@@ -425,7 +425,12 @@ export interface HarnessHostApi {
   };
   /** What the page holds outside the canvas: a DOM menu, an HTML HUD, a loader. */
   "preview.pageUi": { params: { handle?: string }; result: unknown };
-  "preview.state": { params: { handle?: string }; result: unknown };
+  /**
+   * `__studio.state()`, bounded by structure: over the studio's budget its largest lists become
+   * `{__elided, length, chars}` stubs and the root names them under `__cut`. `keep` names the
+   * dotted paths a board reads (at most 64, each up to 120 characters); they are cut last.
+   */
+  "preview.state": { params: { handle?: string; keep?: string[] }; result: unknown };
   "preview.call": { params: { method: string; arg?: unknown; handle?: string }; result: unknown };
   /** Read-only JS over the game's own graph; the answer is untrusted JSON, size-capped by the port. */
   "preview.evaluate": { params: { expression: string; handle?: string }; result: unknown };

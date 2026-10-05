@@ -58,8 +58,12 @@ import {
   PAGE_CAPTURE,
   PAGE_CAPTURE_TIMEOUT_MS,
   type PageCaptureInfo,
+  STATE_MAX_CHARS,
   TRUSTED_PROBE,
+  pageEvaluation,
+  studioStateExpression,
 } from "./preview-page-scripts.ts";
+import { StateShape } from "../shared/studio-state-shape.ts";
 import { computePixelStats, isEffectivelyBlack, type PixelDiff, type PixelStats } from "../substrate/pixel-stats.ts";
 import { chooseCapture, probePageUi, resolveSurface, type PageUi } from "../substrate/page-ui.ts";
 import type { CropRect, PageAttachReport, ShimOptions } from "../substrate/preview-port.ts";
@@ -1058,15 +1062,11 @@ export class GamePreview {
     // `Promise.resolve` first: an expression that evaluates to a promise (a `fetch`, an async
     // probe) must be awaited *before* serialising, otherwise every async probe silently returns
     // `{}` and any check built on it passes without testing anything.
-    const wrapped = `Promise.resolve().then(() => ${expression}).then(
-        (value) => JSON.stringify(value === undefined ? null : value),
-        (err) => JSON.stringify({ __error: String(err) }),
-      )`;
-    const raw = (await view.webContents.executeJavaScript(wrapped, true)) as string | undefined;
+    const raw = (await view.webContents.executeJavaScript(pageEvaluation(expression), true)) as string | undefined;
     if (raw === undefined) return undefined;
     const text = String(raw);
     if (text.length > maxChars) {
-      return { __truncated: true, length: text.length, head: text.slice(0, maxChars) };
+      return { [StateShape.Truncated]: true, length: text.length, head: text.slice(0, maxChars) };
     }
     return JSON.parse(text);
   }
@@ -1095,9 +1095,13 @@ export class GamePreview {
     return { ...base, navigating: false, page: answered ? page : null };
   }
 
-  /** `window.__studio.state()` — the structural probe that complements screenshots. */
-  async studioState(): Promise<unknown> {
-    return this.evaluate("window.__studio ? window.__studio.state() : { __missing: true }");
+  /**
+   * `window.__studio.state()` — the structural probe that complements screenshots. Bounded by
+   * structure in the page (`boundStudioState`): a state past {@link STATE_MAX_CHARS} loses its
+   * largest lists to stubs, never the tail of its text, and the `keep` paths are cut last.
+   */
+  async studioState(options?: { keep?: readonly string[] }): Promise<unknown> {
+    return this.evaluate(studioStateExpression(STATE_MAX_CHARS, options?.keep));
   }
 
   /**

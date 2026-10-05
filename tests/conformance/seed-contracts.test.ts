@@ -19,6 +19,7 @@ import * as seedOutcomes from "../../src/harness-seed/loop/outcomes.ts";
 import * as seedJudgeProvenance from "../../src/harness-seed/loop/judge-provenance.ts";
 import * as seedRunEvents from "../../src/harness-seed/loop/run-events.ts";
 import * as seedSkills from "../../src/harness-seed/loop/skills.ts";
+import * as seedStateShape from "../../src/harness-seed/loop/state-shape.ts";
 import { SteerDelivery as seedSteerDelivery } from "../../src/harness-seed/loop/steer-delivery.ts";
 import * as seedTime from "../../src/harness-seed/loop/time.ts";
 import * as seedWakeSchedule from "../../src/harness-seed/loop/director/wake-schedule.ts";
@@ -49,6 +50,7 @@ import {
   recordedRunLoop,
 } from "../../src/shared/run-state.ts";
 import { applyEdits, SKILL_EDIT_OPS } from "../../src/shared/skill-edits.ts";
+import * as studioStateShape from "../../src/shared/studio-state-shape.ts";
 import { EventKind, type EventEnvelope, MessageUsageSource } from "../../src/shared/event-log.ts";
 import { DIRECTOR_LOOP_ENV, harnessRunEnv } from "../../src/shared/protocol.ts";
 
@@ -438,6 +440,24 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("names what ends a run (its budgets' completion policy) the same way", () => {
     assert.deepEqual(seedCompletionPolicy.CompletionPolicy, CompletionPolicy);
+  });
+
+  it("names a bounded state's markers and keep limits the same way, and validates keep paths the same way", () => {
+    assert.deepEqual(seedStateShape.StateShape, studioStateShape.StateShape);
+    assert.deepEqual(seedStateShape.ElidedKind, studioStateShape.ElidedKind);
+    assert.equal(seedStateShape.MAX_KEEP_PATHS, studioStateShape.MAX_KEEP_PATHS);
+    assert.equal(seedStateShape.MAX_KEEP_PATH_CHARS, studioStateShape.MAX_KEEP_PATH_CHARS);
+    const raws: unknown[] = [
+      undefined,
+      "race.cars",
+      [1, null, {}, ["race"]],
+      ["", ".race", "race.", "race..cars", "a".repeat(121), "a".repeat(120)],
+      ["__proto__.polluted", "a.constructor", "prototype", "race.cars", "race.cars", "cars.0.x"],
+      Array.from({ length: 200 }, (_, i) => `p${i}`),
+    ];
+    for (const raw of raws) {
+      assert.deepEqual(seedStateShape.keepPathsOf(raw), studioStateShape.keepPathsOf(raw), String(raw).slice(0, 40));
+    }
   });
 
   it("has the same time units", () => {

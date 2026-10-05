@@ -23,8 +23,10 @@ import {
   type Rig,
 } from "../helpers/studio-rig.ts";
 import { EngineError, type CompleteRequest, type DelegateRequest } from "../../src/substrate/engines/types.ts";
+import { rememberEvidence } from "../../src/harness-seed/loop/director/night.ts";
 import {
   compareScoreboards,
+  dryRunChecks,
   evaluateMetricCheck,
   evaluateProbeCheck,
   settleVision,
@@ -63,6 +65,7 @@ import {
 } from "../../src/harness-seed/loop/replan.ts";
 import { isTransientProviderError, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
 import {
+  HARNESS_CHECKS,
   loadCatalogue,
   normalizeFacetSpec,
   renderMilestones,
@@ -230,6 +233,67 @@ describe("readiness judge incidents", () => {
     reference: { name: "fixture", shots: [] },
     budgets: { wallClockMs: 1000 },
   };
+
+  it("AUDIT-STATE-STUB (Midnight Asphalt 2026-10-05): an 82 KB state() cuts its largest list and every probe over the rest is still read", () => {
+    const keysMove = { id: "keys-move-player", ...HARNESS_CHECKS["keys-move-player"] } as Check;
+    // An older host (and every journal it wrote) cut the state's JSON text: a string head, not
+    // a state. Every probe read it as a build that reports nothing and told the builder to add more.
+    const head = { __truncated: true, length: 82_303, head: '{"hud":{"items":["hud.speedo.segment.0000"' };
+    const blinded = evaluateProbeCheck(keysMove, { state: head, stateEarly: head });
+    assert.equal(blinded.pass, null);
+    assert.equal(blinded.stateTooLarge, true);
+    assert.equal(blinded.unavailable, undefined, "too large is not 'the build cannot answer'");
+    assert.match(blinded.reason, /82,303/);
+    assert.doesNotMatch(blinded.reason, /does not report/);
+    const unread = dryRunChecks([keysMove], { state: head });
+    assert.deepEqual(unread, { unsatisfiable: [], stateKeys: null, unreadable: { chars: 82_303 } });
+    // The host now bounds by structure: the 6,000-id HUD list becomes a stub, the player survives.
+    const items = { __elided: "array", length: 6000, chars: 168_001 };
+    const bounded = (x: number) => ({
+      player: { x, z: 0, yaw: 0 },
+      hud: { items, crosshair: true },
+      race: { cars: { __elided: "object", length: 12, chars: 9_400 }, lap: 2 },
+      __cut: { chars: 177_640, paths: ["hud.items", "race.cars"] },
+    });
+    const evidence = { state: bounded(3), stateEarly: bounded(0) };
+    assert.equal(evaluateProbeCheck(keysMove, evidence).pass, true);
+    const probe = (id: string, expr: string, needs?: string[]) =>
+      evaluateProbeCheck({ id, kind: "probe", expr, ...(needs ? { needs } : {}) }, evidence);
+    assert.equal(probe("hud-listed", "len(hud.items) >= 1").pass, true);
+    assert.equal(probe("hud-count", "len(hud.items) == 6000").pass, true, "len() reads the stub's length");
+    assert.equal(probe("hud-length", "hud.items.length == 6000").pass, true);
+    assert.equal(probe("hud-has", "has('hud.items') && has('race.cars')").pass, true);
+    assert.equal(probe("lap", "race.lap == 2").pass, true);
+    // A read INTO a cut value is unmeasured and says what was cut and how big the state was.
+    for (const into of [
+      probe("lead-lap", "race.cars.lead.lap >= 1"),
+      probe("first-item", "has('hud.items.0')"),
+      probe("needs-into", "race.lap >= 1", ["race.cars.lead"]),
+    ]) {
+      assert.equal(into.pass, null, into.id);
+      assert.equal(into.stateTooLarge, true, into.id);
+      assert.equal(into.unavailable, undefined, into.id);
+      assert.match(into.reason, /cut/, into.id);
+      assert.match(into.reason, /177,640/, into.id);
+      assert.doesNotMatch(into.reason, /does not report/, into.id);
+    }
+    // The dry run never calls a cut path unsatisfiable; a path the build truly lacks still is.
+    const dry = dryRunChecks(
+      [
+        { id: "lead-lap", kind: "probe", expr: "race.cars.lead.lap >= 1" } as Check,
+        { id: "first-item", kind: "probe", expr: "has('hud.items.0')" } as Check,
+        { id: "fuel", kind: "probe", expr: "player.fuel > 0" } as Check,
+      ],
+      { state: bounded(0) },
+    );
+    assert.deepEqual(dry.unsatisfiable, [{ id: "fuel", missing: ["player.fuel"] }]);
+    // The next worker's dry run never inherits a head the host could not read.
+    const night = { state: { evidenceByHead: new Map() } } as unknown as Parameters<typeof rememberEvidence>[0];
+    rememberEvidence(night, "c0ffee", { ok: true, state: head } as never);
+    assert.equal(night.state.evidenceByHead.has("c0ffee"), false);
+    rememberEvidence(night, "beef", { ok: true, state: bounded(0) } as never);
+    assert.equal(night.state.evidenceByHead.has("beef"), true);
+  });
 
   it("AUDIT-WEBGPU-NULL: an unavailable triangle counter stays unmeasured", () => {
     const check = {

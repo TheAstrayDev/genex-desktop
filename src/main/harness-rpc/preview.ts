@@ -1,6 +1,7 @@
 /** Harness RPC: previews — load, look, drive and measure a game in a window. */
 import { readFile } from "node:fs/promises";
 import { HostMethod, type HarnessHostHandlers, type HarnessParams } from "../../shared/harness-api.ts";
+import { keepPathsOf } from "../../shared/studio-state-shape.ts";
 import { availableMemory } from "../../substrate/hardware.ts";
 import type { CaptureSurface } from "../../substrate/preview-port.ts";
 import { LIVE_HANDLE, STAND_IN_HANDLE } from "../../substrate/preview-pool.ts";
@@ -74,9 +75,13 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
       const ui = port.pageUi ? await port.pageUi().catch(() => null) : null;
       return ui ?? { ...NO_PAGE_UI };
     }),
-    [HostMethod.PreviewState]: routed(async (p: HarnessParams<typeof HostMethod.PreviewState>) =>
-      x.previews.preview(p?.handle).studioState(),
-    ),
+    // Bounded by structure in the page; `keep` reaches it only through the host's validation,
+    // and a malformed one is ignored rather than refused, so an older seed still reads its state.
+    [HostMethod.PreviewState]: routed(async (p: HarnessParams<typeof HostMethod.PreviewState>) => {
+      const keep = keepPathsOf(p?.keep);
+      const port = x.previews.preview(p?.handle);
+      return keep.length > 0 ? port.studioState({ keep }) : port.studioState();
+    }),
     [HostMethod.PreviewCall]: routed(async (p: HarnessParams<typeof HostMethod.PreviewCall>) =>
       x.previews.preview(p.handle).studioCall(String(p.method), p.arg),
     ),

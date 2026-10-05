@@ -581,6 +581,32 @@ describe("the computer tool's host", () => {
     (rig.preview as { pageUi?: unknown }).pageUi = probe;
   });
 
+  it("hands preview.state's keep paths to the window only after validating them, and ignores a hostile keep", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    const api = rig.core.api() as unknown as Record<string, (p: unknown) => Promise<unknown>>;
+    const before = Object.getOwnPropertyNames(Object.prototype).sort();
+    const cases: Array<[unknown, { keep?: readonly string[] } | undefined]> = [
+      [{}, undefined],
+      [undefined, undefined],
+      [{ keep: ["race.cars", "player.x"] }, { keep: ["race.cars", "player.x"] }],
+      [{ keep: "race.cars" }, undefined],
+      [{ keep: [1, null, {}, ["race"]] }, undefined],
+      [{ keep: ["__proto__.polluted", "a.constructor", "prototype", "race.cars"] }, { keep: ["race.cars"] }],
+      [
+        { keep: Array.from({ length: 10_000 }, (_, i) => `p${i}`) },
+        { keep: Array.from({ length: 64 }, (_, i) => `p${i}`) },
+      ],
+    ];
+    for (const [params, handed] of cases) {
+      rig.preview.stateOpts.length = 0;
+      assert.deepEqual(await api["preview.state"]!(params), rig.preview.next, JSON.stringify(params)?.slice(0, 80));
+      assert.deepEqual(rig.preview.stateOpts, [handed], JSON.stringify(params)?.slice(0, 80));
+    }
+    assert.deepEqual(Object.getOwnPropertyNames(Object.prototype).sort(), before);
+    assert.equal(({} as Record<string, unknown>).polluted, undefined);
+  });
+
   // Flipped (2026-09-28): with every pooled window leased, the director's session used to fall
   // back to the live view — the person's own window, for the whole night — and say so on the
   // run's thread. Live is the person's alone now: the session gets a window past the pool's

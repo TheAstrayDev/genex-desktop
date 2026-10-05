@@ -21,11 +21,14 @@ import type { Check, CheckKind, CheckLike, CheckOrigin, CheckWeight } from "./sp
 import { HostMethod } from "./host-methods.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON, clipMarked } from "./text.ts";
 import { isRecord } from "./json.ts";
+import type { StateShape } from "./state-shape.ts";
 import type { AnyRecord, HarnessCtx } from "../types/harness.d.ts";
 import type { PreviewPixelStats } from "../types/host-api.d.ts";
 
 /** The state paths a check may name as its needs. */
 const MAX_CHECK_NEEDS = 4;
+/** How much of a state's JSON an older studio read whole before it cut the text instead. */
+const LEGACY_STATE_CAP_CHARS = 64_000;
 /** How much of a failing check's reason one scoreboard line quotes. */
 const BOARD_REASON_CHARS = 240;
 /** Threshold under which a challenger frame counts as identical to the incumbent's. */
@@ -98,6 +101,13 @@ export interface CheckResult {
   nearest?: string;
   unavailable?: boolean;
   missing?: string[];
+  /**
+   * The studio could not read the state whole: an older studio cut its text, or the check reads
+   * inside a value the studio cut (`cut` names what it read there). Unmeasured, and — unlike
+   * `unavailable` — it still blocks "satisfied": the build reports it, it just reports too much.
+   */
+  stateTooLarge?: boolean;
+  cut?: string[];
   confidence?: number;
   answer?: unknown;
   note?: string;
@@ -136,6 +146,12 @@ const Kind = {
 } as const satisfies Record<string, CheckKind>;
 const Weight = { Identity: "identity", Normal: "normal" } as const satisfies Record<string, CheckWeight>;
 const Origin = { Judge: "judge" } as const satisfies Record<string, CheckOrigin>;
+/** The markers of a state the studio could not read whole; state-shape.ts imports this module too. */
+const Shape = {
+  Truncated: "__truncated",
+  Elided: "__elided",
+  Cut: "__cut",
+} as const satisfies Record<string, StateShape>;
 
 // ── expression language ────────────────────────────────────────────────────────────────────
 
@@ -536,11 +552,109 @@ export function probeScope(state: unknown, early: unknown = null) {
   };
 }
 
-/** A probe's `len()`: an array's or a string's length, an object's key count, else no value. */
+/**
+ * A probe's `len()`: an array's or a string's length, an object's key count, else no value. A
+ * value the studio cut out of an over-budget state keeps its length on the stub left in its place.
+ */
 function lengthOf(v: unknown): number | undefined {
   if (Array.isArray(v) || typeof v === "string") return v.length;
+  if (isElided(v)) return v.length;
   if (v && typeof v === "object") return Object.keys(v).length;
   return undefined;
+}
+
+/** The stub the studio left where it cut a value out of an over-budget state. */
+function isElided(v: unknown): v is { length: number; chars?: number } {
+  return isRecord(v) && !Array.isArray(v) && typeof v[Shape.Elided] === "string" && typeof v.length === "number";
+}
+
+/** How long an older studio's text-cut state was, or null for a state it read whole. */
+function truncatedLength(state: unknown): number | null {
+  if (!isRecord(state) || state[Shape.Truncated] !== true) return null;
+  return typeof state.length === "number" ? state.length : 0;
+}
+
+/**
+ * Where a path reads INTO a value the studio cut: the stub's path, or null. A path that ends at
+ * the stub (or at its `length`) reads it as the value it stands for — present, with its length.
+ */
+function cutAlong(scope: unknown, path: string): string | null {
+  const parts = path.split(".");
+  let current: unknown = scope;
+  for (let i = 0; i < parts.length; i++) {
+    if (!isRecord(current)) return null;
+    if (isElided(current)) {
+      const readsLength = i === parts.length - 1 && parts[i] === "length";
+      return readsLength ? null : parts.slice(0, i).join(".");
+    }
+    current = current[parts[i] as string];
+  }
+  return null;
+}
+
+/** Every path a probe reads: its references, the paths `has`/`delta` name, and its `needs`. */
+function probePathsOf(check: CheckLike): { paths: string[]; early: boolean } {
+  const needs = Array.isArray(check?.needs) ? check.needs.map(String) : [];
+  let ast: ExprNode;
+  try {
+    ast = parseExpr(check.expr ?? "");
+  } catch {
+    return { paths: needs, early: false };
+  }
+  const refs = refPaths(ast);
+  const deltas = deltaPathsNamed(ast);
+  const early = deltas.length > 0 || refs.some((path) => path.startsWith("early."));
+  return { paths: [...new Set([...refs, ...pathsNamedAsStrings(ast), ...needs])], early };
+}
+
+/** Every reference in an expression tree. */
+function refPaths(ast: ExprNode): string[] {
+  const paths: string[] = [];
+  const walk = (node: AnyRecord | null | undefined): void => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "ref" && typeof node.path === "string") paths.push(node.path);
+    for (const child of Object.values(node)) {
+      if (Array.isArray(child)) child.forEach(walk);
+      else if (child && typeof child === "object") walk(child);
+    }
+  };
+  walk(ast);
+  return paths;
+}
+
+/**
+ * A probe over a state the studio could not read whole is unmeasured with the reason, and never
+ * "the build does not report …": that told builders to add to a state that was already too big.
+ * An older studio cut the whole text; this one cuts the largest values, so only a probe that reads
+ * inside one of them is unmeasured.
+ */
+function unreadableState(check: CheckLike, state: unknown, early: unknown): CheckResult | null {
+  const read = probePathsOf(check);
+  const truncated = truncatedLength(state) ?? (read.early ? truncatedLength(early) : null);
+  if (truncated !== null) {
+    return unmeasured(
+      check,
+      `state() is ${truncated.toLocaleString("en-US")} chars, over the ${LEGACY_STATE_CAP_CHARS.toLocaleString("en-US")} the studio reads whole, so it came back cut and nothing in it could be read — report less in state() (keep long lists out of it)`,
+      { stateTooLarge: true },
+    );
+  }
+  const scope = probeScope(state, early);
+  const inside = read.paths.filter((path) => cutAlong(scope, path) !== null);
+  if (!inside.length) return null;
+  const stubs = [...new Set(inside.map((path) => cutAlong(scope, path)))];
+  const whole = stateCutChars(state);
+  const size = whole === null ? "an over-budget" : `a ${whole.toLocaleString("en-US")}-char`;
+  return unmeasured(
+    check,
+    `${inside.join(", ")} reads inside ${stubs.join(", ")}, which the studio cut from ${size} state() — measure it with len(), or report less in state()`,
+    { stateTooLarge: true, cut: inside },
+  );
+}
+
+/** The full size a bounded state says it had, or null for a state the studio read whole. */
+function stateCutChars(state: unknown): number | null {
+  const cut = isRecord(state) ? state[Shape.Cut] : null;
+  return isRecord(cut) && typeof cut.chars === "number" ? cut.chars : null;
 }
 
 /**
@@ -557,8 +671,15 @@ function lengthOf(v: unknown): number | undefined {
 export function dryRunChecks(
   checks: readonly Check[] | null | undefined,
   { state = null, demoStates = null }: { state?: unknown; demoStates?: unknown } = {},
-): { unsatisfiable: Array<{ id: string; missing: string[] }>; stateKeys: string[] | null } {
+): {
+  unsatisfiable: Array<{ id: string; missing: string[] }>;
+  stateKeys: string[] | null;
+  /** The state was cut as text by an older studio: nothing in it can be read, so nothing is judged. */
+  unreadable?: { chars: number };
+} {
   if (!isRecord(state) || state.__missing) return { unsatisfiable: [], stateKeys: null };
+  const truncated = truncatedLength(state);
+  if (truncated !== null) return { unsatisfiable: [], stateKeys: null, unreadable: { chars: truncated } };
   const unsatisfiable: Array<{ id: string; missing: string[] }> = [];
   for (const check of checks ?? []) {
     if (check?.kind !== Kind.Probe || !check.expr) continue;
@@ -576,11 +697,13 @@ export function dryRunChecks(
     }
     // A path named as a string — `has("x")`, `delta("x")` — never becomes a reference, so
     // `missing` cannot see it and the check quietly reads false forever. Read it here.
-    const named = pathsNamedAsStrings(ast).filter((path) => scope.has(path) !== true);
-    const missing = [...new Set([...outcome.missing, ...named])];
+    // A path inside a value the studio cut is reported — the state was just too big to read it.
+    const reported = (path: string): boolean => cutAlong(scope, path) !== null;
+    const named = pathsNamedAsStrings(ast).filter((path) => scope.has(path) !== true && !reported(path));
+    const missing = [...new Set([...outcome.missing.filter((path) => !reported(path)), ...named])];
     if (missing.length) unsatisfiable.push({ id: check.id, missing });
   }
-  return { unsatisfiable, stateKeys: Object.keys(state) };
+  return { unsatisfiable, stateKeys: Object.keys(state).filter((key) => key !== Shape.Cut) };
 }
 
 /** Every string literal a `delta()` call names: the paths a probe reads on BOTH sides of a pass. */
@@ -879,6 +1002,8 @@ export function evaluateProbeCheck(check: CheckLike, evidence: CheckEvidence | n
   }
   if (!state) return unmeasured(check, "no state() probe was captured");
   if (state.__missing) return result(check, false, "window.__studio is missing — the build exposes no state()");
+  const unreadable = unreadableState(check, state, early);
+  if (unreadable) return unreadable;
   const notReported = needsNotReported(check, state, early);
   if (notReported)
     return unmeasured(

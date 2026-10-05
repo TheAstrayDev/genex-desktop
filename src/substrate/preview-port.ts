@@ -124,7 +124,8 @@ export interface PreviewPort {
    */
   pageUi?(): Promise<PageUiAnswer>;
   evaluate(expression: string): Promise<unknown>;
-  studioState(): Promise<unknown>;
+  /** `keep`: state paths a board reads, cut last when the state is over the studio's budget. */
+  studioState(options?: { keep?: readonly string[] }): Promise<unknown>;
   /**
    * Call a `window.__studio` method by name. The classic set is typed; the v2 contract adds
    * `eye`, `inspect` and `audio`, and a game may expose more — the page answers `{__missing}`

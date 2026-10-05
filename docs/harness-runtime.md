@@ -266,6 +266,16 @@ on an empty scaffold — the same exemption the blank-pixel rule already had, se
 (`EMPTY_SCENE_PROBE`) rather than by the game's own word. One classifier answers for every caller: `none`, `observation`, `race` or `build` — an
 observation failure is not a build defect, and "evidence pass failed" is not a race.
 
+What a probe reads. The studio bounds `__studio.state()` by structure, never by cutting its text
+(`main/preview-page-scripts.ts` `boundStudioState`): a state whose JSON fits 48,000 characters
+arrives byte for byte; past that, the largest lists, then the object holding the bulk, become
+`{__elided, length, chars}` stubs, the root names them under `__cut`, and the `keep` paths a
+`preview.state` caller may send (a board's own come from `loop/state-shape.ts`
+`statePathsNamedByChecks`) are cut last.
+`len()` and `has()` read a stub as the value it stands for. A probe that reads inside a stub, or any
+probe over an older studio's text-cut `{__truncated}` state, is unmeasured with `stateTooLarge`:
+it still blocks "satisfied", and it never says the build does not report the path.
+
 What a rollback may assume of a game folder. `snapshot.restore` on a game commits a rescue
 snapshot first and may refuse with a typed `code` (`branch-changed`, `history-changed`,
 `operation-in-progress`, `rescue-failed`), leaving the folder as it is; a loop must treat that as

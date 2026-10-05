@@ -28,6 +28,7 @@ import {
   writeRunArtifact,
 } from "../run-events.ts";
 import { isCommit } from "../shell.ts";
+import { isTruncatedState } from "../state-shape.ts";
 import { verdictRecord } from "../verdict.ts";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -446,6 +447,9 @@ export function rememberEvidence(
   const { state } = night;
   if (!commit || evidence?.ok !== true) return;
   if (!evidence.state || evidence.state.__missing) return;
+  // A state an older studio could only cut as text says nothing about what the build reports:
+  // a dry run against it would call every path unsatisfiable.
+  if (isTruncatedState(evidence.state)) return;
   state.evidenceByHead.set(commit, {
     state: evidence.state,
     demoStates: evidence.demoStates ?? null,
