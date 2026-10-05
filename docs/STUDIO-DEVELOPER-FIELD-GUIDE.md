@@ -46,6 +46,15 @@ its `npm install -g` stays in the profile. A Claude Code sign-in leaves a
 `Claude Code-credentials-<hash>` item in your login keychain that neither sign-out nor `clean`
 removes; delete it in Keychain Access when you like.
 
+A live launch keeps the caller's environment except its agent session's own variables: the
+keys and endpoint it routes model calls through, Claude Code's and the Agent SDK's switches and
+nesting markers, and `ELECTRON_RUN_AS_NODE` ([live-env.ts](../scripts/studio-dev/live-env.ts), the
+list the eval lanes strip too). `CLAUDE_CONFIG_DIR` and `CODEX_HOME` stay: they are your choice of
+account. The start JSON names what it dropped (`envStripped`, never values). Start and status
+warn (`games-root-under-claude-folder`) when the profile's games sit under a `.claude` folder,
+as in a worktree under `.claude/`, where native Claude Write refuses or asks
+([live acceptance](#full-regression-and-failure-evidence)).
+
 Live profiles isolate Studio data, not all machine accounts, Keychain, quotas, local models
 or compute. They do not copy credentials. Follow the [credential restriction](agent/verification.md#credentials)
 for account-connected checks. Preserve active user work; inspect ownership/status before a restart.
@@ -356,13 +365,13 @@ Requests are JSON files to avoid shell quoting:
 
 Send with `npm run studio:dev -- ui --profile ag-933 --request /tmp/request.json`.
 `ui` and `diagnostics` take exactly one of `--request FILE`, `--request -` (stdin) or `--json '<op>'`;
-`snapshot --profile P [--scope SEL] [--limit N]` and `logs --profile P [--surface S] [--cursor N] [--limit N]`
-are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
+`snapshot --profile P [--scope SEL] [--limit N]`, `logs --profile P [--surface S] [--cursor N] [--limit N]`
+and `runs --profile P` are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
 walks the full loop.
 The request union/runtime validator is src/main/dev/protocol.ts. Operations are status,
 snapshot (desktop, scope/limit), click (selector/scope), type (plus text/replace), key
 (surface/key/code/modifiers), select (selector/scope/value), scroll (surface/deltas/target),
-game.input (existing bounded action union), game.state, window.resize, capture, logs, cpu.start/stop,
+game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,
 trace.start/stop and stop. `graph.drag` takes bounded duration/distance/steps and returns
 commit counters through release; `window.resize` takes bounded width/height deltas, steps and
@@ -392,6 +401,31 @@ needs surface/name. Trace needs traceId, durationMs (100–30000) and supported 
 `devtools.timeline`, `v8`, `blink.user_timing`; stop flushes its buffers. Overlap, wrong IDs,
 missing surfaces, detached debugger, reused artifact names and interrupted operations fail.
 Do not open DevTools while the development controller owns its debugger attachment.
+
+`runs` (no parameters) lists every open run of the profile and the newest run of the chat the
+window shows: thread, project, state, journal phase and clock, worked time, its own newest record,
+the last close's stop reason, integration head and landing, and `resumable` (paused with a
+journal that is not done). It reads only the event log and journals ([runs.ts](../src/main/dev/runs.ts)),
+so like `status` and `stop` it answers on a stale build, under a sign-in sheet and while the
+harness is not ready. `key` gives Enter, Escape, Tab, Backspace, the four arrows, PageUp,
+PageDown, Home and End their real key codes.
+
+### An unattended live Loop
+
+A long live run spends the owner's subscription: get their go for that run itself, since a
+live-profile request does not cover it ([credentials](connections-and-context.md#credentials)). Run from a
+checkout outside any `.claude` folder (the start `warnings` say when it is not) and change no
+source there until it ends: a stale build refuses every UI operation, and a restart stops the run.
+Drive only through hooks: the welcome's `[data-onboarding-action="next"]`, then `"start"` (only
+`"skip"` means nothing is signed in: stop and ask; never sign in yourself); the home composer's
+`[aria-label="Model settings"]` role rows `[data-role]` and `[data-model-choice]`, the
+`[aria-label^="Effort:"]` slider (arrow keys), `[aria-label="Mode"]` with
+`[aria-label="Loop time limit"] [data-value]`, and `textarea[aria-label="Prompt"]`. Answer a
+`[data-chat-question]`, plan review or permission card only as a recorded human intervention.
+Watch with `runs` and `status`; no new record for a long while, or a `lastFailure`, is the cue to
+read `logs`. A run paused by an engine limit or a loop crash continues from
+`[data-run-resume="<runId>"]` once the limit resets. Never restart or drive the window while the
+owner is using it; leave the profile running at the end.
 
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket

@@ -137,7 +137,12 @@ export function MorningCard({
   const button = (action: MorningAction): JSX.Element | null => {
     if (action === MorningAction.Resume) {
       return (
-        <Button key={action} title="Pick the build up where it left off" onClick={() => onResume?.()}>
+        <Button
+          key={action}
+          title="Pick the build up where it left off"
+          data-run-resume={runId ?? ""}
+          onClick={() => onResume?.()}
+        >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z" />
           </svg>
