@@ -45,7 +45,7 @@ Harness learned about each game stay. A suggestion written against instructions 
 changed is applied on top of them when it still fits, and refused when it does not. **Look for
 improvements** appears once runs exist and shows its result on the button
 (Found, Added or Nothing new). **Settings → Harness** owns automatic application, **Maximum concurrent workers**
-(default eight, up to twelve) and **How suggestions are tested**.
+(default four, up to twelve) and **How suggestions are tested**.
 Changes land through validated, recoverable host APIs, never by executing a chat reply. The
 agent's own edits carry a plain title and summary too.
 Code changes are type-checked and started in a copy first; a failing one is refused.

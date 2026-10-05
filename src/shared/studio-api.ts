@@ -306,6 +306,7 @@ export interface StudioApi {
     buildersMax?: number;
     agentsMax?: number;
     blender?: boolean;
+    autoResume?: boolean;
   }): Promise<StudioSettingsView>;
   /** Settings → Copy diagnostics: versions, provider status and the recent log, already redacted. */
   diagnostics(): Promise<string>;
@@ -539,6 +540,8 @@ export interface StudioSettingsView {
   agentsMax?: number;
   /** may builders model in Blender (AG-930); on by default */
   blender?: boolean;
+  /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
+  autoResume?: boolean;
 }
 
 declare global {

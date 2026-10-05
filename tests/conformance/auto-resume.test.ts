@@ -1,0 +1,594 @@
+/**
+ * Host auto-resume (src/main/core/auto-resume.ts): a build an engine limit paused resumes once the
+ * limit resets, and one the loop's crash paused resumes once the loop runs again — at most
+ * AUTO_RESUMES_MAX times a run, never after the user's Stop or Finish, never with too little working
+ * time or memory left. Decided from typed fields only: the close's `limit`, the host's own crash
+ * record, `run_control` actions and `run_auto_resumed` counts.
+ */
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  AUTO_RESUME_HORIZON_MS,
+  AUTO_RESUME_MIN_FREE_MB,
+  AUTO_RESUME_RECHECK_MS,
+  AUTO_RESUME_WAIT_MS,
+  AUTO_RESUMES_MAX,
+  AutoResumeAction,
+  AutoResumeHold,
+  AutoResumeService,
+  AutoResumeSkip,
+  LIMIT_RESET_MARGIN_MS,
+  autoResumePlan,
+  type AutoResumeFacts,
+} from "../../src/main/core/auto-resume.ts";
+import { AutoResumeCause, CustomEvent, type RunAutoResumedPayload } from "../../src/shared/custom-events.ts";
+import { RunControlAction } from "../../src/shared/coordinator.ts";
+import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
+import { EventKind, type EventEnvelope } from "../../src/shared/event-log.ts";
+import { HOUR_MS, MINUTE_MS } from "../../src/shared/duration.ts";
+import { toEntries } from "../../src/renderer/chat-entries.ts";
+import { studioActivity } from "../../src/shared/studio-activity.ts";
+import { setTimeout as sleep } from "node:timers/promises";
+import { coreLite } from "../helpers/core-lite.ts";
+
+/** How long the core test lets an asynchronous plan settle: a few short steps, never a deadline. */
+const SETTLE_TRIES = 20;
+const SETTLE_STEP_MS = 10;
+
+const RUN = "run-a";
+const THREAD = "chat";
+const T0 = Date.parse("2026-10-06T00:00:00.000Z");
+const iso = (ms: number) => new Date(ms).toISOString();
+
+let clock = 0;
+function custom(at: number, event_type: string, payload: Record<string, unknown>): EventEnvelope {
+  clock += 1;
+  return {
+    id: `e${String(clock).padStart(5, "0")}`,
+    thread_id: THREAD,
+    session_id: null,
+    turn_id: null,
+    created_at: iso(at),
+    data: { type: EventKind.Custom, event_type, payload },
+  };
+}
+
+const registered = (at = T0, budgets: Record<string, unknown> = { wallClockMs: 4 * HOUR_MS }) =>
+  custom(at, CustomEvent.RunRegistered, { runId: RUN, project: "kart", budgets });
+const resumedStart = (at: number) =>
+  custom(at, CustomEvent.RunRegistered, { runId: RUN, project: "kart", resumed: true });
+
+/** A director's close on an engine limit, as `integrate.ts` `closeRun` writes it, and its pause. */
+function limitPause(at: number, limit: Record<string, unknown>): EventEnvelope[] {
+  return [
+    custom(at, CustomEvent.RunFinished, { runId: RUN, project: "kart", executionStatus: "paused", limit }),
+    custom(at, CustomEvent.AutopilotPaused, { runId: RUN, project: "kart" }),
+  ];
+}
+
+/** A close with no limit: the user's Stop, or the reborn loop's crash close (`boot-notice.ts`). */
+function plainPause(at: number, extra: Record<string, unknown> = {}): EventEnvelope[] {
+  return [
+    custom(at, CustomEvent.RunFinished, { runId: RUN, project: "kart", victory: false, ...extra }),
+    custom(at, CustomEvent.AutopilotPaused, { runId: RUN, project: "kart" }),
+  ];
+}
+
+const autoResumed = (at: number, runId = RUN) =>
+  custom(at, CustomEvent.RunAutoResumed, { runId, cause: AutoResumeCause.LimitReset, attempt: 1 });
+
+const PAUSED_AT = T0 + 60 * MINUTE_MS;
+const RESET_MS = 30 * MINUTE_MS;
+const DUE = PAUSED_AT + RESET_MS + LIMIT_RESET_MARGIN_MS;
+const rateLimit = { kind: EngineFailureKind.RateLimit, retryAfterMs: RESET_MS };
+
+const facts = (patch: Partial<AutoResumeFacts> = {}): AutoResumeFacts => ({
+  runId: RUN,
+  enabled: true,
+  harnessReady: true,
+  freeMb: 8_000,
+  crashedAt: null,
+  stoppedAt: null,
+  ...patch,
+});
+
+const limited = () => [registered(), ...limitPause(PAUSED_AT, rateLimit)];
+const crashed = () => [
+  registered(),
+  ...plainPause(PAUSED_AT, { stoppedBecause: "the studio's loop crashed and restarted" }),
+];
+const CRASH_AT = PAUSED_AT - MINUTE_MS;
+
+describe("autoResumePlan: when a paused build resumes on its own", () => {
+  const rows: Array<{
+    name: string;
+    events: () => EventEnvelope[];
+    now: number;
+    facts?: Partial<AutoResumeFacts>;
+    want: Record<string, unknown>;
+  }> = [
+    {
+      name: "an engine-limit pause waits for the reset plus a margin",
+      events: limited,
+      now: PAUSED_AT + MINUTE_MS,
+      want: { action: AutoResumeAction.Wait, at: DUE, hold: AutoResumeHold.Reset },
+    },
+    {
+      name: "once the reset has passed it resumes, as the run's first automatic resume",
+      events: limited,
+      now: DUE,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
+    },
+    {
+      name: "a usage cap with a known reset is waited out the same way",
+      events: () => [
+        registered(),
+        ...limitPause(PAUSED_AT, { kind: EngineFailureKind.UsageLimit, retryAfterMs: RESET_MS }),
+      ],
+      now: DUE,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
+    },
+    {
+      name: "the reset counts from when the limit was hit, when the close says",
+      events: () => [registered(), ...limitPause(PAUSED_AT, { ...rateLimit, at: PAUSED_AT - 10 * MINUTE_MS })],
+      now: PAUSED_AT,
+      want: { action: AutoResumeAction.Wait, at: DUE - 10 * MINUTE_MS, hold: AutoResumeHold.Reset },
+    },
+    {
+      name: "a limit with no reset time is the user's to resume",
+      events: () => [
+        registered(),
+        ...limitPause(PAUSED_AT, { kind: EngineFailureKind.UsageLimit, retryAfterMs: null }),
+      ],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotResumable },
+    },
+    {
+      name: "a reset further away than the horizon is the user's to resume",
+      events: () => [
+        registered(),
+        ...limitPause(PAUSED_AT, { ...rateLimit, retryAfterMs: AUTO_RESUME_HORIZON_MS + HOUR_MS }),
+      ],
+      now: PAUSED_AT,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.ResetTooFar },
+    },
+    {
+      name: "a failure that is not an engine limit never resumes",
+      events: () => [registered(), ...limitPause(PAUSED_AT, { kind: EngineFailureKind.Auth, retryAfterMs: RESET_MS })],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotResumable },
+    },
+    {
+      name: "a loop-crash pause resumes once the loop is running again",
+      events: crashed,
+      now: PAUSED_AT,
+      facts: { crashedAt: CRASH_AT },
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LoopRestart, attempt: 1 },
+    },
+    {
+      name: "a loop-crash pause waits while the loop is still starting",
+      events: crashed,
+      now: PAUSED_AT,
+      facts: { crashedAt: CRASH_AT, harnessReady: false },
+      want: { action: AutoResumeAction.Wait, at: PAUSED_AT + AUTO_RESUME_RECHECK_MS, hold: AutoResumeHold.Harness },
+    },
+    {
+      name: "a loop that never comes back is given up on",
+      events: crashed,
+      now: PAUSED_AT + AUTO_RESUME_WAIT_MS + 1,
+      facts: { crashedAt: CRASH_AT, harnessReady: false },
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.HarnessDown },
+    },
+    {
+      name: "a pause with no limit and no crash under it (the user's Stop) never resumes",
+      events: crashed,
+      now: PAUSED_AT,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotResumable },
+    },
+    {
+      name: "a crash from before the run started again is not this pause's",
+      events: () => [registered(), ...plainPause(PAUSED_AT)],
+      now: PAUSED_AT,
+      facts: { crashedAt: T0 - MINUTE_MS },
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotResumable },
+    },
+    {
+      name: "a crash after the pause did not cause it",
+      events: () => [registered(), ...plainPause(PAUSED_AT)],
+      now: PAUSED_AT + 2 * MINUTE_MS,
+      facts: { crashedAt: PAUSED_AT + MINUTE_MS },
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotResumable },
+    },
+    {
+      name: "the user's Stop during the run outranks the limit that paused it",
+      events: limited,
+      now: DUE,
+      facts: { stoppedAt: PAUSED_AT - MINUTE_MS },
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.UserStopped },
+    },
+    {
+      name: "a Stop from before the run started again does not hold it back",
+      events: limited,
+      now: DUE,
+      facts: { stoppedAt: T0 - MINUTE_MS },
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
+    },
+    {
+      name: "the user's Finish never resumes",
+      events: () => [
+        registered(),
+        custom(T0 + MINUTE_MS, CustomEvent.RunControl, { runId: RUN, action: RunControlAction.Finish }),
+        ...limitPause(PAUSED_AT, rateLimit),
+      ],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.FinishAsked },
+    },
+    {
+      name: "a resumed run that pauses again is its second automatic resume",
+      events: () => [...limited(), autoResumed(DUE), resumedStart(DUE), ...limitPause(DUE + HOUR_MS, rateLimit)],
+      now: DUE + HOUR_MS + RESET_MS + LIMIT_RESET_MARGIN_MS,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 2 },
+    },
+    {
+      name: `after ${AUTO_RESUMES_MAX} automatic resumes it is the user's`,
+      events: () => [
+        ...limited(),
+        autoResumed(DUE),
+        resumedStart(DUE),
+        autoResumed(DUE + HOUR_MS),
+        resumedStart(DUE + HOUR_MS),
+        ...limitPause(DUE + 2 * HOUR_MS, rateLimit),
+      ],
+      now: DUE + 2 * HOUR_MS + RESET_MS + LIMIT_RESET_MARGIN_MS,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.Spent },
+    },
+    {
+      name: "another run's automatic resumes are not counted",
+      events: () => [autoResumed(T0 - HOUR_MS, "run-b"), autoResumed(T0 - HOUR_MS, "run-b"), ...limited()],
+      now: DUE,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
+    },
+    {
+      name: "too little working time left is not worth a resume",
+      events: () => [registered(T0, { wallClockMs: 65 * MINUTE_MS }), ...limitPause(PAUSED_AT, rateLimit)],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NoTimeLeft },
+    },
+    {
+      name: "a run until satisfied has no clock to run out",
+      events: () => [registered(T0, { untilSatisfied: true }), ...limitPause(PAUSED_AT, rateLimit)],
+      now: DUE,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
+    },
+    {
+      name: "memory below the floor waits",
+      events: limited,
+      now: DUE,
+      facts: { freeMb: AUTO_RESUME_MIN_FREE_MB - 1 },
+      want: { action: AutoResumeAction.Wait, at: DUE + AUTO_RESUME_RECHECK_MS, hold: AutoResumeHold.Memory },
+    },
+    {
+      name: "memory that never recovers is given up on",
+      events: limited,
+      now: DUE + AUTO_RESUME_WAIT_MS + 1,
+      facts: { freeMb: 70 },
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.LowMemory },
+    },
+    {
+      name: "memory that cannot be read does not hold it back",
+      events: limited,
+      now: DUE,
+      facts: { freeMb: null },
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
+    },
+    {
+      name: "switched off in Settings, nothing resumes",
+      events: limited,
+      now: DUE,
+      facts: { enabled: false },
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.Off },
+    },
+    {
+      name: "a run the user already resumed is not paused",
+      events: () => [...limited(), resumedStart(PAUSED_AT + MINUTE_MS)],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotPaused },
+    },
+    {
+      name: "a run that finished is not paused",
+      events: () => [
+        registered(),
+        custom(PAUSED_AT, CustomEvent.RunFinished, { runId: RUN, executionStatus: "completed", limit: rateLimit }),
+      ],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotPaused },
+    },
+  ];
+  for (const row of rows) {
+    it(row.name, () => {
+      assert.deepEqual(autoResumePlan(row.events(), row.now, facts(row.facts)), row.want);
+    });
+  }
+
+  it("reads a limit's fields by type, never by shape alone: hostile values are not a reset", () => {
+    const hostile: unknown[] = [
+      "1800000",
+      -RESET_MS,
+      0,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      { ms: RESET_MS },
+      [RESET_MS],
+    ];
+    for (const retryAfterMs of hostile) {
+      const events = [registered(), ...limitPause(PAUSED_AT, { kind: EngineFailureKind.RateLimit, retryAfterMs })];
+      assert.deepEqual(
+        autoResumePlan(events, DUE, facts()),
+        { action: AutoResumeAction.None, skip: AutoResumeSkip.NotResumable },
+        `retryAfterMs ${JSON.stringify(retryAfterMs)}`,
+      );
+    }
+    for (const limit of [null, "rate_limit", 42, [], { kind: "rate limit", retryAfterMs: RESET_MS }]) {
+      const events = [registered(), ...limitPause(PAUSED_AT, limit as Record<string, unknown>)];
+      assert.equal(autoResumePlan(events, DUE, facts()).action, AutoResumeAction.None, JSON.stringify(limit));
+    }
+  });
+});
+
+/** The service with every clock and port faked: timers run when the test says. */
+function harness(options: { enabled?: boolean; ready?: boolean; freeMb?: number | null } = {}) {
+  let now = PAUSED_AT;
+  let ready = options.ready ?? true;
+  const timers = new Map<number, { at: number; run: () => void }>();
+  let nextTimer = 1;
+  let log: EventEnvelope[] = [registered()];
+  const recorded: Array<{ threadId: string; payload: RunAutoResumedPayload }> = [];
+  const resumed: string[] = [];
+  const service = new AutoResumeService({
+    enabled: () => options.enabled ?? true,
+    harnessReady: () => ready,
+    freeMb: async () => options.freeMb ?? 8_000,
+    events: async () => log,
+    record: async (threadId, payload) => {
+      recorded.push({ threadId, payload });
+      log = [...log, custom(now, CustomEvent.RunAutoResumed, { ...payload })];
+    },
+    resume: async (runId) => {
+      resumed.push(runId);
+    },
+    now: () => now,
+    setTimer: (run, ms) => {
+      const id = nextTimer++;
+      timers.set(id, { at: now + ms, run });
+      return id;
+    },
+    clearTimer: (handle) => timers.delete(handle as number),
+  });
+  return {
+    service,
+    recorded,
+    resumed,
+    timers,
+    append(events: EventEnvelope[]) {
+      log = [...log, ...events];
+      service.observe(THREAD, events);
+    },
+    setReady(value: boolean) {
+      ready = value;
+    },
+    /** Move the clock to `at` and run every timer due by then, letting each tick settle. */
+    async advance(at: number) {
+      now = at;
+      for (;;) {
+        const due = [...timers].filter(([, t]) => t.at <= now);
+        if (due.length === 0) break;
+        for (const [id, timer] of due) {
+          timers.delete(id);
+          timer.run();
+        }
+        await service.idle();
+      }
+    },
+  };
+}
+
+describe("AutoResumeService: the planner wired to timers and the resume path", () => {
+  it("records the automatic resume, then resumes, at the reset — not before", async () => {
+    const h = harness();
+    h.append(limitPause(PAUSED_AT, rateLimit));
+    await h.advance(PAUSED_AT);
+    assert.deepEqual(h.resumed, [], "nothing resumes before the reset");
+    assert.deepEqual(
+      [...h.timers.values()].map((t) => t.at),
+      [DUE],
+    );
+    await h.advance(DUE);
+    assert.deepEqual(h.resumed, [RUN]);
+    assert.deepEqual(h.recorded, [
+      { threadId: THREAD, payload: { runId: RUN, project: "kart", cause: AutoResumeCause.LimitReset, attempt: 1 } },
+    ]);
+    assert.equal(h.timers.size, 0);
+  });
+
+  it("a crash pause resumes once the loop is ready again, and forgetting the crash (the watchdog) cancels it", async () => {
+    const h = harness({ ready: false });
+    h.service.noteCrash([RUN]);
+    h.append(plainPause(PAUSED_AT));
+    await h.advance(PAUSED_AT);
+    assert.deepEqual(h.resumed, [], "the loop is still starting");
+    h.setReady(true);
+    await h.advance(PAUSED_AT + AUTO_RESUME_RECHECK_MS);
+    assert.deepEqual(h.resumed, [RUN]);
+    assert.equal(h.recorded[0]?.payload.cause, AutoResumeCause.LoopRestart);
+
+    const watchdog = harness();
+    watchdog.service.noteCrash([RUN]);
+    watchdog.service.forgetCrashes();
+    watchdog.append(plainPause(PAUSED_AT));
+    await watchdog.advance(DUE);
+    assert.deepEqual(watchdog.resumed, [], "a crash loop the watchdog rewound is the user's to resume");
+  });
+
+  const cancellations: Array<{ name: string; cancel: (h: ReturnType<typeof harness>) => void }> = [
+    { name: "the user's Stop", cancel: (h) => h.service.userStopped(THREAD) },
+    { name: "the user's own Resume", cancel: (h) => h.service.cancelRun(RUN) },
+    { name: "the run starting again", cancel: (h) => h.append([resumedStart(PAUSED_AT + MINUTE_MS)]) },
+  ];
+  for (const { name, cancel } of cancellations) {
+    it(`${name} cancels a planned resume`, async () => {
+      const h = harness();
+      h.append(limitPause(PAUSED_AT, rateLimit));
+      await h.advance(PAUSED_AT);
+      cancel(h);
+      await h.advance(DUE + HOUR_MS);
+      assert.deepEqual(h.resumed, []);
+      assert.deepEqual(h.recorded, []);
+    });
+  }
+
+  it("switched off, nothing is planned; disposed, nothing is left running", async () => {
+    const off = harness({ enabled: false });
+    off.append(limitPause(PAUSED_AT, rateLimit));
+    await off.advance(DUE);
+    assert.deepEqual([off.resumed, off.timers.size], [[], 0]);
+
+    const h = harness();
+    h.append(limitPause(PAUSED_AT, rateLimit));
+    await h.advance(PAUSED_AT);
+    h.service.dispose();
+    assert.equal(h.timers.size, 0);
+  });
+
+  it("a resume that fails is still counted, so a failing resume cannot repeat forever", async () => {
+    let attempts = 0;
+    let log: EventEnvelope[] = [registered(), ...limitPause(PAUSED_AT, rateLimit)];
+    const lines: string[] = [];
+    const service = new AutoResumeService({
+      enabled: () => true,
+      harnessReady: () => true,
+      freeMb: async () => null,
+      events: async () => log,
+      record: async (_threadId, payload) => {
+        log = [...log, custom(DUE, CustomEvent.RunAutoResumed, { ...payload })];
+      },
+      resume: async () => {
+        attempts++;
+        throw new Error("the loop refused");
+      },
+      now: () => DUE,
+      setTimer: (run) => {
+        run();
+        return 0;
+      },
+      clearTimer: () => {},
+      onLog: (line) => lines.push(line),
+    });
+    const pause = log.slice(-1);
+    for (let look = 0; look <= AUTO_RESUMES_MAX; look++) {
+      service.observe(THREAD, pause);
+      await service.idle();
+    }
+    assert.equal(attempts, AUTO_RESUMES_MAX);
+    assert.ok(lines.some((line) => line.includes("the loop refused")));
+  });
+});
+
+describe("run_auto_resumed where people read it", () => {
+  const record = (cause: string) => [
+    registered(),
+    ...limitPause(PAUSED_AT, rateLimit),
+    custom(DUE, CustomEvent.RunAutoResumed, { runId: RUN, project: "kart", cause, attempt: 1 }),
+  ];
+  const texts = (events: EventEnvelope[]) =>
+    toEntries(events).flatMap((entry) =>
+      "rows" in entry ? entry.rows.map((row) => ("text" in row ? row.text : "")) : "text" in entry ? [entry.text] : [],
+    );
+
+  it("the chat says why the build resumed, in plain words", () => {
+    assert.ok(texts(record(AutoResumeCause.LimitReset)).includes("Resumed automatically after the usage limit reset"));
+    assert.ok(
+      texts(record(AutoResumeCause.LoopRestart)).includes("Resumed automatically after the studio’s loop restarted"),
+    );
+    assert.ok(texts(record("something-new")).includes("Resumed automatically"), "an unknown cause still reads");
+  });
+
+  it("Activity lists the automatic resume beside the run", () => {
+    const item = studioActivity(record(AutoResumeCause.LimitReset)).find((i) => i.kind === "recovery");
+    assert.deepEqual(item && { title: item.title, detail: item.detail, runId: item.runId, project: item.project }, {
+      title: "Resumed a build automatically",
+      detail: "The usage limit reset.",
+      runId: RUN,
+      project: "kart",
+    });
+  });
+});
+
+describe("the core: the switch, its default, and who may write the record", () => {
+  it("Resume builds automatically is on by default and a choice survives a restart", async () => {
+    const lite = await coreLite();
+    assert.equal(lite.core.settings.autoResume, true);
+    const off = await lite.core.updateSettings({ autoResume: false });
+    assert.equal(off.autoResume, false);
+    await lite.core.stop();
+    await lite.core.init();
+    assert.equal(lite.core.settings.autoResume, false, "the choice persists");
+    await lite.close();
+  });
+
+  it("the harness cannot write run_auto_resumed: the count that bounds resumes is the host's", async () => {
+    const lite = await coreLite();
+    const threadId = await lite.core.store.createThread({ title: "game" });
+    await assert.rejects(
+      lite.api()["events.append"]!({
+        threadId,
+        batch: [{ type: EventKind.Custom, event_type: CustomEvent.RunAutoResumed, payload: { runId: RUN } }],
+      } as never),
+      /written by the studio only/,
+    );
+    assert.equal(
+      (await lite.core.store.listEvents(threadId)).filter((e) => e.data.type === EventKind.Custom).length,
+      0,
+      "nothing of the batch was written",
+    );
+    await lite.close();
+  });
+
+  it("a limit pause the harness appends is planned for the reset, and not at all when switched off", async () => {
+    const delays: number[] = [];
+    const lite = await coreLite({
+      autoResume: {
+        // The store dates records by the real clock, so the fake one follows it.
+        now: () => Date.now(),
+        setTimer: (run, ms) => {
+          delays.push(ms);
+          if (ms === 0) run();
+          return delays.length;
+        },
+        clearTimer: () => {},
+        freeMb: async () => 8_000,
+      },
+    });
+    const threadId = await lite.core.store.createThread({ title: "game" });
+    const append = (batch: unknown[]) => lite.api()["events.append"]!({ threadId, batch } as never);
+    const registration = { runId: RUN, budgets: { wallClockMs: 4 * HOUR_MS } };
+    await append([{ type: EventKind.Custom, event_type: CustomEvent.RunRegistered, payload: registration }]);
+    await append(limitPause(PAUSED_AT, rateLimit).map((e) => e.data));
+    for (let i = 0; i < SETTLE_TRIES && delays.length < 2; i++) await sleep(SETTLE_STEP_MS);
+    assert.equal(delays[0], 0, "the pause is planned at once");
+    const wait = delays[1] ?? 0;
+    assert.ok(
+      wait > RESET_MS && wait <= RESET_MS + LIMIT_RESET_MARGIN_MS,
+      `the resume waits for the reset and its margin (${wait} ms)`,
+    );
+
+    delays.length = 0;
+    await lite.core.updateSettings({ autoResume: false });
+    await append([
+      { type: EventKind.Custom, event_type: CustomEvent.RunRegistered, payload: { ...registration, resumed: true } },
+    ]);
+    await append(limitPause(PAUSED_AT, rateLimit).map((e) => e.data));
+    for (let i = 0; i < SETTLE_TRIES; i++) await sleep(SETTLE_STEP_MS);
+    assert.deepEqual(delays, [0], "looked at, and nothing planned");
+    await lite.close();
+  });
+});

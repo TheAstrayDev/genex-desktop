@@ -182,6 +182,7 @@ describe("Copy diagnostics", () => {
       buildersMax: 3,
       agentsMax: 5,
       blender: true,
+      autoResume: true,
     };
     registerSettingsIpc(handle, {
       core: { settings, updateSettings: async () => settings },

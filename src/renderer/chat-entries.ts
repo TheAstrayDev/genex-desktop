@@ -53,6 +53,7 @@ import {
   moveWords,
   outageWords,
   partRoundLine,
+  autoResumedWords,
   pausedWords,
   permissionOutcomeWords,
   permissionTitleWords,
@@ -1305,6 +1306,12 @@ function narrateResumed(chat: ChatDraft, event: EventEnvelope): void {
   if (resumed) say(chat, event.id, SystemTag.Resumed, resumedWords(resumed.doneFacets?.length ?? 0));
 }
 
+/** A build the studio resumed on its own: why, in plain words (`core/auto-resume.ts`). */
+function narrateAutoResumed(chat: ChatDraft, event: EventEnvelope): void {
+  const resumed = customPayload(event.data, CustomEvent.RunAutoResumed);
+  if (resumed) say(chat, event.id, SystemTag.Resumed, autoResumedWords(resumed.cause));
+}
+
 function narrateJudgeRound(chat: ChatDraft, event: EventEnvelope): void {
   const judgeRound = customPayload(event.data, CustomEvent.RunIteration);
   if (!judgeRound) return;
@@ -1450,6 +1457,7 @@ const NARRATORS: readonly Narrator[] = [
   narratePermission,
   narratePaused,
   narrateResumed,
+  narrateAutoResumed,
   narrateJudgeRound,
   narrateFinished,
   narrateLook,

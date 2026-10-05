@@ -58,6 +58,8 @@ export const CustomEvent = {
   IntegrationMerge: "integration_merge",
   ObservationOutage: "observation_outage",
   OptimizationUpdated: "optimization_updated",
+  /** The studio resumed a paused run on its own (`main/core/auto-resume.ts`); written by the host only. */
+  RunAutoResumed: "run_auto_resumed",
   RunBackoff: "run_backoff",
   RunControl: "run_control",
   RunControlApplied: "run_control_applied",
@@ -260,6 +262,18 @@ export const StopCode = {
 } as const;
 export type StopCode = (typeof StopCode)[keyof typeof StopCode];
 
+/**
+ * The engine limit a director's night closed on (its report's `limit`): `kind` is an engine failure
+ * kind (`EngineFailureKind` in shared/engine-requests.ts), `retryAfterMs` how long after `at` (ms since
+ * the epoch; a close that leaves it out is read from its own time) the limit resets.
+ */
+export interface RunLimit {
+  kind?: string;
+  message?: string;
+  retryAfterMs?: number | null;
+  at?: number;
+}
+
 export interface RunFinishedPayload extends RunScope {
   victory?: boolean;
   /** Why the run stopped, as a code (autopilot closes carry one; older closes and other modes may not). */
@@ -271,6 +285,8 @@ export interface RunFinishedPayload extends RunScope {
   landed?: boolean;
   /** Why the run failed, when it did (the director's report). */
   failure?: { message?: string } | null;
+  /** The engine limit that paused it, when one did (a director's night). */
+  limit?: RunLimit | null;
   /** Older closes marked a pause with this flag instead of `executionStatus`. */
   paused?: boolean;
   integrationHead?: string;
@@ -286,6 +302,21 @@ export interface RunFinishedPayload extends RunScope {
    * (the conversation's newest record before that launch), where its working time ends.
    */
   workedUntil?: string;
+}
+
+/** Why the studio resumed a paused run on its own (`run_auto_resumed`). Persisted: never rename a value. */
+export const AutoResumeCause = {
+  /** The engine limit that paused it has reset. */
+  LimitReset: "limit-reset",
+  /** The studio's loop crashed under it and is running again. */
+  LoopRestart: "loop-restart",
+} as const;
+export type AutoResumeCause = (typeof AutoResumeCause)[keyof typeof AutoResumeCause];
+
+/** A paused run the studio resumed on its own: why, and which of the run's automatic resumes it is. */
+export interface RunAutoResumedPayload extends RunScope {
+  cause?: AutoResumeCause;
+  attempt?: number;
 }
 
 /** One part of the plan, as the start and plan-review records list it. */
@@ -594,6 +625,7 @@ export interface CustomEventMap {
   plugin_tool_started: PluginToolStartedPayload & { facetTitle?: string };
   tool_permission: ToolPermissionEvent;
   rebuild_and_restart_studio: { ok?: boolean; reason?: string };
+  run_auto_resumed: RunAutoResumedPayload;
   run_control: RunScope & { action?: string };
   run_finished: RunFinishedPayload;
   run_iteration: RunScope & { winner?: string; biggest_gap?: string; verdict?: RoundVerdict | null };

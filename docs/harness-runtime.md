@@ -540,6 +540,22 @@ local timing history is bounded, survives Resume and records any omitted spans. 
 origins keep within-process wall-clock corrections out of elapsed unions. Concurrent work totals are
 separate from wall-time union; neither is a measured model-speed improvement.
 
+### Automatic resume
+
+A paused build is the user's to resume, with two exceptions the host takes itself
+(`main/core/auto-resume.ts`) while Settings → Harness **Resume builds automatically** is on (the
+default). A director night closed on an engine limit (`run_finished.limit`: `rate_limit` or
+`usage_limit` with `retryAfterMs`) resumes two minutes after the limit resets. A run the loop's
+crash paused (the host saw the harness exit with it open, `onHarnessDied`, and the reborn loop's
+close came after) resumes once the harness is ready. The pure planner `autoResumePlan` reads typed
+fields only, never a close's words. A resume goes through the Resume button's own
+`resumeAutopilot`, after a host-only `run_auto_resumed` (`cause`, `attempt`) that bounds it. None
+happens after `AUTO_RESUMES_MAX` (2) automatic resumes of the run, after the user's Stop in that
+chat or a Finish since the run last started, with under ten minutes of working time left, for a
+reset more than 12 hours away, or after ten minutes past its time without a ready harness or 1 GB
+of free memory. A user Resume cancels the planned one. A cold start (the app itself quit or died)
+and a crash loop the watchdog rewound stay the user's click (`recovery.ts` `closeInterruptedRun`).
+
 ## Provider model defaults
 
 Unset model roles defer to the selected coding CLI under Genex settings. An explicit main-model

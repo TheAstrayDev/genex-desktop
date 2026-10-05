@@ -3335,6 +3335,8 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
       { previewPoolMax: 2, createHeadlessPreview: async () => makeFakePreview() },
     );
     rigs.push(rig);
+    // The pause itself is what this row reads: the host's automatic resume has a row of its own.
+    await rig.core.updateSettings({ autoResume: false });
     const project = await rig.core.games.scaffold("crash-night", { title: "Crash night" });
     const aborts = { lead: 0, builder: 0 };
     const letBuilderGo: Array<() => void> = [];
@@ -3562,6 +3564,8 @@ describe("a night the loop died in, resumed (the full journal)", () => {
       { previewPoolMax: 3, createHeadlessPreview: async () => makeFakePreview() },
     );
     rigs.push(rig);
+    // The user's own Resume is what this row reads: the host's automatic resume has a row of its own.
+    await rig.core.updateSettings({ autoResume: false });
     const project = await rig.core.games.scaffold("resume-night", { title: "Resume night" });
     const lead: DelegateRequest[] = [];
     let resumed = false;
@@ -3685,6 +3689,102 @@ describe("a night the loop died in, resumed (the full journal)", () => {
     assert.ok(soft <= resumedTurnAt + workingLeft, `${iso(soft)} is after ${iso(resumedTurnAt + workingLeft)}`);
     assert.match(stands, new RegExp(`wrap-up at ${utc(soft)}`), "the wrap-up when the working time it had left ends");
     assert.ok(after.clock.workedMs >= worked, "the time it worked is never given back");
+  });
+
+  it("crash mid-build with Resume builds automatically on: the host resumes the paused night once, as soon as its loop is back", async () => {
+    const rig = await startRig(
+      { replies: [] },
+      { previewPoolMax: 3, createHeadlessPreview: async () => makeFakePreview() },
+    );
+    rigs.push(rig);
+    assert.equal(rig.core.settings.autoResume, true, "on by default");
+    const project = await rig.core.games.scaffold("auto-resume-night", { title: "Auto resume night" });
+    const lead: DelegateRequest[] = [];
+    let crashed = false;
+    registerFakeEngine(rig, {
+      complete: () => null,
+      delegate: async (request: DelegateRequest) => {
+        if (request.director) {
+          lead.push(request);
+          const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args).catch(() => "");
+          if (crashed) {
+            await call("finish", { land: "no", summary: "picked up on its own" });
+            return { sessionId: "lead-1", summary: "finished" };
+          }
+          await call("plan", {
+            summary: "Tonight: a dusk plaza.",
+            workers: JSON.stringify([
+              { id: "sky", title: "Dusk sky", seam: "the sky", owns: "src/sky.js", done: ["dusk"], minutes: 20 },
+            ]),
+            base: "the integration branch as it stands",
+            risks: "none",
+          });
+          await call("worker_start", {
+            id: "sky",
+            title: "Dusk sky",
+            brief: "Build a dusk sky over the plaza",
+            mode: "single",
+            minutes: "20",
+            owns: "src/sky.js",
+          });
+          return { sessionId: "lead-1", summary: "the sky is building" };
+        }
+        if (!request.selfCapture) return null;
+        return new Promise<Record<string, unknown>>((resolve) =>
+          request.signal!.addEventListener("abort", () => resolve({ ok: false, stopReason: "stopped", summary: "" })),
+        );
+      },
+    });
+
+    const runId = rig.core.newRunId();
+    void rig.core
+      .dispatchRun({
+        runId,
+        goal: "a dusk plaza",
+        project: project.name,
+        mode: "autopilot",
+        engine: "fake-delegate",
+        reference: { name: "Dusk", shots: [] },
+        budgets: { wallClockMs: BUDGET_MS },
+      } as never)
+      .catch(() => {});
+    const threadId = await rig.core.threadForGame(project.name);
+    const journal = async () =>
+      ((await rig.core.store.readArtifact(threadId, `autopilot_${runId}`).catch(() => null)) ?? null) as Record<
+        string,
+        any
+      > | null;
+    await until(
+      async () => lead.length === 1 && Boolean((await journal())?.director?.wake),
+      "the lead to rest with the sky building",
+      180_000,
+    );
+
+    crashed = true;
+    const pid = rig.core.host.pid;
+    assert.ok(pid, "the harness child has a pid to kill");
+    killTree(pid);
+    // Nobody presses Resume: the reborn loop pauses the night and the host picks it back up.
+    await until(() => lead.length >= 2, "the night resumed without a click", 180_000);
+    await until(
+      async () =>
+        customEvents(await rig.core.store.listEvents(threadId), "run_finished").filter((e) => e.runId === runId)
+          .length >= 2,
+      "the resumed night to close",
+      180_000,
+    );
+    const events = await rig.core.store.listEvents(threadId);
+    const automatic = customEvents(events, "run_auto_resumed").filter((e) => e.runId === runId);
+    assert.deepEqual(
+      automatic.map((e) => [e.cause, e.attempt, e.project]),
+      [["loop-restart", 1, project.name]],
+      "resumed once, for the loop's crash, and recorded before it resumed",
+    );
+    const order = events
+      .filter((e) => e.data.type === "custom" && (e.data.payload as { runId?: string })?.runId === runId)
+      .map((e) => (e.data as { event_type: string }).event_type)
+      .filter((type) => ["autopilot_paused", "run_auto_resumed", "run_registered"].includes(type));
+    assert.deepEqual(order, ["run_registered", "autopilot_paused", "run_auto_resumed", "run_registered"]);
   });
 });
 

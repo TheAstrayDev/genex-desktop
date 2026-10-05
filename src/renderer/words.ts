@@ -22,7 +22,7 @@
 import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "../shared/boot.ts";
 import { ChatFileOpen } from "../shared/chat-files.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
-import type { CustomEvent, CustomPayload } from "../shared/custom-events.ts";
+import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
@@ -1068,6 +1068,25 @@ export function planReviewWords(plan: {
 export function pausedWords(): string {
   return "The build stopped. Everything built so far is kept.";
 }
+
+/** Why the studio resumed a build on its own (`run_auto_resumed`), as the chat says it. */
+const AUTO_RESUMED_WORDS = {
+  [AutoResumeCause.LimitReset]: "Resumed automatically after the usage limit reset",
+  [AutoResumeCause.LoopRestart]: "Resumed automatically after the studio’s loop restarted",
+} as const satisfies Record<AutoResumeCause, string>;
+
+/** The chat's line for a build the studio resumed on its own; a cause this version does not know still reads. */
+export function autoResumedWords(cause: unknown): string {
+  const known = Object.values(AutoResumeCause).find((value) => value === cause);
+  return known ? AUTO_RESUMED_WORDS[known] : "Resumed automatically";
+}
+
+/** Settings → Harness: the switch for host auto-resume. */
+export const AUTO_RESUME_SETTING_WORDS = {
+  label: "Resume builds automatically",
+  detail:
+    "When a usage limit resets or Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped.",
+} as const;
 
 export function resumedWords(parts: number): string {
   const done = Math.max(0, Math.trunc(parts || 0));

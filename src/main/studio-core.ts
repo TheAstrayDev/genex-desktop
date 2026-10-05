@@ -117,6 +117,8 @@ import { layoutFor, type StudioLayout } from "./core/layout.ts";
 import { createPlanReviews } from "./core/plan-drafts.ts";
 import { CONSENT_TIMEOUT_MS, PluginToolService } from "./core/plugin-tools.ts";
 import { PreviewService } from "./core/previews.ts";
+import { AutoResumeService, type AutoResumeDeps } from "./core/auto-resume.ts";
+import { availableMemory } from "../substrate/hardware.ts";
 import { RecoveryService } from "./core/recovery.ts";
 import { ChatRewindService } from "./core/rewind.ts";
 import { SelfEditGateService } from "./core/self-edit-gate.ts";
@@ -322,6 +324,8 @@ export interface StudioCoreOptions {
    * it waits on; a test seam.
    */
   rewindBuildStop?: { timeoutMs?: number; now?: () => number; sleep?: (ms: number) => Promise<unknown> };
+  /** The clock, timers and memory reading host auto-resume uses (`core/auto-resume.ts`); a test seam. */
+  autoResume?: Partial<Pick<AutoResumeDeps, "now" | "setTimer" | "clearTimer" | "freeMb">>;
   onUiEvent?: (event: UiEvent) => void;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
 }
@@ -369,6 +373,8 @@ export class StudioCore {
   readonly #previews: PreviewService;
   readonly #delegation: DelegationService;
   readonly #recovery: RecoveryService;
+  /** Resumes a paused build on its own once its limit resets or its loop runs again. */
+  readonly #autoResume: AutoResumeService;
   readonly #selfImprovement: SelfImprovementService;
   readonly #selfEditGate: SelfEditGateService;
   readonly #pluginTools: PluginToolService;
@@ -391,6 +397,7 @@ export class StudioCore {
     buildersMax: DEFAULT_BUILDERS,
     agentsMax: DEFAULT_POOL_MAX,
     blender: true,
+    autoResume: true,
   };
   #assetCheckpointStore?: AssetCheckpoints;
   #planReviews?: PlanReviewController;
@@ -437,6 +444,7 @@ export class StudioCore {
     this.#previews = new PreviewService(this, this.#x);
     this.#delegation = new DelegationService(this, this.#x);
     this.#recovery = new RecoveryService(this, this.#x);
+    this.#autoResume = this.#createAutoResume();
     this.#selfImprovement = new SelfImprovementService(this, this.#x);
     this.#selfEditGate = new SelfEditGateService(this, this.#x);
     this.#pluginTools = new PluginToolService(this, this.#x);
@@ -446,6 +454,22 @@ export class StudioCore {
     this.#gameFiles = new GameFileService(this);
     this.#rewind = new ChatRewindService(this, this.#x);
     this.#permissions = new ChatPermissionService(this);
+  }
+
+  #createAutoResume(): AutoResumeService {
+    const seam: NonNullable<StudioCoreOptions["autoResume"]> = this.options.autoResume ?? {};
+    return new AutoResumeService({
+      ...seam,
+      enabled: () => this.#settings.autoResume,
+      harnessReady: () => this.host?.state === HarnessState.Ready,
+      freeMb: seam.freeMb ?? (async () => (await availableMemory()).freeMb),
+      events: (threadId) => this.store.listEvents(threadId),
+      record: async (threadId, payload) => {
+        await this.append([customEventData(CustomEvent.RunAutoResumed, { ...payload })], threadId);
+      },
+      resume: (runId) => this.#resumeAutopilot(runId),
+      onLog: (line) => this.options.onLog?.(line, "stderr"),
+    });
   }
 
   /**
@@ -974,7 +998,12 @@ export class StudioCore {
         }
         this.emit(UiEvent.HarnessState, { state });
       },
-      onUnexpectedExit: () => this.#recovery.onHarnessDied(),
+      onUnexpectedExit: async () => {
+        const died = await this.#recovery.onHarnessDied();
+        // A pause the reborn loop writes for one of these runs came from this crash.
+        this.#autoResume.noteCrash(died.openRuns);
+        return died;
+      },
       onCrashLoop: (exits) => this.recover(`harness crashed ${exits.length}× in a row`),
       onWedged: (silenceMs) => this.recover(`harness stopped responding for ${Math.round(silenceMs / SECOND_MS)}s`),
     });
@@ -1088,6 +1117,7 @@ export class StudioCore {
     if (this.#x.idleTimer) clearInterval(this.#x.idleTimer);
     this.#x.idleTimer = null;
     if (this.#activityWarmup) clearTimeout(this.#activityWarmup);
+    this.#autoResume.dispose();
     // No orphan contractors: a delegation must not outlive the studio that briefed it. (The
     // first live build's contractor survived an app restart and collided with its successor.)
     for (const delegation of this.#x.activeDelegations.values()) delegation.abort.abort();
@@ -1170,6 +1200,7 @@ export class StudioCore {
       }
     }
     for (const runId of changedRuns) this.emit(UiEvent.RunSummaryChanged, { runId });
+    this.#autoResume.observe(threadId, result.events);
     return result.latestEventId;
   }
 
@@ -1354,6 +1385,7 @@ export class StudioCore {
         buildersMax,
         agentsMax: buildersMax + LEAD_WINDOWS,
         blender: parsed.blender !== false,
+        autoResume: parsed.autoResume !== false,
       };
     } catch {
       /* first launch — defaults stand */
@@ -2012,6 +2044,8 @@ export class StudioCore {
 
   // ── recovery ─────────────────────────────────────────────────────────────────────────────
   recover(...args: Parameters<RecoveryService["recover"]>): ReturnType<RecoveryService["recover"]> {
+    // A loop the watchdog has to rewind crashed in a loop: its runs are the user's to resume.
+    this.#autoResume.forgetCrashes();
     return this.#recovery.recover(...args);
   }
 
@@ -2047,6 +2081,7 @@ export class StudioCore {
   }
 
   stopThread(...args: Parameters<ConversationService["stopThread"]>): ReturnType<ConversationService["stopThread"]> {
+    this.#autoResume.userStopped(args[0]);
     return this.#conversation.stopThread(...args);
   }
 
@@ -2098,10 +2133,17 @@ export class StudioCore {
   }
 
   /**
-   * Resume a paused Autopilot run — the user's click, never a boot side effect (A4). The run
-   * is found by its journal artifact; completed facets replay from it, unfinished work restarts.
+   * Resume a paused Autopilot run — the user's click, never a boot side effect (A4); host
+   * auto-resume (`core/auto-resume.ts`) takes the same path. The run is found by its journal
+   * artifact; completed facets replay from it, unfinished work restarts.
    */
   async resumeAutopilot(runId: string): Promise<void> {
+    // The user's own Resume: a resume the studio planned for this run is no longer needed.
+    this.#autoResume.cancelRun(runId);
+    await this.#resumeAutopilot(runId);
+  }
+
+  async #resumeAutopilot(runId: string): Promise<void> {
     this.#selfImprovement.touchActivity();
     const loopPredatesResume =
       this.host.state === HarnessState.Ready && !this.host.hasCapability(HarnessCapability.Autopilot);
