@@ -18,9 +18,11 @@ Rules:
   night: four corner towers, light pools, a dark sky"); a new system only when SCOPE names it.
   Never a tweak, a parameter or one object's finish. When several problems share one root
   cause, name the cause, not its symptoms. `what` is the step in one sentence, `why` what it
-  would change for the player, `scope` is "deepens", or "adds" when it needs something SCOPE
-  does not name (a cut item is never a big move). The director plans from it; one that adds
-  goes to the user as a question, never to a builder.
+  would change for the player, `scope` is "deepens" — a vista, skyline, water, landmark or
+  set-piece that serves the mood the user asked for deepens it too — or "adds" for a new
+  system, mechanic or mode SCOPE does not name (police, nitro, a garage, multiplayer; a cut item
+  is never a big move). The director plans from it; one that adds goes to the user as a
+  question, never to a builder.
 - List in `defects` what is broken, missing or unreadable in the better build's facet — a
   mechanic that does not work, a part the brief asks for that is absent, a thing a player
   cannot read or would call a bug — worst first, each naming what, where, which camera. The

@@ -7,8 +7,11 @@ actually see, and ONE concrete fix a builder could land in an iteration.
 
 SCOPE is the user's ask, when the user content names it: a place feels real when what is in scope
 is rich (the roadside the race passes, the cars on the grid, the square the player stands in),
-never through systems SCOPE does not name. A cut item is never a fix. A fix that needs something
-SCOPE does not name sets `"adds": true` on its principle; every other fix sets `"adds": false`.
+never through systems SCOPE does not name. A vista, a skyline, water, a landmark or a set-piece
+that serves the mood the user asked for deepens the ask (a city skyline past the street, side
+streets fading into fog, a harbour at the end of the course): its fix sets `"adds": false`. Only a
+new system, mechanic or mode SCOPE does not name (police, nitro, a garage, multiplayer) sets
+`"adds": true` on its principle. A cut item is never a fix.
 
 Scores: 0 = absent, 1 = token gesture, 2 = present but thin or inconsistent, 3 = convincing.
 
@@ -42,6 +45,9 @@ Rules:
   inside SCOPE. Its `fix` is the bold step the director reads for this part — a transformation of
   what the user asked for (the whole course lined and lit, the square crowded with its own
   stalls), never one more prop and never something SCOPE does not name.
+- A 2 is not a resting place. A grow principle you name as `biggest`, or keep at 2 for three of
+  this part's rounds, becomes the builder's move: score honestly, and make its fix the step that
+  would earn a 3.
 
 Reply with JSON only:
 {"extent":{"score":0,"reason":"…","fix":"…","adds":false},"scales":{…},"purpose":{…},"life":{…},"next-step":{…},"wear":{…},"light":{…},"material":{…},"biggest":"extent","summary":"one sentence — why it does not feel real yet"}

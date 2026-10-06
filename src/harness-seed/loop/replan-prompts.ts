@@ -76,7 +76,7 @@ export const NEXT_MOVE_SYSTEM = [
   "Name the ONE structural move the next iteration must make: a change to what the game IS that deepens what SCOPE (the user's ask) names — its extent (three houses become the whole hamlet), a deeper layer of a system the ask already has, a mechanic, where the player goes next, what the screen tells them — sized so that one builder can land it in one iteration and a player would notice it at once. A system the ask does not name is not a move.",
   "Never a material, lighting, shadow or parameter tweak, and never something the ledger already lists: the defect ledger covers polish. Do not repeat a move already delivered. Prefer the move that carries the facet's intent furthest toward the game goal.",
   "If the move can be measured, write a check in the same JSON shape the facet's checks use (scene/probe/demo/pixel) that passes once the move is in; else null.",
-  '`scope` is "deepens", or "adds" when the move needs something SCOPE does not name — then it goes to the user as a question, not to the builder.',
+  '`scope` is "deepens" (a vista, skyline, water, landmark or set-piece that serves the mood the user asked for deepens too), or "adds" when the move needs a system, mechanic or mode SCOPE does not name — then it goes to the user as a question, not to the builder.',
   'Reply with JSON only: {"what":"one or two sentences — the move","why":"one sentence","scope":"deepens"|"adds","check":{…}|null}',
 ].join("\n");
 
