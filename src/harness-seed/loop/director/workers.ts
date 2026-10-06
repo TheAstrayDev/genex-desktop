@@ -24,6 +24,8 @@ import { isRunning, setWorkerState, WorkerMode, WorkerState } from "../outcomes.
 import { runRef } from "../repo.ts";
 import { RunEvent } from "../run-events.ts";
 import { normalizeScoutSetup } from "../scout.ts";
+import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
+import { FINISH_START_MOVES } from "../facet/stage-prompts.ts";
 import { isCommit } from "../shell.ts";
 import { CheckWeight, MAX_DONE, MAX_MILESTONES } from "../spec.ts";
 import { CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, clip } from "../text.ts";
@@ -555,6 +557,9 @@ export async function startRefusal(night: Night, id: string, args: AnyRecord) {
   // policy that did.
   const policySpec = normalizeFacetPolicy(args.policy);
   if (policySpec.error !== undefined) return policySpec.error;
+  // The stage, for the same reason: an unknown one, or a finish asked to build a ladder, is the call's.
+  const stage = stageArg(args.stage, { move: args.move, milestones: args.milestones });
+  if (stage.error !== undefined) return stage.error;
   const seam = seamRefusal(night, id, args);
   if (seam) return seam;
   const cap = await ctx.call(HostMethod.PreviewCapacity, {}).catch(() => null);
@@ -963,6 +968,7 @@ function compileContract(night: Night, worker: Worker, parsed: WorkerArgs, args:
       screen: !ownShape,
       index: state.workers.size,
       forkedFrom: worker.from,
+      stage: String(args.stage ?? "").trim() || null,
     },
     state.evidenceByHead.get(worker.from) ?? null,
     { rarelyMeasurable: neverMeasured() },
@@ -1046,6 +1052,20 @@ function launchWorker(night: Night, worker: Worker): void {
   });
 }
 
+/**
+ * The ladder it will climb, one rung per accepted build — or a warning that the harness's own
+ * planner will name the move instead, which is rarely your brief. A finishing worker takes no
+ * move at all, and says so.
+ */
+function ladderFields(spec: FacetSpec): AnyRecord {
+  if (isFinishing(spec)) return { stage: FacetStage.Finish, moves: FINISH_START_MOVES };
+  if (spec.milestones?.length) return { milestones: spec.milestones.map((m: AnyRecord) => m.what) };
+  return {
+    moves:
+      "no move and no milestones: the harness's planner names one structural move per iteration once identity holds — give `move` (and `milestones`) if the order matters to you",
+  };
+}
+
 /** What `worker_start` answers about a loop worker's contract: what it finishes on, its ladder, its warnings. */
 function loopStartFields(worker: Worker): AnyRecord {
   const spec = contractOf(worker);
@@ -1054,14 +1074,7 @@ function loopStartFields(worker: Worker): AnyRecord {
     // What it will finish on. No identity check means no exit but "every check passes".
     identityChecks: identityChecks(worker),
     ...(spec.done?.length ? { done: spec.done.map((d: AnyRecord) => d.id) } : {}),
-    // The ladder it will climb, one rung per accepted build — or a warning that the
-    // harness's own planner will name the move instead, which is rarely your brief.
-    ...(spec.milestones?.length
-      ? { milestones: spec.milestones.map((m: AnyRecord) => m.what) }
-      : {
-          moves:
-            "no move and no milestones: the harness's planner names one structural move per iteration once identity holds — give `move` (and `milestones`) if the order matters to you",
-        }),
+    ...ladderFields(spec),
     ...(identityChecks(worker) > 0
       ? {}
       : {

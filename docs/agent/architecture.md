@@ -607,19 +607,20 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
   [after the build](../conversation-coordinator.md#after-the-build-the-same-session)).
 - Each turn of the director's session ends with a host-written `session_activity` (`completed`,
   `interrupted` or `failed`), never a `turn_ended`, so the chat shows the build between turns.
-- A monitor (`loop/director/workers.ts`) reads each running worktree with `git status --porcelain`
-  and `git diff -U0` plus the mechanical reviewer (no model, window or index lock) and notes
-  only a change. The digest gives each worker a `waitDigest` line with its reviewers' ideas, and
-  the room left.
+- A monitor (`loop/director/workers.ts`) reads each running worktree (`git status --porcelain`,
+  `git diff -U0`, the mechanical reviewer; no model, window or index lock) and notes only a
+  change; `waitDigest` gives each worker its reviewers' ideas and the room left.
 - Defects a judge names for another worker's seam route to that worker's live spec
-  (`makeRouteDefect`); a finished owner's defects go to `defectsNobodyOwns`; a worker never routes
-  to itself.
-- The director owns a worker's move ladder when it gives one (`move`, `milestones`,
-  `spec.moveOwner = "director"`); otherwise a named move is guidance and costs a round only when
-  asked for or after `polishStreakEscalate` polish-only rounds. A steered rung goes next; a rung
-  climbs once its check passes or the judge finds it built, and `RUNG_MISSES` misses set it aside
-  (`facet/round-judgement.ts`); then the judge's `bigMove`.
-  `integrate` takes a running worker's `lastAccepted`.
+  (`makeRouteDefect`); a finished owner's defects go to `defectsNobodyOwns`; never to
+  itself.
+- The director owns a worker's ladder when it gives one (`move`, `milestones`,
+  `spec.moveOwner = "director"`); otherwise a named move is guidance until `polishStreakEscalate`
+  polish-only rounds escalate it (`move.escalated`). Steered rungs go first; a rung climbs on its
+  check or the judge's word, `RUNG_MISSES` set it aside (`facet/round-judgement.ts`); then the
+  judge's `bigMove`. `integrate` takes a running worker's
+  `lastAccepted`.
+- `spec.stage = "finish"` (`facet/stage.ts`, `stage=`): no move or polish streak, the judge's
+  polish list (`judge/taste-finish.md`) is the work; a preferred, unbroken build ends it.
 - `worker_start` may override `FACET_POLICY`; `loopDigest` puts each worker's phase, streaks and
   checks in the digests.
 - The session ends before the hard deadline (`wrapReserveMs`); the two closes are one function

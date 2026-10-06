@@ -180,6 +180,10 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
           type: "string",
           description: `loop only: JSON array of 2–${MAX_MILESTONES} ORDERED structural steps after the move, each a transformation one accepted round builds (a system, a layer of depth, a reworked feel), never small fixes: [{"what":"herons wade","check":{"kind":"scene","js":"count('heron') >= 3"}}] (check optional). One rung per accepted build; a rung the judge finds built is climbed. While the ladder lasts the harness names no move; once climbed the worker builds its reviewer's big move until worker_steer move= adds a rung.`,
         },
+        stage: {
+          type: "string",
+          description: "finish: polish what exists, no move; blind pick wins, regressions roll back (default build).",
+        },
         identity: {
           type: "string",
           description:
@@ -245,6 +249,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
           description:
             "The next rung of its ladder, in a sentence — what the game IS afterwards. It becomes THE MOVE of the worker's next iteration (mandatory), ahead of its ladder and the harness's own.",
         },
+        stage: { type: "string", description: "build|finish from its next round." },
       },
       required: ["id"],
     },

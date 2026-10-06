@@ -17,6 +17,7 @@ import { rungsMetOnBoard } from "../round-judgement.ts";
 import { FIX_STUCK_LOSSES } from "../policy.ts";
 import { similarDefect } from "../defects.ts";
 import { recordDecision } from "../record.ts";
+import { movesInStage } from "../stage.ts";
 
 /** The planner is asked for a move only with this much of the facet's clock left (or a slice of a short one). */
 const PLANNER_MOVE_MIN_MS = 8 * MINUTE_MS;
@@ -26,6 +27,9 @@ export async function chooseRoundMove(loop: FacetLoop, round: FacetRound): Promi
   const { hasTime, legacy, milestonesDone, policy, spec } = loop;
   // ── the move (§5): the director's ladder always; else identity first, then the planner ──
   loop.currentMove = null;
+  // A finishing worker takes no move of any kind — no rung, no reviewer's or critic's move, no
+  // planner call: the judge's polish list and the defect ledger are its work (facet/stage.ts).
+  if (!movesInStage(spec)) return;
   if (legacy || !movesThisRound(spec, loop.board)) return;
   await climbMeasuredRungs(loop);
   const choice = chooseMove({
@@ -182,14 +186,17 @@ function seedMoveCheck(loop: FacetLoop, check: Check | null | undefined): void {
 /**
  * The move, on the record. Whether missing it can undo the round (M3.3): a rung of the ladder
  * can, an invented one only after two accepted builds that polished instead of moving.
+ * `escalated` says which of the two made it mandatory: the brief and the prompt say ESCALATE only
+ * when polish did — never for a rung the director asked for, and never for guidance.
  */
 async function announceMove(loop: FacetLoop, round: FacetRound, mandatory: boolean): Promise<void> {
-  const { appendRun, facet, milestonesDone, run, spec } = loop;
+  const { appendRun, facet, milestonesDone, policy, run, spec } = loop;
   const move = loop.currentMove;
   if (!move) return;
   move.mandatory = mandatory;
   move.ladder = renderMilestones(spec.milestones ?? [], { done: [...milestonesDone], current: move.milestoneId });
   move.polishStreak = loop.polishStreak;
+  move.escalated = escalatedByPolish(move, loop.polishStreak, policy.polishStreakEscalate);
   await appendRun(RunEvent.FacetMove, {
     runId: run.runId,
     facetId: facet.id,
@@ -202,6 +209,12 @@ async function announceMove(loop: FacetLoop, round: FacetRound, mandatory: boole
     delivered: null,
     scale: null,
   });
+}
+
+/** Did a polish streak make this move mandatory (and not the director's ladder)? */
+function escalatedByPolish(move: AnyRecord, polishStreak: number, threshold: number): boolean {
+  if (move.mandatory !== true || move.source === MoveSource.Milestone) return false;
+  return polishStreak >= threshold;
 }
 
 /** THE FIX: a biggest gap the judge has repeated, named on its own and measured by its own check. */

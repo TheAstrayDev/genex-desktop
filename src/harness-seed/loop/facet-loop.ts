@@ -57,6 +57,14 @@ export {
 export { FACET_POLICY, FACET_POLICY_RANGE, normalizeFacetPolicy, loopStateOf } from "./facet/policy.ts";
 export type { FacetPolicy } from "./facet/policy.ts";
 export {
+  FacetStage,
+  FINISH_POLISH_NOTES,
+  finishDone,
+  movesInStage,
+  polishCountsInStage,
+  stageOf,
+} from "./facet/stage.ts";
+export {
   MAX_PROMPT_LIST,
   MAX_PROMPT_STEERING,
   MAX_PROMPT_FAILURE,

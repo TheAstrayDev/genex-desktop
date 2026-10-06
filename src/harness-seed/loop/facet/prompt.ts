@@ -5,6 +5,8 @@ import { roleEngine, RoleKey, toolCall } from "../model-roles.ts";
 import { facetNotes } from "../repo.ts";
 import { CLIP_QUOTE } from "../text.ts";
 import { DEFAULT_CAMERA } from "../cameras.ts";
+import { FacetStage, stageOf } from "./stage.ts";
+import { FINISH_FIX_ASK, FINISH_PROMPT_LINE, finishLossEscalate } from "./stage-prompts.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** Reference stills into the first brief, and pair images later, at most. */
@@ -229,6 +231,8 @@ type PromptInput = AnyRecord & {
   failureText: string | null;
   moveLine: string;
   briefPointer: string;
+  /** A finishing worker (facet/stage.ts): no move, polish is the work. */
+  finishing: boolean;
 };
 
 function promptInput({
@@ -251,9 +255,11 @@ function promptInput({
   shape = null,
   ownShape = false,
   game = null,
+  stage = null,
   ...rest
 }: AnyRecord): PromptInput {
   const { briefFile } = rest;
+  const finishing = stageOf({ stage }) === FacetStage.Finish;
   return {
     ...rest,
     briefText,
@@ -284,7 +290,10 @@ function promptInput({
     pointsAtBrief: Boolean(briefFile) && briefText === null,
     steering: cappedSteering(userSteering),
     failureText: lastFailure ? cappedFailure(lastFailure) : null,
-    moveLine: [moveAsk(move), fixAsk(fix)].filter(Boolean).join("\n"),
+    finishing,
+    moveLine: (finishing ? [FINISH_PROMPT_LINE, fixAsk(fix, true)] : [moveAsk(move), fixAsk(fix)])
+      .filter(Boolean)
+      .join("\n"),
     briefPointer: briefFile
       ? `READ ${briefFile} FIRST — it is this iteration's brief: the checks (your contract), the scoreboard, the attempts that lost, and the recipes that apply.`
       : "",
@@ -299,17 +308,25 @@ function moveAsk(move: AnyRecord | null): string {
     : " — the taste judge answers whether it is visible";
   const lead = move.mandatory ? "A build that only tunes what already exists LOSES; make" : "Make";
   const escalate =
-    move.polishStreak >= 2 ? ` ESCALATE: your last ${move.polishStreak} accepted builds were polish only.` : "";
+    move.escalated === true ? ` ESCALATE: your last ${move.polishStreak} accepted builds were polish only.` : "";
   return `THE MOVE THIS ITERATION (${move.mandatory ? "mandatory" : "asked for"}): ${move.what}${measured}. ${lead} the move first — the whole step, boldly, so a player notices it in the first minute — then fix up to three ledger items.${escalate}`;
 }
 
-/** THE FIX this iteration names, and how many more namings make it mandatory. */
-function fixAsk(fix: AnyRecord | null): string {
+/** THE FIX this iteration names, and how many more namings make it mandatory; a finisher may tune it closed. */
+function fixAsk(fix: AnyRecord | null, finishing = false): string {
   if (!fix?.what) return "";
   const weight = fix.mandatory
     ? "mandatory — a build that leaves it LOSES"
     : "the judge has named it " + fix.streak + " times; next time it is mandatory";
-  return `THE FIX THIS ITERATION (${weight}): ${fix.what}${fix.checkId ? ` — measured by check ${fix.checkId}` : ""}. Replace the mechanism, do not tune it: if it is a shape, rebuild the shape; if it is a material, change the material kind (foliage.js for anything leafy).`;
+  const how = finishing
+    ? FINISH_FIX_ASK
+    : "Replace the mechanism, do not tune it: if it is a shape, rebuild the shape; if it is a material, change the material kind (foliage.js for anything leafy).";
+  return `THE FIX THIS ITERATION (${weight}): ${fix.what}${fix.checkId ? ` — measured by check ${fix.checkId}` : ""}. ${how}`;
+}
+
+/** A losing streak's ESCALATE: the build stage's own words, or a finisher's "change the approach". */
+function lossEscalate(p: PromptInput, buildWords: string): string {
+  return p.finishing ? finishLossEscalate(p.loseStreak) : buildWords;
 }
 
 /** The board's failing entries and the ones nobody could measure. */
@@ -359,7 +376,10 @@ function resumedPrompt(p: PromptInput): string {
       : "",
     resumedLedger(p),
     p.loseStreak >= 2
-      ? `ESCALATE: ${p.loseStreak} losses in a row on the same checks — change the mechanism, do not re-tune numbers.`
+      ? lossEscalate(
+          p,
+          `ESCALATE: ${p.loseStreak} losses in a row on the same checks — change the mechanism, do not re-tune numbers.`,
+        )
       : "",
     "",
     "Flip failing checks, identity first; do not break passing ones. Capture and LOOK before you finish. Update " +
@@ -581,7 +601,8 @@ function legacyProgress({ defectList, loseStreak, gapHistory }: PromptInput): st
 }
 
 /** A checked facet's news: what still fails, what nobody could measure, and a losing streak. */
-function boardProgress({ board, loseStreak }: PromptInput): string[] {
+function boardProgress(p: PromptInput): string[] {
+  const { board, loseStreak } = p;
   const { failing, unmeasuredNow } = boardState(board);
   const lines: string[] = [];
   if (failing.length)
@@ -593,7 +614,10 @@ function boardProgress({ board, loseStreak }: PromptInput): string[] {
   if (loseStreak >= 2)
     lines.push(
       "",
-      `ESCALATE: ${loseStreak} losses in a row — parameter tweaks on the current approach have failed. Replace the mechanism.`,
+      lossEscalate(
+        p,
+        `ESCALATE: ${loseStreak} losses in a row — parameter tweaks on the current approach have failed. Replace the mechanism.`,
+      ),
     );
   return lines;
 }

@@ -78,6 +78,13 @@ describe("the artefact classes the three judges share", () => {
     assert.match(sharedBlock(), /^## Known artefact classes/);
   });
 
+  it("keeps the marker out of the finish rubric, which rides after taste-veto.md and would list the classes twice", () => {
+    const text = rubric("taste-finish.md");
+    assert.equal(text.includes(ARTEFACT_MARKER), false);
+    assert.equal(text.includes("[haze-plane]"), false);
+    assert.match(text, /^## The finish stage/);
+  });
+
   it("renders byte for byte what the rubrics used to say when the run declared nothing", () => {
     // This is what makes the migration safe: an empty token set is the identity filter, and the
     // fixture is the text the three rubrics shipped before the block moved.

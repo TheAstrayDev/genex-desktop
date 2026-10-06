@@ -17,6 +17,8 @@ import { runPlaytest } from "../playtester.ts";
 import { attemptRef } from "../repo.ts";
 import { RunEvent, SteeringSource } from "../run-events.ts";
 import { CheckKind, CheckWeight, MoveOwner, normalizeFacetSpec, normalizeMilestone } from "../spec.ts";
+import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
+import { STEER_BACK_TO_BUILD, steerStageRefusal, steerStageWords } from "../facet/stage-prompts.ts";
 import { CLIP_REASON } from "../text.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
 import { Against, againstWords, observedFrom, VerdictPass, VerdictRule } from "../verdict.ts";
@@ -986,33 +988,74 @@ function steerAnswer(worker: Worker, arrival: string, rung: AnyRecord | null, te
   return arrival;
 }
 
+/**
+ * The stage a steer names, set on the spec the loop reads every round (facet/stage.ts); a move
+ * always takes a finishing worker back to the build stage, because the director's explicit move
+ * wins. Answers the sentence to add to the steer's answer ("" when the stage did not change).
+ */
+function steerStage(worker: Worker, stage: FacetStage | null, moved: boolean): string {
+  if (!worker.spec) return "";
+  if (stage !== null) {
+    worker.spec.stage = stage;
+    return steerStageWords(worker.id, stage === FacetStage.Finish);
+  }
+  if (!moved || !isFinishing(worker.spec)) return "";
+  worker.spec.stage = FacetStage.Build;
+  return STEER_BACK_TO_BUILD;
+}
+
+/** What a steer puts on the run's record when it carries no text of its own. */
+function steerRecordText(moveText: string, stage: FacetStage | null): string {
+  if (moveText) return `the next move: ${moveText}`;
+  return `the stage: ${stage}`;
+}
+
+/** Why this steer cannot be taken: nothing in it, a worker that is not running, or a stage for a single session. */
+function steerRefusal(worker: Worker, text: string, moveText: string, stage: FacetStage | null): string | null {
+  if (!text && !moveText && !stage) return "worker_steer needs text, move, or both";
+  if (!isRunning(worker))
+    return `worker ${worker.id} is ${worker.state}; start a new worker with the instruction in its brief`;
+  if (stage && !worker.spec) return steerStageRefusal(worker.id);
+  return null;
+}
+
+/** The steer's move and stage, on the spec the loop reads: the rung it added and the stage sentence, or a refusal. */
+function steerLadder(
+  worker: Worker,
+  moveText: string,
+  stage: FacetStage | null,
+): { rung: AnyRecord | null; words: string } | { refusal: string } {
+  const added = moveText ? addRung(worker, moveText) : { rung: null };
+  if ("refusal" in added) return added;
+  return { rung: added.rung, words: steerStage(worker, stage, Boolean(added.rung)) };
+}
+
 async function steerWorker(night: Night, args: AnyRecord): Promise<string> {
   const { appendRun, interruptWorker, state } = night;
   const worker = state.workers.get(slug(args.id));
   if (!worker) return `no worker "${args.id}"`;
   const text = String(args.text ?? "").trim();
   const moveText = String(args.move ?? "").trim();
-  if (!text && !moveText) return "worker_steer needs text, move, or both";
-  if (!isRunning(worker))
-    return `worker ${worker.id} is ${worker.state}; start a new worker with the instruction in its brief`;
-  let rung = null;
-  if (moveText) {
-    const added = addRung(worker, moveText);
-    if ("refusal" in added) return added.refusal;
-    rung = added.rung;
-  }
+  const staged = stageArg(args.stage, { move: moveText });
+  if (staged.error !== undefined) return staged.error;
+  const refusal = steerRefusal(worker, text, moveText, staged.stage);
+  if (refusal) return refusal;
+  const ladder = steerLadder(worker, moveText, staged.stage);
+  if ("refusal" in ladder) return ladder.refusal;
+  const { rung } = ladder;
   // A single session is only ever steered now — it has no boundary to wait for.
   const nowAsked = worker.mode !== WorkerMode.Loop || yes(args.now, false);
   if (text) worker.steering.push(text);
   await appendRun(RunEvent.RunSteering, {
-    text: text || `the next move: ${moveText}`,
+    text: text || steerRecordText(moveText, staged.stage),
     facetId: worker.id,
     source: SteeringSource.Director,
     now: nowAsked,
     at: new Date().toISOString(),
   });
   const reached = text && nowAsked ? await interruptWorker(worker) : false;
-  return steerAnswer(worker, arrivalWords(worker, text, reached, nowAsked), rung, text);
+  const answer = steerAnswer(worker, arrivalWords(worker, text, reached, nowAsked), rung, text);
+  return [answer, ladder.words].filter(Boolean).join(". ");
 }
 
 async function stopWorkerTool(night: Night, args: AnyRecord): Promise<string> {

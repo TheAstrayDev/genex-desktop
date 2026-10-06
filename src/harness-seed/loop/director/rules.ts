@@ -33,6 +33,7 @@ import { Against } from "../verdict.ts";
 import { KIND_QUOTED, lines, list, num, parseJson, slug } from "./args.ts";
 import { MAX_LEDGER, MAX_PLAN_WORKERS, PLAN_HOLD_SLICE_MS, SILENT_ROUND_MIN } from "./budgets.ts";
 import { SECOND_MS } from "../time.ts";
+import { FacetStage, isFinishing } from "../facet/stage.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { Check, FacetSpec } from "../spec.ts";
@@ -566,6 +567,8 @@ export interface WorkerSpecInput {
   screen?: boolean;
   index?: number;
   forkedFrom?: string | null;
+  /** "finish" for a worker that finishes what exists (facet/stage.ts); absent or anything else, the build stage. */
+  stage?: string | null;
 }
 
 /**
@@ -628,6 +631,7 @@ export function compileWorkerSpec(
     screen = true,
     index = 0,
     forkedFrom = null,
+    stage = null,
   }: WorkerSpecInput,
   base: AnyRecord | null = null,
   { rarelyMeasurable: rarely = [] }: { rarelyMeasurable?: Array<{ id: string; rounds: number }> } = {},
@@ -653,6 +657,9 @@ export function compileWorkerSpec(
   // structural move" and the liveness critic's grow gaps are exactly what once overruled a
   // brief every iteration. With no ladder the harness names the move as it always did.
   if (spec.milestones?.length) spec.moveOwner = MoveOwner.Director;
+  // The finish stage rides on the spec beside moveOwner: the loop reads it every round, a steer
+  // flips it live, and the journal keeps it. A build worker's spec carries no stage at all.
+  if (isFinishing({ stage })) spec.stage = FacetStage.Finish;
   return {
     spec,
     problems: validated.problems ?? [],

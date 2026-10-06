@@ -729,6 +729,112 @@ describe("a worker's contract: done, compiled and dry-run", () => {
     assert.equal(none.moveOwner, undefined);
   });
 
+  /**
+   * The finish stage (Midnight Apex, 2026-10-06): a worker that finishes what exists, where polish
+   * is the work and wins on the blind pick. The director sets it on worker_start and flips it on
+   * worker_steer; it rides on the spec like `moveOwner`, so the loop reads it every round and the
+   * journal keeps it.
+   */
+  it("compiles a finishing worker's stage onto its spec, and leaves a build worker's spec as it was", () => {
+    const finishing = compileWorkerSpec(
+      { id: "paint", brief: "finish the street", stage: "finish" } as never,
+      base as never,
+    );
+    assert.equal((finishing.spec as { stage?: string }).stage, "finish");
+    const building = compileWorkerSpec({ id: "paint", brief: "build the street" } as never, base as never);
+    assert.equal("stage" in building.spec, false, "a build worker's spec is byte for byte what it was");
+  });
+
+  it("refuses an unknown stage and a finish with a ladder by name, before it asks the machine for anything", async () => {
+    const { startRefusal } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const asked: string[] = [];
+    const night = {
+      ctx: { call: async (method: string) => void asked.push(method) },
+      runningWorkers: () => [],
+      softDeadline: Date.now() + 60 * 60_000,
+      state: { finish: false, workers: new Map() },
+      priorWorkers: [],
+    };
+    const refusal = async (args: Record<string, unknown>) =>
+      String(await startRefusal(night as never, "paint", { id: "paint", brief: "finish", ...args }));
+    assert.match(await refusal({ stage: "polish" }), /stage: "polish" is not a stage \(build, finish\)/);
+    assert.match(await refusal({ stage: "finish", move: "rain slicks the street" }), /contradict/);
+    assert.match(
+      await refusal({ stage: "finish", milestones: JSON.stringify([{ what: "traffic weaves" }]) }),
+      /contradict/,
+    );
+    assert.deepEqual(asked, [], "a typo is not a capacity problem: nothing was asked of the machine");
+  });
+
+  it("turns a running worker to finishing with worker_steer stage=, and back to building with a move", async () => {
+    const { handler } = await import("../../src/harness-seed/loop/director/tools.ts");
+    const ladder = [{ id: "rain", what: "rain slicks the street" }];
+    const worker = {
+      id: "paint",
+      title: "Paint",
+      state: "running",
+      mode: "loop",
+      steering: [] as string[],
+      spec: { id: "paint", checks: [], milestones: ladder, moveOwner: "director" } as Record<string, unknown>,
+    };
+    const steered: string[] = [];
+    const night = {
+      ctx: { cancelled: false },
+      toolCalls: 0,
+      toolsInFlight: 0,
+      run: { runId: "apex" },
+      state: { workers: new Map([["paint", worker]]), integrationHead: null, finished: false },
+      journal: null,
+      saveJournal: async () => {},
+      keepMemory: async () => {},
+      syncHead: async () => {},
+      appendRun: async (_type: string, payload: { text?: string }) => void steered.push(String(payload.text)),
+      interruptWorker: async () => false,
+    };
+    const steer = async (args: Record<string, unknown>) =>
+      String(await handler(night as never, "worker_steer", { id: "paint", ...args }));
+    assert.match(await steer({ stage: "finish" }), /next round finishes/);
+    assert.equal(worker.spec.stage, "finish", "the loop holds this spec: its next round reads it");
+    assert.match(steered.at(-1)!, /stage: finish/, "the steer is on the record");
+    assert.match(await steer({ stage: "polish" }), /stage: "polish" is not a stage/);
+    assert.equal(worker.spec.stage, "finish", "a refused steer changes nothing");
+    assert.match(await steer({ stage: "finish", move: "traffic weaves in both lanes" }), /contradict/);
+    // The director's explicit move always wins: the worker is back in the build stage.
+    assert.match(await steer({ move: "traffic weaves in both lanes" }), /THE MOVE/);
+    assert.equal(worker.spec.stage, "build");
+    assert.match(await steer({ stage: "finish" }), /next round finishes/);
+    assert.match(await steer({ stage: "build" }), /next round builds/);
+    assert.equal(worker.spec.stage, "build");
+    const single = { ...worker, id: "solo", mode: "single", spec: null };
+    night.state.workers.set("solo", single as never);
+    assert.match(
+      String(await handler(night as never, "worker_steer", { id: "solo", stage: "finish" })),
+      /single session/,
+    );
+  });
+
+  it("shows a finishing worker's stage to the lead, and nothing for a building one", () => {
+    const worker = (spec: Record<string, unknown> | null) =>
+      ({
+        id: "paint",
+        title: "Paint",
+        mode: "loop",
+        state: "running",
+        startedAt: Date.now(),
+        deadline: Date.now() + 60_000,
+        iterations: [],
+        roundMs: [],
+        spec,
+        result: null,
+        loop: null,
+        monitor: null,
+        worktree: "/w",
+      }) as never;
+    assert.equal((workerDigest(worker({ stage: "finish", checks: [] })) as { stage?: string }).stage, "finish");
+    assert.equal("stage" in (workerDigest(worker({ checks: [] })) as object), false);
+    assert.equal("stage" in (workerDigest(worker(null)) as object), false);
+  });
+
   it("inlines the check grammar in the tool the director actually reads", () => {
     const start = DIRECTOR_TOOLS.find((t) => t.name === "worker_start") as unknown as {
       parameters: { properties: Record<string, { description: string }> };

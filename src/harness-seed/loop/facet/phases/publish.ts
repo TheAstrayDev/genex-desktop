@@ -12,6 +12,7 @@ import type { FacetLoop, FacetRound } from "../state.ts";
 import { RoundFlow } from "../flow.ts";
 import { brokenStreakWords, facetIsDone, grownCheckIds, smooth } from "../rules.ts";
 import { recordDecision, unjudgedMove } from "../record.ts";
+import { finishDone, isFinishing } from "../stage.ts";
 import { Side } from "../../judge.ts";
 
 /** The defects a round's record lists, at most. */
@@ -221,13 +222,11 @@ function roundVerdict(loop: FacetLoop, round: FacetRound) {
 export async function decideExit(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
   const { result } = loop;
   // ── exit: the work it was given is done ──
-  round.finished = facetIsDone({
-    won: round.won,
-    broken: round.challengerBroken,
-    verdict: round.verdict,
-    summary: round.summary,
-    legacy: loop.legacy,
-  });
+  const exit = { won: round.won, broken: round.challengerBroken, summary: round.summary };
+  // A finishing worker is done when the judge preferred its polish and nothing broke: the strict
+  // `satisfied` the build stage waits for is not its contract (facet/stage.ts).
+  const finishing = isFinishing(loop.spec) && !loop.legacy;
+  round.finished = finishing ? finishDone(exit) : facetIsDone({ ...exit, verdict: round.verdict, legacy: loop.legacy });
   if (round.finished) {
     result.satisfied = true;
     stopWith(result, StopCode.Done, round.finished);

@@ -36,6 +36,8 @@ import { clip, CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, sharesStem } fr
 import { isRecord } from "./json.ts";
 import { lessonLine, MAX_CONTRACT_LESSONS, renderContractLessons } from "./contract-lessons.ts";
 import { RECIPE_ID_CHARS } from "./config.ts";
+import { FacetStage, FINISH_POLISH_NOTES, stageOf } from "./facet/stage.ts";
+import { FINISH_FIX_LINE, FINISH_POLISH_HEAD, FINISH_RULES, FINISH_SECTION_HEAD } from "./facet/stage-prompts.ts";
 import type { Check, FacetSpec } from "./spec.ts";
 import type { ReferenceStats, Scoreboard } from "./checks.ts";
 import type { StyleStats } from "./style.ts";
@@ -713,6 +715,8 @@ export interface BriefOptions {
   critic?: string;
   template?: boolean;
   game?: AnyRecord | null;
+  /** The worker's stage (facet/stage.ts): "finish" makes polish the work; anything else is the build stage. */
+  stage?: string | null;
 }
 
 /** Per-camera style distance to the stills, now and the round before. */
@@ -745,7 +749,7 @@ export function renderBrief({
   lessons = [],
   /** What earlier nights on THIS game cost (loop/ledger.ts) — already one sentence each. */
   gameLessons = [],
-  /** This iteration's structural move: `{ what, why?, milestoneId?, check?, mandatory?, ladder?, polishStreak? }`. */
+  /** This iteration's structural move: `{ what, why?, milestoneId?, check?, mandatory?, ladder?, polishStreak?, escalated? }`. */
   move = null,
   /** The liveness critic's last card, already rendered to lines (judge.ts renderLiveness). */
   liveness = null,
@@ -759,19 +763,22 @@ export function renderBrief({
   template = true,
   /** The night's declared game — kind, traits and play script (loop/kinds.ts). Its one line heads the brief the way it heads every judge call. */
   game = null,
+  /** "finish" for a worker finishing what exists: THE FINISH replaces THE MOVE, and the polish list is the work. */
+  stage = null,
 }: BriefOptions): string {
+  const finishing = stageOf({ stage }) === FacetStage.Finish;
   const lines = [
     ...briefHeader(run, spec, iteration, game),
     ...steeringSection(steering),
-    ...moveSection(move),
-    ...fixSection(fix, template),
+    ...(finishing ? finishSection(polish) : moveSection(move)),
+    ...fixSection(fix, template, finishing),
     ...scoreboardSection(board, comparison),
     ...(integration ? [`## Integration`, integration, ``] : []),
     ...livenessSection(liveness, critic),
     ...styleSection(style),
     ...flagsSection(flags),
     ...defectsSection(defects, move),
-    ...polishSection(polish),
+    ...(finishing ? [] : polishSection(polish)),
     ...reviewSection(review),
     ...(spike ? [`## Spike result`, spike, ``] : []),
     ...attemptsSection(attempts),
@@ -831,7 +838,7 @@ function moveSection(move: AnyRecord | null): string[] {
       ? `Measured by check ${move.check.id} (on the board above); the taste judge also answers whether the move is visible.`
       : "The taste judge answers whether this change is visible in your build; make it unmistakable.",
     `Alongside the move, fix up to three items from the defect ledger below — the move first, the polish second. Never spend the iteration on the ledger alone.`,
-    move.polishStreak >= 2
+    move.escalated === true
       ? `ESCALATE: the last ${move.polishStreak} accepted builds were polish only. The judge now rejects a build without the move.`
       : "",
     move.ladder ? `\nThe facet's ladder:\n${move.ladder}` : "",
@@ -839,8 +846,20 @@ function moveSection(move: AnyRecord | null): string[] {
   ];
 }
 
-/** The biggest gap the judge keeps naming, and how to replace the mechanism behind it. */
-function fixSection(fix: AnyRecord | null, template: boolean): string[] {
+/** A finishing worker's iteration: no move — the judge's polish list, all of it, is the work. */
+function finishSection(polish: readonly string[]): string[] {
+  return [
+    FINISH_SECTION_HEAD,
+    ...FINISH_RULES,
+    ...(polish.length
+      ? ["", FINISH_POLISH_HEAD, ...polish.slice(0, FINISH_POLISH_NOTES).map((p, i) => `${i + 1}. ${p}`)]
+      : []),
+    ``,
+  ];
+}
+
+/** The biggest gap the judge keeps naming, and how to replace the mechanism behind it (or, finishing, close it). */
+function fixSection(fix: AnyRecord | null, template: boolean, finishing = false): string[] {
   if (!fix?.what) return [];
   const urgency = fix.mandatory
     ? "mandatory — a build that leaves it loses, whatever else it flips"
@@ -854,15 +873,21 @@ function fixSection(fix: AnyRecord | null, template: boolean): string[] {
     fix.recipe
       ? `The library has a recipe for exactly this: ${fix.recipe.title} (${fix.recipe.id}) — it is under "Recipes that apply" below. Port it; do not invent a fourth way.`
       : "",
-    // The named modules are the studio template's own (foliage.js, materials.js). A game the
-    // user brought has neither, and the builder's seam forbids inventing them at those paths,
-    // so it hears the same rule in its own game's terms. The Blender clause stays on the run,
-    // not on the shape: the modeller is granted to an own-shape worker too.
-    template
-      ? `Replace the mechanism behind it, do not tune it. A faceted or smooth solid that should read as something organic (a tree, a bush, hay, an animal) is rebuilt from cards or parts (\`foliage.js\`); a flat wash that should read as a material gets a baked material kind (\`materials.js\`); a thing that floats gets a contact patch and sinks. Land it in the same build as the move — the move comes first, this before the rest of the ledger.`
-      : `Replace the mechanism behind it, do not tune it. A faceted or smooth solid that should read as something organic (a tree, a bush, hay, an animal) is rebuilt out of cards or parts, the way this game already builds its objects; a flat wash that should read as a material gets a material this game's renderer can bake; a thing that floats gets a contact patch and sinks. Land it in the same build as the move — the move comes first, this before the rest of the ledger.`,
+    // A finishing worker may close a polish defect by tuning: "do not tune it" is the build stage's.
+    finishing ? FINISH_FIX_LINE : fixMechanismLine(template),
     ``,
   ];
+}
+
+/** THE FIX's build-stage instruction: replace the mechanism, in the template's terms or the game's own. */
+function fixMechanismLine(template: boolean): string {
+  // The named modules are the studio template's own (foliage.js, materials.js). A game the
+  // user brought has neither, and the builder's seam forbids inventing them at those paths,
+  // so it hears the same rule in its own game's terms. The Blender clause stays on the run,
+  // not on the shape: the modeller is granted to an own-shape worker too.
+  return template
+    ? `Replace the mechanism behind it, do not tune it. A faceted or smooth solid that should read as something organic (a tree, a bush, hay, an animal) is rebuilt from cards or parts (\`foliage.js\`); a flat wash that should read as a material gets a baked material kind (\`materials.js\`); a thing that floats gets a contact patch and sinks. Land it in the same build as the move — the move comes first, this before the rest of the ledger.`
+    : `Replace the mechanism behind it, do not tune it. A faceted or smooth solid that should read as something organic (a tree, a bush, hay, an animal) is rebuilt out of cards or parts, the way this game already builds its objects; a flat wash that should read as a material gets a material this game's renderer can bake; a thing that floats gets a contact patch and sinks. Land it in the same build as the move — the move comes first, this before the rest of the ledger.`;
 }
 
 /** The board after the last judged build: identity first, and what could not be measured. */

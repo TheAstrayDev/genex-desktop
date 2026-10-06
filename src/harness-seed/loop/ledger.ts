@@ -487,7 +487,7 @@ const UNDONE_LESSON: Partial<Record<string, (n: number, of: number) => string>> 
   [VerdictRule.ChecksRegressed]: (n, of) =>
     `${n} of ${of} rounds were undone because a check that used to pass stopped passing. Name what must not move in the brief, not only what must change.`,
   [VerdictRule.Vetoed]: (n, of) =>
-    `${n} of ${of} rounds were undone by the judge preferring the round before. On this game a build that only tunes what already exists loses.`,
+    `${n} of ${of} rounds were undone by the judge preferring the round before, on the blind pick or over a regression it named. Make the change one a player would notice, and name in the brief what must not get worse.`,
   [VerdictRule.NoMove]: (n, of) =>
     `${n} of ${of} rounds were undone because the structural step that was asked for did not arrive. Ask for one visible change per round and say how it will be seen.`,
   [VerdictRule.Unfixed]: (n, of) =>

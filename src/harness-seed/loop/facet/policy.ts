@@ -6,6 +6,7 @@ import { CheckOrigin } from "../spec.ts";
 import { MINUTE_MS } from "../time.ts";
 import { clip, CLIP_QUOTE, CLIP_REASON } from "../text.ts";
 import { isPlainRecord } from "../json.ts";
+import { polishEscalates } from "./stage.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** Frames an evidence pass takes along its drive, so a judge sees the game move, not one still. */
@@ -173,7 +174,7 @@ export function loopStateOf({
   loseStreak?: number;
   brokenStreak?: { reason?: string | null; count?: number } | null;
   fix?: AnyRecord | null;
-  spec?: { checks?: Array<{ origin?: string } | null> } | null;
+  spec?: { checks?: Array<{ origin?: string } | null>; moveOwner?: unknown; stage?: unknown } | null;
   retiredChecks?: Iterable<string>;
   policy?: FacetPolicy;
   emaBuildMs?: number | null;
@@ -186,6 +187,9 @@ export function loopStateOf({
     phase,
     round,
     polishStreak,
+    // Whether a polish streak can make this worker's move mandatory at all: never for a
+    // director-owned or a finishing worker, so nobody is woken with an escalation that will not come.
+    escalates: polishEscalates(spec),
     loseStreak,
     brokenStreak: { reason: brokenStreak?.reason ?? null, count: brokenStreak?.count ?? 0 },
     fix: fix

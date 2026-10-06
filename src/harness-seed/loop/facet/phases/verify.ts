@@ -15,6 +15,7 @@ import { diffAgainstIncumbent, scoreEvidence } from "../scoring.ts";
 import { noisyRegressions, remeasurable } from "../round-judgement.ts";
 import { OutagePhase, recordDecision, roundFields } from "../record.ts";
 import { tasteVerdict } from "./taste.ts";
+import { isFinishing, isZeroDiff } from "../stage.ts";
 
 /** A regression is followed up in the builder's session only with this much of the facet's clock left (or a slice of a short one). */
 const FOLLOW_UP_MIN_MS = 5 * MINUTE_MS;
@@ -306,7 +307,10 @@ async function decideOnBoard(loop: FacetLoop, round: FacetRound): Promise<void> 
     refuse(VerdictSource.Checks, `regressed ${regressed}`, `checks regressed: ${regressed}`);
     return;
   }
-  if (comparison.flips.length === 0 && isInvisibleDiff(round.diffs)) {
+  // A finishing round's polish can sit under the build stage's "no visible change" line at the
+  // judge's window size: it is refused unseen only when nothing at all was redrawn.
+  const invisible = isFinishing(loop.spec) ? isZeroDiff(round.diffs) : isInvisibleDiff(round.diffs);
+  if (comparison.flips.length === 0 && invisible) {
     const reason = "no visible change — every camera reads identical to the accepted build (no judge call spent)";
     refuse(VerdictSource.Invisible, loop.biggestGap, reason);
     return;

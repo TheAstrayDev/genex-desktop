@@ -12,6 +12,7 @@ import { minutes } from "../time.ts";
 import { VerdictSource } from "../verdict.ts";
 import { medianMinutes } from "./budgets.ts";
 import { Side } from "../judge.ts";
+import { FacetStage, isFinishing } from "../facet/stage.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 // Type-only: erased at runtime, so this module still imports no part of the night.
 import type { Worker } from "./night.ts";
@@ -235,8 +236,13 @@ function retiredChecksNote(id: string, was: AnyRecord | null, now: AnyRecord): s
   return `worker ${id}: ${retired} retired (${fresh.slice(0, DIGEST_ENTRIES).join(", ")})`;
 }
 
-/** A polish streak that has just reached the point where the next brief makes the move mandatory. */
+/**
+ * A polish streak that has just reached the point where the next brief makes the move mandatory.
+ * Never for a worker whose streak cannot escalate (`escalates: false` — a director-owned or a
+ * finishing one); a loop state from before the field keeps the old note.
+ */
 function polishStreakNote(id: string, was: AnyRecord | null, now: AnyRecord, policy: AnyRecord): string | null {
+  if (now.escalates === false) return null;
   if (!(now.polishStreak >= policy.polishStreakEscalate && now.polishStreak > (was?.polishStreak ?? 0))) return null;
   return `worker ${id}: ${now.polishStreak} accepted builds in a row only polished — the next brief makes the move mandatory`;
 }
@@ -329,6 +335,8 @@ export function workerDigest(w: Worker, now = Date.now()): AnyRecord {
     state: w.state,
     minutesRunning: minutes((w.endedAt ?? now) - w.startedAt),
     minutesLeft: isRunning(w) ? minutes(w.deadline - now) : 0,
+    // Only a finishing worker says its stage: polish is its work, and it takes no move.
+    ...(isFinishing(w.spec) ? { stage: FacetStage.Finish } : {}),
     ...roundFields(w),
     lastCommit: w.lastCommit ? shortSha(w.lastCommit) : null,
     board: boardOf(w),

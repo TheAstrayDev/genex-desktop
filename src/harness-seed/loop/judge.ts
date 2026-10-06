@@ -42,6 +42,8 @@ import { CheckKind, CheckOrigin, CheckWeight, type Check } from "./spec.ts";
 import { ReferenceKind } from "./run-events.ts";
 import { clip, CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON } from "./text.ts";
 import { normalizeBigMove } from "./big-move.ts";
+import { FacetStage, FINISH_POLISH_NOTES, stageOf } from "./facet/stage.ts";
+import { FINISH_RUBRIC_FALLBACK, FINISH_STAGE_LINE } from "./facet/stage-prompts.ts";
 import { isRecord } from "./json.ts";
 import { DEFAULT_CAMERA, hasOwnStyle } from "./cameras.ts";
 import type { CheckResult, ReferenceStats, Scoreboard } from "./checks.ts";
@@ -572,15 +574,15 @@ export function normalizeDefects(raw: AnyRecord | null | undefined): string[] {
   return defects;
 }
 
-/** The judge's polish notes: distinct, none of them a defect it already listed, at most a few. */
-function polishNotes(raw: unknown, defects: readonly string[]): string[] {
+/** The judge's polish notes: distinct, none of them a defect it already listed, at most a few (a finisher's eight). */
+function polishNotes(raw: unknown, defects: readonly string[], cap = MAX_POLISH_NOTES): string[] {
   const listed = Array.isArray(raw) ? raw : [];
   const notes: string[] = [];
   for (const entry of listed) {
     const text = typeof entry === "string" ? entry.trim() : "";
     if (text && !notes.includes(text) && !defects.includes(text)) notes.push(text);
   }
-  return notes.slice(0, MAX_POLISH_NOTES);
+  return notes.slice(0, cap);
 }
 
 /** Map a shuffled A/B letter onto challenger/incumbent. */
@@ -1457,6 +1459,7 @@ export async function tasteVeto(
     cameras = null,
     iterationId,
     move = null,
+    stage = null,
     random = Math.random,
   }: {
     run: Run;
@@ -1468,23 +1471,14 @@ export async function tasteVeto(
     cameras?: string[] | null;
     iterationId?: string;
     move?: string | null;
+    /** The worker's stage (facet/stage.ts): "finish" judges a round that polishes on purpose. */
+    stage?: string | null;
     /** The shuffle (tests pass their own): below one half puts the challenger on A. */
     random?: Shuffle;
   },
 ) {
-  const system = await judgePrompt(
-    ctx,
-    "taste-veto.md",
-    [
-      "You are the taste judge for ONE FACET of two shuffled builds. The facet's checks are already settled — judge only what checks cannot see.",
-      "Pick the side with the better feel, or tie. If you pick the side that lost on the checks you MUST name the one regression that justifies it and phrase it as a new yes/no vision check.",
-      "Name `bigMove`: the ONE bold transformation of this facet's whole domain that would most close the gap to the goal and the reference — a new system, a layer of depth, a different model, a reworked feel; never a tweak. When several problems share a root cause, name the cause.",
-      "List in `defects` what is broken, missing or unreadable in the better build, worst first; at most three small cosmetic nits go in `polish`, never in `defects`. `satisfied` = the facet genuinely delivers its brief; be strict.",
-      "When the user content names THE MOVE the builder was asked to make, answer `moveDelivered`: is that structural change there in the build the checks accepted (true even when the other build has it too — then `moveAlreadyPresent` is true)? And `scale`: is the difference between the two builds structural (extent, a system, a mechanic, the player's path, the UI) or polish (materials, lighting, parameters)?",
-      `Reply with JSON only: ${TASTE_REPLY}`,
-    ].join("\n"),
-    artefactTokens(run),
-  );
+  const finishing = stageOf({ stage }) === FacetStage.Finish;
+  const system = await tasteSystemPrompt(ctx, run, finishing);
   const challengerIsA = random() < 0.5;
   const incumbent = { incumbent: true, evidence: incumbentEvidence ?? null };
   const A = challengerIsA ? challenger : incumbent;
@@ -1502,6 +1496,7 @@ export async function tasteVeto(
     `VERIFIED CHECKS (settled — build ${side(true)} is the one the checks accepted):`,
     ...(checkLines.length ? checkLines : ["- (no checks on this facet)"]),
     moveLine(move, side(true)),
+    finishing ? FINISH_STAGE_LINE : "",
     styleLine(challenger, run, side(true)),
     "",
     imagesLine(images),
@@ -1519,7 +1514,7 @@ export async function tasteVeto(
 
   const answer = await askJudgeFor(ctx, { run, systemPrompt: system, userContent, images });
   const verdict = {
-    ...tasteVerdictOf(answer, challengerIsA, move),
+    ...tasteVerdictOf(answer, challengerIsA, move, finishing ? FINISH_POLISH_NOTES : MAX_POLISH_NOTES),
     facetId: facet.id,
     iterationId,
     ...provenanceOf(answer, answer.judged.parse, challengerIsA),
@@ -1528,8 +1523,36 @@ export async function tasteVeto(
   return verdict;
 }
 
+/**
+ * The taste judge's rubric: `judge/taste-veto.md` (or its built-in text), and for a finishing
+ * worker the finish rubric after it — never instead of it: the blind pick, the named-regression
+ * veto and the new check stay exactly as they are.
+ */
+async function tasteSystemPrompt(ctx: HarnessCtx, run: Run, finishing: boolean): Promise<string> {
+  const rubric = await judgePrompt(
+    ctx,
+    "taste-veto.md",
+    [
+      "You are the taste judge for ONE FACET of two shuffled builds. The facet's checks are already settled — judge only what checks cannot see.",
+      "Pick the side with the better feel, or tie. If you pick the side that lost on the checks you MUST name the one regression that justifies it and phrase it as a new yes/no vision check.",
+      "Name `bigMove`: the ONE bold transformation of this facet's whole domain that would most close the gap to the goal and the reference — a new system, a layer of depth, a different model, a reworked feel; never a tweak. When several problems share a root cause, name the cause.",
+      "List in `defects` what is broken, missing or unreadable in the better build, worst first; at most three small cosmetic nits go in `polish`, never in `defects`. `satisfied` = the facet genuinely delivers its brief; be strict.",
+      "When the user content names THE MOVE the builder was asked to make, answer `moveDelivered`: is that structural change there in the build the checks accepted (true even when the other build has it too — then `moveAlreadyPresent` is true)? And `scale`: is the difference between the two builds structural (extent, a system, a mechanic, the player's path, the UI) or polish (materials, lighting, parameters)?",
+      `Reply with JSON only: ${TASTE_REPLY}`,
+    ].join("\n"),
+    artefactTokens(run),
+  );
+  if (!finishing) return rubric;
+  return `${rubric}\n\n${await judgePrompt(ctx, "taste-finish.md", FINISH_RUBRIC_FALLBACK)}`;
+}
+
 /** What a taste answer decides. An answer nobody could read says nothing: no pick, defects, veto or tie. */
-function tasteVerdictOf(answer: JudgeAnswer, challengerIsA: boolean, move: string | null) {
+function tasteVerdictOf(
+  answer: JudgeAnswer,
+  challengerIsA: boolean,
+  move: string | null,
+  polishCap = MAX_POLISH_NOTES,
+) {
   const readable = answer.judged.parse === JudgeParse.Valid;
   const raw: AnyRecord = readable ? answer.raw : {};
   const pick = letterToSide(raw.pick, challengerIsA);
@@ -1549,7 +1572,7 @@ function tasteVerdictOf(answer: JudgeAnswer, challengerIsA: boolean, move: strin
     newCheck,
     satisfied: raw.satisfied === true,
     defects,
-    polish: polishNotes(raw.polish, defects),
+    polish: polishNotes(raw.polish, defects, polishCap),
     bigMove: normalizeBigMove(raw.bigMove),
     moveDelivered,
     moveAlreadyPresent,
