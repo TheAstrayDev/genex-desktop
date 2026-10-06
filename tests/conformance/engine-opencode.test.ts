@@ -181,6 +181,7 @@ describe("OpenCode sessions", () => {
     const { engine, seen, root } = await engineWith(async function* (invocation) {
       // The bridge is written where the session runs, for its shell to find.
       await access(path.join(invocation.cwd, ".studio", "bridge", "tool.mjs"), constants.R_OK);
+      yield* replay([]);
     });
     const cwd = await game();
     const result = await engine.delegate({
@@ -280,6 +281,7 @@ describe("OpenCode sessions", () => {
         () => false,
         () => true,
       );
+      yield* replay([]);
     });
     await engine.delegate({
       cwd,
