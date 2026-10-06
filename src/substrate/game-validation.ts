@@ -80,10 +80,12 @@ export interface GameValidation {
  *
  * 0 no file at all, 1 predates `inspect()`, 2 has `inspect()` and no HUD, 3 the one-screen
  * contract (HUD and input), 4 the M4 contract: the HUD is a lazy facade over `./hud.js` and an
- * eye camera is borrowed from the game and given back.
+ * eye camera is borrowed from the game and given back, 5 the HUD facade forwards arc, panel,
+ * path, image and font and reports a bounded summary before the module loads.
  */
 export function studioContractGeneration(source: string | null): number {
   if (source === null) return 0;
+  if (/\bunloadedHudSummary\s*\(/.test(source)) return 5;
   if (/\bcreateHudFacade\s*[(=]/.test(source) || /\bborrowedCamera\b/.test(source)) return 4;
   if (!/\binspect\s*[(:]/.test(source)) return 1;
   return /\bhud\s*:\s*hud\.api/.test(source) ? 3 : 2;

@@ -71,6 +71,15 @@ const HUD_COVERAGE_GRID = { cols: 96, rows: 54 };
 const HUD_MAX_OVERLAPS = 8;
 /** Two items overlap when they share at least this much of the smaller one. */
 const HUD_OVERLAP_MIN = 0.2;
+/**
+ * An item with at least this share of its box inside a larger one sits in it (a readout in its
+ * dial, a label on its bar, a ring around the crosshair): a group, not a collision.
+ */
+const HUD_GROUPED_SHARE = 0.75;
+/** How many times larger than the item the one it sits in must be: two same-sized gauges still collide. */
+const HUD_GROUP_AREA_RATIO = 2;
+/** The longest an id is written in the summary: a game's own id never makes state() large. */
+const HUD_SUMMARY_ID_CHARS = 32;
 /** The most pairs the overlap sweep compares before it stops: a summary never stalls a frame. */
 const HUD_OVERLAP_COMPARISONS = 200_000;
 
@@ -495,16 +504,33 @@ function panelHolds(outer, inner) {
   );
 }
 
-/** Do two items run into each other: a real share of the smaller one, and neither a panel holding the other? */
+/** Does `inner`, the smaller by far, sit in `outer` (`shared` is the area the two have in common)? */
+function sitsIn(outer, inner, shared) {
+  const innerArea = areaOf(inner);
+  const muchSmaller = innerArea * HUD_GROUP_AREA_RATIO <= areaOf(outer);
+  return muchSmaller && shared >= HUD_GROUPED_SHARE * innerArea;
+}
+
+/** Do two items run into each other: a real share of the smaller one, and neither one sitting in the other? */
 function collide(a, b) {
   const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
   const h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
   if (w <= 0 || h <= 0) return false;
-  if (w * h < HUD_OVERLAP_MIN * Math.min(areaOf(a), areaOf(b))) return false;
-  return !panelHolds(a, b) && !panelHolds(b, a);
+  const shared = w * h;
+  if (shared < HUD_OVERLAP_MIN * Math.min(areaOf(a), areaOf(b))) return false;
+  const grouped = panelHolds(a, b) || panelHolds(b, a) || sitsIn(a, b, shared) || sitsIn(b, a, shared);
+  return !grouped;
 }
 
-/** The pairs of items that run into each other, in the order they were added, at most HUD_MAX_OVERLAPS. */
+/** An id as the summary writes it: clipped to HUD_SUMMARY_ID_CHARS, the cut marked. */
+function summaryId(id) {
+  return id.length > HUD_SUMMARY_ID_CHARS ? `${id.slice(0, HUD_SUMMARY_ID_CHARS - 1)}…` : id;
+}
+
+/**
+ * The pairs of items that run into each other, at most HUD_MAX_OVERLAPS, in the order the sweep
+ * (left edge first) finds them; within a pair, the item added first comes first.
+ */
 function overlapsOf(boxes) {
   const sorted = boxes.filter((box) => areaOf(box) > 0).sort((a, b) => a.x0 - b.x0);
   const out = [];
@@ -515,7 +541,7 @@ function overlapsOf(boxes) {
       compared += 1;
       if (compared > HUD_OVERLAP_COMPARISONS || out.length >= HUD_MAX_OVERLAPS) return out;
       const b = sorted[j];
-      if (collide(a, b)) out.push(a.order < b.order ? [a.id, b.id] : [b.id, a.id]);
+      if (collide(a, b)) out.push((a.order < b.order ? [a.id, b.id] : [b.id, a.id]).map(summaryId));
     }
   }
   return out;
@@ -544,12 +570,12 @@ function measure(items, frame, res, measureText) {
   return { kinds, coverage: coverageOf(boxes), overlaps: overlapsOf(boxes) };
 }
 
-/** The first `limit` item ids. */
+/** The first `limit` item ids, each clipped as the summary writes it. */
 function firstIds(items, limit) {
   const out = [];
   for (const id of items.keys()) {
     if (out.length >= limit) break;
-    out.push(id);
+    out.push(summaryId(id));
   }
   return out;
 }
@@ -701,9 +727,10 @@ export function createHud(deps) {
       composeOver(renderer, overlay);
     },
     /**
-     * What `state().hud` reports: the first HUD_SUMMARY_ITEMS ids and how many there are, the
-     * kinds, the share of the frame the items cover, the pairs that run into each other, and how
-     * many images or fonts have not arrived yet. Bounded however many items a game draws.
+     * What `state().hud` reports: the first HUD_SUMMARY_ITEMS ids (each clipped to
+     * HUD_SUMMARY_ID_CHARS) and how many there are, the kinds, the share of the frame the items
+     * cover, the pairs that run into each other, and how many images or fonts have not arrived
+     * yet. Bounded however many items a game draws, and however long their ids.
      */
     summary() {
       const { kinds, coverage, overlaps } = measuredNow();

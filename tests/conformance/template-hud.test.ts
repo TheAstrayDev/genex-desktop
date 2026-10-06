@@ -11,8 +11,12 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
 import * as hudModule from "../../src/game-template/src/hud.js";
 import { domUi as hookDomUi, sceneHelpers } from "../../src/page/hook.ts";
 import { hudContractGeneration, shippedHudGeneration } from "../../src/substrate/game-workspace.ts";
@@ -433,6 +437,39 @@ describe("the summary state() carries", () => {
     assert.ok(overlaps.length > 0 && overlaps.length <= 8, `${overlaps.length} overlaps listed`);
   });
 
+  it("reads a readout inside its gauge, a label on its bar and a ring around the crosshair as groups", () => {
+    const { hud } = hudAt(1600, 900);
+    // A tachometer with its readout centred in the dial: the dial's box is 154.8 px from (160, 90).
+    hud.api.arc("rpm", { x: 0.1, y: 0.1, r: 0.08, fraction: 0.6 });
+    hud.api.text("rpm-value", "7200", { x: 237.4 / 1600, y: 157.4 / 900, align: "center" });
+    // An "HP" label centred on a bar of the default height: the label stands a little proud of it.
+    hud.api.bar("hp", 0.6, { x: 0.1, y: 0.9, w: 0.3 });
+    hud.api.text("hp-label", "HP", { x: 0.11, y: 808.1 / 900 });
+    // A hit ring drawn around the crosshair.
+    hud.api.crosshair();
+    hud.api.arc("ring", { anchor: "center", x: 0, y: 0, r: 0.04, width: 0.004 });
+    assert.deepEqual(hud.summary().overlaps, []);
+  });
+
+  it("still names two gauges that half cover each other", () => {
+    const { hud } = hudAt(1600, 900);
+    hud.api.arc("rpm", { x: 0.1, y: 0.1, r: 0.08 });
+    hud.api.arc("speed", { x: 0.15, y: 0.1, r: 0.08 });
+    hud.api.text("speed-value", "212", { x: 0.2, y: 0.18 });
+    assert.deepEqual(hud.summary().overlaps, [["rpm", "speed"]]);
+  });
+
+  it("stays a few kilobytes when every id is thousands of characters long", () => {
+    const { hud } = hudAt(1600, 900);
+    for (let i = 0; i < 64; i++) hud.api.text(`${i}-${"x".repeat(2000)}`, "SAME PLACE", { x: 0.4, y: 0.4 });
+    const summary = hud.summary();
+    const text = JSON.stringify(summary);
+    assert.ok(text.length < 4096, `${text.length} characters`);
+    assert.equal((summary.items as string[]).length, 64);
+    assert.ok((summary.overlaps as unknown[]).length > 0, "the clipped ids still name the overlaps");
+    assert.ok((summary.items as string[])[1]!.startsWith("1-xx"), "a clipped id still begins as the game wrote it");
+  });
+
   it("leaves a hidden crosshair out of the coverage", () => {
     const { hud } = hudAt(1600, 900);
     hud.api.crosshair({ visible: false });
@@ -488,6 +525,93 @@ describe("the HUD through installStudio", () => {
     assert.ok(JSON.stringify(late).length < 64_000, `${JSON.stringify(late).length} characters after the load`);
     assert.equal(late.hud.count, 6000);
     assert.equal(typeof late.hud.coverage, "number");
+  });
+
+  it("keeps state() small before the module loads when every id is thousands of characters long", async () => {
+    studioPage();
+    const renderer = { domElement: { width: 1600, height: 900 }, render() {}, setRenderTarget() {} };
+    const api = await installStudio({ renderer });
+    const hud = api.hud as unknown as HudApi;
+    for (let i = 0; i < 64; i++) hud.text!(`${i}-${"x".repeat(2000)}`, "LONG");
+    const early = (api.state!() as { hud: Loose }).hud;
+    assert.equal(early.coverage, null, "read before the module is there");
+    assert.ok(JSON.stringify(early).length < 4096, `${JSON.stringify(early).length} characters`);
+    assert.equal(early.count, 64);
+  });
+});
+
+/**
+ * A game whose `src/hud.js` somebody edited keeps it (the studio only replaces copies it shipped),
+ * so the current facade can sit in front of a first-generation module with no arc, panel, path,
+ * image or font. A call the module lacks is skipped with one warning; it never throws into the
+ * game's loop or stops the calls queued behind it.
+ */
+describe("the facade in front of an older HUD module", () => {
+  const STUB_HUD = [
+    "export function createHud() {",
+    "  const drawn = [];",
+    "  globalThis.__stubHudDrawn = drawn;",
+    "  const api = {",
+    "    text: (id, text) => { drawn.push(['text', id, text]); },",
+    "    bar: (id, fraction) => { drawn.push(['bar', id, fraction]); },",
+    "    get: (id) => drawn.find((call) => call[1] === id) ?? null,",
+    "    items: () => drawn.map((call) => call[1]),",
+    "    enable: () => {},",
+    "  };",
+    "  return { api, scene: null, flashAlpha: 0, tick() {}, compose() {}, summary: () => ({ count: drawn.length }) };",
+    "}",
+  ].join("\n");
+  let hadWindow: unknown;
+  let warn: typeof console.warn;
+  let warnings: unknown[][];
+  beforeEach(() => {
+    hadWindow = (globalThis as unknown as Loose).window;
+    warn = console.warn;
+    warnings = [];
+    console.warn = (...args: unknown[]) => warnings.push(args);
+  });
+  afterEach(() => {
+    const globals = globalThis as unknown as Loose;
+    globals.window = hadWindow;
+    delete globals.__stubHudDrawn;
+    console.warn = warn;
+  });
+
+  it("skips what the module cannot draw, with one warning, and draws the rest in order", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "studio-old-hud-"));
+    try {
+      await cp(new URL("../../src/game-template/src/studio.js", import.meta.url), path.join(dir, "studio.js"));
+      await writeFile(path.join(dir, "hud.js"), STUB_HUD);
+      studioPage();
+      const { installStudio: install } = await import(pathToFileURL(path.join(dir, "studio.js")).href);
+      const api = install({ renderer: { domElement: { width: 1600, height: 900 }, render() {} } });
+      const hud = api.hud as HudApi;
+      // Queued before the module arrives: the arc in the middle must not stop the bar behind it.
+      hud.text!("score", "12");
+      hud.arc!("rpm", { fraction: 0.5 });
+      hud.bar!("hp", 0.5);
+      for (let i = 0; i < 200 && hud.get!("hp") === null; i++) await delay(10);
+      // Called once the module is there.
+      assert.doesNotThrow(() => hud.arc!("rpm", { fraction: 0.6 }));
+      assert.doesNotThrow(() => hud.panel!("box", {}));
+      hud.text!("score", "13");
+      const drawnCalls = (globalThis as unknown as Loose).__stubHudDrawn;
+      assert.deepEqual(drawnCalls, [
+        ["text", "score", "12"],
+        ["bar", "hp", 0.5],
+        ["text", "score", "13"],
+      ]);
+      const about = (name: string) => warnings.filter((args) => String(args[0]).includes(`hud.${name}`));
+      assert.equal(about("arc").length, 1, "one warning for arc however often it is called");
+      assert.equal(about("panel").length, 1);
+      assert.equal(
+        warnings.filter((args) => String(args[0]).includes("could not be loaded")).length,
+        0,
+        "the module did load",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -565,12 +689,10 @@ describe("no-dom-ui sees a second canvas over the game", () => {
 describe("which HUD a game's copy is", () => {
   const read = (file: string) => readFileSync(new URL(file, import.meta.url), "utf8");
   const firstGeneration = read("../fixtures/hud-generation-1.js.txt");
-  const template = read("../../src/game-template/src/hud.js");
 
   it("reads the generation a copy declares, and a copy that declares none as the first", () => {
     assert.equal(hudContractGeneration(null), 0, "no file at all");
     assert.equal(hudContractGeneration(firstGeneration), 1);
-    assert.equal(hudContractGeneration(template), 2, "the shipped template is the current one");
     assert.equal(hudContractGeneration("export const HUD_GENERATION = 7;\n"), 7);
   });
 
@@ -580,6 +702,5 @@ describe("which HUD a game's copy is", () => {
     assert.equal(shippedHudGeneration(`${firstGeneration}// my own tweak\n`), null, "an edited copy is the game's");
     assert.equal(shippedHudGeneration(firstGeneration.replace("0.86", "0.9")), null);
     assert.equal(shippedHudGeneration(null), null);
-    assert.equal(shippedHudGeneration(template), null, "the current HUD is not an older shipped one");
   });
 });

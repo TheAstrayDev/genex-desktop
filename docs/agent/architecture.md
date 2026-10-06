@@ -722,7 +722,8 @@ every planned write (`plannedWrites`), and only its button calls
 keeping the parent passes `template: false`. Adoption never writes the template's entry or pages
 beside a real entry; an own game gets `CLAUDE.md`/`NOTES.md` from `game-template/*.own.md`.
 `game.upgradeContract` replaces an older `src/studio.js` (`studioContractGeneration`) and an
-unedited shipped `src/hud.js` (`shippedHudGeneration`), keeping each as `<name>.v<generation>.js`.
+unedited shipped `src/hud.js` (`shippedHudGeneration`), kept as `<name>.v<generation>.js`;
+`hud` reports an older HUD.
 
 **Builds.** `preview.load`/`preview.reload` build through `GameBuilds`
 ([`src/main/game-build.ts`](../../src/main/game-build.ts)) and serve the output. A build never runs in

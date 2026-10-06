@@ -171,14 +171,14 @@ export interface StudioHud {
 
 /** What the HUD is showing, as `state()` reports it: bounded however many items a game draws. */
 export interface HudSummary {
-  /** The first 64 item ids; `count` is how many there are. */
+  /** The first 64 item ids, each clipped to 32 characters; `count` is how many there are. */
   items: string[];
   count?: number;
   /** Items per kind (`text`, `bar`, `arc`, `panel`, `path`, `image`, `crosshair`). */
   kinds?: Record<string, number>;
   /** The share of the frame the items cover, 0–1; null until the HUD module has loaded. */
   coverage?: number | null;
-  /** Pairs of item ids that run into each other (a panel holding an item is not one), at most 8. */
+  /** Pairs of item ids that run into each other, at most 8; an item sitting inside a much larger one (a readout in its dial, a label on its bar) is a group, not a pair. */
   overlaps?: Array<[string, string]>;
   /** Images still decoding and fonts still loading. */
   pending?: number;

@@ -373,10 +373,20 @@ export interface HarnessHostApi {
     params: { project: string; root?: string; entry?: string; candidateId?: string };
     result: AttachReport;
   };
-  /** v2 contract upgrade: an older `src/studio.js` gets the shipped template's copy, the old one kept beside it. */
+  /**
+   * v2 contract upgrade: an older `src/studio.js` gets the shipped template's copy, the old one kept beside it.
+   * `hud` is there when the game's `src/hud.js` was older than the template's: replaced (a shipped copy,
+   * kept as `backup`) or left alone (an edited copy, still at `generation`).
+   */
   "game.upgradeContract": {
     params: { project: string };
-    result: { upgraded: boolean; reason?: string; materialsAdded?: boolean; backup?: string | null };
+    result: {
+      upgraded: boolean;
+      reason?: string;
+      materialsAdded?: boolean;
+      backup?: string | null;
+      hud?: { generation: number; replaced: boolean; backup?: string };
+    };
   };
   "game.read": { params: { project: string; file: string; candidateId?: string }; result: string | GameImageRead };
   "game.write": {

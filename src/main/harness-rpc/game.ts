@@ -252,12 +252,13 @@ async function upgradeContract(core: StudioCore, project: string): Promise<Harne
   const own = await isOwnShape(core, project);
   const materialsAdded = await addCompanionFiles(core, dir);
   await addContractPage(own, dir, core.games.templateDir);
-  if (!own) await upgradeShippedHud(core, project, dir);
+  const hudUpgrade = own ? null : await upgradeShippedHud(core, project, dir);
+  const hud = hudUpgrade ? { hud: hudUpgrade } : {};
   const template = await readText(path.join(core.games.templateDir, "src", "studio.js"));
-  if (template === null) return { upgraded: false, reason: "no template studio.js" };
+  if (template === null) return { upgraded: false, reason: "no template studio.js", ...hud };
   // Only a copy older than the shipped one is replaced, so a game that already holds the
   // current contract is left alone and a template that ever moves backwards writes nothing.
-  if (generation >= studioContractGeneration(template)) return { upgraded: false, materialsAdded };
+  if (generation >= studioContractGeneration(template)) return { upgraded: false, materialsAdded, ...hud };
   let backup: string | null = null;
   if (current !== null) {
     backup = `src/studio.v${generation}.js`;
@@ -266,7 +267,7 @@ async function upgradeContract(core: StudioCore, project: string): Promise<Harne
   await ensureDir(path.dirname(target));
   await writeFile(target, template);
   core.emit(UiEvent.GameChanged, { project, file: "src/studio.js" });
-  return { upgraded: true, backup };
+  return { upgraded: true, backup, ...hud };
 }
 
 /** Copy each companion file the game lacks from the template; true when any was added. */
@@ -311,31 +312,40 @@ async function landsInside(dir: string, file: string): Promise<boolean> {
   return root !== null && landing !== null && isBelow(root, landing);
 }
 
+/** What `game.upgradeContract` says about a game whose HUD was older than the template's. */
+type HudUpgrade = NonNullable<HarnessResult<"game.upgradeContract">["hud"]>;
+
 /**
  * The template's HUD for a game whose `src/hud.js` is an older copy the studio shipped, byte for
  * byte; the old copy is kept beside it as `src/hud.v<generation>.js`. A copy anyone edited is the
- * main owner's work and stays, as does everything reached through a link. True when the HUD was
- * replaced.
+ * main owner's work and stays, as does everything reached through a link. Answers what happened
+ * to a HUD older than the template's (replaced, or left at its generation), and null for a HUD
+ * that is current, absent or out of reach.
  */
-async function upgradeShippedHud(core: StudioCore, project: string, dir: string): Promise<boolean> {
+async function upgradeShippedHud(core: StudioCore, project: string, dir: string): Promise<HudUpgrade | null> {
   const target = path.join(dir, "src", "hud.js");
-  if (!(await landsInside(dir, target))) return false;
+  if (!(await landsInside(dir, target))) return null;
   const current = await readRegularFile(target, MAX_HUD_READ_BYTES)
     .then((bytes) => bytes.toString("utf8"))
     .catch(() => null);
-  const shipped = shippedHudGeneration(current);
-  if (current === null || shipped === null) return false;
   const template = await readText(path.join(core.games.templateDir, "src", "hud.js"));
-  if (template === null || shipped >= hudContractGeneration(template)) return false;
-  const backup = path.join(dir, "src", `hud.v${shipped}.js`);
-  if (!(await landsInside(dir, backup))) return false;
+  if (current === null || template === null) return null;
+  const latest = hudContractGeneration(template);
+  const held = hudContractGeneration(current);
+  if (held >= latest) return null;
+  const leftAlone = { generation: held, replaced: false };
+  const shipped = shippedHudGeneration(current);
+  if (shipped === null) return leftAlone;
+  const backupName = `src/hud.v${shipped}.js`;
+  const backup = path.join(dir, backupName);
+  if (!(await landsInside(dir, backup))) return leftAlone;
   try {
     // The backup first: when it cannot be written, the game's HUD is not touched either.
     await writeFileNoFollow(backup, current);
     await writeFileNoFollow(target, template);
   } catch {
-    return false;
+    return leftAlone;
   }
   core.emit(UiEvent.GameChanged, { project, file: "src/hud.js" });
-  return true;
+  return { generation: latest, replaced: true, backup: backupName };
 }
