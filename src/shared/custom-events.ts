@@ -356,6 +356,23 @@ export interface SessionActivityPayload extends RunScope {
   delegationId?: string;
 }
 
+/**
+ * What a round's code review enforced, by file. Logs written before the split carry every enforced
+ * file under `reverted`, kept and quarantined ones included, and nothing under the other lists.
+ */
+export interface FacetReviewEnforcedPayload extends RunScope {
+  /** Files outside the part's ownership, checked out from the diff base. */
+  reverted?: string[];
+  /** Files outside the part's ownership whose content arrived by merge, left as they are. */
+  kept?: string[];
+  /** New files outside the part's ownership, moved to `.studio/quarantine/`. */
+  quarantined?: string[];
+  /** Another part's changes a merge into this part dropped, checked out from the merged head. */
+  restored?: string[];
+  /** Checks the model reviewer marked as made to pass without the work. */
+  gamed?: string[];
+}
+
 /** A part-level notice: a circuit break, a replanned check, a raised flag, or the lead's plan. */
 export interface FacetNoticePayload extends RunScope {
   reason?: string;
@@ -565,6 +582,7 @@ export interface CustomEventMap {
     source?: string;
   };
   facet_provider_outage: RunScope & { phase?: string; wait?: number; attempt?: number; error?: string };
+  facet_review_enforced: FacetReviewEnforcedPayload;
   improvement_applied: { file?: string; reason?: string; snapshot_id?: string };
   interview_question: { question?: string; choices?: InterviewChoice[] };
   /** A provider signed out mid-turn (harness `turn-loop.ts`); `message` is the provider's own error. */

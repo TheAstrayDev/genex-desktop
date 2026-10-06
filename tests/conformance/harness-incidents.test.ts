@@ -56,6 +56,15 @@ import { EngineId } from "../../src/shared/providers.ts";
 import { LEAD_WINDOWS, MAX_BUILDERS } from "../../src/shared/builders.ts";
 import { unionMergeMain, verifyWiringMerge } from "../../src/harness-seed/loop/merge.ts";
 import {
+  concludeHandMerge,
+  droppedByMerge,
+  EnforcedAction,
+  HandMerge,
+  resolveByOwnership,
+  restoreDropped,
+  ReviewCategory,
+} from "../../src/harness-seed/loop/merge-ownership.ts";
+import {
   flagTarget,
   harnessFlags,
   normalizeReason,
@@ -76,6 +85,7 @@ import type { Check } from "../../src/harness-seed/loop/spec.ts";
 import { renderBrief } from "../../src/harness-seed/loop/library.ts";
 import {
   allowedFile as reviewAllowedFile,
+  enforceOwnership,
   mechanicalReview,
   ownMatches as reviewOwnMatches,
   reviewAttempt,
@@ -100,7 +110,7 @@ import { chatWaitsFor, leadDoor, passCtx, stopRunsOf } from "../../src/harness-s
 import { openLeadLine } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
-import { setImmediate as nextTurn } from "node:timers/promises";
+import { setImmediate as nextTurn, setTimeout as setTimeoutPromise } from "node:timers/promises";
 import { DIRECTOR_TOOLS } from "../../src/harness-seed/loop/director/tool-specs.ts";
 import { cancelThread } from "../../src/harness-seed/loop/main.ts";
 import type { Studio } from "../../src/harness-seed/loop/studio-state.ts";
@@ -8131,5 +8141,371 @@ describe("a Hello in a brand-new game (2026-10-04)", () => {
     assert.match(brief, /nothing has been built/i);
     const talk = brief.search(/greeting/i);
     assert.ok(talk >= 0 && talk < brief.search(/CLAUDE\.md/), "how to answer a greeting comes before how to build");
+  });
+});
+
+// ── Midnight Apex (2026-10): the ownership reviewer against the mandatory merge ──
+
+/** A real repository and the ways the loop runs git in it: argv, `run.exec` (`code`/`stdout`), and stdout-or-throw. */
+async function mergeRepo(files: Record<string, string>) {
+  const { tmpDir } = await import("../helpers/tmp.ts");
+  const dir = await tmpDir("merge-ownership-");
+  const git = async (...args: string[]) => (await gitFile(["-C", dir, ...args])).stdout.trim();
+  await git("init", "-q", "-b", "main");
+  await git("config", "user.email", "t@x");
+  await git("config", "user.name", "t");
+  for (const [name, text] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
+    await writeFile(path.join(dir, name), text);
+  }
+  await git("add", "-A");
+  await git("commit", "-qm", "incumbent");
+  const exec = async (command: string) => {
+    try {
+      const { stdout, stderr } = await promisify(execFile)("sh", ["-c", command], { cwd: dir, maxBuffer: 10_000_000 });
+      return { code: 0, stdout, stderr };
+    } catch (err) {
+      const e = err as { stdout?: string; stderr?: string; code?: number };
+      return { code: typeof e.code === "number" ? e.code : 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+    }
+  };
+  const sh = async (command: string) => {
+    const out = await exec(command);
+    if (out.code !== 0) throw new Error(out.stderr || out.stdout);
+    return out.stdout.trim();
+  };
+  const ctx = {
+    workspace: "/nonexistent",
+    cancelled: false,
+    notify() {},
+    call: async (method: string, p: { command: string }) => (method === "run.exec" ? exec(p.command) : null),
+  };
+  const read = (name: string) => readFile(path.join(dir, name), "utf8");
+  return { dir, git, exec, sh, ctx, read };
+}
+
+type MergeRepo = Awaited<ReturnType<typeof mergeRepo>>;
+
+/** Commit `files` on a new branch `name` from the current HEAD and come back: another part's integrated work. */
+async function commitOnBranch(repo: MergeRepo, name: string, files: Record<string, string>): Promise<string> {
+  const back = await repo.git("rev-parse", "HEAD");
+  await repo.git("checkout", "-qb", name);
+  for (const [file, text] of Object.entries(files)) await writeFile(path.join(repo.dir, file), text);
+  await repo.git("add", "-A");
+  await repo.git("commit", "-qm", name);
+  const head = await repo.git("rev-parse", "HEAD");
+  await repo.git("checkout", "-q", back);
+  return head;
+}
+
+describe("ownership after a merge (Midnight Apex)", () => {
+  it("MA-1. an uncommitted hand merge: enforcement keeps a file whose content arrived by merge (hud-2 reverted city-2's districts)", async () => {
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/city.js": "export const districts = 0;\n",
+      "src/hud.js": "export const hud = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    const head = await commitOnBranch(repo, "integration", { "src/city.js": "export const districts = 5;\n" });
+    // The hud builder merged by hand and never committed it, then did its own work.
+    await repo.git("merge", "--no-commit", "--no-ff", head);
+    await writeFile(path.join(repo.dir, "src", "hud.js"), "export const hud = 1;\n");
+    const spec = { id: "hud", title: "HUD", owns: ["src/hud.js"], checks: [] };
+    const review = await reviewAttempt(
+      repo.ctx as never,
+      {
+        run: {},
+        spec,
+        worktree: repo.dir,
+        incumbentCommit: incumbent,
+        integrationHead: [head],
+        ownsMain: false,
+        model: false,
+      } as never,
+    );
+    const enforced = await enforceOwnership(repo.sh, {
+      base: review.base,
+      integrationHeads: [head],
+      violations: review.violations,
+      iterationId: "001",
+    });
+    assert.equal(await repo.read("src/city.js"), "export const districts = 5;\n", JSON.stringify(enforced));
+    assert.ok(
+      !enforced.some((e) => e.file === "src/city.js" && e.action === "reverted"),
+      `city's districts were not reverted: ${JSON.stringify(enforced)}`,
+    );
+    assert.equal(await repo.read("src/hud.js"), "export const hud = 1;\n", "the facet's own work is untouched");
+  });
+
+  it("MA-1b. enforcement selects ownership findings by category, not by their wording", async () => {
+    const repo = await mergeRepo({ "src/main.js": "// main\n" });
+    const base = await repo.git("rev-parse", "HEAD");
+    await writeFile(path.join(repo.dir, "src", "stray.js"), "stray\n");
+    await writeFile(path.join(repo.dir, "src", "other.js"), "other\n");
+    const enforced = await enforceOwnership(repo.sh, {
+      base,
+      violations: [
+        { source: "mechanical", category: "ownership", what: "touched another part's file", file: "src/stray.js" },
+        { source: "mechanical", category: "wiring", what: "outside this facet's ownership", file: "src/other.js" },
+      ],
+      iterationId: "002",
+    } as never);
+    assert.deepEqual(enforced, [{ file: "src/stray.js", action: "quarantined to .studio/quarantine/002" }]);
+    assert.equal(await repo.read("src/other.js"), "other\n", "a finding of another category is not ownership");
+  });
+
+  it("MA-2. a merge that kept this part's side of another part's file is found, and the other part's work restored", async () => {
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/city.js": "export const city = 0;\n",
+      "src/hud.js": "export const hud = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    const head = await commitOnBranch(repo, "integration", { "src/city.js": "export const city = 1;\n" });
+    // The silent revert: the merge is committed with this part's (old) copy of city's file.
+    await repo.git("merge", "--no-commit", "--no-ff", head);
+    await repo.git("checkout", incumbent, "--", "src/city.js");
+    await repo.git("commit", "-qm", "merge integration, ours on city.js");
+    await writeFile(path.join(repo.dir, "src", "hud.js"), "export const hud = 1;\n");
+    const spec = { id: "hud", title: "HUD", owns: ["src/hud.js"], checks: [] };
+    const review = await reviewAttempt(
+      repo.ctx as never,
+      {
+        run: {},
+        spec,
+        worktree: repo.dir,
+        incumbentCommit: incumbent,
+        integrationHead: [head],
+        ownsMain: false,
+        model: false,
+      } as never,
+    );
+    assert.equal(review.merged, true);
+    assert.ok(!review.violations.some((v) => v.file === "src/city.js"), "the diff review alone cannot see it");
+    const owned = (file: string) => reviewAllowedFile(file, spec, false);
+    const dropped = await droppedByMerge(repo.exec, { incumbent, mergedHead: review.base, owned });
+    assert.deepEqual(
+      dropped.map((v) => [v.file, v.category, v.source]),
+      [["src/city.js", ReviewCategory.MergeDropped, "mechanical"]],
+    );
+    const restored = await restoreDropped(repo.sh, { violations: dropped, from: review.base });
+    assert.deepEqual(restored, [{ file: "src/city.js", action: EnforcedAction.Restored }]);
+    assert.equal(await repo.read("src/city.js"), "export const city = 1;\n");
+    await repo.git("commit", "-qam", "hud round");
+    const hudHead = await repo.git("rev-parse", "HEAD");
+    // Integrating the round no longer undoes city's work.
+    await repo.git("checkout", "-q", "integration");
+    await repo.git("merge", "-q", "--no-edit", hudHead);
+    assert.equal(await repo.read("src/city.js"), "export const city = 1;\n");
+    assert.deepEqual(
+      await droppedByMerge(repo.exec, { incumbent, mergedHead: incumbent, owned }),
+      [],
+      "nothing came in, nothing dropped",
+    );
+  });
+
+  it("MA-3. the mandatory merge takes the other side of a file this part does not own and leaves only its own", async () => {
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/state.js": "export const state = 0;\n",
+      "src/hud.js": "export const hud = 0;\n",
+    });
+    const theirs = await commitOnBranch(repo, "theirs", {
+      "src/state.js": "export const state = 'theirs';\n",
+      "src/hud.js": "export const hud = 'theirs';\n",
+    });
+    await writeFile(path.join(repo.dir, "src", "state.js"), "export const state = 'ours';\n");
+    await writeFile(path.join(repo.dir, "src", "hud.js"), "export const hud = 'ours';\n");
+    await repo.git("commit", "-qam", "ours");
+    const spec = { id: "hud", owns: ["src/hud.js"] };
+    const owned = (file: string) => reviewAllowedFile(file, spec, false);
+    assert.equal((await repo.exec(`git merge ${theirs}`)).code === 0, false, "both files conflict");
+    const both = await resolveByOwnership(repo.exec, { owned, message: "take integration" });
+    assert.equal(both.ok, false);
+    assert.deepEqual(both.left, ["src/hud.js"], "only the file this part may edit is left to its builder");
+    assert.equal(await repo.read("src/state.js"), "export const state = 'theirs';\n");
+    assert.equal(await repo.git("diff", "--name-only", "--diff-filter=U"), "src/hud.js");
+    await repo.git("merge", "--abort");
+    // Only another part's file conflicts: the merge is settled and committed, theirs taken.
+    await writeFile(path.join(repo.dir, "src", "hud.js"), "export const hud = 'theirs';\n");
+    await repo.git("commit", "-qam", "ours takes theirs hud");
+    assert.equal((await repo.exec(`git merge ${theirs}`)).code === 0, false, "state.js conflicts");
+    const one = await resolveByOwnership(repo.exec, { owned, message: "take integration" });
+    assert.equal(one.ok, true, one.reason);
+    assert.deepEqual(one.theirs, ["src/state.js"]);
+    assert.equal(await repo.git("rev-list", "--count", "--merges", "HEAD"), "1", "the merge is committed");
+    assert.equal(await repo.git("merge-base", "--is-ancestor", theirs, "HEAD").then(() => "yes"), "yes");
+    assert.equal(await repo.read("src/state.js"), "export const state = 'theirs';\n");
+  });
+
+  it("MA-3b. the mandatory merge follows the other side's deletion of a file this part does not own, and unions the wiring", async () => {
+    const wiring = (line: string) => `// ── FACET WIRING ──\n${line}\n// ── END FACET WIRING ──\n`;
+    const repo = await mergeRepo({ "src/main.js": wiring(""), "src/old.js": "export const old = 0;\n" });
+    const theirs = await commitOnBranch(repo, "theirs", { "src/main.js": wiring('import "./water.js";') });
+    await repo.git("checkout", "-q", "theirs");
+    await repo.git("rm", "-q", "src/old.js");
+    await repo.git("commit", "-qm", "theirs drops old.js");
+    const theirsHead = await repo.git("rev-parse", "HEAD");
+    await repo.git("checkout", "-q", "main");
+    assert.ok(theirs);
+    await writeFile(path.join(repo.dir, "src", "main.js"), wiring('import "./sky.js";'));
+    await writeFile(path.join(repo.dir, "src", "old.js"), "export const old = 'ours';\n");
+    await repo.git("commit", "-qam", "ours");
+    assert.notEqual((await repo.exec(`git merge ${theirsHead}`)).code, 0);
+    const spec = { id: "sky", owns: ["src/sky.js"] };
+    const resolved = await resolveByOwnership(repo.exec, {
+      owned: (file: string) => reviewAllowedFile(file, spec, false),
+      message: "take integration",
+    });
+    assert.equal(resolved.ok, true, resolved.reason);
+    assert.equal(resolved.union, true);
+    assert.match(await repo.read("src/main.js"), /sky\.js[\s\S]*water\.js|water\.js[\s\S]*sky\.js/);
+    assert.equal(await repo.git("ls-files", "src/old.js"), "", "the other side's deletion stands");
+  });
+
+  it("MA-4. a hand merge left uncommitted is concluded before review, and one left with markers is unresolved", async () => {
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/a.js": "a = 0\n" });
+    const clean = await commitOnBranch(repo, "clean", { "src/b.js": "b = 1\n" });
+    await repo.git("merge", "--no-commit", "--no-ff", clean);
+    const concluded = await concludeHandMerge(repo.exec, { message: "conclude" });
+    assert.equal(concluded.state, HandMerge.Concluded);
+    assert.equal(concluded.head, clean);
+    assert.equal(await repo.git("merge-base", "--is-ancestor", clean, "HEAD").then(() => "yes"), "yes");
+    assert.equal(await repo.exec("git rev-parse -q --verify MERGE_HEAD").then((r) => r.code), 1, "no merge pending");
+    assert.equal((await concludeHandMerge(repo.exec, {})).state, HandMerge.None);
+    const conflicting = await commitOnBranch(repo, "conflicting", { "src/a.js": "a = 'theirs'\n" });
+    await writeFile(path.join(repo.dir, "src", "a.js"), "a = 'ours'\n");
+    await repo.git("commit", "-qam", "ours");
+    assert.notEqual((await repo.exec(`git merge ${conflicting}`)).code, 0);
+    const half = await concludeHandMerge(repo.exec, { message: "conclude" });
+    assert.equal(half.state, HandMerge.Unresolved);
+    assert.deepEqual(half.files, ["src/a.js"]);
+    // Staged with its markers still in it: still a half merge, never committed.
+    await repo.git("add", "src/a.js");
+    const staged = await concludeHandMerge(repo.exec, { message: "conclude" });
+    assert.equal(staged.state, HandMerge.Unresolved);
+    assert.deepEqual(staged.files, ["src/a.js"]);
+  });
+
+  it("MA-5. a conflict in a file only another part owns is settled by ownership: no builder is told to merge it by hand", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const plan = twoFacetPlan();
+    (plan.facets[0] as { owns: string[] }).owns = ["src/water.js", "src/shared.js"];
+    const builds: Record<string, number> = { water: 0, sky: 0 };
+    const skyPrompts: string[] = [];
+    registerFakeEngine(rig, {
+      complete: (text) => (text.includes("ENGINE HINT: maxParallel") ? JSON.stringify(plan) : null),
+      delegate: async (request) => {
+        const cwd = request.cwd;
+        const git = async (...args: string[]) => (await gitFile(["-C", cwd, ...args])).stdout.trim();
+        await mkdir(path.join(cwd, "src"), { recursive: true });
+        const shared = path.join(cwd, "src", "shared.js");
+        if (/YOUR FACET: Water|facet "Water"/.test(request.prompt)) {
+          builds.water++;
+          await writeFile(shared, `export const shared = "water-${builds.water}";\n`);
+          await writeFile(path.join(cwd, "src", "water.js"), `export const water = ${builds.water};\n`);
+          return { sessionId: "ses_water" };
+        }
+        if (/YOUR FACET: Sky|facet "Sky"/.test(request.prompt)) {
+          builds.sky++;
+          const brief = await readFile(path.join(cwd, ".studio", "BRIEF.md"), "utf8").catch(() => "");
+          skyPrompts.push(`${request.prompt}\n${brief}`);
+          if (builds.sky === 1) {
+            // Sky writes water's file only once water's version is integrated: both sides add it.
+            const until = Date.now() + 90_000;
+            while (Date.now() < until) {
+              const found = await git("log", "--all", "--grep=integrate water iteration 1", "--format=%H").catch(
+                () => "",
+              );
+              if (found) break;
+              await setTimeoutPromise(200);
+            }
+          }
+          // A builder without the edit-time hook (review off below): it overwrote a file it does not own.
+          const current = await readFile(shared, "utf8").catch(() => "");
+          if (!current.includes("water")) await writeFile(shared, `export const shared = "sky";\n`);
+          await writeFile(path.join(cwd, "src", "sky.js"), `export const sky = ${builds.sky};\n`);
+          return { sessionId: "ses_sky" };
+        }
+        if (request.playtest)
+          return { summary: JSON.stringify({ answers: { "integration-play": { answer: "yes" } }, report: "played" }) };
+        return null;
+      },
+    });
+    // Review off: the reviewer would otherwise act on sky's stray edit before it could conflict.
+    const { events } = await runAutopilot(rig, "ownershipworld", { budgets: { review: false } });
+    const skyMerges = customEvents(events, "integration_merge").filter((m) => m.facetId === "sky" && !m.stage);
+    assert.ok(
+      !skyPrompts.some((prompt) => /could not merge it automatically/.test(prompt)),
+      `sky was never told to merge water's file by hand: ${JSON.stringify(skyMerges)}`,
+    );
+    assert.ok(
+      skyMerges.every((m) => m.conflict === false),
+      `no merge into sky's worktree was left to its builder: ${JSON.stringify(skyMerges)}`,
+    );
+    assert.ok(
+      skyMerges.some(
+        (m) => m.conflict === false && ((m.theirs as string[] | undefined) ?? []).includes("src/shared.js"),
+      ),
+      `sky's worktree merge took water's side of src/shared.js: ${JSON.stringify(skyMerges)}`,
+    );
+    const gameDir = path.join(rig.core.layout.gamesRoot, "ownershipworld");
+    assert.match(await readFile(path.join(gameDir, "src", "shared.js"), "utf8"), /water-\d+/);
+  });
+
+  it("MA-6. a builder's merge left uncommitted is concluded before review: nothing that arrived by it is reverted", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const plan = twoFacetPlan();
+    (plan.facets[0] as { owns: string[] }).owns = ["src/water.js", "src/materials.js"];
+    const builds: Record<string, number> = { water: 0, sky: 0 };
+    registerFakeEngine(rig, {
+      complete: (text) => (text.includes("ENGINE HINT: maxParallel") ? JSON.stringify(plan) : null),
+      delegate: async (request) => {
+        const cwd = request.cwd;
+        const git = async (...args: string[]) => (await gitFile(["-C", cwd, ...args])).stdout.trim();
+        await mkdir(path.join(cwd, "src"), { recursive: true });
+        if (/YOUR FACET: Water|facet "Water"/.test(request.prompt)) {
+          builds.water++;
+          // Water changes a file the game already had: one that exists at sky's incumbent.
+          const materials = path.join(cwd, "src", "materials.js");
+          const before = (await readFile(materials, "utf8")).replace(/^export const waterTint = .*\n/m, "");
+          await writeFile(materials, `${before}export const waterTint = ${builds.water};\n`);
+          await writeFile(path.join(cwd, "src", "water.js"), `export const water = ${builds.water};\n`);
+          return { sessionId: "ses_water" };
+        }
+        if (/YOUR FACET: Sky|facet "Sky"/.test(request.prompt)) {
+          builds.sky++;
+          if (builds.sky === 1) {
+            let head = "";
+            const until = Date.now() + 90_000;
+            while (Date.now() < until && !head) {
+              head = await git("log", "--all", "--grep=integrate water iteration 1", "--format=%H").catch(() => "");
+              if (!head) await setTimeoutPromise(200);
+            }
+            assert.ok(head, "water's first round was integrated");
+            // The builder merges the integration head by hand and never commits the merge.
+            await git("-c", "user.name=fake", "-c", "user.email=fake@x", "merge", "--no-commit", "--no-ff", head);
+          }
+          await writeFile(path.join(cwd, "src", "sky.js"), `export const sky = ${builds.sky};\n`);
+          return { sessionId: "ses_sky" };
+        }
+        if (request.playtest)
+          return { summary: JSON.stringify({ answers: { "integration-play": { answer: "yes" } }, report: "played" }) };
+        return null;
+      },
+    });
+    const { events } = await runAutopilot(rig, "handmergeworld");
+    const first = customEvents(events, "facet_iteration").find((i) => i.facetId === "sky" && i.iteration === 1);
+    assert.ok(first && first.verdictSource !== "broken", `the concluded merge was judged: ${JSON.stringify(first)}`);
+    const enforced = customEvents(events, "facet_review_enforced").filter((e) => e.facetId === "sky");
+    assert.ok(
+      enforced.every((e) => !((e.reverted as string[] | undefined) ?? []).includes("src/materials.js")),
+      `water's materials were never reverted on sky: ${JSON.stringify(enforced)}`,
+    );
+    const gameDir = path.join(rig.core.layout.gamesRoot, "handmergeworld");
+    assert.match(await readFile(path.join(gameDir, "src", "materials.js"), "utf8"), /waterTint = \d+/);
+    assert.match(await readFile(path.join(gameDir, "src", "sky.js"), "utf8"), /sky = \d+/);
   });
 });

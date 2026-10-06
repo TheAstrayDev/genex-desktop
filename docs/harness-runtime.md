@@ -299,6 +299,15 @@ owned whole, because two workers in one entry file get union-merged and the merg
 follow. `src/substrate/ownership.ts` and `loop/review.ts` are two copies of that one rule, held in
 step by a conformance test, because the seed runs outside the app, where nothing under `src/` resolves.
 
+Ownership is judged on the worker's own diff, never on what arrived by merge (`loop/merge-ownership.ts`).
+Each round's merge of the integration head is settled by ownership: another part's conflicted file
+takes the integration side, the template entry's wiring block is union-merged, and only a conflict
+in the worker's own files goes to its builder, whose note names just those files. A hand merge the
+builder left uncommitted is committed before the review; one left with conflicts makes the build
+broken. Enforcement keeps an unowned file that matches an integration head, and a merge that kept
+the worker's side of another part's file is a `merge-dropped` finding, restored from the merged
+head. `facet_review_enforced` lists `reverted`, `kept`, `quarantined` and `restored` files.
+
 Manual SkillOpt resolves the most recent run's model through `modelOn`, as the post-run path does.
 A cross-provider run stores its builder model alongside its orchestrator engine, so those two raw
 fields must not be passed together to a completion call. Skill gates compare instruction texts against saved task descriptions; they do not execute

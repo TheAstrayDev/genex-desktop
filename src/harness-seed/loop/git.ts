@@ -145,6 +145,37 @@ export const GIT = Object.freeze({
   catFileExists: (rev: string, file: string): string =>
     `git cat-file -e ${shellQuote(`${rev}:${file}`)} && echo yes || echo no`,
   checkoutPath: (rev: unknown, file: string): string => `git checkout ${commitArg(rev)} -- ${shellQuote(file)}`,
+  /**
+   * Is the worktree's `file` byte-identical to its copy at `rev` (and does `rev` hold it at all)?
+   * Answers `yes` or `no` on stdout: an untracked file never reads as the same as nothing.
+   */
+  sameAsRev: (rev: unknown, file: string): string =>
+    `git cat-file -e ${shellQuote(`${commitArg(rev)}:${file}`)} && git diff --quiet ${commitArg(rev)} -- ${shellQuote(file)} && echo yes || echo no`,
+  /** The best common ancestor of two commits. */
+  mergeBase: (a: unknown, b: unknown): string => `git merge-base ${commitArg(a)} ${commitArg(b)}`,
+  /** The paths that differ between two commits, one per line, renames read as a delete and an add. */
+  changedBetween: (from: unknown, to: unknown): string =>
+    `git diff --name-only --no-renames ${commitArg(from)} ${commitArg(to)} --`,
+  /** The commit a merge in progress is merging; fails when no merge is pending. */
+  mergeHead: "git rev-parse -q --verify MERGE_HEAD",
+  /** Does the index hold `stage` of a conflicted path (1 base, 2 ours, 3 theirs)? Answers `yes` or `no`. */
+  stageExists: (stage: 1 | 2 | 3, file: string): string =>
+    `git cat-file -e ${shellQuote(`:${Number(stage)}:${file}`)} && echo yes || echo no`,
+  /** Settle a conflicted path on the side being merged in. */
+  takeTheirs: (file: string): string =>
+    `git checkout --theirs -- ${shellQuote(file)} && git add -- ${shellQuote(file)}`,
+  /** Settle a conflicted path the side being merged in deleted: deleted here too. */
+  takeTheirDeletion: (file: string): string => `git rm -q -- ${shellQuote(file)}`,
+  /** Stage a path as it stands on disk, a deletion included. */
+  addAllPath: (file: string): string => `git add -A -- ${shellQuote(file)}`,
+  /** The paths staged against HEAD, one per line. */
+  stagedNames: "git diff --cached --name-only --no-renames",
+  /**
+   * Of `files`, the ones on disk that still hold a conflict (a `<<<<<<<` line and a `>>>>>>>`
+   * line), one per line. A link is never read through.
+   */
+  conflictMarked: (files: readonly string[]): string =>
+    `for f in ${files.map(shellQuote).join(" ")}; do if [ -f "$f" ] && [ ! -L "$f" ] && grep -qE '^<{7}( |$)' -- "$f" && grep -qE '^>{7}( |$)' -- "$f"; then printf '%s\\n' "$f"; fi; done; true`,
   /** One stage of a conflicted path (`:1:<path>` base, `:2:` ours, `:3:` theirs). */
   show: (object: string): string => `git show ${shellQuote(object)}`,
   /** A three-way union merge of three files; the arguments are shell words the caller built. */
