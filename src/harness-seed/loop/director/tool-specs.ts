@@ -63,7 +63,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
   {
     name: DirectorTool.RunStatus,
     description:
-      "Time, integration branch, worker progress and budgets, pool slots, free memory, loop thresholds and user guidance. Read it when the wake snapshot is stale. Boards show the first failing and unmeasured checks; worker_status has the whole board.",
+      "Time, integration branch, worker progress and budgets, pool slots, free memory, loop thresholds and user guidance. Read it when the wake snapshot is stale or incomplete. Boards show the first failing and unmeasured checks; worker_status has the whole board.",
     parameters: { type: "object", properties: {} },
   },
   {
@@ -111,7 +111,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
   {
     name: DirectorTool.WorkerStart,
     description:
-      "Start a background builder with its own git worktree and hidden preview. loop (default): build, gather evidence, check, compare blindly, keep or roll back, until done passes or the budget ends; accepted builds are committed. single: one session committed without a judge; you assess it. Returns a worker id — use wait and worker_status. One area a player can name per worker, on files of its own. The workers run_status allows are a ceiling: start the fewest that cover independent files; a deeper worker beats another area.",
+      "Start a background builder with its own git worktree and hidden preview. loop (default): build, gather evidence, check, compare blindly, keep or roll back, until done passes or the budget ends; accepted builds are committed. single: one session committed without a judge; you assess it. Returns a worker id — use wait and worker_status. One area a player can name per worker, on files of its own. The workers run_status allows are a ceiling: start the fewest that cover independent files.",
     parameters: {
       type: "object",
       properties: {
@@ -267,7 +267,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
   },
   {
     name: DirectorTool.Wait,
-    description: `Wait until a worker ends, an iteration is accepted, new inspection evidence or user guidance arrives, or the timeout (default 60 s, max ${MAX_WAIT_S}). Returns worker progress, touched files, contract violations, inspection and integration status. Use instead of polling; call again to wait longer.`,
+    description: `Wait until a worker ends, an iteration is accepted, new inspection evidence or user guidance arrives, or until the timeout (default 60 s, max ${MAX_WAIT_S}). Returns worker progress, touched files, contract violations, inspection and integration status. Use instead of polling; call again to wait longer.`,
     parameters: {
       type: "object",
       properties: {
@@ -312,7 +312,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
         goal: {
           type: "string",
           description:
-            "Required goal to verify on integration by its frozen acceptance scenarios, not ask; report unavailable hosted prerequisites as blocked.",
+            "Required goal to verify on integration by its frozen acceptance scenarios, not your question (ask); report unavailable hosted prerequisites as blocked.",
         },
         scenario: {
           type: "string",
