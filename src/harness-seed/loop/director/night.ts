@@ -202,6 +202,11 @@ export interface NightState {
   contractError?: string | null;
   /** How many loop workers were refused for want of a contract (contract-gate.ts `contractBeforeFork`). */
   contractRefusals?: number;
+  /**
+   * A night resumed from a journal written before the contract gate (journal.ts `restoreNight`): its
+   * loop workers start as they always did until its lead commits a contract.
+   */
+  contractLegacy?: boolean;
   integrationHealthy: boolean | null;
   healthByHead: Map<string | null | undefined, boolean>;
   consoleByHead: Map<string | null | undefined, string[]>;

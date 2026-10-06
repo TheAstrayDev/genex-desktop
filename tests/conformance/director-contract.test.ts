@@ -18,7 +18,7 @@ import { describe, it } from "node:test";
 import { compilePlan, compileWorkerSpec } from "../../src/harness-seed/loop/director/rules.ts";
 import { rememberEvidence as rememberHeadEvidence } from "../../src/harness-seed/loop/director/night.ts";
 import { loopIntegration, startRefusal } from "../../src/harness-seed/loop/director/workers.ts";
-import { recordNight, restoreNight } from "../../src/harness-seed/loop/director/journal.ts";
+import { priorFork, recordNight, restoreNight } from "../../src/harness-seed/loop/director/journal.ts";
 import {
   ARCHITECTURE_FILE,
   contractPointer,
@@ -1126,5 +1126,86 @@ describe("the contract and the wave on the journal (review)", () => {
     });
     assert.equal(back.state.waveHead, undefined);
     assert.equal(back.state.contract.commit, CONTRACT_COMMIT, "the contract it was held to goes on");
+  });
+});
+
+describe("a build paused before the contract gate shipped, resumed (review)", () => {
+  const now = Date.UTC(2026, 9, 6, 2, 0, 0);
+  /** The plan as a pre-upgrade director kept it: two parts, no contract, no part marked single. */
+  const oldPlan = () => compilePlan(planArgs(null)).plan!;
+  /** A night over `repo` resumed from `saved` (its journal's director record), as setup.ts starts one. */
+  const resumedOver = (repo: string, head: string, saved: Record<string, any>) => {
+    const { night } = stubNight(repo, head, saved.plan ?? null);
+    Object.assign(night, {
+      resume: true,
+      priorJournal: { director: saved },
+      started: now,
+      softDeadline: now,
+      finalDeadline: now,
+    });
+    Object.assign(night.state, { log: [], planReviewUntil: 0, judges: 0, plays: 0 });
+    restoreNight(night as never, now);
+    return night;
+  };
+  /** A pre-upgrade journal: a two-part plan and a worker that left a commit, and nothing of the contract. */
+  async function preUpgrade() {
+    const { repo, head } = await integrationRepo();
+    const carWork = await workerBranch(repo, head, "car-before", { "src/car.js": "export const drift = 1;\n" });
+    const saved = {
+      plan: oldPlan(),
+      integrationHead: head,
+      workers: { car: { id: "car", title: "Car handling", state: "stopped", from: head, lastCommit: carWork } },
+    };
+    return { repo, head, carWork, saved };
+  }
+
+  it("starts a loop worker from a worker before the pause as it always did: no refusal, no contract commit", async () => {
+    const { repo, head, carWork, saved } = await preUpgrade();
+    const night = resumedOver(repo, head, saved);
+    assert.equal(priorFork(night as never, "car")?.commit, carWork);
+    const args = { id: "car", from: "car" };
+    for (let i = 0; i <= CONTRACT_REFUSALS_BEFORE_DERIVED; i++) {
+      assert.equal(await contractBeforeFork(night as never, args, WorkerMode.Loop), null, `call ${i + 1}`);
+    }
+    const gate = await contractAtFork(night as never, { id: "car", args, mode: WorkerMode.Loop, commit: carWork });
+    assert.deepEqual(gate, { owns: null });
+    assert.equal(await fixtureGit(repo, ["rev-parse", "HEAD"]), head, "no docs/ARCHITECTURE.md committed");
+    assert.equal(night.state.contract, undefined);
+  });
+
+  it("stays a build from before the gate through a second pause", async () => {
+    const { repo, head, saved } = await preUpgrade();
+    const night = resumedOver(repo, head, saved);
+    recordNight(night as never, now);
+    const again = resumedOver(repo, head, structuredClone(night.journal.director));
+    for (let i = 0; i <= CONTRACT_REFUSALS_BEFORE_DERIVED; i++) {
+      assert.equal(await contractBeforeFork(again as never, { id: "car" }, WorkerMode.Loop), null, `call ${i + 1}`);
+    }
+    assert.equal(again.state.contract, undefined);
+  });
+
+  it("holds its loop workers once its lead gives a contract", async () => {
+    const { repo, head, saved } = await preUpgrade();
+    const night = resumedOver(repo, head, saved);
+    night.state.plan = compilePlan(planArgs()).plan!;
+    assert.match(String(await contractOnPlan(night as never)), /docs\/ARCHITECTURE\.md/);
+    const args = { id: "city" };
+    const gate = await contractAtFork(night as never, { id: "city", args, mode: WorkerMode.Loop, commit: head });
+    assert.match(String(gate.refusal), /does not contain the module contract/);
+    recordNight(night as never, now);
+    const again = resumedOver(repo, head, structuredClone(night.journal.director));
+    const stillHeld = await contractAtFork(again as never, { id: "city", args, mode: WorkerMode.Loop, commit: head });
+    assert.match(String(stillHeld.refusal), /does not contain the module contract/, "and goes on holding them");
+  });
+
+  it("a build on this harness that paused before its first loop worker still needs a contract on Resume", async () => {
+    const { repo, head } = await integrationRepo();
+    const before = resumedOver(repo, head, {});
+    before.resume = false;
+    before.state.plan = oldPlan();
+    recordNight(before as never, now);
+    const night = resumedOver(repo, head, structuredClone(before.journal.director));
+    const refused = await contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop);
+    assert.match(String(refused), /2 parts that loop, and no module contract yet/);
   });
 });

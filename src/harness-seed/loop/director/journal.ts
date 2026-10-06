@@ -232,6 +232,10 @@ export function recordNight(night: Night, now = Date.now()): void {
     // with neither reads exactly as it did.
     ...(state.contract ? { contract: state.contract } : {}),
     ...(state.waveHead ? { waveHead: state.waveHead } : {}),
+    // Written by a director that holds loop workers to a contract: a journal without it is from
+    // before the gate, and a Resume of it goes on as it did (`restoreIntegration`). A night resumed
+    // from one keeps not writing it until its lead commits a contract.
+    ...(state.contractLegacy ? {} : { contractGate: true }),
   });
   // The art director's last word and a goal build's one turned-back finish: kept once there is one.
   if (state.lastShip) director.lastShip = { ...state.lastShip, at: iso(state.lastShip.at) };
@@ -355,6 +359,10 @@ function restoreIntegration(state: NightState, saved: AnyRecord): void {
       state.baseHeads?.add(commit);
     }
   }
+  // A plan saved by a director from before the contract gate (no `contractGate` mark): its parts
+  // never said which run alone, and its workers' commits predate any contract, so its loop workers
+  // start as they always did until its lead commits one (contract-gate.ts `exempt`).
+  if (saved.plan && saved.contractGate !== true && !state.contract) state.contractLegacy = true;
   // A finished build reopened forks from the game folder as it is now (reopen.ts): the finished
   // night's wave head is an ancestor its workers would follow, missing the lead's new commits.
   const waveHead = saved.reopened ? null : commitOf(saved.waveHead);

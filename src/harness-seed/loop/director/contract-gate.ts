@@ -8,7 +8,8 @@
  * the modules the contract gives it exist there (stubs, written by the lead or a single worker),
  * and only with a seam that leaves the other parts' modules alone; with no seam named it owns its
  * contract modules (`contractAtFork`). A single session, a conflict worker and a plan with one
- * looping part are never held. A lead that gives no contract is refused twice, and then the harness
+ * looping part are never held, nor is a night resumed from a journal written before this gate
+ * until its lead commits a contract (`NightState.contractLegacy`). A lead that gives no contract is refused twice, and then the harness
  * writes one from the plan's own seams rather than stall the build (`contractBeforeFork`).
  *
  * Its functions take the night explicitly; they are not bound onto it. A new module: workers.ts
@@ -74,9 +75,13 @@ export interface NightContract {
 /** A gate's answer: the refusal, or what the worker starts with (its contract seam, when it named none). */
 export type ContractGate = { refusal: string } | { refusal?: undefined; owns: string[] | null };
 
-/** Is the worker never held to a contract: a single session, a conflict worker, a plan of one looping part? */
+/**
+ * Is the worker never held to a contract: a single session, a conflict worker, a plan of one
+ * looping part, a night resumed from before the gate whose lead has given none?
+ */
 function exempt(night: Night, args: AnyRecord, mode: WorkerMode): boolean {
   if (mode !== WorkerMode.Loop || conflictMergeOf(args)) return true;
+  if (night.state.contractLegacy === true) return true;
   return !contractRequired(night.state.plan);
 }
 
@@ -237,6 +242,8 @@ export async function commitContract(
   state.contract = nightContract(night, head, spec, parent);
   state.contractError = null;
   if (parent && head !== parent) inheritStanding(night, parent, head);
+  // A night resumed from before the gate is held from the contract its lead gave on.
+  state.contractLegacy = false;
   if (head !== state.integrationHead) {
     state.integrationHead = head;
     journal.director.integrationHead = head;
