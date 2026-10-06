@@ -30,6 +30,10 @@ label ship or not, each decisive defect with the plan part that owns it and its 
 malformed reply must stay no verdict, never a "no", and a camera it was not shown is dropped. It is
 never put beside another build's frames.
 
+When the run's plan carries a vision (`docs/VISION.md`, `loop/vision.ts`), the taste judge, the
+liveness critic and the ship review also read a bounded excerpt of it as the direction to grow
+toward. Freeze it with the task brief, and compare candidates under the same vision or none.
+
 A finish-stage round's taste judge reads `judge/taste-finish.md` after its usual rubric
 (`taste-veto.md`): polish is the work, the build a player would rather ship wins, and it lists up
 to eight polish items. Evaluate it on finish pairs only, and confirm that build-stage pairs, judged

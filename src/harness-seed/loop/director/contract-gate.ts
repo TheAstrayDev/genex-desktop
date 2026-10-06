@@ -12,6 +12,11 @@
  * until its lead commits a contract (`NightState.contractLegacy`). A lead that gives no contract is refused twice, and then the harness
  * writes one from the plan's own seams rather than stall the build (`contractBeforeFork`).
  *
+ * The plan's vision (vision.ts) is committed in the same commit as docs/VISION.md, and held to the
+ * same gate: no loop worker starts under such a plan before the vision is on the branch — refused
+ * twice by name, then the build goes on without one and the lead hears it. The NFS lead froze its
+ * world inside the contract; the vision is where the world's ambition lives instead, never frozen.
+ *
  * Its functions take the night explicitly; they are not bound onto it. A new module: workers.ts
  * calls it, and a kept older workers.ts simply never does.
  */
@@ -21,6 +26,8 @@ import { GIT, gitExec, headOf, shortFailure, shortSha } from "../git.ts";
 import { RunEvent } from "../run-events.ts";
 import { commitArg } from "../shell.ts";
 import { WorkerMode } from "../outcomes.ts";
+import { restoreVision, sameVision, VISION_FILE } from "../vision.ts";
+import { renderVision, VISION_GATE } from "../vision-prompts.ts";
 import { list } from "./args.ts";
 import { conflictMergeOf } from "./conflict-worker.ts";
 import {
@@ -44,11 +51,13 @@ import {
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
 import type { ModuleContract } from "./module-contract.ts";
 import type { Night } from "./night.ts";
+import type { RunVision } from "../vision.ts";
 
 /** "No contract" refusals a lead gets before the harness writes one from the plan's seams. */
 export const CONTRACT_REFUSALS_BEFORE_DERIVED = 2;
-/** The commit message of the contract's commit. */
+/** The commit message of the contract's commit, and of one that also writes the vision. */
 const CONTRACT_COMMIT_MESSAGE = `studio: module contract (${ARCHITECTURE_FILE})`;
+const DOCS_COMMIT_MESSAGE = `studio: module contract and vision (${ARCHITECTURE_FILE}, ${VISION_FILE})`;
 /** Why the contract's commit failed when git said nothing. */
 const COMMIT_FAILED = "the commit failed with no message from git";
 
@@ -70,6 +79,14 @@ export interface NightContract {
   onStart?: boolean;
   /** Written on one of the run's base heads, so it is one too: the fork gate looks at it as a start. */
   baseHead?: boolean;
+  /** The plan's vision, committed with the contract as docs/VISION.md (absent: none given yet). */
+  vision?: RunVision;
+}
+
+/** A document the contract's commit writes: its path in the game and its text. */
+interface StudioDoc {
+  file: string;
+  text: string;
 }
 
 /** A gate's answer: the refusal, or what the worker starts with (its contract seam, when it named none). */
@@ -96,22 +113,38 @@ async function linkAt(file: string): Promise<{ exists: boolean; link: boolean; f
 }
 
 /**
- * Write the contract file (`ARCHITECTURE_FILE`) into the worktree, and nowhere else: a `docs` folder or a contract
- * file that is a symbolic link, or a `docs` that resolves outside the worktree, writes nothing.
- * Answers why it did not write, or null.
+ * Write one of the studio's documents in docs/ (the contract, the vision) into the worktree, and
+ * nowhere else: a `docs` folder or a document that is a symbolic link, or a `docs` that resolves
+ * outside the worktree, writes nothing. Answers why it did not write, or null.
  */
-export async function writeArchitecture(worktree: string, text: string): Promise<string | null> {
+async function writeStudioDoc(worktree: string, doc: StudioDoc): Promise<string | null> {
   const root = await realpath(worktree);
-  const target = path.join(root, ARCHITECTURE_FILE);
+  const target = path.join(root, doc.file);
   const dir = path.dirname(target);
   const folder = await linkAt(dir);
   if (folder.link) return WRITE_REFUSED.link("docs");
   if (!folder.exists) await mkdir(dir);
   if ((await realpath(dir)) !== dir) return WRITE_REFUSED.outside;
   const file = await linkAt(target);
-  if (file.link) return WRITE_REFUSED.link(ARCHITECTURE_FILE);
-  if (file.exists && !file.file) return WRITE_REFUSED.notFile(ARCHITECTURE_FILE);
-  await writeFile(target, text);
+  if (file.link) return WRITE_REFUSED.link(doc.file);
+  if (file.exists && !file.file) return WRITE_REFUSED.notFile(doc.file);
+  await writeFile(target, doc.text);
+  return null;
+}
+
+/** Write the contract file (`ARCHITECTURE_FILE`) into the worktree, and nowhere else (`writeStudioDoc`). */
+export function writeArchitecture(worktree: string, text: string): Promise<string | null> {
+  return writeStudioDoc(worktree, { file: ARCHITECTURE_FILE, text });
+}
+
+/** Write every document in turn; why the first one could not be written, or null. */
+async function writeStudioDocs(worktree: string, docs: readonly StudioDoc[]): Promise<string | null> {
+  for (const doc of docs) {
+    const refused = await writeStudioDoc(worktree, doc).catch((error: unknown) =>
+      String((error as Error)?.message ?? error),
+    );
+    if (refused) return refused;
+  }
   return null;
 }
 
@@ -162,14 +195,20 @@ export function holdsContract(
   return gitSays(ctx, worktree, lacking, label, "0");
 }
 
-/** Stage and commit the contract file alone, whatever else is uncommitted there; why it could not, or null. */
-async function commitArchitecture(night: Night, label: string): Promise<string | null> {
+/**
+ * Stage and commit the studio's documents alone, whatever else is uncommitted there — only the ones
+ * that changed, nothing when none did; why it could not, or null.
+ */
+async function commitStudioDocs(night: Night, files: readonly string[], label: string): Promise<string | null> {
   const { ctx, integrationWorktree } = night;
-  const unchanged = await gitSays(ctx, integrationWorktree, () => GIT.sameAsRev("HEAD", ARCHITECTURE_FILE), label);
-  if (unchanged) return null;
+  const changed: string[] = [];
+  for (const file of files)
+    if (!(await gitSays(ctx, integrationWorktree, () => GIT.sameAsRev("HEAD", file), label))) changed.push(file);
+  if (!changed.length) return null;
   // Staged even where the game's .gitignore covers docs/ (an older git.ts adds it as it always did).
-  const stage = GIT.addPath(ARCHITECTURE_FILE, { force: true });
-  const commit = GIT.commit(CONTRACT_COMMIT_MESSAGE, { only: [ARCHITECTURE_FILE] });
+  const stage = changed.map((file) => GIT.addPath(file, { force: true })).join(" && ");
+  const message = changed.includes(VISION_FILE) ? DOCS_COMMIT_MESSAGE : CONTRACT_COMMIT_MESSAGE;
+  const commit = GIT.commit(message, { only: changed });
   const committed = await gitExec(ctx, integrationWorktree, `${stage} && ${commit}`, { label }).catch(
     (error: unknown) => ({ code: 1, stdout: "", stderr: String((error as Error)?.message ?? error) }),
   );
@@ -209,17 +248,38 @@ function inheritStanding(night: Night, from: string, to: string): void {
   if (seen !== undefined) state.evidenceByHead.set(to, seen);
 }
 
-/** The contract the night holds, with where it was written when that was the run's start. */
-function nightContract(night: Night, commit: string, spec: ModuleContract, parent: string | null): NightContract {
+/** The contract the night holds, with where it was written when that was the run's start, and the vision beside it. */
+function nightContract(
+  night: Night,
+  commit: string,
+  spec: ModuleContract,
+  parent: string | null,
+  vision: RunVision | null,
+): NightContract {
   const onStart = isStart(night, parent);
   const baseHead = Boolean(parent && night.state.baseHeads.has(parent));
-  return { commit, spec, ...(onStart ? { onStart } : {}), ...(baseHead ? { baseHead } : {}) };
+  return {
+    commit,
+    spec,
+    ...(onStart ? { onStart } : {}),
+    ...(baseHead ? { baseHead } : {}),
+    ...(vision ? { vision } : {}),
+  };
+}
+
+/** The vision the night's plan carries, held to its shape; null when it has none. */
+const planVision = (night: Night): RunVision | null => restoreVision(night.state.plan?.vision);
+
+/** The documents the contract's commit writes: the contract, and the plan's vision when it has one. */
+function studioDocs(spec: ModuleContract, vision: RunVision | null, titles: Record<string, string>): StudioDoc[] {
+  const contract = { file: ARCHITECTURE_FILE, text: renderArchitecture(spec, titles) };
+  return vision ? [contract, { file: VISION_FILE, text: renderVision(vision) }] : [contract];
 }
 
 /**
- * Render the contract into its file (`ARCHITECTURE_FILE`) and commit it on the integration branch: the new
- * head is protected, journalled and on the record, and the night holds its loop workers to it.
- * Answers the commit, or why there is none.
+ * Render the contract into its file (`ARCHITECTURE_FILE`) — and the plan's vision into `VISION_FILE`
+ * — and commit them on the integration branch: the new head is protected, journalled and on the
+ * record, and the night holds its loop workers to it. Answers the commit, or why there is none.
  */
 export async function commitContract(
   night: Night,
@@ -228,18 +288,24 @@ export async function commitContract(
   const { appendRun, ctx, integrationWorktree, journal, note, protectHead, run, saveJournal, state } = night;
   const label = `director:${run.runId}:module-contract`;
   const titles = Object.fromEntries((state.plan?.workers ?? []).map((part: AnyRecord) => [part.id, part.title]));
+  const vision = planVision(night);
+  const docs = studioDocs(spec, vision, titles);
   // The commit the contract is written on: what the new head inherits its standing from.
   const parent = await headOf(ctx, integrationWorktree, { label }).catch(() => null);
-  const written = await writeArchitecture(integrationWorktree, renderArchitecture(spec, titles)).catch(
-    (error: unknown) => String((error as Error)?.message ?? error),
-  );
-  const failed = written ?? (await commitArchitecture(night, label));
+  const written = await writeStudioDocs(integrationWorktree, docs);
+  const failed =
+    written ??
+    (await commitStudioDocs(
+      night,
+      docs.map((doc) => doc.file),
+      label,
+    ));
   if (failed) {
     state.contractError = failed;
     return { error: failed };
   }
   const head = await headOf(ctx, integrationWorktree, { label });
-  state.contract = nightContract(night, head, spec, parent);
+  state.contract = nightContract(night, head, spec, parent, vision);
   state.contractError = null;
   if (parent && head !== parent) inheritStanding(night, parent, head);
   // A night resumed from before the gate is held from the contract its lead gave on.
@@ -261,31 +327,41 @@ export async function commitContract(
 const allPaths = (spec: ModuleContract): string[] => [...spec.modules, ...spec.shared].map((entry) => entry.path);
 
 /**
- * The plan's contract, committed when the plan has two or more looping parts and the contract is
- * new or changed: the sentence `plan` adds to its answer, or null when there was nothing to do.
+ * The plan's contract and vision, committed when the plan has two or more looping parts and either
+ * is new or changed — a vision given after the contract is committed beside the contract the night
+ * already holds: the sentence `plan` adds to its answer, or null when there was nothing to do.
  */
 export async function contractOnPlan(night: Night): Promise<string | null> {
   const { ctx, integrationWorktree, state } = night;
-  const spec: ModuleContract | null = state.plan?.contract ?? null;
-  if (!spec || !contractRequired(state.plan)) return null;
-  if (sameContract(state.contract?.spec, spec)) return null;
+  if (!contractRequired(state.plan)) return null;
+  const spec: ModuleContract | null = state.plan?.contract ?? state.contract?.spec ?? null;
+  if (!spec) return null;
+  const vision = planVision(night);
+  const visionNew = Boolean(vision) && !sameVision(state.contract?.vision, vision);
+  if (sameContract(state.contract?.spec, spec) && !visionNew) return null;
   const committed = await commitContract(night, spec);
   if ("error" in committed) return CONTRACT_GATE.notCommitted(committed.error);
   const missing = await missingAt(ctx, integrationWorktree, committed.commit, allPaths(spec));
   return contractCommittedWords(committed.commit, missing, {
     lead: Boolean(night.lead),
     worktree: integrationWorktree,
+    vision: Boolean(vision),
   });
 }
 
+/** Is the contract on the branch, with the vision beside it (or waived after the lead's refusals)? */
+const foundationKept = (night: Night): boolean =>
+  Boolean(night.state.contract && (night.state.contract.vision || night.state.visionWaived));
+
 /**
- * Before a loop worker's fork point is read: is there a contract to hold it to? Refused while
- * there is none — twice, and then the harness writes one from the plan's seams and commits it, so
- * a lead that never writes one does not stall the build. Answers the refusal, or null.
+ * Before a loop worker's fork point is read: is there a contract to hold it to, and a vision beside
+ * it? Refused while either is missing, by name — twice, and then the harness writes the contract
+ * from the plan's seams and commits it, and the build goes on without a vision the lead never gave,
+ * so a lead that never writes them does not stall the build. Answers the refusal, or null.
  */
 export async function contractBeforeFork(night: Night, args: AnyRecord, mode: WorkerMode): Promise<string | null> {
-  const { ctx, integrationWorktree, note, state } = night;
-  if (exempt(night, args, mode) || state.contract) return null;
+  const { note, state } = night;
+  if (exempt(night, args, mode) || foundationKept(night)) return null;
   // A contract the lead gave that could not be committed is the lead's to give again; one the
   // harness derived is tried again below, so a cause since cleared does not stall every worker.
   if (state.contractError && state.plan?.contract) return CONTRACT_GATE.notCommitted(state.contractError);
@@ -293,15 +369,35 @@ export async function contractBeforeFork(night: Night, args: AnyRecord, mode: Wo
   const refusals = state.contractRefusals ?? 0;
   if (refusals < CONTRACT_REFUSALS_BEFORE_DERIVED) {
     state.contractRefusals = refusals + 1;
-    return CONTRACT_GATE.none(parts.length);
+    if (state.contract) return VISION_GATE.missing(parts.length);
+    return CONTRACT_GATE.none(parts.length, { vision: Boolean(planVision(night)) });
   }
+  if (!state.contract) {
+    const derived = await deriveContract(night, parts);
+    if (derived) return derived;
+  }
+  if (!state.contract?.vision) {
+    state.visionWaived = true;
+    note(VISION_GATE.waived(refusals));
+  }
+  return null;
+}
+
+/**
+ * The contract the harness writes from the plan's seams after the lead's refusals, committed:
+ * the refusal when it could not be, or null.
+ */
+async function deriveContract(night: Night, parts: ReturnType<typeof loopParts>): Promise<string | null> {
+  const { ctx, integrationWorktree, note } = night;
   const named = [...new Set(parts.flatMap((part) => part.owns ?? []).map(contractPath))].filter(
     (file): file is string => file !== null,
   );
   const missing = new Set(await missingAt(ctx, integrationWorktree, "HEAD", named));
   const committed = await commitContract(night, derivedContract(parts, new Set(named.filter((f) => !missing.has(f)))));
   if ("error" in committed) return CONTRACT_GATE.derivedNotCommitted(committed.error);
-  note(contractCommittedWords(committed.commit, [], { lead: Boolean(night.lead), derived: true }));
+  // Says the vision only when it was written beside it: a missing one is the gate's to say.
+  const vision = night.state.contract?.vision ? { vision: true } : {};
+  note(contractCommittedWords(committed.commit, [], { lead: Boolean(night.lead), derived: true, ...vision }));
   return null;
 }
 

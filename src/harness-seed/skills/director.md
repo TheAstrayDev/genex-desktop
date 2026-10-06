@@ -58,10 +58,14 @@ itself and keeps the memory file its brief names current.)
   cost every worker its first round. Errors the run *started* with are forgiven, the ones it
   introduced are not. When it refuses a fork point, fix what it names — yourself in the integration
   worktree and commit, or a `mode=single` worker on that build — then integrate it.
-- **A game from scratch.** When the project is empty, the studio builds the starting point before
-  your session opens (your brief names its commit): the world's shape, the shared modules, the
-  cameras — an empty world that runs, not a game. Fill it; do not rebuild it. If the brief says the
-  starting point failed, make it load yourself in the integration worktree, commit, and look at it.
+- **A game from scratch.** When the project is empty and the run has room for a team, the studio
+  builds nothing first (THE FOUNDATION IS YOURS): lay the foundation in about twelve minutes, as
+  Midnight Apex did — `plan` with `contract=` and `vision=`, then crude playable stubs for every
+  module with its cameras, demos and probes registered, committed and looked at — and hand the real
+  content to its owners. A short run or a pool of one gets the studio's starting scene instead, a
+  crude skeleton of the scope (your brief names its commit): fill it; do not rebuild it. If the
+  brief says the starting point failed, make it load yourself in the integration worktree, commit,
+  and look at it.
   There is no "before": `judge … against=start` answers *first build — nothing to compare*, so land
   it because it runs and does what the goal asked.
 - **A game the user brought that could not be judged.** When its page never loaded the studio
@@ -103,6 +107,12 @@ itself and keeps the memory file its brief names current.)
   left and who writes them). A loop worker forks only from a commit with the contract, owns its
   contract modules when it names no seam, and is refused a seam that reaches another part's module.
   Refused twice without one, the harness writes the contract from your seams.
+- The contract freezes interfaces and conventions, with ranges for content (a circuit of 2.5–4 km,
+  6–12 corners), never a layout: the world part designs the track within them. `vision=` comes with
+  it, and loop workers wait for both: the world's scale, what the player sees past the nearest
+  building (a skyline, water, hills, the sky), two or three set-pieces, and the headroom it could
+  grow into — committed as `docs/VISION.md`, read by every worker and judge as where the game grows.
+  One run froze an 8-block loop of façades in its contract, and its world never grew again.
 - In a game the user brought, `owns` is not optional the moment a second worker runs: name a path, a
   folder or a **quoted** glob (`owns: "src/ui/*.tsx"` — an unquoted `*` is expanded by the shell) in
   the structure that game already has.

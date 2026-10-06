@@ -24,6 +24,7 @@ import { WorkerState } from "../outcomes.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
 import { runRef } from "../repo.ts";
 import { clip } from "../text.ts";
+import { restoreVision } from "../vision.ts";
 import { MAX_LEDGER, wrapReserveMs } from "./budgets.ts";
 import {
   priorCommitWords,
@@ -358,6 +359,9 @@ function restoreIntegration(state: NightState, saved: AnyRecord): void {
       state.contract.baseHead = true;
       state.baseHeads?.add(commit);
     }
+    // The vision committed beside it: a resumed night does not ask its lead for it again.
+    const vision = restoreVision(contract.vision);
+    if (vision) state.contract.vision = vision;
   }
   // A plan saved by a director from before the contract gate (no `contractGate` mark): its parts
   // never said which run alone, and its workers' commits predate any contract, so its loop workers

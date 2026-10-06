@@ -524,6 +524,19 @@ function widenedByUser(scope: RunScope, added: string[], instruction: string, st
   return addToScope(scope, added, instruction, steers) ?? scope;
 }
 
+/**
+ * The vision the plan carries, or the one the plan before it gave — a re-plan never has to repeat
+ * it to keep it — set on the run too: every worker brief and every judge of the game reads
+ * `run.vision` (vision-prompts.ts), and the journal's run brings it back on a Resume.
+ */
+function keepVision(night: Night, plan: AnyRecord, previous: AnyRecord | null): void {
+  const vision = plan.vision ?? previous?.vision ?? null;
+  if (!vision) return;
+  plan.vision = vision;
+  night.run.vision = vision;
+  night.journal.run = { ...night.journal.run, vision };
+}
+
 export async function setPlan(night: Night, args: AnyRecord) {
   const { journal, saveJournal, state } = night;
   const compiled = compilePlan(args);
@@ -536,6 +549,7 @@ export async function setPlan(night: Night, args: AnyRecord) {
   const scopeError = await planAcceptance(night, args, plan.workers);
   if (scopeError) return scopeError;
   const additions = await settlePlanScope(night, plan, previous, args);
+  keepVision(night, plan, previous);
   state.plan = plan;
   if (plan.game) await declareGameKind(night, plan.game);
   journal.director.plan = plan;
@@ -546,7 +560,8 @@ export async function setPlan(night: Night, args: AnyRecord) {
   await saveJournal();
   for (const item of additions) await night.decision(MESSAGE_ADDED.text(item), MESSAGE_ADDED.plain(item));
   if (first) await openPlanReview(night);
-  // A plan of several looping parts with a module contract: committed as docs/MODULE-CONTRACT.md.
+  // A plan of several looping parts with a module contract: committed as docs/MODULE-CONTRACT.md,
+  // with its vision beside it as docs/VISION.md.
   const contracted = await contractOnPlan(night);
   const answer = await planAnswer(night, plan, { first, acceptanceKept, args });
   return contracted ? `${answer} ${contracted}` : answer;

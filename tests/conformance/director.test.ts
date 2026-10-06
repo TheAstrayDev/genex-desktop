@@ -115,6 +115,17 @@ const planFor = (...ids: string[]): Record<string, unknown> => ({
 });
 
 /**
+ * The vision a plan with a module contract gives beside it (loop/vision.ts): a loop worker under a
+ * contract waits for both.
+ */
+const PLAZA_VISION = JSON.stringify({
+  scale: "a plaza 40 metres across, three streets off it",
+  far: "rooftops and a church spire past the nearest buildings, a dusk sky",
+  set_pieces: ["the fountain at the plaza's heart", "a stair down to the river"],
+  headroom: "the river bank and a market street the plaza could grow into",
+});
+
+/**
  * The same plan with the parts `singles` names built by one session only (`"mode":"single"`): one
  * looping part is left, so no module contract is needed before its worker starts (contract-gate.ts).
  */
@@ -3284,6 +3295,67 @@ describe("a director's night through the real core and harness", () => {
   });
 
   /**
+   * A game from scratch on a run with room for a team (the NFS ∞ Loop run): the studio's starting
+   * scene — six minutes, the goal and a mood — was a straight sprint the lead threw away six
+   * minutes later. Midnight Apex laid its contract and crude stubs first; so does a lead now.
+   */
+  it("a run from scratch with room for a team builds no starting scene: the lead's first brief hands it the foundation", async () => {
+    const asEmptyScaffold = (preview: FakePreview): FakePreview => {
+      preview.pixelStatsNext = { width: 800, height: 600, sampled: 480_000, meanLuma: 0, litFraction: 0, canvas: true };
+      preview.evaluations.push({ match: "isScene", value: true }, { match: "matrixWorld", value: "[1,0,0,1]" });
+      return preview;
+    };
+    const rig = await startRig(
+      { replies: [] },
+      { previewPoolMax: 6, createHeadlessPreview: async () => asEmptyScaffold(makeFakePreview()) },
+    );
+    rigs.push(rig);
+    asEmptyScaffold(rig.preview);
+    const project = await rig.core.games.scaffold("director-foundation", { title: "Foundation first" });
+    const seen: { director: DelegateRequest[]; others: DelegateRequest[] } = { director: [], others: [] };
+    fakeEngine(rig, async (request) => {
+      if (!request.director) {
+        seen.others.push(request);
+        return { ok: true, engine: "codex", turns: 1, usage: {}, sessionId: "other", summary: "nothing" };
+      }
+      seen.director.push(request);
+      await request.onLiveTool!("finish", { summary: "the foundation is the lead's", land: "no" });
+      return { ok: true, engine: "codex", turns: 1, usage: {}, sessionId: "director-foundation", summary: "done" };
+    });
+    const runId = rig.core.newRunId();
+    await rig.core.dispatchRun({
+      runId,
+      goal: "a neon street race",
+      project: project.name,
+      mode: "autopilot",
+      engine: "codex",
+      reference: { name: "street race", shots: [] },
+      budgets: { wallClockMs: 3 * 60 * 60_000 },
+    });
+    const events = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "run_finished").some((e) => e.runId === runId),
+      120_000,
+      "director run_finished with the foundation left to the lead",
+    );
+    assert.deepEqual(seen.others, [], "no starting-scene session, nor any other");
+    assert.deepEqual(
+      customEvents(events, "autopilot_base_started").filter((e) => e.runId === runId),
+      [],
+      "no starting point is built",
+    );
+    assert.match(seen.director[0]!.prompt, /THE FOUNDATION IS YOURS/);
+    assert.match(seen.director[0]!.prompt, /plan with contract= and vision=/);
+    const cards = customEvents(events, "autopilot_decision")
+      .filter((e) => e.runId === runId)
+      .map((e) => String(e.plain));
+    assert.ok(
+      cards.some((line) => /the lead lays the foundation first/.test(line)),
+      cards.join(" | "),
+    );
+  });
+
+  /**
    * A game the user brought that never loads the studio contract — the flautout-remix case
    * (2026-09-07). Nothing in it can be photographed, checked or compared: `window.__studio` is
    * missing, so every evidence pass reports a build that does not run, the fork gate refuses
@@ -6057,7 +6129,9 @@ describe("a module contract before loop workers", () => {
           contract: '{"modules":[{"path":"../x.js","owner":"plaza"}]}',
         }),
       );
-      results.planned = text(await call("plan", { ...planFor("plaza", "sky"), contract: JSON.stringify(contract) }));
+      results.planned = text(
+        await call("plan", { ...planFor("plaza", "sky"), contract: JSON.stringify(contract), vision: PLAZA_VISION }),
+      );
       results.noStubs = text(await call("worker_start", { id: "plaza", brief: "pave it" }));
       results.wide = text(await call("worker_start", { id: "sky", brief: "a dusk sky", owns: "src/" }));
       results.finished = text(await call("finish", { summary: "a contract and nothing built", land: "no" }));
@@ -6101,6 +6175,8 @@ describe("a module contract before loop workers", () => {
     ]);
     assert.match(architecture, /### src\/plaza\.js — owned by `plaza` \(plaza\)/);
     assert.match(architecture, /- the plaza is 40 metres across/);
+    const vision = await git(project.dir, ["show", `refs/studio/runs/${runId}/integration:docs/VISION.md`]);
+    assert.match(vision, /## Headroom\n\nthe river bank and a market street/, "the vision is committed beside it");
   });
 
   /**
@@ -6132,7 +6208,9 @@ describe("a module contract before loop workers", () => {
     fakeEngine(rig, async (request) => {
       if (request.director) {
         const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
-        results.planned = text(await call("plan", { ...planFor("plaza", "sky"), contract: JSON.stringify(contract) }));
+        results.planned = text(
+          await call("plan", { ...planFor("plaza", "sky"), contract: JSON.stringify(contract), vision: PLAZA_VISION }),
+        );
         results.started = json(await call("worker_start", { id: "plaza", brief: "pave the plaza", minutes: "5" }));
         if (results.started.started) {
           await call("worker_stop", { id: "plaza", why: "the start is what this proves" });

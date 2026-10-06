@@ -111,7 +111,12 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
         contract: {
           type: "string",
           description:
-            'Module contract, required before loop workers when 2+ parts loop: JSON {"conventions":[…],"modules":[{"path","owner":"<part id>","api":[…]}],"shared":[{"path","owner"}]}. Committed as docs/MODULE-CONTRACT.md; a bad one is answered with the grammar.',
+            'Module contract, required before loop workers when 2+ parts loop: JSON {"conventions":[…],"modules":[{"path","owner":"<part id>","api":[…]}],"shared":[{"path","owner"}]}. It freezes interfaces and conventions, with ranges for content (track 2.5–4 km), never a layout. Committed as docs/MODULE-CONTRACT.md; a bad one is answered with the grammar.',
+        },
+        vision: {
+          type: "string",
+          description:
+            'Required with contract: JSON {"scale","far","set_pieces":[2–3],"headroom"} — the world\'s scale, what the player sees past the nearest building, set-pieces, what it could grow into. Committed as docs/VISION.md; never frozen.',
         },
         play_script: {
           type: "string",

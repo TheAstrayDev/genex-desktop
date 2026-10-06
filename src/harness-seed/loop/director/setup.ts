@@ -24,6 +24,7 @@ import { MINUTE_MS } from "../time.ts";
 import { bindNight, BuildTarget, WindowLease } from "./night.ts";
 import path from "node:path";
 import { preparationBudgetMs } from "./budgets.ts";
+import { foundationFirst } from "./foundation.ts";
 import { contractBrief, preparationBudgetNote } from "./briefs.ts";
 import { nightClock, restoreNight } from "./journal.ts";
 import { clampDirectorMemory } from "./memory.ts";
@@ -909,6 +910,24 @@ async function sayStartingPoint(night: Night, commit: string | null, error: stri
 }
 
 /**
+ * A run whose lead lays the foundation itself (foundation.ts `foundationFirst`) gets no starting scene:
+ * the lead stands on the empty template, writes the module contract, the vision and crude playable
+ * stubs in its first minutes, and every owner builds its content from there (briefs.ts
+ * `startingPointLine` says so). Kept on the journal, so a Resume does not build one either; the
+ * close and the fork gate read the empty template as the run's start, as they always did.
+ */
+async function skipStartingPoint(night: Night) {
+  const { decision, journal, saveJournal } = night;
+  journal.base = { commit: null, ok: false, skipped: true, empty: true, error: null };
+  await saveJournal();
+  await decision(
+    "this game is an empty project and the run has room for a team: no starting scene — the lead lays the foundation itself (the module contract, the vision and crude playable stubs), and each part's owner builds its content",
+    "this game is empty, so the lead lays the foundation first and the builders fill it in",
+  );
+  return journal.base;
+}
+
+/**
  * A new game is an empty scaffold: no camera can photograph it, the fork gate refuses every
  * worker forked from it, and every judge answers "renders effectively black". The classic
  * pipeline always built a shared base before the facets forked; a director's night gets the
@@ -920,8 +939,10 @@ async function sayStartingPoint(night: Night, commit: string | null, error: stri
 export async function buildStartingPoint(night: Night) {
   const { appendRun, consoleInheritedBy, ctx, decision, journal, patientEvidence, run, saveJournal } = night;
   const { shotsOf, softDeadline, withLease, writeVerdict, integrationWorktree } = night;
-  const budget = preparationBudgetMs(softDeadline - Date.now());
+  const remainingMs = softDeadline - Date.now();
+  const budget = preparationBudgetMs(remainingMs);
   if (!budget) return null; // The lead uses the remaining time directly.
+  if (foundationFirst({ remainingMs, capacity: night.capacity })) return skipStartingPoint(night);
   await appendRun(RunEvent.AutopilotBaseStarted, {});
   ctx.setStatus(`run ${run.runId} · building the starting point`);
   await decision(
