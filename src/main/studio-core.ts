@@ -2085,6 +2085,15 @@ export class StudioCore {
     return this.#conversation.stopThread(...args);
   }
 
+  /**
+   * Stop one run through the run controls (`studio:run.stop`): the user's word, so the run never
+   * resumes on its own afterwards, then the harness is asked to settle and close it.
+   */
+  async stopRun(runId: string, timeoutMs?: number): Promise<void> {
+    this.#autoResume.userStoppedRun(runId);
+    await this.host.dispatch({ type: DispatchActionType.RunStop, runId }, timeoutMs);
+  }
+
   async changeQueuedMessage(
     threadId: string,
     messageId: string,

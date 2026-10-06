@@ -10,6 +10,7 @@ import { describe, it } from "node:test";
 import {
   AUTO_RESUME_HORIZON_MS,
   AUTO_RESUME_MIN_FREE_MB,
+  AUTO_RESUME_RECHECK_MAX_MS,
   AUTO_RESUME_RECHECK_MS,
   AUTO_RESUME_WAIT_MS,
   AUTO_RESUMES_MAX,
@@ -27,7 +28,7 @@ import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
 import { EventKind, type EventEnvelope } from "../../src/shared/event-log.ts";
 import { HOUR_MS, MINUTE_MS } from "../../src/shared/duration.ts";
 import { toEntries } from "../../src/renderer/chat-entries.ts";
-import { studioActivity } from "../../src/shared/studio-activity.ts";
+import { ActivityIndex } from "../../src/shared/studio-activity.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 import { coreLite } from "../helpers/core-lite.ts";
 
@@ -295,6 +296,29 @@ describe("autoResumePlan: when a paused build resumes on its own", () => {
       want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotPaused },
     },
     {
+      name: "a newer run started in the same chat: the paused one is the user's",
+      events: () => [
+        ...limited(),
+        custom(PAUSED_AT + MINUTE_MS, CustomEvent.RunRegistered, { runId: "run-b", project: "kart" }),
+        custom(PAUSED_AT + 30 * MINUTE_MS, CustomEvent.RunFinished, {
+          runId: "run-b",
+          project: "kart",
+          executionStatus: "completed",
+        }),
+      ],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.Superseded },
+    },
+    {
+      name: "another run still running: the paused one waits for the user",
+      events: () => [
+        custom(T0 - MINUTE_MS, CustomEvent.RunRegistered, { runId: "run-b", project: "kart" }),
+        ...limited(),
+      ],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.Superseded },
+    },
+    {
       name: "a run that finished is not paused",
       events: () => [
         registered(),
@@ -336,10 +360,19 @@ describe("autoResumePlan: when a paused build resumes on its own", () => {
 });
 
 /** The service with every clock and port faked: timers run when the test says. */
-function harness(options: { enabled?: boolean; ready?: boolean; freeMb?: number | null } = {}) {
+function harness(
+  options: {
+    enabled?: boolean;
+    ready?: boolean;
+    freeMb?: number | null;
+    resume?: (runId: string) => Promise<void>;
+  } = {},
+) {
   let now = PAUSED_AT;
   let ready = options.ready ?? true;
-  const timers = new Map<number, { at: number; run: () => void }>();
+  const timers = new Map<number, { at: number; ms: number; run: () => void }>();
+  const memoryReads: number[] = [];
+  const logReads: number[] = [];
   let nextTimer = 1;
   let log: EventEnvelope[] = [registered()];
   const recorded: Array<{ threadId: string; payload: RunAutoResumedPayload }> = [];
@@ -347,19 +380,26 @@ function harness(options: { enabled?: boolean; ready?: boolean; freeMb?: number 
   const service = new AutoResumeService({
     enabled: () => options.enabled ?? true,
     harnessReady: () => ready,
-    freeMb: async () => options.freeMb ?? 8_000,
-    events: async () => log,
+    freeMb: async () => {
+      memoryReads.push(now);
+      return options.freeMb ?? 8_000;
+    },
+    events: async () => {
+      logReads.push(now);
+      return log;
+    },
     record: async (threadId, payload) => {
       recorded.push({ threadId, payload });
       log = [...log, custom(now, CustomEvent.RunAutoResumed, { ...payload })];
     },
     resume: async (runId) => {
       resumed.push(runId);
+      await options.resume?.(runId);
     },
     now: () => now,
     setTimer: (run, ms) => {
       const id = nextTimer++;
-      timers.set(id, { at: now + ms, run });
+      timers.set(id, { at: now + ms, ms, run });
       return id;
     },
     clearTimer: (handle) => timers.delete(handle as number),
@@ -369,6 +409,28 @@ function harness(options: { enabled?: boolean; ready?: boolean; freeMb?: number 
     recorded,
     resumed,
     timers,
+    memoryReads,
+    logReads,
+    /**
+     * The Mac slept: the wall clock jumps to `at`, but a timer counts only awake time, so just the
+     * earliest pending timer fires, however far it was from due.
+     */
+    async wakeAt(at: number) {
+      now = at;
+      const [next] = [...timers].sort(([, a], [, b]) => a.at - b.at);
+      if (!next) return;
+      timers.delete(next[0]);
+      next[1].run();
+      await service.idle();
+    },
+    /** Run the timers due by `at` without waiting for the looks they start to settle. */
+    fire(at: number) {
+      now = at;
+      for (const [id, timer] of [...timers].filter(([, t]) => t.at <= now)) {
+        timers.delete(id);
+        timer.run();
+      }
+    },
     append(events: EventEnvelope[]) {
       log = [...log, ...events];
       service.observe(THREAD, events);
@@ -400,8 +462,10 @@ describe("AutoResumeService: the planner wired to timers and the resume path", (
     assert.deepEqual(h.resumed, [], "nothing resumes before the reset");
     assert.deepEqual(
       [...h.timers.values()].map((t) => t.at),
-      [DUE],
+      [PAUSED_AT + AUTO_RESUME_RECHECK_MAX_MS],
+      "the next look is a bounded step towards the reset, not one long timer",
     );
+    assert.deepEqual(h.memoryReads, [], "memory is read only once a resume is due");
     await h.advance(DUE);
     assert.deepEqual(h.resumed, [RUN]);
     assert.deepEqual(h.recorded, [
@@ -459,6 +523,55 @@ describe("AutoResumeService: the planner wired to timers and the resume path", (
     assert.equal(h.timers.size, 0);
   });
 
+  it("a Mac that slept past the reset resumes at its first look after waking, not a whole sleep late", async () => {
+    const h = harness();
+    h.append(limitPause(PAUSED_AT, rateLimit));
+    await h.advance(PAUSED_AT);
+    assert.ok(
+      [...h.timers.values()].every((t) => t.ms <= AUTO_RESUME_RECHECK_MAX_MS),
+      `every timer is a bounded step: ${[...h.timers.values()].map((t) => t.ms)}`,
+    );
+    for (let at = PAUSED_AT; at < DUE; at += AUTO_RESUME_RECHECK_MAX_MS) await h.advance(at);
+    assert.deepEqual(h.logReads, [PAUSED_AT], "a step before the reset reads nothing");
+    await h.wakeAt(DUE + HOUR_MS);
+    assert.deepEqual(h.resumed, [RUN], "the first look after waking sees the reset has passed");
+  });
+
+  it("the user's stop of the run itself (not its chat) holds a later limit pause back", async () => {
+    const h = harness();
+    h.service.userStoppedRun(RUN);
+    h.append(limitPause(PAUSED_AT, rateLimit));
+    await h.advance(DUE + HOUR_MS);
+    assert.deepEqual([h.resumed, h.recorded], [[], []]);
+  });
+
+  it("a resume that fails after the run paused again does not drop the new plan", async () => {
+    let fail: (err: Error) => void = () => {};
+    let calls = 0;
+    const h = harness({
+      resume: () => {
+        calls++;
+        // The first resume's dispatch settles only when that run ends — here, by failing late.
+        return calls === 1 ? new Promise<void>((_resolve, reject) => (fail = reject)) : Promise.resolve();
+      },
+    });
+    h.append(limitPause(PAUSED_AT, rateLimit));
+    await h.advance(PAUSED_AT);
+    for (let at = PAUSED_AT; at < DUE; at += AUTO_RESUME_RECHECK_MAX_MS) await h.advance(at);
+    h.fire(DUE);
+    for (let i = 0; i < SETTLE_TRIES && h.resumed.length === 0; i++) await sleep(SETTLE_STEP_MS);
+    assert.deepEqual(h.resumed, [RUN], "the first resume is under way");
+    const secondPause = DUE + HOUR_MS;
+    h.append([resumedStart(DUE), ...limitPause(secondPause, rateLimit)]);
+    fail(new Error("the resumed run ended badly"));
+    await h.service.idle();
+    await h.advance(secondPause);
+    for (let at = secondPause; at <= secondPause + RESET_MS + LIMIT_RESET_MARGIN_MS; at += AUTO_RESUME_RECHECK_MAX_MS)
+      await h.advance(at);
+    await h.advance(secondPause + RESET_MS + LIMIT_RESET_MARGIN_MS);
+    assert.deepEqual(h.resumed, [RUN, RUN], "the second pause still resumes");
+  });
+
   it("a resume that fails is still counted, so a failing resume cannot repeat forever", async () => {
     let attempts = 0;
     let log: EventEnvelope[] = [registered(), ...limitPause(PAUSED_AT, rateLimit)];
@@ -505,18 +618,21 @@ describe("run_auto_resumed where people read it", () => {
     );
 
   it("the chat says why the build resumed, in plain words", () => {
-    assert.ok(texts(record(AutoResumeCause.LimitReset)).includes("Resumed automatically after the usage limit reset"));
+    assert.ok(texts(record(AutoResumeCause.LimitReset)).includes("Resumed automatically after the limit reset"));
     assert.ok(
-      texts(record(AutoResumeCause.LoopRestart)).includes("Resumed automatically after the studio’s loop restarted"),
+      texts(record(AutoResumeCause.LoopRestart)).includes("Resumed automatically after Studio’s loop restarted"),
     );
     assert.ok(texts(record("something-new")).includes("Resumed automatically"), "an unknown cause still reads");
   });
 
   it("Activity lists the automatic resume beside the run", () => {
-    const item = studioActivity(record(AutoResumeCause.LimitReset)).find((i) => i.kind === "recovery");
+    // The core serves Activity from its incremental index, never from the whole log.
+    const index = new ActivityIndex();
+    assert.ok(index.append(record(AutoResumeCause.LimitReset)));
+    const item = index.items().find((i) => i.kind === "recovery");
     assert.deepEqual(item && { title: item.title, detail: item.detail, runId: item.runId, project: item.project }, {
       title: "Resumed a build automatically",
-      detail: "The usage limit reset.",
+      detail: "The limit reset.",
       runId: RUN,
       project: "kart",
     });
@@ -575,17 +691,40 @@ describe("the core: the switch, its default, and who may write the record", () =
     await append(limitPause(PAUSED_AT, rateLimit).map((e) => e.data));
     for (let i = 0; i < SETTLE_TRIES && delays.length < 2; i++) await sleep(SETTLE_STEP_MS);
     assert.equal(delays[0], 0, "the pause is planned at once");
-    const wait = delays[1] ?? 0;
-    assert.ok(
-      wait > RESET_MS && wait <= RESET_MS + LIMIT_RESET_MARGIN_MS,
-      `the resume waits for the reset and its margin (${wait} ms)`,
-    );
+    // The reset is half an hour away: the core waits for it in bounded steps, not at once.
+    assert.equal(delays[1], AUTO_RESUME_RECHECK_MAX_MS, "the resume waits for the reset, a bounded step at a time");
 
     delays.length = 0;
     await lite.core.updateSettings({ autoResume: false });
     await append([
       { type: EventKind.Custom, event_type: CustomEvent.RunRegistered, payload: { ...registration, resumed: true } },
     ]);
+    await append(limitPause(PAUSED_AT, rateLimit).map((e) => e.data));
+    for (let i = 0; i < SETTLE_TRIES; i++) await sleep(SETTLE_STEP_MS);
+    assert.deepEqual(delays, [0], "looked at, and nothing planned");
+    await lite.close();
+  });
+
+  it("a stop asked through the run controls (not the chat's Stop) holds the run back too", async () => {
+    const delays: number[] = [];
+    const lite = await coreLite({
+      autoResume: {
+        now: () => Date.now(),
+        setTimer: (run, ms) => {
+          delays.push(ms);
+          if (ms === 0) run();
+          return delays.length;
+        },
+        clearTimer: () => {},
+        freeMb: async () => 8_000,
+      },
+    });
+    const threadId = await lite.core.store.createThread({ title: "game" });
+    const append = (batch: unknown[]) => lite.api()["events.append"]!({ threadId, batch } as never);
+    const registration = { runId: RUN, budgets: { wallClockMs: 4 * HOUR_MS } };
+    await append([{ type: EventKind.Custom, event_type: CustomEvent.RunRegistered, payload: registration }]);
+    // No loop runs in core-lite, so the stop's dispatch fails; the user's word is kept all the same.
+    await lite.core.stopRun(RUN, MINUTE_MS).catch(() => {});
     await append(limitPause(PAUSED_AT, rateLimit).map((e) => e.data));
     for (let i = 0; i < SETTLE_TRIES; i++) await sleep(SETTLE_STEP_MS);
     assert.deepEqual(delays, [0], "looked at, and nothing planned");

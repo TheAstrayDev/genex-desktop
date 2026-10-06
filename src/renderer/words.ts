@@ -1071,8 +1071,8 @@ export function pausedWords(): string {
 
 /** Why the studio resumed a build on its own (`run_auto_resumed`), as the chat says it. */
 const AUTO_RESUMED_WORDS = {
-  [AutoResumeCause.LimitReset]: "Resumed automatically after the usage limit reset",
-  [AutoResumeCause.LoopRestart]: "Resumed automatically after the studio’s loop restarted",
+  [AutoResumeCause.LimitReset]: "Resumed automatically after the limit reset",
+  [AutoResumeCause.LoopRestart]: "Resumed automatically after Studio’s loop restarted",
 } as const satisfies Record<AutoResumeCause, string>;
 
 /** The chat's line for a build the studio resumed on its own; a cause this version does not know still reads. */
@@ -1085,7 +1085,7 @@ export function autoResumedWords(cause: unknown): string {
 export const AUTO_RESUME_SETTING_WORDS = {
   label: "Resume builds automatically",
   detail:
-    "When a usage limit resets or Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped.",
+    "When a session limit resets or Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped.",
 } as const;
 
 export function resumedWords(parts: number): string {

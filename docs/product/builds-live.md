@@ -48,7 +48,7 @@ with its time left, starting over only when asked. With Loop on, a small change 
 more work reopens the build until checked. One the chat cannot continue, like Ollama's, is answered
 as with Loop off, noting it once. **Stop** interrupts work immediately, preserving finished
 work; a stopped Loop run shows one Stopped line with Resume, and Builds or a chat request makes its
-build live. Usage-limit and loop-crash pauses resume themselves, twice at most, unless stopped
+build live. Resetting-limit and loop-crash pauses resume themselves, twice at most, unless stopped
 (Settings → Harness). A crash or restart settles abandoned activity from persisted state; stopped, failed,
 incomplete and delivered outcomes stay distinct.
 

@@ -110,6 +110,7 @@ const METHODS = [
   "start",
   "stop",
   "stopLive",
+  "stopRun",
   "stopThread",
   "threadForGame",
   "undoSelfChange",

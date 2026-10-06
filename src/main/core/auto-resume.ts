@@ -15,7 +15,7 @@ import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { EngineFailureKind } from "../../shared/engine-requests.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import type { EventEnvelope } from "../../shared/event-log.ts";
-import { RUN_START_EVENTS, RunState, runExecution } from "../../shared/run-state.ts";
+import { RUN_START_EVENTS, RunState, runExecution, runExecutions } from "../../shared/run-state.ts";
 
 /** The most times the studio resumes one run on its own; after that it is the user's. */
 export const AUTO_RESUMES_MAX = 2;
@@ -31,6 +31,12 @@ export const AUTO_RESUME_MIN_FREE_MB = 1_024;
 export const AUTO_RESUME_WAIT_MS = 10 * MINUTE_MS;
 /** How often a waiting resume looks again at the loop and at memory. */
 export const AUTO_RESUME_RECHECK_MS = 30 * SECOND_MS;
+/**
+ * The longest single timer a planned resume sets. A Node timer counts only the time the Mac is
+ * awake (and App Nap can defer it), so a reset hours away is approached in bounded steps, each
+ * planned again against the wall clock: after a sleep the first look resumes.
+ */
+export const AUTO_RESUME_RECHECK_MAX_MS = 5 * MINUTE_MS;
 
 /** What to do about a paused run now. */
 export const AutoResumeAction = {
@@ -60,6 +66,8 @@ export const AutoResumeSkip = {
   /** Neither an engine limit with a reset time nor a crash of the loop paused it. */
   NotResumable: "not-resumable",
   Spent: "spent",
+  /** The user moved on: a newer run started in the conversation, or another run is running. */
+  Superseded: "superseded",
   NoTimeLeft: "no-time-left",
   ResetTooFar: "reset-too-far",
   HarnessDown: "harness-down",
@@ -83,7 +91,7 @@ export interface AutoResumeFacts {
   freeMb: number | null;
   /** When the host last saw the loop die with this run open (ms), or null. */
   crashedAt: number | null;
-  /** When the user last pressed Stop in this run's conversation (ms), or null. */
+  /** When the user last stopped this run or pressed Stop in its conversation (ms), or null. */
   stoppedAt: number | null;
 }
 
@@ -145,6 +153,13 @@ function dueResume(
   return AutoResumeSkip.NotResumable;
 }
 
+/** Has the user moved on from this run: a newer run in its conversation, or another one running? */
+function superseded(events: readonly EventEnvelope[], runId: string): boolean {
+  if (runExecution(events)?.runId !== runId) return true;
+  for (const [id, run] of runExecutions(events)) if (id !== runId && run.state === RunState.Running) return true;
+  return false;
+}
+
 /** Is less working time left than a resume is worth? A run until satisfied has no clock to run out. */
 function tooLittleTime(events: readonly EventEnvelope[], stretch: RunStretch, runId: string): boolean {
   const budget = positiveMs(stretch.budgets?.wallClockMs);
@@ -186,6 +201,7 @@ export function autoResumePlan(events: readonly EventEnvelope[], now: number, fa
   if (!close) return none(AutoResumeSkip.NotPaused);
   const held = userHeld(stretch, facts);
   if (held) return none(held);
+  if (superseded(events, facts.runId)) return none(AutoResumeSkip.Superseded);
   if (stretch.autoResumes >= AUTO_RESUMES_MAX) return none(AutoResumeSkip.Spent);
   if (tooLittleTime(events, stretch, facts.runId)) return none(AutoResumeSkip.NoTimeLeft);
   const due = dueResume(close, stretch, facts);
@@ -223,6 +239,8 @@ interface Planned {
   threadId: string;
   handle: unknown;
   token: number;
+  /** The wall-clock time (ms) of the look. */
+  dueAt: number;
 }
 
 /**
@@ -236,6 +254,8 @@ export class AutoResumeService {
   readonly #crashedAt = new Map<string, number>();
   /** When the user last pressed Stop in each conversation. */
   readonly #stoppedAt = new Map<string, number>();
+  /** When the user last stopped each run through the run controls (`studio:run.stop`). */
+  readonly #stoppedRunAt = new Map<string, number>();
   readonly #ticks = new Set<Promise<void>>();
   #nextToken = 1;
 
@@ -254,7 +274,7 @@ export class AutoResumeService {
       const runId = typeof custom?.payload.runId === "string" ? custom.payload.runId : null;
       if (!custom || !runId) continue;
       if (RUN_START_EVENTS.has(custom.event_type)) this.cancelRun(runId);
-      if (custom.event_type === CustomEvent.AutopilotPaused) this.#plan(threadId, runId, 0);
+      if (custom.event_type === CustomEvent.AutopilotPaused) this.#plan(threadId, runId, this.#now());
     }
   }
 
@@ -273,6 +293,12 @@ export class AutoResumeService {
   userStopped(threadId: string): void {
     this.#stoppedAt.set(threadId, this.#now());
     for (const [runId, planned] of this.#planned) if (planned.threadId === threadId) this.cancelRun(runId);
+  }
+
+  /** The user stopped this run itself (the run controls, not the chat's Stop): it never resumes on its own. */
+  userStoppedRun(runId: string): void {
+    this.#stoppedRunAt.set(runId, this.#now());
+    this.cancelRun(runId);
   }
 
   /** Forget a planned resume (the user resumed it, or it started again). */
@@ -298,16 +324,26 @@ export class AutoResumeService {
     else clearTimeout(handle as ReturnType<typeof setTimeout>);
   }
 
-  #plan(threadId: string, runId: string, delayMs: number): void {
+  /** Look at the run again at wall-clock time `dueAt`. */
+  #plan(threadId: string, runId: string, dueAt: number): void {
     this.cancelRun(runId);
-    const token = this.#nextToken++;
+    const planned: Planned = { threadId, handle: null, token: this.#nextToken++, dueAt };
+    this.#planned.set(runId, planned);
+    this.#arm(runId, planned);
+  }
+
+  /**
+   * One bounded step towards the plan's time: a step that ends before it only sets the next step
+   * (nothing is read), so a Mac that slept through the time looks at the run at its first step.
+   */
+  #arm(runId: string, planned: Planned): void {
     const run = () => {
-      const tick = this.#tick(threadId, runId, token).finally(() => this.#ticks.delete(tick));
+      if (!this.#current(runId, planned.token)) return;
+      if (this.#now() < planned.dueAt) return this.#arm(runId, planned);
+      const tick = this.#tick(planned.threadId, runId, planned.token).finally(() => this.#ticks.delete(tick));
       this.#ticks.add(tick);
     };
-    const ms = Math.max(0, delayMs);
-    const planned: Planned = { threadId, handle: null, token };
-    this.#planned.set(runId, planned);
+    const ms = Math.min(Math.max(0, planned.dueAt - this.#now()), AUTO_RESUME_RECHECK_MAX_MS);
     if (this.#deps.setTimer) {
       planned.handle = this.#deps.setTimer(run, ms);
       return;
@@ -322,26 +358,51 @@ export class AutoResumeService {
     return this.#planned.get(runId)?.token === token;
   }
 
+  /** Forget this look's plan, unless a newer plan (a later pause of the run) has replaced it. */
+  #forget(runId: string, token: number): void {
+    if (this.#current(runId, token)) this.#planned.delete(runId);
+  }
+
+  /** The user's latest Stop that applies to this run: of the run itself or of its conversation. */
+  #lastStop(threadId: string, runId: string): number | null {
+    const stops = [this.#stoppedAt.get(threadId), this.#stoppedRunAt.get(runId)].filter((at) => at !== undefined);
+    return stops.length > 0 ? Math.max(...stops) : null;
+  }
+
+  #planAt(
+    events: readonly EventEnvelope[],
+    now: number,
+    ids: { threadId: string; runId: string },
+    freeMb: number | null,
+  ) {
+    return autoResumePlan(events, now, {
+      runId: ids.runId,
+      enabled: this.#deps.enabled(),
+      harnessReady: this.#deps.harnessReady(),
+      freeMb,
+      crashedAt: this.#crashedAt.get(ids.runId) ?? null,
+      stoppedAt: this.#lastStop(ids.threadId, ids.runId),
+    });
+  }
+
   async #tick(threadId: string, runId: string, token: number): Promise<void> {
     try {
       if (!this.#current(runId, token)) return;
       const events = await this.#deps.events(threadId);
-      const freeMb = await this.#deps.freeMb().catch(() => null);
       if (!this.#current(runId, token)) return;
+      const ids = { threadId, runId };
       const now = this.#now();
-      const plan = autoResumePlan(events, now, {
-        runId,
-        enabled: this.#deps.enabled(),
-        harnessReady: this.#deps.harnessReady(),
-        freeMb,
-        crashedAt: this.#crashedAt.get(runId) ?? null,
-        stoppedAt: this.#stoppedAt.get(threadId) ?? null,
-      });
-      if (plan.action === AutoResumeAction.Wait) return this.#plan(threadId, runId, plan.at - now);
-      this.#planned.delete(runId);
+      const due = this.#planAt(events, now, ids, null);
+      // Memory is read only once a resume is due: on macOS each reading starts a process.
+      const freeMb = due.action === AutoResumeAction.Resume ? await this.#deps.freeMb().catch(() => null) : null;
+      if (!this.#current(runId, token)) return;
+      const plan = freeMb === null ? due : this.#planAt(events, now, ids, freeMb);
+      if (plan.action === AutoResumeAction.Wait) return this.#plan(threadId, runId, plan.at);
+      this.#forget(runId, token);
       if (plan.action === AutoResumeAction.Resume) await this.#resume(threadId, runId, events, plan);
     } catch (err) {
-      this.#planned.delete(runId);
+      // The resume settles only when the resumed run ends: by then a later pause may have a plan.
+      this.#forget(runId, token);
       this.#deps.onLog?.(`[auto-resume] ${runId}: ${errorMessage(err)}`);
     }
   }

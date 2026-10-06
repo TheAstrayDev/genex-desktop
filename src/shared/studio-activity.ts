@@ -340,7 +340,7 @@ const recoveryItem: ItemReader = ({ event, event_type, payload: p }) => ({
 /** Why the studio resumed a build on its own, as Activity says it (`run_auto_resumed`). */
 const AUTO_RESUMED = {
   title: "Resumed a build automatically",
-  [AutoResumeCause.LimitReset]: "The usage limit reset.",
+  [AutoResumeCause.LimitReset]: "The limit reset.",
   [AutoResumeCause.LoopRestart]: "Studio’s loop restarted.",
 } as const;
 
@@ -501,8 +501,11 @@ export class ActivityIndex {
       return;
     }
     if (data.type !== EventKind.Custom) return;
+    // A record with an Activity item of its own is kept even when it stays in its conversation's
+    // transcript (it is not a Studio record): an automatic resume, say.
     const retained =
       STUDIO_RECORD_EVENTS.has(data.event_type) ||
+      ITEM_READERS.has(data.event_type) ||
       data.event_type === CustomEvent.RunStarted ||
       data.event_type === CustomEvent.RunRegistered;
     if (retained) this.#records.push(event);

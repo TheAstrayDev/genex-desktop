@@ -2522,6 +2522,10 @@ describe("a director's night through the real core and harness", () => {
     assert.match(String(finished.stoppedBecause), /the integration branch was landed/);
     assert.doesNotMatch(String(finished.stoppedBecause), /ran out of time/);
     assert.equal((finished.limit as { kind: string }).kind, "rate_limit");
+    // When the limit was hit, so the host's auto-resume counts the reset from then, not from the close.
+    const hitAt = (finished.limit as { at?: unknown }).at;
+    assert.equal(typeof hitAt, "number", `limit.at: ${JSON.stringify(finished.limit)}`);
+    assert.ok((hitAt as number) <= Date.parse(String(finished.finishedAt ?? new Date().toISOString())));
     assert.equal(finished.integrationRef, `refs/studio/runs/${runId}/integration`);
     assert.ok(String(finished.integrationHead).startsWith(head));
     assert.ok(

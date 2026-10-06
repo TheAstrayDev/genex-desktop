@@ -840,6 +840,17 @@ export async function appendClose(ctx: HarnessCtx, threadId: string, batch: Even
   }
 }
 
+/** The engine limit that paused the night, as its close reports it. */
+function reportedLimit(limit: AnyRecord): AnyRecord {
+  return {
+    kind: limit.kind,
+    message: String(limit.message ?? "").slice(0, CLIP_REASON),
+    retryAfterMs: limit.retryAfterMs ?? null,
+    // When it was hit: the host's auto-resume counts the reset from here, not from the close.
+    ...(typeof limit.at === "number" ? { at: limit.at } : {}),
+  };
+}
+
 export async function closeRun(night: Night, landed: AnyRecord): Promise<void> {
   const { baseCommit, ctx, integrationRef, journal, keepMemory, protectHead, recordVerdict, report, run, saveJournal } =
     night;
@@ -871,12 +882,7 @@ export async function closeRun(night: Night, landed: AnyRecord): Promise<void> {
     notLanded: landed.why ?? null,
   });
   await keepTheRecord(night, landed, closeVerdict.because);
-  if (state.limit)
-    report.limit = {
-      kind: state.limit.kind,
-      message: String(state.limit.message ?? "").slice(0, CLIP_REASON),
-      retryAfterMs: state.limit.retryAfterMs ?? null,
-    };
+  if (state.limit) report.limit = reportedLimit(state.limit);
   report.optimization = await skipOptimization(ctx, {
     threadId,
     run,

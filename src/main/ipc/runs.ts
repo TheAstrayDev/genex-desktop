@@ -40,9 +40,9 @@ export interface RunsIpcDeps {
     | "saveRunArtifact"
     | "dispatchRun"
     | "threadForGame"
-    | "host"
     | "requestRunFinish"
     | "resumeAutopilot"
+    | "stopRun"
   >;
   runSummaryReader: Pick<RunSummaryReader, "forProject">;
   keepAwake: Pick<KeepAwake, "hold" | "armFallback">;
@@ -111,7 +111,8 @@ export function registerRunsIpc(
     // wait is bounded. Arming is safe either way: it no-ops with no blocker held, and the next
     // run's `run.keepawake` disarms it.
     try {
-      await core.host.dispatch({ type: DispatchActionType.RunStop, runId: payload.runId }, RUN_STOP_TIMEOUT_MS);
+      // Through the core: the user's stop also means the run never resumes on its own afterwards.
+      await core.stopRun(payload.runId, RUN_STOP_TIMEOUT_MS);
     } finally {
       keepAwake.armFallback();
     }
