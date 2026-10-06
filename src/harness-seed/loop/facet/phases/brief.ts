@@ -6,7 +6,7 @@ import type { FacetLoop, FacetRound } from "../state.ts";
 import type { RoundFlow } from "../flow.ts";
 import { pinFixRecipe } from "../rules.ts";
 import { briefWithMovedSections, facetPrompt, promptImagesFor } from "../prompt.ts";
-import { stageOf } from "../stage.ts";
+import { roundStage } from "../stage.ts";
 
 /** A template game's entry module, when the shape names none. */
 const DEFAULT_ENTRY = "src/main.js";
@@ -106,8 +106,8 @@ function briefInput(loop: FacetLoop, round: FacetRound) {
     move: loop.currentMove,
     fix: loop.currentFix,
     liveness: loop.lastLiveness ? renderLiveness(loop.lastLiveness) : null,
-    // Building or finishing (facet/stage.ts): read from the spec every round, so a steer lands here.
-    stage: stageOf(spec),
+    // Building or finishing (facet/stage.ts): the stage this round was fixed in when its move was chosen.
+    stage: roundStage(round, spec),
   };
 }
 
@@ -156,6 +156,6 @@ export function facetPromptFor(
     imagesAttached: round.promptImages.length,
     move: loop.currentMove,
     fix,
-    stage: stageOf(spec),
+    stage: roundStage(round, spec),
   });
 }

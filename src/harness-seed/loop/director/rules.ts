@@ -657,8 +657,9 @@ export function compileWorkerSpec(
   // structural move" and the liveness critic's grow gaps are exactly what once overruled a
   // brief every iteration. With no ladder the harness names the move as it always did.
   if (spec.milestones?.length) spec.moveOwner = MoveOwner.Director;
-  // The finish stage rides on the spec beside moveOwner: the loop reads it every round, a steer
-  // flips it live, and the journal keeps it. A build worker's spec carries no stage at all.
+  // The finish stage rides on the spec beside moveOwner: the loop fixes it at the top of each
+  // round, a steer flips it from the next one, and the run log records a steer. A build worker's
+  // spec carries no stage at all.
   if (isFinishing({ stage })) spec.stage = FacetStage.Finish;
   return {
     spec,

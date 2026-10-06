@@ -13,7 +13,7 @@ import { FIX_STUCK_LOSSES } from "../policy.ts";
 import { recordDecision } from "../record.ts";
 import { ReplanSource } from "./replans.ts";
 import { CLIP_QUOTE } from "../../text.ts";
-import { FINISH_POLISH_NOTES, polishCountsInStage, polishEscalates } from "../stage.ts";
+import { FINISH_POLISH_NOTES, polishCountsInStage, polishEscalates, roundStage } from "../stage.ts";
 
 /** The judge's biggest gaps a brief remembers, newest first. */
 const MAX_GAP_HISTORY = 4;
@@ -50,7 +50,7 @@ async function settleMove(loop: FacetLoop, round: FacetRound): Promise<void> {
   if (!move?.what || round.challengerBroken) {
     // A finishing worker's won round is polish on purpose: it clears the streak, so a later steer
     // back to the build stage does not inherit one.
-    const landed = structural || !polishCountsInStage(loop.spec);
+    const landed = structural || !polishCountsInStage({ stage: roundStage(round, loop.spec) });
     if (round.won && !round.challengerBroken && landed) loop.polishStreak = 0;
     return;
   }
@@ -217,7 +217,8 @@ function updateDefectLedger(loop: FacetLoop, round: FacetRound): void {
   if (round.taste) {
     const polish = round.taste.polish ?? [];
     // A finishing worker's polish list is its work: the judge's eight, not the build stage's three.
-    loop.polishList = polishCountsInStage(loop.spec) ? polish : polish.slice(0, FINISH_POLISH_NOTES);
+    const counts = polishCountsInStage({ stage: roundStage(round, loop.spec) });
+    loop.polishList = counts ? polish : polish.slice(0, FINISH_POLISH_NOTES);
     if (round.taste.bigMove) loop.lastBigMove = round.taste.bigMove;
   }
   // A defect no camera can answer keeps its place in the ledger, with the expression that

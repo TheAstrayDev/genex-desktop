@@ -12,7 +12,7 @@ import { acceptRound, moveVerdict } from "../rules.ts";
 import { VerdictSource } from "../../verdict.ts";
 import { similarDefect, twinDefect, uniqueCheckId } from "../defects.ts";
 import { roundFields } from "../record.ts";
-import { stageOf } from "../stage.ts";
+import { roundStage } from "../stage.ts";
 
 /** The harness's eyes the taste judge looks through beside the facet's own cameras. */
 const TASTE_EYES = ["eye:spawn", "eye:here", "eye:down"];
@@ -46,7 +46,7 @@ export async function tasteVerdict(loop: FacetLoop, round: FacetRound): Promise<
     iterationId: round.iterationId,
     move: loop.currentMove?.what ?? null,
     // A finishing round is judged as one: polish is expected, and its polish list is the work.
-    stage: stageOf(spec),
+    stage: roundStage(round, spec),
   });
   // The move (§5): measured by its own check when it has one, else by the taste judge.
   // A build that flipped nothing AND did not deliver a move somebody asked for is a

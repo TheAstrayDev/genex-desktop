@@ -12,3 +12,5 @@ with these changes for this round:
   it. They are the builder's work now, not optional nits.
 - `bigMove` may be null.
 - A regression still needs a name in `regression` and a `newCheck`, exactly as above.
+
+Reply with JSON only, in the shape above.

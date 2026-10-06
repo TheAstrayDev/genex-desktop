@@ -5,7 +5,7 @@ import { roleEngine, RoleKey, toolCall } from "../model-roles.ts";
 import { facetNotes } from "../repo.ts";
 import { CLIP_QUOTE } from "../text.ts";
 import { DEFAULT_CAMERA } from "../cameras.ts";
-import { FacetStage, stageOf } from "./stage.ts";
+import { FacetStage, moveEscalated, stageOf } from "./stage.ts";
 import { FINISH_FIX_ASK, FINISH_PROMPT_LINE, finishLossEscalate } from "./stage-prompts.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
@@ -308,7 +308,7 @@ function moveAsk(move: AnyRecord | null): string {
     : " — the taste judge answers whether it is visible";
   const lead = move.mandatory ? "A build that only tunes what already exists LOSES; make" : "Make";
   const escalate =
-    move.escalated === true ? ` ESCALATE: your last ${move.polishStreak} accepted builds were polish only.` : "";
+    moveEscalated(move) ? ` ESCALATE: your last ${move.polishStreak} accepted builds were polish only.` : "";
   return `THE MOVE THIS ITERATION (${move.mandatory ? "mandatory" : "asked for"}): ${move.what}${measured}. ${lead} the move first — the whole step, boldly, so a player notices it in the first minute — then fix up to three ledger items.${escalate}`;
 }
 

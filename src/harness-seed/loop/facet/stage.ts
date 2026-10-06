@@ -24,12 +24,36 @@ export const FINISH_POLISH_NOTES = 8;
 /** How much of an unknown stage a refusal quotes. */
 const QUOTED_STAGE_CHARS = 40;
 
+/** The polish streak the brief and prompt said ESCALATE at before a move carried `escalated`. */
+const UNSTAMPED_ESCALATE_STREAK = 2;
+
 /** What a stage is read from: a spec, or anything carrying `stage`. */
 type Staged = { stage?: unknown; moveOwner?: unknown; [field: string]: unknown } | null | undefined;
 
 /** The spec's stage: finish only when it says exactly that; anything else is the build stage. */
 export function stageOf(spec: Staged): FacetStage {
   return spec?.stage === FacetStage.Finish ? FacetStage.Finish : FacetStage.Build;
+}
+
+/**
+ * The stage a round runs in: fixed once, when its move is chosen (`chooseRoundMove` stamps
+ * `round.stage`), so a `worker_steer stage=` that lands while the builder works takes effect from
+ * the next round — the round in flight is judged, gated, settled and exited in the stage it was
+ * briefed in. A round that has no stamp yet reads the spec.
+ */
+export function roundStage(round: Staged, spec: Staged): FacetStage {
+  return Object.values(FacetStage).find((s) => s === round?.stage) ?? stageOf(spec);
+}
+
+/**
+ * Did a polish streak make this move mandatory? `escalated`, when the move carries it (stamped by
+ * announceMove). A workspace that kept an older plan.ts stamps none, so it is read off what that
+ * one did stamp: mandatory, not a rung of the director's ladder, and two polished builds behind it.
+ */
+export function moveEscalated(move: Staged): boolean {
+  if (typeof move?.escalated === "boolean") return move.escalated;
+  const rung = Boolean(move?.milestoneId);
+  return move?.mandatory === true && !rung && Number(move?.polishStreak) >= UNSTAMPED_ESCALATE_STREAK;
 }
 
 /** Is this worker finishing what exists? */

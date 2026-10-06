@@ -2101,9 +2101,7 @@ describe("harness incidents", () => {
         iteration: 3,
         board: { a: { id: "a", kind: "probe", weight: "normal", pass: true, reason: "" } },
         comparison: null,
-        // Flipped (Midnight Apex, 2026-10-06): ESCALATE is said only of a move polish escalated
-        // (`escalated`, stamped by announceMove), not of every move with a streak behind it.
-        move: { what: "doors open onto interiors", mandatory: true, polishStreak: 2, escalated: true, ladder: "x" },
+        move: { what: "doors open onto interiors", mandatory: true, polishStreak: 2, ladder: "x" },
       } as never),
     );
     assert.match(brief, /## THE MOVE this iteration \(mandatory/);
@@ -8123,7 +8121,13 @@ describe("the finish stage and the false ESCALATE (Midnight Apex, 2026-10-06)", 
     assert.doesNotMatch(brief(guidance), /rejects a build without the move/);
     assert.doesNotMatch(prompt(guidance), /ESCALATE/);
     // A rung is mandatory because the director asked for it, not because polish escalated.
-    const rung = { what: ladder[0]!.what, mandatory: true, polishStreak: 2, source: "milestone" };
+    const rung = {
+      what: ladder[0]!.what,
+      mandatory: true,
+      polishStreak: 2,
+      source: "milestone",
+      milestoneId: ladder[0]!.id,
+    };
     assert.doesNotMatch(brief(rung), /ESCALATE/);
     assert.doesNotMatch(prompt(rung), /ESCALATE/);
     // The real escalation still says so, in the same words.
@@ -8133,6 +8137,41 @@ describe("the finish stage and the false ESCALATE (Midnight Apex, 2026-10-06)", 
       /ESCALATE: the last 2 accepted builds were polish only\. The judge now rejects a build without the move\./,
     );
     assert.match(prompt(escalated), /ESCALATE: your last 2 accepted builds were polish only\./);
+  });
+
+  it("ESC-4. a workspace that kept an older plan.ts, which stamps no `escalated`, still hears the real escalation", () => {
+    const brief = (move: Record<string, unknown>) =>
+      String(renderBrief({ run, spec, iteration: 4, board: {}, comparison: null, move } as never));
+    const prompt = (move: Record<string, unknown>) =>
+      String(
+        facetPrompt({
+          run,
+          spec: { ...spec, cameras: ["default"] },
+          iteration: 4,
+          resumed: false,
+          briefFile: ".studio/BRIEF.md",
+          worktree: "/w",
+          move,
+        } as never),
+      );
+    // What an older announceMove stamped: mandatory, the streak, the source — and no `escalated`.
+    const invented = { what: "a jetty to walk out on", source: "planner", milestoneId: null, mandatory: true };
+    assert.match(brief({ ...invented, polishStreak: 2 }), /ESCALATE: the last 2 accepted builds were polish only/);
+    assert.match(prompt({ ...invented, polishStreak: 2 }), /ESCALATE: your last 2 accepted builds were polish only/);
+    // Its rung and its guidance never escalated, and a streak short of two did not either.
+    const oldRung = {
+      what: ladder[0]!.what,
+      source: "milestone",
+      milestoneId: "rain",
+      mandatory: true,
+      polishStreak: 3,
+    };
+    assert.doesNotMatch(brief(oldRung), /ESCALATE/);
+    assert.doesNotMatch(prompt(oldRung), /ESCALATE/);
+    const oldGuidance = { ...invented, mandatory: false, polishStreak: 3 };
+    assert.doesNotMatch(brief(oldGuidance), /ESCALATE/);
+    assert.doesNotMatch(prompt(oldGuidance), /ESCALATE/);
+    assert.doesNotMatch(brief({ ...invented, polishStreak: 1 }), /ESCALATE/);
   });
 
   it("ESC-2. the move is stamped escalated only when polish made it mandatory", async () => {
@@ -8296,7 +8335,18 @@ describe("the finish stage and the false ESCALATE (Midnight Apex, 2026-10-06)", 
     const fix = { what: "the neon signs are a flat wash", streak: 3, mandatory: true, checkId: null };
     const brief = (stage: string | undefined) =>
       String(
-        renderBrief({ run, spec, iteration: 4, board: {}, comparison: null, polish, defects, fix, stage } as never),
+        renderBrief({
+          run,
+          spec,
+          iteration: 4,
+          board: {},
+          comparison: null,
+          polish,
+          defects,
+          fix,
+          stage,
+          liveness: "- life 1/3 (grow): nothing moves on the pavement",
+        } as never),
       );
     const finish = brief("finish");
     assert.match(finish, /## THE FINISH this iteration — polish wins/);
@@ -8314,6 +8364,10 @@ describe("the finish stage and the false ESCALATE (Midnight Apex, 2026-10-06)", 
     assert.ok(build.includes(polish[2]!) && !build.includes(polish[3]!), "three nits, not eight");
     assert.match(build, /Replace the mechanism behind it, do not tune it/);
     assert.doesNotMatch(build, /THE FINISH/);
+    // The critic's grow notes are the build stage's next step; a finisher builds nothing new.
+    assert.match(build, /grow = what to build next, polish = optional/);
+    assert.doesNotMatch(finish, /grow = what to build next/);
+    assert.match(finish, /polish = the work; grow waits for the build stage/);
 
     const prompt = (stage: string | undefined, extra: Record<string, unknown> = {}) =>
       String(
@@ -8401,6 +8455,107 @@ describe("the finish stage and the false ESCALATE (Midnight Apex, 2026-10-06)", 
     assert.equal((await exit({ stage: "finish" })).satisfied, true, "the work it was given is done");
     assert.equal((await exit({ stage: "finish" }, { identityAllPass: false })).stoppedBecause, undefined);
     assert.equal((await exit({})).stoppedBecause, undefined, "the build stage still waits for the judge's `satisfied`");
+  });
+
+  it("FIN-6. a stage steered mid-round lands on the next round: the round in flight is judged, settled and exited in the stage it was briefed in", async () => {
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { tasteVerdict } = await import("../../src/harness-seed/loop/facet/phases/taste.ts");
+    const { settleMoveAndGap } = await import("../../src/harness-seed/loop/facet/phases/settle.ts");
+    const { decideExit } = await import("../../src/harness-seed/loop/facet/phases/publish.ts");
+    const polish = Array.from({ length: 10 }, (_, i) => `polish ${i + 1}: the kerb paint reads flat`);
+    let reply: Record<string, unknown> = {};
+    // The judge picks the build the checks accepted (the challenger), whichever letter the shuffle gave it.
+    const challengerLetter = (params: Record<string, unknown>) => {
+      const user = String((params.messages as Array<{ content?: unknown }> | undefined)?.[0]?.content ?? "");
+      return /build ([AB]) is the one the checks accepted/.exec(user)?.[1] ?? "A";
+    };
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.complete": (params) => ({
+          message: { content: JSON.stringify({ ...reply, pick: challengerLetter(params) }) },
+        }),
+      },
+    });
+    const lastAsk = () => {
+      const params = recorder.paramsOf("engine.complete").at(-1) as {
+        systemPrompt?: string;
+        messages?: Array<{ content?: unknown }>;
+      };
+      return `${params?.systemPrompt ?? ""}\n${String(params?.messages?.[0]?.content ?? "")}`;
+    };
+    const pending = { what: "a jetty to walk out on", source: "planner", delivered: false, attempts: 1 };
+    const planned = await planLoop({
+      spec: { ...spec, cameras: ["default"], checks: [], milestones: [] } as Record<string, unknown>,
+      moves: [pending],
+      polishStreak: 2,
+      ctx: recorder.ctx,
+      incumbentEvidence: { state: { phase: "race" } },
+      currentFix: null,
+      rungMisses: {},
+      gapHistory: [],
+      biggestGap: "",
+      gapStreak: null,
+      defectList: [],
+      polishList: [] as string[],
+      loseStreak: 0,
+      lastFailure: null,
+      result: {} as Record<string, unknown>,
+    });
+    // The plan phase's loop with the fields the later phases read on it.
+    const loop = planned.loop as typeof planned.loop & Record<string, any>;
+    /** One round from the move to the exit, with the director's steer landing while it builds. */
+    const play = async (iteration: number, steer: () => void) => {
+      const round: Record<string, any> = { iteration };
+      await chooseRoundMove(loop as never, round as never);
+      steer();
+      Object.assign(round, {
+        evidence: { eyes: [], state: { phase: "race" } },
+        nextBoard: {},
+        attemptBoard: {},
+        comparison: { flips: [], regressions: [] },
+        iterationId: `it-${iteration}`,
+        challengerBroken: false,
+        defectNotes: [],
+        summary: { identityAllPass: true },
+      });
+      await tasteVerdict(loop as never, round as never);
+      round.won = round.verdict.pick === "challenger";
+      await settleMoveAndGap(loop as never, round as never);
+      loop.result = {};
+      await decideExit(loop as never, round as never);
+      return { round, asked: lastAsk(), stopped: loop.result.stoppedBecause as string | undefined };
+    };
+    const judged = { pick: "A", satisfied: false, regression: null, newCheck: null, bigMove: null, defects: [] };
+    // A build round with a mandatory move is in flight when worker_steer stage=finish writes the
+    // spec the loop holds. The builder delivers the move; the round is still a build round.
+    reply = { ...judged, polish, moveDelivered: true, scale: "structural", reason: "the jetty is there" };
+    const building = await play(5, () => {
+      assert.equal(loop.currentMove?.mandatory, true, "the round in flight carries a mandatory move");
+      (loop.spec as Record<string, unknown>).stage = "finish";
+    });
+    assert.equal(building.round.won, true);
+    assert.doesNotMatch(building.asked, /STAGE: finish|## The finish stage/, "judged as the build round it was");
+    assert.equal(building.round.taste.polish.length, 3, "the build stage's three nits");
+    assert.equal(building.stopped, undefined, "no finish is in before a single finish round has run");
+    // The next round reads the steer: no move, the finish rubric, and a won round ends the worker.
+    reply = { ...judged, polish, moveDelivered: null, scale: "polish", reason: "A reads wetter" };
+    const finishing = await play(6, () => {});
+    assert.equal(loop.currentMove, null);
+    assert.match(finishing.asked, /STAGE: finish/);
+    assert.equal(loop.polishList.length, 8);
+    assert.match(String(finishing.stopped), /the finish is in/);
+    // The other way: a finish round in flight when worker_steer move= takes it back to building.
+    const backToBuild = await play(7, () => {
+      Object.assign(loop.spec as Record<string, unknown>, {
+        stage: "build",
+        moveOwner: "director",
+        milestones: [{ id: "traffic", what: "traffic weaves in both lanes" }],
+      });
+    });
+    assert.match(backToBuild.asked, /STAGE: finish/, "the polish round is judged as the finish it was briefed as");
+    assert.equal(loop.polishList.length, 8, "and keeps the judge's whole polish list");
+    assert.equal(loop.polishStreak, 0, "a finishing round's polish is no streak");
+    assert.equal(backToBuild.stopped, undefined, "the director asked for a move: the worker does not end on a finish");
   });
 
   it("FIN-4. the game's ledger no longer teaches that tuning loses when the judge kept the round before", async () => {

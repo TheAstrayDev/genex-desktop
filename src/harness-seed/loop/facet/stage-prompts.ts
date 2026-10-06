@@ -51,6 +51,16 @@ export const steerStageWords = (id: string, finishing: boolean): string =>
 /** What `worker_steer move=` adds when it took a finishing worker back to the build stage. */
 export const STEER_BACK_TO_BUILD = "It is back in the build stage.";
 
+/** A finish asked of a single session, which has no rounds to read a stage in. */
+export const FINISH_SINGLE_REFUSAL =
+  "stage=finish needs a loop worker: a single session has no rounds to finish in. Drop stage or mode=single";
+
+/** A steer with nothing in it. */
+export const STEER_EMPTY_REFUSAL = "worker_steer needs text, move or stage";
+
+/** The critic section's key in a finish-stage brief: its grow notes wait for the build stage. */
+export const FINISH_CRITIC_KEY = "polish = the work; grow waits for the build stage";
+
 /** A stage steered at a worker with no loop to read it. */
 export const steerStageRefusal = (id: string): string =>
   `worker ${id} has no stage to set — it is a single session; send it text instead`;
@@ -61,4 +71,5 @@ export const FINISH_RUBRIC_FALLBACK = [
   "`scale: polish` is expected and is no fault. Pick the build a player would rather ship: finish, readability, light, materials, motion, HUD craft. A build that adds a system instead of finishing loses.",
   "List up to eight `polish` items, worst first, each naming what, where and which camera: they are the builder's work now, not optional nits. `bigMove` may be null.",
   "A regression still needs a name in `regression` and `newCheck`, as above.",
+  "Reply with JSON only, in the shape above.",
 ].join("\n");

@@ -18,7 +18,7 @@ import { attemptRef } from "../repo.ts";
 import { RunEvent, SteeringSource } from "../run-events.ts";
 import { CheckKind, CheckWeight, MoveOwner, normalizeFacetSpec, normalizeMilestone } from "../spec.ts";
 import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
-import { STEER_BACK_TO_BUILD, steerStageRefusal, steerStageWords } from "../facet/stage-prompts.ts";
+import { STEER_BACK_TO_BUILD, STEER_EMPTY_REFUSAL, steerStageRefusal, steerStageWords } from "../facet/stage-prompts.ts";
 import { CLIP_REASON } from "../text.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
 import { Against, againstWords, observedFrom, VerdictPass, VerdictRule } from "../verdict.ts";
@@ -1012,7 +1012,7 @@ function steerRecordText(moveText: string, stage: FacetStage | null): string {
 
 /** Why this steer cannot be taken: nothing in it, a worker that is not running, or a stage for a single session. */
 function steerRefusal(worker: Worker, text: string, moveText: string, stage: FacetStage | null): string | null {
-  if (!text && !moveText && !stage) return "worker_steer needs text, move, or both";
+  if (!text && !moveText && !stage) return STEER_EMPTY_REFUSAL;
   if (!isRunning(worker))
     return `worker ${worker.id} is ${worker.state}; start a new worker with the instruction in its brief`;
   if (stage && !worker.spec) return steerStageRefusal(worker.id);

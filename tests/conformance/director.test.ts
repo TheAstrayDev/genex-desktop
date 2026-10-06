@@ -732,8 +732,8 @@ describe("a worker's contract: done, compiled and dry-run", () => {
   /**
    * The finish stage (Midnight Apex, 2026-10-06): a worker that finishes what exists, where polish
    * is the work and wins on the blind pick. The director sets it on worker_start and flips it on
-   * worker_steer; it rides on the spec like `moveOwner`, so the loop reads it every round and the
-   * journal keeps it.
+   * worker_steer; it rides on the spec like `moveOwner`, so the loop fixes it at the top of each
+   * round, and the run log records a steer.
    */
   it("compiles a finishing worker's stage onto its spec, and leaves a build worker's spec as it was", () => {
     const finishing = compileWorkerSpec(
@@ -763,6 +763,8 @@ describe("a worker's contract: done, compiled and dry-run", () => {
       await refusal({ stage: "finish", milestones: JSON.stringify([{ what: "traffic weaves" }]) }),
       /contradict/,
     );
+    // A single session has no loop to read a stage: refused by name, never silently ignored.
+    assert.match(await refusal({ stage: "finish", mode: "single" }), /single session/);
     assert.deepEqual(asked, [], "a typo is not a capacity problem: nothing was asked of the machine");
   });
 
@@ -793,6 +795,7 @@ describe("a worker's contract: done, compiled and dry-run", () => {
     };
     const steer = async (args: Record<string, unknown>) =>
       String(await handler(night as never, "worker_steer", { id: "paint", ...args }));
+    assert.match(await steer({}), /worker_steer needs text, move or stage/);
     assert.match(await steer({ stage: "finish" }), /next round finishes/);
     assert.equal(worker.spec.stage, "finish", "the loop holds this spec: its next round reads it");
     assert.match(steered.at(-1)!, /stage: finish/, "the steer is on the record");

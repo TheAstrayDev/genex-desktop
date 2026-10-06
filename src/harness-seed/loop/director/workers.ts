@@ -25,7 +25,7 @@ import { runRef } from "../repo.ts";
 import { RunEvent } from "../run-events.ts";
 import { normalizeScoutSetup } from "../scout.ts";
 import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
-import { FINISH_START_MOVES } from "../facet/stage-prompts.ts";
+import { FINISH_SINGLE_REFUSAL, FINISH_START_MOVES } from "../facet/stage-prompts.ts";
 import { isCommit } from "../shell.ts";
 import { CheckWeight, MAX_DONE, MAX_MILESTONES } from "../spec.ts";
 import { CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, clip } from "../text.ts";
@@ -533,6 +533,11 @@ function capacityRefusal(running: number, cap: AnyRecord | null, pooled: boolean
   return null;
 }
 
+/** The mode a `worker_start` asks for: a single session only when it says so. */
+function workerModeOf(args: AnyRecord): WorkerMode {
+  return /^single$/i.test(String(args.mode ?? "")) ? WorkerMode.Single : WorkerMode.Loop;
+}
+
 /**
  * Why `id` cannot start now, in the sentence the director reads — a run that is finishing, a
  * mistyped restart or policy, a seam a game the user brought needs, a machine with no window or
@@ -560,6 +565,7 @@ export async function startRefusal(night: Night, id: string, args: AnyRecord) {
   // The stage, for the same reason: an unknown one, or a finish asked to build a ladder, is the call's.
   const stage = stageArg(args.stage, { move: args.move, milestones: args.milestones });
   if (stage.error !== undefined) return stage.error;
+  if (stage.stage === FacetStage.Finish && workerModeOf(args) === WorkerMode.Single) return FINISH_SINGLE_REFUSAL;
   const seam = seamRefusal(night, id, args);
   if (seam) return seam;
   const cap = await ctx.call(HostMethod.PreviewCapacity, {}).catch(() => null);
@@ -1163,7 +1169,7 @@ export async function startWorker(night: Night, args: AnyRecord) {
   const allowed = await startRefusal(id, args);
   if (typeof allowed === "string") return allowed;
   const { pooled, remaining, replaces, policySpec } = allowed;
-  const mode = /^single$/i.test(String(args.mode ?? "")) ? WorkerMode.Single : WorkerMode.Loop;
+  const mode = workerModeOf(args);
   const budgetMs = Math.min(
     Math.max(WORKER_MIN_MINUTES, num(args.minutes, WORKER_DEFAULT_MINUTES)) * MINUTE_MS,
     remaining,

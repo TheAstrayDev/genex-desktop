@@ -36,8 +36,14 @@ import { clip, CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, sharesStem } fr
 import { isRecord } from "./json.ts";
 import { lessonLine, MAX_CONTRACT_LESSONS, renderContractLessons } from "./contract-lessons.ts";
 import { RECIPE_ID_CHARS } from "./config.ts";
-import { FacetStage, FINISH_POLISH_NOTES, stageOf } from "./facet/stage.ts";
-import { FINISH_FIX_LINE, FINISH_POLISH_HEAD, FINISH_RULES, FINISH_SECTION_HEAD } from "./facet/stage-prompts.ts";
+import { FacetStage, FINISH_POLISH_NOTES, moveEscalated, stageOf } from "./facet/stage.ts";
+import {
+  FINISH_CRITIC_KEY,
+  FINISH_FIX_LINE,
+  FINISH_POLISH_HEAD,
+  FINISH_RULES,
+  FINISH_SECTION_HEAD,
+} from "./facet/stage-prompts.ts";
 import type { Check, FacetSpec } from "./spec.ts";
 import type { ReferenceStats, Scoreboard } from "./checks.ts";
 import type { StyleStats } from "./style.ts";
@@ -774,7 +780,7 @@ export function renderBrief({
     ...fixSection(fix, template, finishing),
     ...scoreboardSection(board, comparison),
     ...(integration ? [`## Integration`, integration, ``] : []),
-    ...livenessSection(liveness, critic),
+    ...livenessSection(liveness, critic, finishing),
     ...styleSection(style),
     ...flagsSection(flags),
     ...defectsSection(defects, move),
@@ -838,7 +844,7 @@ function moveSection(move: AnyRecord | null): string[] {
       ? `Measured by check ${move.check.id} (on the board above); the taste judge also answers whether the move is visible.`
       : "The taste judge answers whether this change is visible in your build; make it unmistakable.",
     `Alongside the move, fix up to three items from the defect ledger below — the move first, the polish second. Never spend the iteration on the ledger alone.`,
-    move.escalated === true
+    moveEscalated(move)
       ? `ESCALATE: the last ${move.polishStreak} accepted builds were polish only. The judge now rejects a build without the move.`
       : "",
     move.ladder ? `\nThe facet's ladder:\n${move.ladder}` : "",
@@ -919,12 +925,14 @@ function scoreboardSection(board: Scoreboard | null | undefined, comparison: Bri
 }
 
 /** The liveness (or readability) critic's last card. */
-function livenessSection(liveness: string | null, critic: string): string[] {
+function livenessSection(liveness: string | null, critic: string, finishing = false): string[] {
   if (!liveness) return [];
+  // A finishing worker builds nothing new: the critic's grow notes wait for the build stage.
+  const key = finishing ? FINISH_CRITIC_KEY : "grow = what to build next, polish = optional";
   return [
     critic === "screen"
-      ? `## Why the screen does not read yet (the readability critic, 0–3 per principle; grow = what to build next, polish = optional)`
-      : `## Why it does not feel like a real place yet (the liveness critic, 0–3 per principle; grow = what to build next, polish = optional)`,
+      ? `## Why the screen does not read yet (the readability critic, 0–3 per principle; ${key})`
+      : `## Why it does not feel like a real place yet (the liveness critic, 0–3 per principle; ${key})`,
     liveness,
     ``,
   ];

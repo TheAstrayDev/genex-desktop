@@ -619,8 +619,8 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
   check or the judge's word, `RUNG_MISSES` set it aside (`facet/round-judgement.ts`); then the
   judge's `bigMove`. `integrate` takes a running worker's
   `lastAccepted`.
-- `spec.stage = "finish"` (`facet/stage.ts`, `stage=`): no move or polish streak, the judge's
-  polish list (`judge/taste-finish.md`) is the work; a preferred, unbroken build ends it.
+- `spec.stage = "finish"` (`facet/stage.ts`, per round, `stage=`): polish list
+  (`judge/taste-finish.md`) is the work, no move or streak; a preferred, unbroken build ends it.
 - `worker_start` may override `FACET_POLICY`; `loopDigest` puts each worker's phase, streaks and
   checks in the digests.
 - The session ends before the hard deadline (`wrapReserveMs`); the two closes are one function
