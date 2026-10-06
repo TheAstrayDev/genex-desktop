@@ -821,7 +821,9 @@ function createFacetPreview(studio: StudioCore, index: number, released: () => v
   port.setViewSize = (size) => {
     if (facetWin.isDestroyed()) return;
     const { width, height } = size ?? FACET_WINDOW;
-    facetWin.setContentSize(width, height);
+    // The window opened at FACET_WINDOW as its outer size, so a restore sets that, not the content.
+    if (size) facetWin.setContentSize(width, height);
+    else facetWin.setSize(width, height);
     port.setBounds({ x: 0, y: 0, width, height });
   };
   return port;

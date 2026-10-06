@@ -75,6 +75,16 @@ function sizedPorts() {
 const snapshot = (ports: SizedPort[]) =>
   ports.map((port) => ({ id: port.id, size: port.size, asked: port.asked.length }));
 
+/**
+ * A refusal for its own reason: a missing method (a TypeError) never passes for one, so each
+ * row fails until the host refuses that input on purpose.
+ */
+const refusedFor = (reason: RegExp) => (error: unknown) =>
+  error instanceof Error && !(error instanceof TypeError) && reason.test(error.message);
+const BAD_SIZE = /two finite positive numbers/;
+const NO_LEASE = /only a leased pooled window|unknown preview handle|sizes one leased window/;
+const IN_SESSION = /a computer session's/;
+
 /** Sizes the host refuses outright: not a finite positive number. Nothing may move for any of them. */
 const HOSTILE: Array<[label: string, width: unknown, height: unknown]> = [
   ["NaN width", Number.NaN, 900],
@@ -159,7 +169,7 @@ describe("one pooled window at another size", () => {
       const pool = new PreviewPool({ live: ports.live as never, createHeadless: ports.create, max: 4 });
       const lease = await pool.acquire({ label: "ship-review" });
       const before = snapshot(ports.everyPort());
-      assert.throws(() => pool.resize(lease.handle, { width, height }));
+      assert.throws(() => pool.resize(lease.handle, { width, height }), refusedFor(BAD_SIZE));
       assert.deepEqual(snapshot(ports.everyPort()), before);
       await pool.release(lease.handle);
       assert.deepEqual(ports.made[0]?.asked, [], "a refused size leaves nothing to restore");
@@ -174,7 +184,7 @@ describe("one pooled window at another size", () => {
     await pool.release(released.handle);
     const before = snapshot(ports.everyPort());
     for (const handle of [LIVE_HANDLE, STAND_IN_HANDLE, "pv-unknown", released.handle, "", "../live"]) {
-      assert.throws(() => pool.resize(handle, { width: 1600, height: 900 }), Error, handle);
+      assert.throws(() => pool.resize(handle, { width: 1600, height: 900 }), refusedFor(NO_LEASE), handle);
     }
     assert.deepEqual(snapshot(ports.everyPort()), before);
   });
@@ -182,7 +192,7 @@ describe("one pooled window at another size", () => {
   it("refuses a lease whose window cannot change size, and moves nothing", async () => {
     const pool = new PreviewPool({ live: {} as never, createHeadless: async () => ({}) as never, max: 2 });
     const lease = await pool.acquire({ label: "old-port" });
-    assert.throws(() => pool.resize(lease.handle, { width: 1600, height: 900 }));
+    assert.throws(() => pool.resize(lease.handle, { width: 1600, height: 900 }), refusedFor(/cannot change size/));
   });
 });
 
@@ -204,7 +214,7 @@ describe("a computer session's window", () => {
     const worker = await service.pool().acquire({ label: "facet" });
     const session = service.sessionPortFor({ handle: worker.handle, label: "build:hud" });
     const port = await session.get();
-    assert.throws(() => service.viewport({ handle: worker.handle, width: 1600, height: 900 }));
+    assert.throws(() => service.viewport({ handle: worker.handle, width: 1600, height: 900 }), refusedFor(IN_SESSION));
     assert.deepEqual(port.viewSize?.(), FACET);
     assert.deepEqual(ports.made[0]?.asked, []);
     await session.release();
@@ -231,7 +241,7 @@ describe("a computer session's window", () => {
     await session.get();
     const handle = session.handle();
     assert.ok(handle);
-    assert.throws(() => service.viewport({ handle, width: 1600, height: 900 }));
+    assert.throws(() => service.viewport({ handle, width: 1600, height: 900 }), refusedFor(IN_SESSION));
     await session.release();
   });
 });
@@ -267,6 +277,18 @@ describe("preview.viewport over the harness RPC", () => {
     await close();
   });
 
+  it("preview.status says the size a window is at now, so a caller sees its look was put back", async () => {
+    const { call, acquire, close } = await start();
+    const judge = await acquire();
+    const worker = await acquire();
+    const sizeOf = async (handle: string) =>
+      ((await call(HostMethod.PreviewStatus, { handle })) as { viewSize?: Size }).viewSize;
+    await call(HostMethod.PreviewViewport, { handle: judge, width: 1600, height: 900 });
+    assert.deepEqual(await sizeOf(judge), { width: 1600, height: 900 });
+    assert.deepEqual(await sizeOf(worker), FACET);
+    await close();
+  });
+
   it("refuses hostile params, Live and the stand-in, and moves nothing", async () => {
     const { ports, call, acquire, close } = await start();
     const judge = await acquire();
@@ -281,7 +303,11 @@ describe("preview.viewport over the harness RPC", () => {
       undefined,
     ];
     for (const params of refused) {
-      await assert.rejects(call(HostMethod.PreviewViewport, params), Error, JSON.stringify(params) ?? "undefined");
+      await assert.rejects(
+        call(HostMethod.PreviewViewport, params),
+        refusedFor(new RegExp(`${BAD_SIZE.source}|${NO_LEASE.source}`)),
+        JSON.stringify(params) ?? "undefined",
+      );
     }
     assert.deepEqual(snapshot(ports.everyPort()), before);
     await close();

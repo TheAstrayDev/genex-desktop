@@ -1306,6 +1306,12 @@ export interface PreviewPortStatus {
    * not say (a fake, an older port), which reads as no reason given.
    */
   gone?: PreviewGone | null;
+  /**
+   * The view's size now, in pixels: the space of its captures. A window put at another size by
+   * `preview.viewport` reads that size until its lease is released or a computer session takes it
+   * (which puts it back at the facet size). Absent from a port that cannot say.
+   */
+  viewSize?: { width: number; height: number };
   unresponsive: boolean;
   loadError: string | null;
   consoleErrors: number | null;
@@ -1671,7 +1677,9 @@ export interface HarnessHostApi {
   /**
    * One leased window at another size (the art director's 1600×900 look), for that lease only:
    * clamped to 320–1920 × 240–1200 and back at the facet size when the lease is released. Never
-   * Live, the stand-in or a window a computer session plays in, so its view never changes size.
+   * Live, the stand-in or a window a computer session plays in, so its view never changes size:
+   * handing the lease to a session puts it back at the facet size, and the caller sizes it again
+   * afterwards (`preview.status` `viewSize` says the size it is at now).
    */
   "preview.viewport": {
     params: { handle: string; width: number; height: number };

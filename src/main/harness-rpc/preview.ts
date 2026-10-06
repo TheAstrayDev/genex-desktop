@@ -107,9 +107,13 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
       const preview = x.previews.preview(p?.handle);
       return preview.gpuErrors ? preview.gpuErrors() : [];
     }),
-    [HostMethod.PreviewStatus]: routed(async (p: HarnessParams<typeof HostMethod.PreviewStatus>) =>
-      x.previews.preview(p?.handle).status(),
-    ),
+    [HostMethod.PreviewStatus]: routed(async (p: HarnessParams<typeof HostMethod.PreviewStatus>) => {
+      const port = x.previews.preview(p?.handle);
+      const status = port.status();
+      // The size it is at now, so a look `preview.viewport` set and a session put back is visible.
+      const viewSize = port.viewSize?.();
+      return viewSize ? { ...status, viewSize } : status;
+    }),
     // Readiness is a fact the page reports, not a sleep — and a HOST call, not an agent tool:
     // the loop asks over the substrate RPC, so no MCP schema and no bridge entry change.
     [HostMethod.PreviewReady]: routed(async (p: HarnessParams<typeof HostMethod.PreviewReady>) => {

@@ -19,11 +19,9 @@ export const LIVE_HANDLE = "live";
 /** The hidden window that stands in for the live view when the harness names no window. */
 export const STAND_IN_HANDLE = "stand-in";
 
-/**
- * The sizes one leased window may take (`resize`): the art director's 1600×900 look fits, a
- * 1920×1200 display is the most, and below 320×240 no game lays out.
- */
+/** The smallest size one leased window may take (`resize`): below 320×240 no game lays out. */
 export const VIEWPORT_MIN = { width: 320, height: 240 } as const;
+/** The largest size one leased window may take (`resize`): a 1920×1200 display; 1600×900 fits. */
 export const VIEWPORT_MAX = { width: 1920, height: 1200 } as const;
 
 /** A window's size in pixels. */
@@ -299,7 +297,7 @@ export class PreviewPool {
 }
 
 /** `asked` as a window size, clamped and rounded; null when either side is not a finite positive number. */
-export function viewportSize(asked: { width: unknown; height: unknown } | null | undefined): ViewSize | null {
+function viewportSize(asked: { width: unknown; height: unknown } | null | undefined): ViewSize | null {
   const width = asked?.width;
   const height = asked?.height;
   if (!isPixels(width) || !isPixels(height)) return null;

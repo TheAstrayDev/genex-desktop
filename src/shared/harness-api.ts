@@ -469,7 +469,9 @@ export interface HarnessHostApi {
   /**
    * One leased window at another size (the art director's 1600×900 look), for that lease only:
    * clamped to 320–1920 × 240–1200 and back at the facet size when the lease is released. Never
-   * Live, the stand-in or a window a computer session plays in, so its view never changes size.
+   * Live, the stand-in or a window a computer session plays in, so its view never changes size:
+   * handing the lease to a session puts it back at the facet size, and the caller sizes it again
+   * afterwards (`preview.status` `viewSize` says the size it is at now).
    */
   "preview.viewport": {
     params: { handle: string; width: number; height: number };

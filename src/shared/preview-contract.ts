@@ -154,6 +154,12 @@ export interface PreviewPortStatus {
    * not say (a fake, an older port), which reads as no reason given.
    */
   gone?: PreviewGone | null;
+  /**
+   * The view's size now, in pixels: the space of its captures. A window put at another size by
+   * `preview.viewport` reads that size until its lease is released or a computer session takes it
+   * (which puts it back at the facet size). Absent from a port that cannot say.
+   */
+  viewSize?: { width: number; height: number };
   unresponsive: boolean;
   loadError: string | null;
   consoleErrors: number | null;
