@@ -23,7 +23,7 @@ import {
   withObservationPatience,
 } from "../../src/harness-seed/loop/gauntlet.ts";
 import { observationOnlyFailure } from "../../src/harness-seed/loop/autopilot.ts";
-import { demosNamedByChecks, withHarnessChecks } from "../../src/harness-seed/loop/spec.ts";
+import { demosNamedByChecks, HARNESS_CHECKS, withHarnessChecks } from "../../src/harness-seed/loop/spec.ts";
 import type { Check } from "../../src/harness-seed/loop/spec.ts";
 import { evaluateProbeCheck, evaluateSceneCheck, sceneCheckExpression } from "../../src/harness-seed/loop/checks.ts";
 import {
@@ -45,6 +45,7 @@ import { FlowPhase as HarnessFlowPhase } from "../../src/harness-seed/loop/page-
 import { FlowPhase as TemplateFlowPhase } from "../../src/game-template/src/studio.js";
 import { PreviewConsoleSource } from "../../src/harness-seed/loop/preview-gone.ts";
 import { blindCompare } from "../../src/harness-seed/loop/judge.ts";
+import { facetPrompt } from "../../src/harness-seed/loop/facet/prompt.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
 interface StubOptions {
@@ -272,7 +273,17 @@ describe("gatherEvidence after the stale-frame night", () => {
     // counts, or the cap would drop the demo and leave its check permanently unmeasured.
     const requiredDemos = demosNamedByChecks([{ kind: "probe", demo: "five", expr: "state.done > 0" }] as never);
     assert.deepEqual(requiredDemos, ["five"]);
-    const evidence = await gatherEvidence(ctx as never, { run, iterationId: "001", seed: 1, requiredDemos } as never);
+    // A cap of three, named: the default is DEMOS_PER_LOOK since the NFS run (NFS-F1 below).
+    const evidence = await gatherEvidence(
+      ctx as never,
+      {
+        run,
+        iterationId: "001",
+        seed: 1,
+        requiredDemos,
+        maxDemos: 3,
+      } as never,
+    );
     const ran = calls
       .filter((c) => c.method === "preview.call" && c.payload.method === "demo")
       .map((c) => c.payload.arg);
@@ -2107,5 +2118,285 @@ describe("after the review: a kill mid-pass, the studio's own console line, and 
       settleMs: 1,
     });
     assert.equal(wrong.reached, false, "a state read whole and wrong is still not reached");
+  });
+});
+
+/**
+ * The NFS run (run_muwe8k92lv4t, 2026-10-06) lost rounds the judges could not see: a registered
+ * `contact` demo the cap of three never photographed (42.8 min of no-move rounds), no frame that
+ * showed a corner when the move was corner warnings (16.3 min), a drive that held the throttle into
+ * the wall, and a race a bot that only holds the throttle wins in both games.
+ */
+const NFS_DEMOS = [
+  "title",
+  "countdown",
+  "race-finish",
+  "rival-battle",
+  "contact",
+  "drift",
+  "drift-hold",
+  "wall-scrape",
+  "top-speed",
+  "rain-spray",
+];
+
+/** Frames that never repeat, so no retake hides a demo frame. */
+const uniqueFrames = (n: number): string[] => Array.from({ length: n }, (_, i) => `frame-${i}`);
+
+/** What the pass handed one page verb, call by call, in order. */
+function pageCalls(calls: Array<{ method: string; payload: Record<string, unknown> }>, method: string): unknown[] {
+  return calls.filter((c) => c.method === "preview.call" && c.payload.method === method).map((c) => c.payload.arg);
+}
+
+/**
+ * A racer on a course as the evidence pass sees it: a car that gains ground while W is held in play,
+ * turns into a corner after `cornerAfter` drive steps, and finishes a race of `raceMs` simulated
+ * milliseconds in `position`. It reports its race and its heading only when told to.
+ */
+function racer({
+  cornerAfter = 10,
+  raceMs = 200_000,
+  position = 1,
+  reportsRace = true,
+  reportsHeading = true,
+  assist = true,
+}: {
+  cornerAfter?: number;
+  raceMs?: number;
+  position?: number;
+  reportsRace?: boolean;
+  reportsHeading?: boolean;
+  assist?: boolean;
+} = {}) {
+  let playing = false;
+  let raced = 0;
+  let driveSteps = 0;
+  const held = new Set<string>();
+  const assists: unknown[] = [];
+  const yaw = () => (driveSteps > cornerAfter ? (driveSteps - cornerAfter) * 0.6 : 0);
+  return {
+    assists,
+    state: () => ({
+      version: 2,
+      flow: { phase: playing ? "playing" : "menu", playing },
+      player: { x: raced, z: 0, yaw: reportsHeading ? yaw() : 0 },
+      ...(reportsRace ? { race: { position, finished: raced >= raceMs, lap: 1 } } : {}),
+    }),
+    evaluate: (expression: string) =>
+      expression.includes("studio corner probe") ? { yaw: reportsHeading ? yaw() : null, steer: null } : false,
+    page: (method: string, arg: unknown): unknown => {
+      if (method === "seed") {
+        playing = false;
+        raced = 0;
+        driveSteps = 0;
+        held.clear();
+        return 1;
+      }
+      if (method === "begin") {
+        playing = true;
+        return { ok: true, flow: { phase: "playing", playing: true } };
+      }
+      if (method === "assist") {
+        assists.push(arg);
+        const steer = (arg as { steer?: boolean } | null)?.steer === true;
+        return assist ? { ok: true, steer } : { ok: false, reason: "no config.steer" };
+      }
+      if (method !== "step") return undefined;
+      if (arg === 960) driveSteps += 1;
+      if (playing && held.has("w")) raced += Number(arg);
+      return { frame: 1 };
+    },
+    input: (actions: Array<Record<string, unknown>>) => {
+      for (const action of actions) {
+        const keys = (action.keys ?? []) as string[];
+        if (action.type === "down") for (const key of keys) held.add(key);
+        if (action.type === "up") for (const key of keys) held.delete(key);
+      }
+    },
+  };
+}
+
+const racingRun = { run: { ...run, game: { kind: "racing" } } };
+/** The frame the drive takes of a corner, in its wire spelling (pass-frames.ts `CORNER_CAMERA`). */
+const CORNER_CAMERA = "drive:corner";
+const throttleBot = (): Check => ({ id: "throttle-bot-loses", ...HARNESS_CHECKS["throttle-bot-loses"] }) as Check;
+
+describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
+  it("NFS-F1. a registered contact demo was never photographed: every registered demo's end is photographed", async () => {
+    const { ctx } = stubCtx({ frames: uniqueFrames(40), cameras: ["default", "pack"], demos: NFS_DEMOS });
+    const evidence = await gather(ctx, { requiredDemos: ["rival-battle"] });
+    assert.deepEqual(evidence.skippedDemos, [], "the cap of three left contact unseen for four rounds");
+    const demoFrames = cameraList(evidence).filter((camera) => camera.startsWith("demo:"));
+    assert.equal(demoFrames.length, NFS_DEMOS.length, demoFrames.join(", "));
+    assert.ok(demoFrames.includes("demo:contact"));
+  });
+
+  it("NFS-F1b. a vision check on demo:<name> waits on that demo, so the cap can never drop it", () => {
+    const checks = [
+      { id: "contact-reads", kind: "vision", camera: "demo:rival-battle", ask: "Is the contact physical?" },
+      { id: "lit", kind: "pixel", camera: "default", expr: "litFraction > 0.2" },
+    ] as Check[];
+    assert.deepEqual(demosNamedByChecks(checks), ["rival-battle"]);
+  });
+
+  it("NFS-F1c. a capped look runs the build's new demos first, and tells the judge and the builder what it left out", async () => {
+    const { ctx, calls } = stubCtx({
+      frames: uniqueFrames(20),
+      cameras: ["default"],
+      demos: ["title", "countdown", "race-finish", "contact"],
+    });
+    const evidence = await gather(ctx, { maxDemos: 2, knownDemos: ["title", "countdown", "race-finish"] });
+    assert.deepEqual(pageCalls(calls, "demo"), ["contact", "title"], "the demo this build added comes first");
+    assert.deepEqual(evidence.skippedDemos, ["countdown", "race-finish"]);
+    assert.equal(evidence.demoCap, 2);
+    // The cap is the harness's, never a defect a judge may name as the gap: not a warning.
+    assert.ok(!evidence.warnings.some((w: string) => /race-finish/.test(w)), evidence.warnings.join("; "));
+    const recorder = ctxRecorder({
+      handlers: { "engine.complete": () => ({ message: { content: '{"pick":"A"}' } }) },
+    });
+    const judged = { ...run, goal: "a racer", budgets: { wallClockMs: 1000 } } as never;
+    await blindCompare(recorder.ctx, { run: judged, challenger: evidence, incumbentEvidence: evidence });
+    const asked = JSON.stringify(recorder.paramsOf("engine.complete")[0]?.messages);
+    assert.match(
+      asked,
+      /demos registered but not photographed this pass \(a look runs every demo a check names and at most 2 more; unmeasured, not the build's defect\): countdown, race-finish/,
+    );
+  });
+
+  it("NFS-F1e. the builder is told which of its demos its last look left unphotographed", () => {
+    const lastAttempt = { won: false, flips: [], why: "no check moved", skippedDemos: ["contact", "drift-hold"] };
+    const prompt = facetPrompt({
+      resumed: true,
+      run: { runId: "run_nfs", goal: "a street race" },
+      spec: { id: "rivals-race", title: "Rivals", checks: [] },
+      iteration: 3,
+      lastAttempt,
+    });
+    assert.match(prompt, /did not photograph the demos contact, drift-hold/);
+    assert.match(prompt, /name one in a check/);
+    const quiet = facetPrompt({
+      resumed: true,
+      run: { runId: "run_nfs", goal: "a street race" },
+      spec: { id: "rivals-race", title: "Rivals", checks: [] },
+      iteration: 3,
+      lastAttempt: { ...lastAttempt, skippedDemos: [] },
+    });
+    assert.doesNotMatch(quiet, /did not photograph/);
+  });
+
+  it("NFS-F1d. a facet camera that is a demo's frame or the drive's corner is never asked of debugCamera", async () => {
+    const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), cameras: ["default", "pack"], demos: ["rival-battle"] });
+    const evidence = await gather(ctx, {
+      cameras: ["pack", "demo:rival-battle", "drive:corner"],
+      requiredDemos: ["rival-battle"],
+    });
+    const asked = pageCalls(calls, "debugCamera");
+    assert.ok(!asked.includes("demo:rival-battle"), asked.join(", "));
+    assert.ok(!asked.includes("drive:corner"), asked.join(", "));
+    assert.deepEqual(evidence.missingCameras, []);
+    assert.equal(cameraList(evidence).filter((camera) => camera === "demo:rival-battle").length, 1);
+  });
+
+  it("NFS-F2. no judged frame showed a corner: the drive photographs the turn-in of a racer", async () => {
+    const game = racer({ cornerAfter: 10 });
+    const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), ...game });
+    const evidence = await gather(ctx, racingRun);
+    assert.equal(evidence.ok, true, evidence.problems.join("; "));
+    const corner = evidence.shots.find((shot: { camera: string }) => shot.camera === CORNER_CAMERA);
+    assert.ok(corner, `no corner frame among ${cameraList(evidence).join(", ")}`);
+    assert.equal(evidence.corner?.seen, true);
+    assert.ok(Number(evidence.corner?.turnDegPerSecond) > 20, JSON.stringify(evidence.corner));
+    const labels = calls.filter((c) => c.method === "preview.screenshot").map((c) => String(c.payload.label));
+    assert.ok(
+      labels.some((label) => label.endsWith("/screenshots/drive-corner")),
+      labels.join(", "),
+    );
+  });
+
+  it("NFS-F2b. a racer that never turns or reports nothing gets no corner frame, never a failure, and a walker is not watched", async () => {
+    const straight = stubCtx({ frames: uniqueFrames(20), ...racer({ cornerAfter: 1_000 }) });
+    const flat = await gather(straight.ctx, racingRun);
+    assert.equal(flat.ok, true, flat.problems.join("; "));
+    assert.equal(cameraList(flat).includes(CORNER_CAMERA), false);
+    assert.deepEqual(flat.corner, { seen: false, turnDegPerSecond: 0 });
+    const blind = stubCtx({ frames: uniqueFrames(20), ...racer({ reportsHeading: false }) });
+    const unread = await gather(blind.ctx, racingRun);
+    assert.equal(unread.ok, true, unread.problems.join("; "));
+    assert.equal(unread.corner?.seen, false);
+    assert.equal(unread.corner?.unreadable, true);
+    const walker = stubCtx({ frames: uniqueFrames(20), ...racer() });
+    const walked = await gather(walker.ctx, { run: { ...run, game: { kind: "first-person" } } });
+    assert.equal(walked.corner, undefined);
+    const probed = walker.calls.filter((c) => String(c.payload.expression ?? "").includes("studio corner probe"));
+    assert.deepEqual(probed, [], "a walker's drive is not watched for corners");
+  });
+
+  it("NFS-F3. the scripted drive pinned the car to the wall: the cruise steers by the game's racing line", async () => {
+    const game = racer({ cornerAfter: 1_000 });
+    const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), ...game });
+    const evidence = await gather(ctx, racingRun);
+    const words = calls.map((c) =>
+      c.method === "preview.call" ? `call:${c.payload.method}:${JSON.stringify(c.payload.arg ?? null)}` : c.method,
+    );
+    const cruise = calls.findIndex(
+      (c) => c.method === "preview.input" && JSON.stringify(c.payload.actions).includes('"down"'),
+    );
+    const on = words.indexOf('call:assist:{"steer":true}');
+    const off = words.indexOf('call:assist:{"steer":false}');
+    const firstCamera = words.indexOf('call:debugCamera:"default"');
+    assert.ok(cruise >= 0 && cruise < on, words.join(" "));
+    assert.ok(on < off && off < firstCamera, "steered through the drive, let go before the cameras");
+    assert.deepEqual(evidence.drive, { steered: true });
+    // A racer with no helper is driven exactly as before: the throttle held, nothing steered.
+    const plain = stubCtx({ frames: uniqueFrames(20), ...racer({ cornerAfter: 1_000, assist: false }) });
+    const unsteered = await gather(plain.ctx, racingRun);
+    assert.deepEqual(unsteered.drive, { steered: false });
+    assert.ok(heldThrough(plain.calls, ["w", "ArrowUp"]), "the throttle is still held");
+    // A walker is not steered at all.
+    const walker = stubCtx({ frames: uniqueFrames(20), ...racer() });
+    await gather(walker.ctx, { run: { ...run, game: { kind: "first-person" } } });
+    assert.deepEqual(pageCalls(walker.calls, "assist"), []);
+  });
+
+  it("NFS-F4. a throttle-only bot won the race: the challenge race is run, and the harness check fails on it", async () => {
+    const game = racer({ cornerAfter: 1_000, raceMs: 226_600, position: 1 });
+    const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), ...game });
+    const evidence = await gather(ctx, { ...racingRun, challenge: true });
+    assert.equal(evidence.challenge?.ran, true, JSON.stringify(evidence.challenge));
+    assert.equal(evidence.challenge?.finished, true);
+    assert.equal(evidence.challenge?.position, 1);
+    assert.equal(evidence.challenge?.steered, true);
+    assert.ok(Number(evidence.challenge?.simulatedMs) >= 226_600, JSON.stringify(evidence.challenge));
+    const bot = evaluateProbeCheck(throttleBot(), evidence);
+    assert.equal(bot.pass, false, bot.reason);
+    // The bot holds the throttle and nothing else: no brake, no handbrake, and lets go after.
+    const pressed = calls
+      .filter((c) => c.method === "preview.input")
+      .flatMap((c) => (c.payload.actions as Array<{ keys?: string[] }>).flatMap((a) => a.keys ?? []));
+    assert.ok(!pressed.some((key) => /^(s|ArrowDown|space|Space)$/.test(key)), pressed.join(","));
+    assert.deepEqual(game.assists.at(-1), { steer: false });
+    // A field that beats it passes.
+    const beaten = stubCtx({ frames: uniqueFrames(20), ...racer({ cornerAfter: 1_000, position: 3 }) });
+    const fair = await gather(beaten.ctx, { ...racingRun, challenge: true });
+    assert.equal(evaluateProbeCheck(throttleBot(), fair).pass, true);
+  });
+
+  it("NFS-F4b. the challenge race is bounded, skipped for a game with no race result, and never run unasked", async () => {
+    const endless = stubCtx({
+      frames: uniqueFrames(20),
+      ...racer({ cornerAfter: 1_000, raceMs: Number.POSITIVE_INFINITY }),
+    });
+    const timedOut = await gather(endless.ctx, { ...racingRun, challenge: true });
+    assert.equal(timedOut.challenge?.finished, false);
+    assert.ok(Number(timedOut.challenge?.simulatedMs) <= 6 * 60_000, JSON.stringify(timedOut.challenge));
+    assert.equal(evaluateProbeCheck(throttleBot(), timedOut).pass, false, "leading when the time ran out is winning");
+    const noRace = stubCtx({ frames: uniqueFrames(20), ...racer({ reportsRace: false }) });
+    const skipped = await gather(noRace.ctx, { ...racingRun, challenge: true });
+    assert.equal(skipped.challenge?.ran, false);
+    assert.equal(evaluateProbeCheck(throttleBot(), skipped).pass, null, "a game that reports no race is not failed");
+    const unasked = stubCtx({ frames: uniqueFrames(20), ...racer({ cornerAfter: 1_000 }) });
+    const plain = await gather(unasked.ctx, racingRun);
+    assert.equal(plain.challenge, undefined);
+    assert.equal(evaluateProbeCheck(throttleBot(), plain).pass, null);
   });
 });

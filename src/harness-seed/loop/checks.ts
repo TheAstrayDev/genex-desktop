@@ -18,6 +18,7 @@
  */
 import { nearestReference, styleDistance, type StyleStats } from "./style.ts";
 import type { Check, CheckKind, CheckLike, CheckOrigin, CheckWeight } from "./spec.ts";
+import type { ProbeAfter } from "./throttle-bot.ts";
 import { HostMethod } from "./host-methods.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON, clipMarked } from "./text.ts";
 import { isRecord } from "./json.ts";
@@ -147,6 +148,7 @@ const Kind = {
 } as const satisfies Record<string, CheckKind>;
 const Weight = { Identity: "identity", Normal: "normal" } as const satisfies Record<string, CheckWeight>;
 const Origin = { Judge: "judge" } as const satisfies Record<string, CheckOrigin>;
+const After = { ThrottleBot: "throttle-bot" } as const satisfies Record<string, ProbeAfter>;
 /** The markers of a state the studio could not read whole; state-shape.ts imports this module too. */
 const Shape = {
   Truncated: "__truncated",
@@ -1052,21 +1054,9 @@ function needsNotReported(check: CheckLike, state: unknown, early: unknown): str
 }
 
 export function evaluateProbeCheck(check: CheckLike, evidence: CheckEvidence | null | undefined): CheckResult {
-  let state = evidence?.state;
-  let early = evidence?.stateEarly;
-  if (check.demo) {
-    const demo = evidence?.demos?.[check.demo];
-    if (!demo) return demoNotRun(check, evidence, check.demo);
-    if (demo.ok !== true)
-      return result(
-        check,
-        false,
-        `demo "${check.demo}" failed: ${demo.error ?? JSON.stringify(demo).slice(0, CLIP_DETAIL)}`,
-      );
-    state = evidence?.demoStates?.[check.demo];
-    early = evidence?.state;
-    if (!state) return unmeasured(check, `no state() was captured after demo "${check.demo}"`);
-  }
+  const scoped = probeStates(check, evidence);
+  if ("result" in scoped) return scoped.result;
+  const { state, early } = scoped;
   if (!state) return unmeasured(check, "no state() probe was captured");
   if (state.__missing) return result(check, false, "window.__studio is missing — the build exposes no state()");
   const unreadable = unreadableState(check, state, early);
@@ -1087,12 +1077,64 @@ export function evaluateProbeCheck(check: CheckLike, evidence: CheckEvidence | n
       missing: outcome.missing,
       unavailable: true,
     });
-  const where = check.demo ? ` after demo "${check.demo}"` : "";
   return result(
     check,
     outcome.pass,
-    `${outcome.reason} — state${where} ${clipMarked(JSON.stringify(state), CLIP_REASON)}`,
+    `${outcome.reason} — state${whereRead(check)} ${clipMarked(JSON.stringify(state), CLIP_REASON)}`,
   );
+}
+
+/** The states a probe is scoped to, as `AnyRecord`s the expression reads; or why there is none. */
+type ProbeStates =
+  | { state: AnyRecord | null | undefined; early: AnyRecord | null | undefined }
+  | { result: CheckResult };
+
+/** What a probe reads: the drive's states, a demo's end state, or the throttle-bot race's — or why it cannot. */
+function probeStates(check: CheckLike, evidence: CheckEvidence | null | undefined): ProbeStates {
+  if (check.after === After.ThrottleBot) return raceStates(check, evidence);
+  if (!check.demo) return { state: evidence?.state, early: evidence?.stateEarly };
+  const demo = evidence?.demos?.[check.demo];
+  if (!demo) return { result: demoNotRun(check, evidence, check.demo) };
+  if (demo.ok !== true) {
+    const why = demo.error ?? JSON.stringify(demo).slice(0, CLIP_DETAIL);
+    return { result: result(check, false, `demo "${check.demo}" failed: ${why}`) };
+  }
+  const state = evidence?.demoStates?.[check.demo];
+  if (!state) return { result: unmeasured(check, `no state() was captured after demo "${check.demo}"`) };
+  return { state, early: evidence?.state };
+}
+
+/**
+ * The state the throttle-only bot's race left (evidence.ts `raceThrottleBot`), against the state it
+ * started from. With no race to read, a game whose own state reports no race result is not asked —
+ * the drive's state says which of the check's `needs` it lacks, and a harness check over a path the
+ * build never reports is not its question (harness-needs.ts). Any other race nobody ran is unmeasured.
+ */
+function raceStates(check: CheckLike, evidence: CheckEvidence | null | undefined): ProbeStates {
+  const race = isRecord(evidence?.challenge) ? evidence.challenge : null;
+  if (race?.ran === true) {
+    if (!isRecord(race.state))
+      return { result: unmeasured(check, "no state() was captured after the throttle-bot race") };
+    return { state: race.state, early: isRecord(race.early) ? race.early : evidence?.state };
+  }
+  const drive = evidence?.state;
+  const notReported = isRecord(drive) ? needsNotReported(check, drive, evidence?.stateEarly) : null;
+  if (notReported) {
+    const why = `the build does not report ${notReported.join(", ")} — there is no race for a throttle-only bot to win`;
+    return { result: unmeasured(check, why, { missing: notReported, unavailable: true }) };
+  }
+  const why =
+    typeof race?.reason === "string"
+      ? `the throttle-bot race did not run: ${race.reason}`
+      : "the throttle-bot race was not run in this evidence pass";
+  return { result: unmeasured(check, why) };
+}
+
+/** Where a probe's state was read, for its reason: after a demo, after the bot's race, or the drive. */
+function whereRead(check: CheckLike): string {
+  if (check.demo) return ` after demo "${check.demo}"`;
+  if (check.after) return ` after the ${check.after} race`;
+  return "";
 }
 
 export function evaluateDemoCheck(check: CheckLike, evidence: CheckEvidence | null | undefined): CheckResult {

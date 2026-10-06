@@ -16,6 +16,8 @@
  */
 import * as judgeParts from "./judge.ts";
 import { hudFactLines } from "./judge-facts.ts";
+// By namespace for what judge-facts.ts gained later: a kept older copy never stops this file linking.
+import * as judgeFacts from "./judge-facts.ts";
 import { hudBudgetFor } from "./hud-budget.ts";
 import { JudgeParse } from "./judge-provenance.ts";
 import { workingGoal } from "./goal-prompts.ts";
@@ -179,6 +181,8 @@ function evidenceLines(evidence: AnyRecord, hudBudget: number | null): string[] 
   if (evidence.play && evidence.play.reached === false)
     lines.push(`the scripted drive did not reach play (it stayed in "${evidence.play.phase ?? "unknown"}")`);
   lines.push(...hudFactLines(evidence.state?.hud, hudBudget));
+  // The drive's facts: the corner frame and the throttle-only bot's race (a ship look races it).
+  if (typeof judgeFacts.drivenFactLines === "function") lines.push(...judgeFacts.drivenFactLines(evidence));
   if (evidence.consoleErrors?.length)
     lines.push(`console errors: ${evidence.consoleErrors.slice(0, ERROR_LINES).join(" | ")} — ${BUILD_OUTPUT}`);
   return lines;

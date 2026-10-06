@@ -1,6 +1,7 @@
 /** Evidence for the round, with patience for a blind camera, and whether the build it saw can be judged at all. */
 import { gatherEvidence, observationOnlyFailure, withObservationPatience } from "../../evidence.ts";
 import { demosNamedByChecks } from "../../spec.ts";
+import { racesThrottleBot } from "../../throttle-bot.ts";
 import { statePathsNamedByChecks } from "../../state-shape.ts";
 import { normalizeReason } from "../../replan.ts";
 import { GIT, commitAll, shortSha } from "../../git.ts";
@@ -62,8 +63,12 @@ async function gatherOnce(loop: FacetLoop, round: FacetRound): Promise<AnyRecord
       motion: legacy ? 0 : MOTION_FRAMES,
       audio: !legacy,
       // Every demo a check names runs; the integration facet — the only judgeable build of
-      // the merged game — runs all of them.
+      // the merged game — runs all of them. Under the cap, a demo this challenger added runs
+      // before the ones the accepted build already showed.
       requiredDemos: demosNamedByChecks(spec.checks),
+      knownDemos: loop.incumbentEvidence?.registeredDemos ?? null,
+      // A board that carries `throttle-bot-loses` races the throttle-only bot (evidence.ts).
+      challenge: racesThrottleBot(spec.checks),
       // The paths the board reads are cut last when the state is over the studio's budget.
       keepPaths: statePathsNamedByChecks(spec.checks),
       ...(role === FacetRole.Integration ? { maxDemos: Infinity } : {}),

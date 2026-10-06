@@ -81,10 +81,12 @@ export interface GameValidation {
  * 0 no file at all, 1 predates `inspect()`, 2 has `inspect()` and no HUD, 3 the one-screen
  * contract (HUD and input), 4 the M4 contract: the HUD is a lazy facade over `./hud.js` and an
  * eye camera is borrowed from the game and given back, 5 the HUD facade forwards arc, panel,
- * path, image and font and reports a bounded summary before the module loads.
+ * path, image and font and reports a bounded summary before the module loads, 6 the racing-line
+ * assist (`config.steer`, `assist()`) the harness's drive and its throttle-only bot steer by.
  */
 export function studioContractGeneration(source: string | null): number {
   if (source === null) return 0;
+  if (/\bwithAssistKeys\s*\(/.test(source)) return 6;
   if (/\bunloadedHudSummary\s*\(/.test(source)) return 5;
   if (/\bcreateHudFacade\s*[(=]/.test(source) || /\bborrowedCamera\b/.test(source)) return 4;
   if (!/\binspect\s*[(:]/.test(source)) return 1;
@@ -151,6 +153,10 @@ const SHIPPED_STUDIO_DIGESTS: Readonly<Record<string, number>> = {
   "3fa898dbff35227ae6815493b46ac252aa95ab7fe180150a10e05362a1ca2ece": 4,
   "64dc5359ff81f8edd7ab815c2d48ca114db0a065dd95bb8a72df1dbccc4faf31": 4,
   a7221ced2600350b8d8ade6dd6da421fe766132c611c5b6651fa7fad86ea9102: 4,
+  // Generation 5: arcs, panels, paths, images and fonts, in its two revisions before the
+  // racing-line assist (the second is the NFS run's, 2026-10-06).
+  "77f1c1d367c1e63225ff34b10136c04c4866932793a754ce0ff381ae1c7cd384": 5,
+  f5f4cc72c37a789c4f1c1b66bf69bd7e63fa7fe0f1993498f36a72872a62b2da: 5,
 };
 
 /**

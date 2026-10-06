@@ -9,6 +9,10 @@
 export const GameClock = { Start: "start", Pause: "pause" } as const;
 export type GameClock = (typeof GameClock)[keyof typeof GameClock];
 
+/** The `__studio` verb that lets a racing game's own line (`config.steer`) steer the held keys. */
+export const GameSteer = { Assist: "assist" } as const;
+export type GameSteer = (typeof GameSteer)[keyof typeof GameSteer];
+
 /**
  * Which surface a capture photographs (M4.5/M4.9a). `canvas` is what the game draws, `page` is
  * the whole compositor frame — the DOM menu, the HTML HUD, the loader — and `auto` lets the

@@ -221,6 +221,8 @@ async function builderNotes({ facet, workdir }: FacetLoop): Promise<string> {
 /** The round as the next brief remembers it: what flipped, what it cost, why it lost, and the builder's own notes. */
 async function attemptRecordOf(loop: FacetLoop, round: FacetRound): Promise<AnyRecord> {
   const notes: string = round.attemptNotes ?? (await builderNotes(loop));
+  // The demos this round's look left out, for the builder's next prompt (facet/prompt.ts).
+  const skipped: string[] = Array.isArray(round.evidence?.skippedDemos) ? round.evidence.skippedDemos : [];
   return {
     iteration: round.iteration,
     won: round.won,
@@ -234,6 +236,7 @@ async function attemptRecordOf(loop: FacetLoop, round: FacetRound): Promise<AnyR
       ? `iteration ${round.iteration}: accepted`
       : `iteration ${round.iteration}: ${clip(round.verdict.reason, ATTEMPT_REASON_CHARS)}`,
     notes: notes.slice(-ATTEMPT_NOTES_CHARS),
+    ...(skipped.length ? { skippedDemos: skipped } : {}),
   };
 }
 

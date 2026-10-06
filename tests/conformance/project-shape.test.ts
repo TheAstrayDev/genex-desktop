@@ -1682,6 +1682,9 @@ describe("the contract upgrade", () => {
 
   const m4Studio = () =>
     readFile(path.join(repo, "tests", "fixtures", "shipped", "studio-generation-4.js.txt"), "utf8");
+  /** The contract the template shipped before the racing-line assist (the NFS run, 2026-10-06). */
+  const arcsStudio = () =>
+    readFile(path.join(repo, "tests", "fixtures", "shipped", "studio-generation-5.js.txt"), "utf8");
   const firstHud = () => readFile(path.join(repo, "tests", "fixtures", "hud-generation-1.js.txt"), "utf8");
   const templateHud = () => readFile(path.join(repo, "src", "game-template", "src", "hud.js"), "utf8");
 
@@ -1706,9 +1709,13 @@ describe("the contract upgrade", () => {
 
   it("reads the shipped template as newer than every copy that came before it", async () => {
     const shipped = await readFile(path.join(repo, "src", "game-template", "src", "studio.js"), "utf8");
-    assert.equal(studioContractGeneration(shipped), 5, "the shipped contract is the current one");
+    // Flipped for the NFS run (2026-10-06): the racing-line assist is generation 6.
+    assert.equal(studioContractGeneration(shipped), 6, "the shipped contract is the current one");
     // The contract every game scaffolded since M4 holds: its HUD facade has no arc, panel or path.
     assert.equal(studioContractGeneration(await m4Studio()), 4);
+    // The one before the assist: arcs and panels, and no racing line to steer by.
+    assert.equal(studioContractGeneration(await arcsStudio()), 5);
+    assert.equal(shippedStudioGeneration(await arcsStudio()), 5, "a game scaffolded with it is upgraded");
     // Only a copy the studio shipped may be replaced: the released one is, an edited one is not,
     // and the current template is not an older shipped one.
     assert.equal(shippedStudioGeneration(await m4Studio()), 4);
@@ -1766,7 +1773,8 @@ describe("the contract upgrade", () => {
     assert.equal(result.backup, "src/studio.v4.js", "its predecessor is kept beside it, named for its vintage");
     assert.equal(await readFile(path.join(dir, "src", "studio.v4.js"), "utf8"), await m4Studio());
     const upgraded = await readFile(studio, "utf8");
-    assert.equal(studioContractGeneration(upgraded), 5);
+    // Flipped for the NFS run (2026-10-06): the template is generation 6.
+    assert.equal(studioContractGeneration(upgraded), 6);
     assert.match(upgraded, /returnCamera/, "the eye camera is given back — the bug M4 fixed");
 
     // And the second call is a no-op: the game now holds what the template holds.
@@ -1774,6 +1782,12 @@ describe("the contract upgrade", () => {
       upgraded: false,
       materialsAdded: false,
     });
+
+    // A game scaffolded with the contract before the racing-line assist gets it too.
+    await writeFile(studio, await arcsStudio());
+    const assisted = (await api["game.upgradeContract"]!({ project: "aged" } as never)) as { backup: string };
+    assert.equal(assisted.backup, "src/studio.v5.js");
+    assert.equal(studioContractGeneration(await readFile(studio, "utf8")), 6);
   });
 
   /**

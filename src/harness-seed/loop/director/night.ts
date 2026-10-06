@@ -704,6 +704,7 @@ export async function evidenceOf(
     viewport = null,
     maxDemos = Infinity,
     requiredDemos = [],
+    challenge = false,
   }: {
     handle?: string | null;
     label: string;
@@ -722,6 +723,8 @@ export async function evidenceOf(
      */
     maxDemos?: number;
     requiredDemos?: string[];
+    /** Race the throttle-only bot after the demos (evidence.ts): the art director's whole-game look. */
+    challenge?: boolean;
   },
 ): Promise<Evidence> {
   const { ctx, run } = night;
@@ -740,6 +743,7 @@ export async function evidenceOf(
     audio: true,
     maxDemos,
     ...(requiredDemos.length ? { requiredDemos } : {}),
+    ...(challenge ? { challenge } : {}),
     setup: setup === undefined ? run.setup : setup,
     scaffold,
     inheritedConsole,

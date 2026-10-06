@@ -669,7 +669,8 @@ async function judgeOnWindow(night: Night, ask: JudgeAsk, handle: string | null)
     scaffold: state.baseHeads.has(head),
     inheritedConsole: consoleInheritedBy(target.worker),
     // The art director looks at a real screen's size; the window is 960×600 again once released.
-    ...(ask.ship ? { viewport: SHIP_VIEW } : {}),
+    // Its whole-game look also races the throttle-only bot, whose place it is told (NFS run).
+    ...(ask.ship ? { viewport: SHIP_VIEW, challenge: true } : {}),
   });
   const onIntegration = target.root === integrationWorktree;
   rememberJudgedHead(night, head, evidence);

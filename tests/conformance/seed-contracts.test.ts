@@ -47,7 +47,7 @@ import * as duration from "../../src/shared/duration.ts";
 import { DelegationRefusal, EngineFailureKind, StopReason } from "../../src/shared/engine-requests.ts";
 import * as queue from "../../src/shared/message-queue.ts";
 import * as roles from "../../src/shared/model-roles.ts";
-import { GameFront, PreviewConsoleSource, PreviewGone } from "../../src/shared/preview-contract.ts";
+import { GameFront, GameSteer, PreviewConsoleSource, PreviewGone } from "../../src/shared/preview-contract.ts";
 import { EngineId } from "../../src/shared/providers.ts";
 import {
   CompletionPolicy,
@@ -423,6 +423,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("calls the game's front-end verb by the name the harness drives it with", () => {
     assert.equal(GameFront.Begin, seedPageMethod.Begin);
+  });
+
+  it("calls the racing-line assist by the name the harness steers with", () => {
+    assert.equal(GameSteer.Assist, seedPageMethod.Assist);
   });
 
   it("reads why the host refused a delegation the same way", () => {

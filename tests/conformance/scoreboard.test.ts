@@ -41,6 +41,7 @@ import {
   demosNamedByChecks,
   loadCatalogue,
   MAX_CRAFT,
+  normalizeCheck,
   normalizeFacetSpec,
   normalizeGameTraits,
   recordCatalogueOutcomes,
@@ -727,6 +728,8 @@ describe("the board a game actually carries", () => {
       { id: "f", checks: [] as Check[] },
       { ownsMain: true, game: { kind: "racing" } as never },
     ).checks as { id: string; expr?: string; needs?: string[]; weight: string }[];
+    // Flipped for the NFS run (2026-10-06): the entry owner of a racer also carries the race a
+    // throttle-only bot must not win.
     assert.deepEqual(racing.map((c) => c.id).sort(), [
       "hud-coverage",
       "hud-overlap",
@@ -734,6 +737,7 @@ describe("the board a game actually carries", () => {
       "no-dom-ui",
       "reaches-play",
       "single-hud",
+      "throttle-bot-loses",
     ]);
     const coverage = racing.find((c) => c.id === "hud-coverage")!;
     assert.equal(coverage.expr, "hud.coverage <= 0.18");
@@ -749,6 +753,33 @@ describe("the board a game actually carries", () => {
       "no-dom-ui",
       "single-hud",
     ]);
+  });
+
+  it("NFS-F4d. a throttle-only bot won both games: its race rides on the entry owner of a racer or a craft, never a part or the front-end's owner", () => {
+    const owned = (game: Record<string, unknown>, options: Record<string, unknown> = {}) =>
+      withHarnessChecks({ id: "f", checks: [] as Check[] }, { ownsMain: true, game, ...options } as never).checks;
+    const bot = owned({ kind: "racing" }).find((c: Check) => c.id === "throttle-bot-loses");
+    assert.ok(bot, "the entry owner of a racer carries the challenge");
+    assert.equal(bot.kind, "probe");
+    assert.equal(bot.after, "throttle-bot", "it reads the state the throttle-only bot's race left");
+    assert.equal(bot.expr, "race.position > 1");
+    assert.deepEqual(bot.needs, ["race.position"], "a game that reports no race is not asked");
+    assert.equal(bot.weight, "normal", "the challenge never decides whether a part is done");
+    assert.ok(owned({ kind: "flight" }).some((c: Check) => c.id === "throttle-bot-loses"));
+    const ownScript = { kind: "racing", playScript: [{ type: "tap", keys: ["x"] }] };
+    assert.ok(
+      owned(ownScript).some((c: Check) => c.id === "throttle-bot-loses"),
+      "the bot holds the kind's throttle",
+    );
+    for (const game of [{ kind: "first-person" }, { kind: "top-down" }, {}]) {
+      assert.ok(!owned(game).some((c: Check) => c.id === "throttle-bot-loses"), JSON.stringify(game));
+    }
+    const part = withHarnessChecks({ id: "f", checks: [] }, { game: { kind: "racing" } as never }).checks;
+    assert.ok(!part.some((c: Check) => c.id === "throttle-bot-loses"), "a part that does not own main is not asked");
+    const frontEnd = owned({ kind: "racing" }, { keepsFrontEnd: true });
+    assert.ok(!frontEnd.some((c: Check) => c.id === "throttle-bot-loses"), "the title's owner is judged on its menu");
+    // The normalised check keeps what it reads.
+    assert.equal(normalizeCheck({ ...bot } as never)?.after, "throttle-bot");
   });
 
   it("a harness check whose needs the build does not report is not its question: no nudge, no count, no lost lesson", () => {
@@ -915,7 +946,7 @@ describe("the board a game actually carries", () => {
     assert.match(racer, /lap-time-drops/);
     assert.match(
       racer,
-      /Already on this game's board \(harness-owned, do not re-declare\): no-dom-ui, single-hud, hud-coverage, hud-overlap, keys-move-player, reaches-play\./,
+      /Already on this game's board \(harness-owned, do not re-declare\): no-dom-ui, single-hud, hud-coverage, hud-overlap, keys-move-player, reaches-play, throttle-bot-loses\./,
     );
     // Two families have recorded it: it has stopped being one genre's opinion.
     catalogue.checks["lap-time-drops"].kinds = ["racing", "static-board"];

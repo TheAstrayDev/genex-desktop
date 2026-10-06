@@ -23,6 +23,10 @@ export const PageMethod = {
   Audio: "audio",
   /** Past the game's title, menu and countdown into play (`config.begin`), left paused. */
   Begin: "begin",
+  /** The racing-line assist on or off (`{ steer: true }`): the game's `config.steer` steers through the player's keys. */
+  Assist: "assist",
+  /** The steering the game's racing line asks for now (`config.steer`), -1 full left … 1 full right. */
+  Steer: "steer",
 } as const;
 export type PageMethod = (typeof PageMethod)[keyof typeof PageMethod];
 

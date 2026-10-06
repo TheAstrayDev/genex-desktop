@@ -342,9 +342,18 @@ const SELFTEST_STEPS: readonly SelftestStep[] = [
         normalizeFacetSpec({ id: "gun", intent: "a gun", checks: [{ id: "single-hud", kind: "scene", js: "true" }] }),
         { ownsMain: true, game: firstPerson },
       );
+      // A racer's main owner carries the one a first-person game cannot (the throttle-only bot's race).
+      const racer = withHarnessChecks(
+        { id: "car", checks: [] as Check[], cameras: [] },
+        {
+          ownsMain: true,
+          game: { kind: "racing" },
+        },
+      );
+      const ridesOnce = (id: string, board: { checks: Check[] }) => board.checks.filter((c) => c.id === id).length;
       check(
         "every harness check, no duplicate",
-        Object.keys(HARNESS_CHECKS).every((id) => spec.checks.filter((c) => c.id === id).length === 1),
+        Object.keys(HARNESS_CHECKS).every((id) => Math.max(ridesOnce(id, spec), ridesOnce(id, racer)) === 1),
       );
       check(
         "the HUD budget is the kind's",
