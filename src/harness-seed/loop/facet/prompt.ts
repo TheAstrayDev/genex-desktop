@@ -8,6 +8,7 @@ import { DEFAULT_CAMERA } from "../cameras.ts";
 import { FacetStage, moveEscalated, stageOf } from "./stage.ts";
 import { FINISH_FIX_ASK, FINISH_PROMPT_LINE, finishLossEscalate } from "./stage-prompts.ts";
 import { scopeLines } from "../scope-prompts.ts";
+import { heldHudPromptDraws } from "../held-hud-prompts.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** Reference stills into the first brief, and pair images later, at most. */
@@ -570,7 +571,7 @@ function ownShapeLine({ entryMain, shape }: PromptInput): string {
   return `- THIS GAME HAS ITS OWN SHAPE: its entry is ${entryMain}${built} and the studio serves ${shape?.entry ?? "index.html"}. Keep its UI and input handling as they are — no __studio.hud overlays, no second input path. Keep window.__studio working (installStudio in ${entryMain}).${runBuild}`;
 }
 
-function oneScreenLine({ spec: facet }: PromptInput): string {
+function oneScreenLine({ spec: facet, run }: PromptInput): string {
   // Only the harness-owned checks this facet actually carries — under the declared-only rule a
   // board may carry none of them, and naming a check nobody scores teaches the wrong lesson.
   const harnessOnBoard = (facet.checks ?? [])
@@ -580,7 +581,11 @@ function oneScreenLine({ spec: facet }: PromptInput): string {
   const enforced = harnessOnBoard.length
     ? ` The harness-owned check${one ? "" : "s"} ${harnessOnBoard.join(", ")} enforce${one ? "s" : ""} this.`
     : "";
-  return `- ONE SCREEN, ONE INPUT PATH: all UI through __studio.hud (drawn into the canvas: text, bars, arcs and gauges, paths, images, panels and fonts, anchored in frame fractions; keep the middle of the view for the game — the harness measures the HUD's coverage and overlap; no DOM, no second HUD); all input from ctx.keys / ctx.look / ctx.wheel (studio.js owns pointer lock and the mouse).${enforced} A label that belongs to something in the world — a player's name, a marker over a target — is a sprite or mesh in the scene, attached to that object and tagged with it (never hud), so it moves and hides with it; __studio.hud holds only what stays on the screen.`;
+  // A game keeping an edited older HUD (held-hud.ts) is told only what that HUD draws.
+  const draws =
+    heldHudPromptDraws(run) ??
+    "drawn into the canvas: text, bars, arcs and gauges, paths, images, panels and fonts, anchored in frame fractions; keep the middle of the view for the game — the harness measures the HUD's coverage and overlap";
+  return `- ONE SCREEN, ONE INPUT PATH: all UI through __studio.hud (${draws}; no DOM, no second HUD); all input from ctx.keys / ctx.look / ctx.wheel (studio.js owns pointer lock and the mouse).${enforced} A label that belongs to something in the world — a player's name, a marker over a target — is a sprite or mesh in the scene, attached to that object and tagged with it (never hud), so it moves and hides with it; __studio.hud holds only what stays on the screen.`;
 }
 
 /** The last build's news: its failure, the legacy gap, or the board. */

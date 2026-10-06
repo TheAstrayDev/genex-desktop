@@ -6101,3 +6101,46 @@ describe("a module contract before loop workers", () => {
     assert.equal(finished.landed, false, "the start and a document are nothing to land");
   });
 });
+
+describe("a game that keeps its own edited HUD", () => {
+  it("notes the first-generation HUD it leaves alone, and keeps the owner's copy", async () => {
+    const rig = await startRig(
+      { replies: [] },
+      { previewPoolMax: 2, createHeadlessPreview: async () => makeFakePreview() },
+    );
+    rigs.push(rig);
+    const project = await rig.core.games.scaffold("held-hud", { title: "Held HUD" });
+    // The game's first HUD, with the owner's own gauge helper in it: theirs, so the upgrade keeps it.
+    const hudFile = path.join(project.dir, "src", "hud.js");
+    const first = await readFile(path.join(import.meta.dirname, "..", "fixtures", "hud-generation-1.js.txt"), "utf8");
+    const edited = `${first}// the main owner's own gauge helper\n`;
+    await writeFile(hudFile, edited);
+    fakeEngine(rig, async (request) => {
+      if (!request.director) throw new Error("no worker is started");
+      await request.onLiveTool!("finish", { summary: "nothing to build", land: "no" });
+      return { ok: true, engine: "codex", turns: 1, usage: {}, sessionId: "director-held", summary: "finished" };
+    });
+
+    const runId = rig.core.newRunId();
+    await rig.core.dispatchRun({
+      runId,
+      goal: "a dashboard",
+      project: project.name,
+      mode: "autopilot",
+      engine: "codex",
+      reference: { name: "dash", shots: [] },
+      budgets: { wallClockMs: 15 * 60_000 },
+    });
+    const events = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "run_finished").some((e) => e.runId === runId),
+      120_000,
+      "held-HUD run_finished",
+    );
+    const cards = customEvents(events, "autopilot_decision").filter((e) => e.runId === runId);
+    const held = cards.find((e) => /left src\/hud\.js at HUD generation 1/.test(String(e.decision)));
+    assert.ok(held, cards.map((e) => String(e.decision)).join(" | "));
+    assert.match(String(held.plain), /text, bars and the crosshair/);
+    assert.equal(await readFile(hudFile, "utf8"), edited, "the owner's HUD is untouched");
+  });
+});

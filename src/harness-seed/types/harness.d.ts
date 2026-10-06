@@ -119,6 +119,8 @@ export interface Run extends RunSpec {
   readiness?: AnyRecord | null;
   /** What earlier nights on this game cost (ledger.ts), one sentence each. */
   gameLessons?: string[];
+  /** The generation of an edited, older `src/hud.js` the game keeps (held-hud.ts); absent when it holds the template's. */
+  heldHudGeneration?: number;
   blender?: unknown;
   optimizationDeadline?: number;
   optimizationThreadId?: string;

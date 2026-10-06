@@ -28,6 +28,7 @@ import { nightClock, restoreNight } from "./journal.ts";
 import { clampDirectorMemory } from "./memory.ts";
 import { outcomesAwaitPlan, reopenCommits, reopenMarkOf } from "./reopen.ts";
 import { startingHeads } from "./rules.ts";
+import { noteHudUpgrade } from "../held-hud.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../../types/harness.d.ts";
 import type { ProjectShape, ReferenceFrame } from "../../types/host-api.d.ts";
 import type { Evidence } from "../evidence.ts";
@@ -239,6 +240,9 @@ async function readyTheGame(night: Night): Promise<string> {
       `upgraded src/studio.js to the v2 contract (the previous copy is kept as ${upgraded.backup})`,
       "updated the game's connection to the studio so this build's work can be checked",
     );
+  // An edited older HUD stays and is said so; its generation rides on the run into every brief.
+  const hud = noteHudUpgrade(run, upgraded);
+  if (hud) await decision(hud.decision, hud.plain);
   await ctx.call(HostMethod.PreviewLoad, { project: run.project }).catch(() => {});
   const games = await ctx.call(HostMethod.GameList, {}).catch(() => []);
   const projectDir = games.find((g: AnyRecord) => g.name === run.project)?.dir ?? null;

@@ -76,6 +76,7 @@ import { readJournal, writeJournal } from "./run-journal.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON } from "./text.ts";
 import { MINUTE_MS, SECOND_MS, sleep } from "./time.ts";
 import { isPlainRecord } from "./json.ts";
+import { noteHudUpgrade } from "./held-hud.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type { CompleteResponse, EngineDescriptor, Message, SnapshotRecord } from "../types/host-api.d.ts";
 import type { ScoutReport } from "./scout.ts";
@@ -1363,6 +1364,14 @@ async function prepareFolder(pipeline: Pipeline): Promise<void> {
       at: new Date().toISOString(),
     });
   }
+  // An edited older HUD stays and is said so; its generation rides on the run into every brief.
+  const hud = noteHudUpgrade(run, upgraded);
+  if (hud)
+    await appendRunEvent(ctx, threadId, RunEvent.AutopilotDecision, {
+      runId: run.runId,
+      decision: hud.decision,
+      at: new Date().toISOString(),
+    });
   await ctx.call(HostMethod.PreviewLoad, { project: run.project });
   pipeline.startingConsole = await inheritedConsoleAfterLoad(ctx);
   const games = await ctx.call(HostMethod.GameList, {}).catch(() => []);
