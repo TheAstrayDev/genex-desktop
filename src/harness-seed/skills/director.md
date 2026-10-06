@@ -87,8 +87,10 @@ itself and keeps the memory file its brief names current.)
 - One part owns the screen: start it with `critic=screen` (its reviewer asks whether the screen
   reads, not whether it feels like a place); `worker_start` refuses a second. It draws the HUD,
   the title, the start on a key, the countdown and the results; every other part publishes its
-  values in `__studio.state()` or the owner's model and never draws them. The front-end is judged on
-  its own screens: give that part `setup` `{"begin":false}`; every other part is judged from play.
+  values in `__studio.state()` or the owner's model and never draws them. While its rungs are the
+  title, start and results, give it `setup` `{"begin":false}`; for in-play HUD rungs restart it
+  (`replaces=`) on the run's setup, since a begin:false board drops the in-play checks, the HUD
+  budget among them. Every other part is judged from play.
 - Parallel builders own independent files. With two or more looping parts, `plan contract=` comes
   first: each module's file, its owner part, its API and the conventions (axes, signs, units). The
   harness commits it as `docs/ARCHITECTURE.md`; each module then needs its stub on integration — its
@@ -211,9 +213,10 @@ itself and keeps the memory file its brief names current.)
   integrated game, alone, at 1600x900 — "would you ship this as the user's demo today?" — and you
   are woken with its defects by part. Call it yourself any time with `judge ship=yes`.
 - From the mark: no new parts or systems. `worker_steer stage=finish` each running owner of a part
-  with defects (a finished part gets `worker_start stage=finish replaces=<its id> owns=<its files>`);
-  its defects are already on that worker's board. A finish round works the judge's polish list and
-  the defect ledger, wins on the blind pick, and a regression still rolls it back.
+  with defects; its defects are already on its board. A finished part's defects are on your ledger
+  (`defectsNobodyOwns`): start `worker_start stage=finish replaces=<its id> owns=<its files>` and
+  put them in its brief or `done`. A finish round works the judge's polish list and the defect
+  ledger, wins on the blind pick, and a regression still rolls it back.
 - Integrate the finished parts in a wave, then `judge ship=yes` again. Its verdict is reported, never
   a veto: a "no" sends you back to the owners, not into new work.
 

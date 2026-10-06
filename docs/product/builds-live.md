@@ -2,7 +2,7 @@
 
 ## From a request to a game
 
-Auto edits directly; Loop can delegate workers (four by default) while the chat leads.
+Auto edits directly; Loop can delegate workers (four by default; a chosen number stays) while the chat leads.
 Parts grow boldly within the ask; from the finish mark an art director reviews the whole game and
 its defects go back to their parts for polish: a verdict, never a veto.
 Timed builds use their window; until-satisfied ones finish on verified required outcomes, time

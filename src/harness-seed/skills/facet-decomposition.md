@@ -108,17 +108,18 @@ A check is a number or a boolean the harness can compute, phrased so that a fail
 the builder what to change, about what a player gets: the race reaches its results, the speed
 reads at a glance, the frame rate holds, the console stays clean. How much the build draws (HUD
 items, draw calls, triangles) is bounded only from above — the harness refuses a floor — and a
-vision check asks what a player can see or read, never the technique that draws it. "Roof pitch 38–45°" is a scene check over the roof mesh normals;
-"no more than 2% of pixels above 0.9" is a pixel check on the camera that shows the sky; "the
-player moved" is a probe check on delta('player.x'). Write the number down once, in the check —
-never only in the prose.
+vision check asks what a player can see or read, never the technique that draws it. "Roof pitch
+38–45°" is a scene check over the roof mesh normals; "no more than 2% of pixels above 0.9" is a
+pixel check on the camera that shows the sky; "the player moved" is a probe check on
+delta('player.x'). Write the number down once, in the check — never only in the prose.
 
 ## File ownership
 
 Facets that all edit `src/main.js` conflict at merge time by construction. Give every facet its
 own module under `src/` (`city.js`, `lighting.js`, `movement.js`) in `owns`, and name in `base`
-what each module exports for the others and the conventions they share (axes, signs, units): that
-is their contract, and no facet edits another's module — what it needs goes through the API. When
+(its notes and files) what each module exports for the others and the conventions they share
+(axes, signs, units): the base builder writes that contract as the shared stubs every facet forks
+from, and no facet edits another's module — what it needs goes through the API. When
 the game carries `docs/ARCHITECTURE.md`, it is that contract already. The `mainOwner`
 facet is the only one that may restructure `src/main.js` and `src/studio.js`. Non-owner facets
 touch main.js only to add their single import + init line inside the marked FACET WIRING block,
