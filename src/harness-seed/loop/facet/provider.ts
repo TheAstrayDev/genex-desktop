@@ -23,15 +23,16 @@ import type { FacetLoop, FacetRound } from "./state.ts";
 /** How often a round waiting for its provider looks again: a stop, its clock, the provider back. */
 const PROVIDER_POLL_MS = 30 * SECOND_MS;
 
+/** How long a session limit that names no reset is waited for before the round is tried again. */
+const UNNAMED_RESET_WAIT_MS = MINUTE_MS;
+/** Who ended a round the facet's own clock ran out on while it waited (`facet_stopped.by`). */
+const WAITED_OUT_BY = "provider";
+
 /** How often this run's waiting rounds look again: its own knob (`budgets.providerPollMs`, tests), else `PROVIDER_POLL_MS`. */
 function pollMs(loop: FacetLoop): number {
   const own = loop.run?.budgets?.providerPollMs;
   return typeof own === "number" && own > 0 ? own : PROVIDER_POLL_MS;
 }
-/** How long a session limit that names no reset is waited for before the round is tried again. */
-const UNNAMED_RESET_WAIT_MS = MINUTE_MS;
-/** Who ended a round the facet's own clock ran out on while it waited (`facet_stopped.by`). */
-const WAITED_OUT_BY = "provider";
 
 /** A lost provider, as a round waits on it. */
 export interface LostProvider {
@@ -55,7 +56,7 @@ function liftsAt(loop: FacetLoop, err: AnyRecord, now: number): number | null {
 
 /**
  * The provider loss `err` names for `engine`, or null for any other failure: a lost sign-in or a
- * limit (its circuit opens for the whole run, outage.ts), or an outage (`isTransientProviderError`)
+ * limit (its circuit opens for the whole run, provider-loss.ts), or an outage (`isTransientProviderError`)
  * tried again after the last step of the run's outage ladder.
  */
 export function lostProviderOf(loop: FacetLoop, err: unknown, engine: string, now = Date.now()): LostProvider | null {

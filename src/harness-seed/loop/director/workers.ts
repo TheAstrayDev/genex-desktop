@@ -1686,7 +1686,7 @@ function delegateSingle(night: Night, worker: Worker, prompt: string, resume: st
       ownership: singleOwnership(night, worker),
     })
     .catch((err: any) => {
-      // A sign-in or a limit the builders' engine lost holds it for the whole run (outage.ts).
+      // A sign-in or a limit the builders' engine lost holds it for the whole run (provider-loss.ts).
       noteProviderLoss(run.runId, roleEngine(run, RoleKey.Builder), err);
       return failedDelegation(night, err);
     });

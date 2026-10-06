@@ -674,9 +674,9 @@ an outage the patience ladder could not outlast, a 529 the session returned incl
 night (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
 or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and no learning pass
 until the run ends. A sign-in, cap or reset-naming limit opens that engine's circuit for the run
-(`loop/outage.ts`): judge, critic and ship-review calls to it fail at once with its kind until the
-run starts again or the limit resets, and a sign-in any engine of the run lost pauses the night at
-the lead's next turn or wake. A worker round the provider failed (`facet/provider.ts`) is recorded
+(`loop/provider-loss.ts`): judge, critic and ship-review calls to it fail at once with its kind
+until the run starts again or the limit resets (ten minutes at most for a loss that names no end),
+and a sign-in any engine of the run lost pauses the night at the lead's next turn or wake. A worker round the provider failed (`facet/provider.ts`) is recorded
 as `facet_provider_outage` with `lost`, never judged, struck or rolled back: its build or
 verification waits for the provider and runs again, a run's stop keeps it on its `…-stopped` ref,
 and a usage cap still stops the worker with its limit for the lead.

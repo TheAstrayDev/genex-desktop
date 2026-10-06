@@ -790,7 +790,7 @@ async function pauseOnProvider(night: Night, err: any, now: number): Promise<boo
 }
 
 /**
- * A sign-in lost on any engine of the run — a worker's, a judge's (outage.ts `lostSignIn`) — pauses
+ * A sign-in lost on any engine of the run — a worker's, a judge's (provider-loss.ts `lostSignIn`) — pauses
  * the night at the lead's next turn: no worker can build and no round can be judged until the user
  * fixes it. Answers whether the night is paused on one.
  */

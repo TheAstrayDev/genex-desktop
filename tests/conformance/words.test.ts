@@ -590,6 +590,18 @@ describe("verdicts", () => {
       stoppedWords("the director's session ended (failed) before it called finish; nothing was landed (land=no)"),
       "the engine's session ended early",
     );
+    assert.equal(
+      stoppedWords(
+        "the engine lost its sign-in before the director called finish (Your organization has disabled Claude subscription access for Claude Code); the run is paused — sign in again (or have the admin turn access back on), then Resume; nothing was landed (the run paused on its provider; nothing is made live that nobody could check)",
+      ),
+      "the model provider stopped accepting the account — sign in again, then Resume",
+    );
+    assert.equal(
+      stoppedWords(
+        "the engine's provider stayed down before the director called finish (529 overloaded); the run is paused — Resume it once the provider is back; nothing was landed (the run paused on its provider; nothing is made live that nobody could check)",
+      ),
+      "the model provider stayed down — Resume picks the build up",
+    );
     assert.equal(stoppedWords("interrupted by restart"), "the studio restarted");
     // Nothing but the landing clause: then it really is the only thing there is to say.
     assert.equal(stoppedWords("nothing was landed (land=no)"), "nothing was made live");

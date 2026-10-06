@@ -382,7 +382,7 @@ export async function askJudgeFor(ctx: HarnessCtx, ask: JudgeAsk): Promise<Judge
     try {
       response = await ctx.call(HostMethod.EngineComplete, judgeRequest(ctx, ask, using, sha));
     } catch (err) {
-      // A sign-in gone or a limit opens the engine's circuit for the whole run (outage.ts), and
+      // A sign-in gone or a limit opens the engine's circuit for the whole run (provider-loss.ts), and
       // the failure then names the engine, so whoever waits for it knows which one.
       const loss = noteProviderLoss(run.runId, using.engine, err);
       await recoverOrThrow(ctx, run, using, loss ? providerLostError(loss) : err, attempt);
@@ -490,7 +490,7 @@ async function recoverOrThrow(
 }
 
 /**
- * A judge engine the run has lost (outage.ts `providerLossFor`: its sign-in gone, its cap, a limit
+ * A judge engine the run has lost (provider-loss.ts `providerLossFor`: its sign-in gone, its cap, a limit
  * not yet reset) is not asked again: the verdict moves to the fallback when a throttle allows one
  * (answers true: ask that), and otherwise fails at once with the loss's own kind, so the round
  * waits instead of sending call after call to a dead account (the NFS run sent thirteen).

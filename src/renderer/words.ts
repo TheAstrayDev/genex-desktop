@@ -499,6 +499,11 @@ function whyItEnded(why: string): string | null {
     return said ? `stopped by the lead — ${withoutIds(said)}` : "stopped by the lead";
   }
   if (/^autopilot finished$/i.test(why)) return "the build finished";
+  // A lost provider paused it (harness provider-loss.ts `pauseEnding`): what to fix, never the provider's own words.
+  if (/^the engine lost its sign-in\b/i.test(why))
+    return "the model provider stopped accepting the account — sign in again, then Resume";
+  if (/^the engine's provider stayed down\b/i.test(why))
+    return "the model provider stayed down — Resume picks the build up";
   // The engine's own limit is the one ending a user can act on: it says when to come back.
   if (/usage cap|usage limit|session limit|rate limit/i.test(why))
     return "the engine hit its limit — the build can pick up again when it resets";
@@ -1135,7 +1140,7 @@ export function autoResumedWords(cause: unknown): string {
 export const AUTO_RESUME_SETTING_WORDS = {
   label: "Resume builds automatically",
   detail:
-    "When a session limit resets, a model provider’s outage has passed or Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.",
+    "When a session limit resets, a while after a model provider’s outage, or when Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.",
 } as const;
 
 export function resumedWords(parts: number): string {
