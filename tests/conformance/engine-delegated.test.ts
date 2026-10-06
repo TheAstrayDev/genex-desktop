@@ -1985,3 +1985,93 @@ describe("Compact now on claude code", () => {
     assert.equal(result.sessionId, SESSION, "the session is untouched and still resumable");
   });
 });
+
+/**
+ * The NFS run (6 Oct 2026): 3 h 05 min in, the provider answered every call with "Your organization
+ * has disabled Claude subscription access…". The CLI reported it as a `success`-subtype result
+ * flagged `is_error`, the text matched none of the sign-in words, and the run read a lost account as
+ * an ordinary failed turn: it closed, landed an unchecked build and sent thirteen more judge calls to
+ * the dead account. A revoked or disabled access is a sign-in failure the user has to fix.
+ */
+describe("an account whose access was taken away (provider lost)", () => {
+  /** The words the CLI said, exactly. */
+  const DISABLED =
+    "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+
+  /** The stream as the run's log recorded it: the CLI's message as an assistant text, then the result. */
+  const observed = (text: string, assistant: Record<string, unknown> = {}, result: Record<string, unknown> = {}) => [
+    { type: "system", subtype: "init", model: "claude-opus-5-5", session_id: "ses_lead", tools: [] },
+    { type: "assistant", message: { content: [{ type: "text", text }] }, parent_tool_use_id: null, ...assistant },
+    {
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      num_turns: 5,
+      total_cost_usd: 15.904740000000002,
+      result: text,
+      ...result,
+    },
+  ];
+
+  const isAuth = (err: unknown): boolean => {
+    assert.ok(err instanceof EngineError, String(err));
+    assert.equal(err.kind, "auth", err.message);
+    return true;
+  };
+
+  it("D1. a disabled subscription reported inside a success result is a sign-in failure, and the engine stops claiming to be ready", async () => {
+    const engine = await engineWithLogin(fakeQuery(observed(DISABLED)).fn);
+    await assert.rejects(
+      () => engine.delegate({ prompt: "wake", cwd: "/tmp/x", resume: "ses_lead" }),
+      (err: unknown) => isAuth(err) && (err as Error).message.includes("disabled Claude subscription access"),
+    );
+    const after = await engine.status();
+    assert.equal(after.code, "needs_login");
+    assert.match(after.detail, /disabled Claude subscription access/);
+  });
+
+  it("D2. a judge that meets the same answer fails on sign-in, not as some other error to retry", async () => {
+    const engine = await engineWithLogin(fakeQuery(observed(DISABLED)).fn);
+    await assert.rejects(
+      () => engine.complete({ model: "opus", messages: [{ role: "user", content: "BUILD A vs BUILD B" }] }),
+      isAuth,
+    );
+  });
+
+  it("D3. the CLI's own error code on the reply decides, whatever the words, even when the result calls itself a success", async () => {
+    for (const [code, text, flagged] of [
+      ["oauth_org_not_allowed", "Claude Code is not available to this organization", true],
+      ["account_on_hold", "Request refused", false],
+      ["authentication_failed", "Request refused", true],
+    ] as const) {
+      const engine = await engineWithLogin(fakeQuery(observed(text, { error: code }, { is_error: flagged })).fn);
+      await assert.rejects(() => engine.delegate({ prompt: "build", cwd: "/tmp/x" }), isAuth, code);
+    }
+  });
+
+  it("D4. words that only look like it stay an ordinary failure (hostile inputs)", async () => {
+    const lookalikes: Array<[string, Record<string, unknown>]> = [
+      ["API Error: 529 Overloaded", { error: "overloaded" }],
+      ["I disabled the subscription button in the HUD", {}],
+      ["The organization has disabled tyre spray in the rain", {}],
+      ["Your account screen is disabled until the race ends", {}],
+      ["subscription access panel opened", {}],
+      ["Access to the pit lane was revoked by the race director", {}],
+    ];
+    for (const [text, assistant] of lookalikes) {
+      const engine = await engineWithLogin(fakeQuery(observed(text, assistant)).fn);
+      const result = await engine.delegate({ prompt: "build", cwd: "/tmp/x" });
+      assert.equal(result.ok, false, text);
+      assert.equal(result.errorText, text);
+      assert.equal((await engine.status()).code, "ready", `${text} leaves the sign-in alone`);
+    }
+    // A turn that answered after an error on its way is not a lost account.
+    const recovered = [
+      ...observed(DISABLED, { error: "oauth_org_not_allowed" }).slice(0, 2),
+      { type: "assistant", message: { content: [{ type: "text", text: "Built it." }] }, parent_tool_use_id: null },
+      { type: "result", subtype: "success", is_error: false, num_turns: 3, result: "Built it." },
+    ];
+    const engine = await engineWithLogin(fakeQuery(recovered).fn);
+    assert.equal((await engine.delegate({ prompt: "build", cwd: "/tmp/x" })).ok, true);
+  });
+});

@@ -25,7 +25,20 @@ import { durationCommission, goalCommission } from "./commission.ts";
  */
 import { isResumeFailure } from "../chat-session.ts";
 import { HostMethod } from "../host-methods.ts";
-import { EngineFailure, StopReason, outageDelays, withProviderPatience } from "../outage.ts";
+import {
+  EngineFailure,
+  engineLimitOf,
+  isProviderLoss,
+  isTransientProviderError,
+  lostSignIn,
+  noteProviderLoss,
+  outageDelays,
+  pauseDecision,
+  StopReason,
+  withProviderPatience,
+  type EngineLimit,
+} from "../outage.ts";
+import { CLIP_DETAIL } from "../text.ts";
 import { RunEvent } from "../run-events.ts";
 import { SteerDelivery } from "../steer-delivery.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
@@ -368,7 +381,8 @@ async function turnFacts(
   const finishRequested = await inbox.finishing().catch(() => false);
   return {
     ok: result?.ok === true,
-    closed: nightOver(night) || Boolean(state.limit) || wake.wrapping,
+    closed: nightOver(night) || wake.wrapping,
+    providerLost: Boolean(state.limit) || (await pauseOnLostSignIn(night, now)),
     running: runningWorkers().length,
     planWindowOpen: planWindowOpen(state, now),
     workersLimitPending: workersLimitPending(state, now),
@@ -747,6 +761,64 @@ function failedTurn(err: any): Partial<DelegateResult> {
   return { ok: false, stopReason: err?.kind ?? StopReason.Error, errorText: String(err?.message ?? err) };
 }
 
+/** The night pauses on `limit` (a provider loss), and its feed says why — once, whatever else failed after it. */
+async function pauseOn(night: Night, limit: EngineLimit): Promise<void> {
+  if (night.state.limit) return;
+  night.state.limit = limit;
+  const words = pauseDecision(limit.kind, String(limit.message).slice(0, CLIP_DETAIL));
+  await night.decision(words.line, words.plain);
+}
+
+/**
+ * A lead turn a lost provider ended pauses the night: a lost sign-in or a limit (the session's own
+ * catch has kept one already, director.ts `directorTalk`), or an outage the patience ladder could not
+ * outlast. A first turn pauses too: a provider gone is no crash of the night. Answers whether it did.
+ */
+async function pauseOnProvider(night: Night, err: any, now: number): Promise<boolean> {
+  if (night.ctx.cancelled) return false;
+  if (isProviderLoss(err?.kind)) {
+    // Judges on the lead's engine stop asking it too, until the run resumes or the limit resets.
+    noteProviderLoss(night.run.runId, night.run.engine, err, now);
+    await pauseOn(night, engineLimitOf(err, now));
+    return true;
+  }
+  if (!isTransientProviderError(err)) return false;
+  await pauseOn(night, {
+    kind: EngineFailure.Unavailable,
+    message: String(err?.message ?? err),
+    retryAfterMs: null,
+    at: now,
+  });
+  return true;
+}
+
+/**
+ * A sign-in lost on any engine of the run — a worker's, a judge's (outage.ts `lostSignIn`) — pauses
+ * the night at the lead's next turn: no worker can build and no round can be judged until the user
+ * fixes it. Answers whether the night is paused on one.
+ */
+async function pauseOnLostSignIn(night: Night, now: number): Promise<boolean> {
+  const lost = lostSignIn(night.run.runId, now);
+  if (!lost || night.ctx.cancelled) return false;
+  await pauseOn(night, {
+    kind: lost.kind,
+    message: `${lost.engine}: ${lost.message}`,
+    retryAfterMs: null,
+    at: lost.at,
+  });
+  return true;
+}
+
+/**
+ * Did the lead's turn come back failed on the provider's outage (a 529, a dropped gateway) rather
+ * than throw it? It is asked again on the outage ladder like a thrown one (`patientSession`).
+ */
+function endedOnOutage(result: Partial<DelegateResult>): boolean {
+  const failed = result?.ok === false && result.stopReason !== StopReason.Stopped;
+  if (!failed || isProviderLoss(result.stopReason)) return false;
+  return isTransientProviderError(String(result.errorText ?? ""));
+}
+
 /** Why the lead's session is gone and a fresh one must carry the night, or null when it is not. */
 function lostSessionWhy(talk: DirectorTalk, err: any): string | null {
   if (talk.sessionId && isResumeFailure(err)) return SESSION_LOST_WHY.resumeFailed;
@@ -818,12 +890,16 @@ async function freshSession(
 async function askSession(night: Night, kit: TurnKit, turn: TurnAsk): Promise<Partial<DelegateResult>> {
   const { talk, clock } = kit;
   for (let tries = 0; ; tries += 1) {
+    let result: Partial<DelegateResult>;
     try {
-      return await talk.session(turn.prompt, talk.sessionId, turn.deadline - clock.now());
+      result = await talk.session(turn.prompt, talk.sessionId, turn.deadline - clock.now());
     } catch (err: any) {
       if (!folderBusy(err) || tries >= MAX_BUSY_RETRIES || night.ctx.cancelled) throw err;
       await clock.sleep(BUSY_RETRY_MS);
+      continue;
     }
+    if (!endedOnOutage(result)) return result;
+    throw Object.assign(new Error(String(result.errorText)), { kind: EngineFailure.Unavailable });
   }
 }
 
@@ -858,7 +934,8 @@ async function sessionOrFresh(
   turn: TurnAsk,
 ): Promise<Partial<DelegateResult>> {
   const { talk } = kit;
-  const failed = (err: any): Partial<DelegateResult> => {
+  const failed = async (err: any): Promise<Partial<DelegateResult>> => {
+    if (await pauseOnProvider(night, err, kit.clock.now())) return failedTurn(err);
     if (wake.turns === 1 && !folderBusy(err)) throw err;
     return failedTurn(err);
   };
@@ -1158,6 +1235,8 @@ export async function runWakeLoop(
     const due = await sleepUntilDue(night, wake, kit);
     night.resting = false;
     if (!due) break;
+    // A sign-in a worker or a judge lost while the lead slept pauses the night before it is woken.
+    if (await pauseOnLostSignIn(night, clock.now())) break;
     const prompt = await wakePrompt(night, wake, due, clock);
     if (wake.wrapping) line?.shut();
     result = await takeTurn(night, wake, kit, prompt);

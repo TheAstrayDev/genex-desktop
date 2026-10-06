@@ -1073,6 +1073,7 @@ export function pausedWords(): string {
 const AUTO_RESUMED_WORDS = {
   [AutoResumeCause.LimitReset]: "Resumed automatically after the limit reset",
   [AutoResumeCause.LoopRestart]: "Resumed automatically after Studio’s loop restarted",
+  [AutoResumeCause.ProviderOutage]: "Resumed automatically to try the model provider again after its outage",
 } as const satisfies Record<AutoResumeCause, string>;
 
 /** The chat's line for a build the studio resumed on its own; a cause this version does not know still reads. */
@@ -1085,7 +1086,7 @@ export function autoResumedWords(cause: unknown): string {
 export const AUTO_RESUME_SETTING_WORDS = {
   label: "Resume builds automatically",
   detail:
-    "When a session limit resets or Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped.",
+    "When a session limit resets, a model provider’s outage has passed or Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.",
 } as const;
 
 export function resumedWords(parts: number): string {

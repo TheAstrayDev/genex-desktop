@@ -2857,7 +2857,7 @@ describe("a director's night through the real core and harness", () => {
     );
   });
 
-  it("a session limit ends the director: the head is kept on a ref, looked at again, landed on the judge's word, and the run pauses — then the user can play or land any build", async () => {
+  it("a session limit ends the director: the head is kept on a ref, nothing is landed, and the run pauses — then the user can play or land any build", async () => {
     const rig = await startRig(
       { replies: [] },
       { previewPoolMax: 2, createHeadlessPreview: async () => makeFakePreview() },
@@ -2925,12 +2925,15 @@ describe("a director's night through the real core and harness", () => {
     assert.equal(results.status1.integration.lastJudge?.ok, true, JSON.stringify(results.status1.integration));
     const head: string = results.status1.integration.head;
 
-    // The close: the limit named honestly, the head landed on a fresh look, the run paused for Resume.
+    // The close: the limit named honestly, the run paused for Resume — and nothing landed (provider
+    // lost, NFS 2026-10-06: a close on a lost provider cannot have the build checked, and Resume
+    // carries it on from its head).
     const finished = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
-    assert.equal(finished.landed, true, String(finished.stoppedBecause));
+    assert.equal(finished.landed, false, String(finished.stoppedBecause));
+    assert.equal((finished.landingResult as { why?: string }).why, "paused");
     assert.match(String(finished.stoppedBecause), /session limit/);
     assert.match(String(finished.stoppedBecause), /paused/);
-    assert.match(String(finished.stoppedBecause), /the integration branch was landed/);
+    assert.match(String(finished.stoppedBecause), /nothing was landed/);
     assert.doesNotMatch(String(finished.stoppedBecause), /ran out of time/);
     assert.equal((finished.limit as { kind: string }).kind, "rate_limit");
     // When the limit was hit, so the host's auto-resume counts the reset from then, not from the close.
@@ -2950,8 +2953,14 @@ describe("a director's night through the real core and harness", () => {
       decisions.some((d) => /the engine hit its session limit/.test(d)),
       decisions.join(" | "),
     );
-    assert.equal(await readFile(path.join(project.dir, "src", "sign.js"), "utf8"), "export const sign = 'open';\n");
-    await stat(path.join(rig.core.layout.runs, runId, "director", `close_${head.slice(0, 8)}`, "verdict.json"));
+    await assert.rejects(
+      readFile(path.join(project.dir, "src", "sign.js"), "utf8"),
+      "the game folder is as the user left it until the run resumes",
+    );
+    await assert.rejects(
+      stat(path.join(rig.core.layout.runs, runId, "director", `close_${head.slice(0, 8)}`, "verdict.json")),
+      "the paused close looks at nothing and judges nothing",
+    );
 
     // The ref outlives the worktree: the head is reachable in the game's repo.
     const api = rig.core.api() as unknown as Record<string, (p: unknown) => Promise<unknown>>;
@@ -2976,7 +2985,8 @@ describe("a director's night through the real core and harness", () => {
     assert.equal(await readFile(path.join(shown.dir, "src", "sign.js"), "utf8"), "export const sign = 'open';\n");
     assert.ok(rig.preview.loads.length > loadsBefore, "the user's window loaded the build");
     const landed = await rig.core.landBuild(project.name, head);
-    assert.equal(landed.how, "already", "the close had landed it");
+    assert.notEqual(landed.how, "already", "the paused close had landed nothing; the user's Make it live does");
+    assert.equal(await readFile(path.join(project.dir, "src", "sign.js"), "utf8"), "export const sign = 'open';\n");
     await assert.rejects(rig.core.showBuild(project.name, "deadbeef"), /not in/);
     await assert.rejects(rig.core.landBuild(project.name, "nonsense"), /not a commit hash/);
   });

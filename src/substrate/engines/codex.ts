@@ -89,6 +89,7 @@ import {
   COMPLETE_TIMEOUT_MS,
   hasCredentials,
   interruption,
+  isAccessLost,
   type PartialDelegateState,
   partialDelegateResult,
   STOPPED_BY_USER,
@@ -1149,7 +1150,8 @@ export class CodexEngine implements Engine {
     if (RATE_LIMIT_PATTERNS.some((re) => re.test(text))) {
       return new EngineError(EngineFailureKind.RateLimit, this.id, text, resetMs);
     }
-    if (AUTH_PATTERNS.some((re) => re.test(text))) {
+    // A sign-in gone stale, or the account's access taken away (the table both engines share).
+    if (AUTH_PATTERNS.some((re) => re.test(text)) || isAccessLost(text)) {
       return new EngineError(EngineFailureKind.Auth, this.id, `${text} — ${this.loginHint()}`);
     }
     if (UNAVAILABLE_PATTERN.test(text)) return new EngineError(EngineFailureKind.Unavailable, this.id, text);

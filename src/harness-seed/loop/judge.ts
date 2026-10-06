@@ -35,7 +35,7 @@ import { hudFactLines } from "./judge-facts.ts";
 import { hudBudgetFor } from "./hud-budget.ts";
 import { LIGHT_EFFORT } from "./config.ts";
 import { HostMethod } from "./host-methods.ts";
-import { EngineFailure } from "./outage.ts";
+import { EngineFailure, noteProviderLoss, providerLossFor, providerLostError } from "./outage.ts";
 import { MINUTE_MS, SECOND_MS, sleep } from "./time.ts";
 import { workingGoal } from "./goal-prompts.ts";
 import { judgeScopeLines, LIVENESS_SCOPE_RULE, PROPOSAL_SCOPE_RULE } from "./scope-prompts.ts";
@@ -376,10 +376,13 @@ export async function askJudgeFor(ctx: HarnessCtx, ask: JudgeAsk): Promise<Judge
   let reasks = 0;
   for (let attempt = 0; ; attempt++) {
     if (ctx.cancelled || pastDeadline(run)) throw new Error("optimization deadline or cancellation");
+    if (avoidLostProvider(ctx, run, using)) continue;
     let response: CompleteResponse;
     try {
       response = await ctx.call(HostMethod.EngineComplete, judgeRequest(ctx, ask, using, sha));
     } catch (err) {
+      // A sign-in gone or a limit opens the engine's circuit for the whole run (outage.ts).
+      noteProviderLoss(run.runId, using.engine, err);
       await recoverOrThrow(ctx, run, using, err, attempt);
       continue;
     }
@@ -482,6 +485,19 @@ async function recoverOrThrow(
     return;
   }
   if (!fallBack(ctx, using, failure)) throw err;
+}
+
+/**
+ * A judge engine the run has lost (outage.ts `providerLossFor`: its sign-in gone, its cap, a limit
+ * not yet reset) is not asked again: the verdict moves to the fallback when a throttle allows one
+ * (answers true: ask that), and otherwise fails at once with the loss's own kind, so the round
+ * waits instead of sending call after call to a dead account (the NFS run sent thirteen).
+ */
+function avoidLostProvider(ctx: HarnessCtx, run: Run, using: JudgeEngine): boolean {
+  const lost = providerLossFor(run.runId, using.engine);
+  if (!lost) return false;
+  if (fallBack(ctx, using, { kind: lost.kind, fallbacks: lost.fallbacks })) return true;
+  throw providerLostError(lost);
 }
 
 /** The run's optimization window has closed. */

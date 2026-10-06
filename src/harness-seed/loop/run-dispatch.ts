@@ -15,6 +15,7 @@ import { EventKind, ExecutionStatus, RunEvent, RunMode } from "./run-events.ts";
 import { type ActiveRun, RunnerKind, type RunStart, type Studio, heldRuns } from "./studio-state.ts";
 import { passCtx } from "./live-chat.ts";
 import { resumeStopped } from "./after-night.ts";
+import { forgetProviderLosses } from "./outage.ts";
 import type { AnyRecord, HarnessCtx, HarnessEvent, Host, Run } from "../types/harness.d.ts";
 import type { EngineDescriptor } from "../types/host-api.d.ts";
 
@@ -297,6 +298,8 @@ async function conductRun(
   ctx.runInbox = inbox;
   const described =
     run.mode === RunMode.Autopilot ? await host.call(HostMethod.EngineDescribe, {}).catch(() => []) : [];
+  // A run (a Resume included) starts trusting its providers again: a loss was the last stretch's.
+  forgetProviderLosses(run.runId);
   const report = await RUNNERS[chooseRunner(run, described)](ctx, { threadId, run, resume });
   closed();
   host.notify("run.finished", report);

@@ -285,8 +285,13 @@ export function nextWake(view: WakeView): Wake | null {
 /** What the loop knows when one of the lead's turns has ended. */
 export interface TurnFacts {
   ok: boolean;
-  /** The night is over for this session: finished, stopped, a limit it will not wait out, or the wrap-up turn done. */
+  /** The night is over for this session: finished, stopped, or the wrap-up turn done. */
   closed: boolean;
+  /**
+   * A provider is lost under the night — the lead's sign-in, a limit it will not wait out, an outage
+   * it could not outlast, or a sign-in a worker or judge lost (absent: none). The night pauses.
+   */
+  providerLost?: boolean;
   running: number;
   planWindowOpen: boolean;
   workersLimitPending: boolean;
@@ -313,10 +318,11 @@ const busy = (turn: TurnFacts): boolean => turn.running > 0 || turn.planWindowOp
  * A turn has ended. With work going on the lead rests until something happens; with nothing
  * running and time left it is asked once what next, and a second idle turn starts the wrap-up —
  * unless the art director is owed a look first (a goal build, once: `artDirectionOwed`).
- * Out of working time — or asked by the user to finish — it wraps up; a failed turn does too.
+ * Out of working time — or asked by the user to finish — it wraps up; a failed turn does too,
+ * unless a lost provider failed it: then the night closes paused, and no wrap-up lands a build.
  */
 export function afterTurn(turn: TurnFacts): TurnVerdict {
-  if (turn.closed) return { next: TurnEnd.Close, idleAsked: turn.idleAsked };
+  if (turn.closed || turn.providerLost === true) return { next: TurnEnd.Close, idleAsked: turn.idleAsked };
   if (!turn.workingTimeLeft) {
     const wrapCause = turn.finishRequested ? WrapCause.Finish : WrapCause.Deadline;
     return { next: TurnEnd.WrapUp, idleAsked: turn.idleAsked, wrapCause };

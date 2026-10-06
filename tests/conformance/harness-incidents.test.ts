@@ -73,7 +73,13 @@ import {
   parseSpikeVerdict,
   replanCheck,
 } from "../../src/harness-seed/loop/replan.ts";
-import { isTransientProviderError, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
+import {
+  forgetProviderLosses,
+  isTransientProviderError,
+  noteProviderLoss,
+  providerLossFor,
+  withProviderPatience,
+} from "../../src/harness-seed/loop/outage.ts";
 import {
   HARNESS_CHECKS,
   loadCatalogue,
@@ -4078,6 +4084,28 @@ describe("the lead's later turns (wake loop)", () => {
     assert.match(turns[2]!.prompt, /WHAT HAPPENED/);
     assert.equal(finished.stoppedBecause, "the director finished the run");
   });
+
+  it("D11 (provider lost, NFS 2026-10-06). the lead's account disabled on a wake pauses the run: workers stopped, nothing landed, no wrap-up, the user told what to fix", async () => {
+    const disabled =
+      "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+    const { turns, finished } = await lateTurnNight("late-access-lost", async (request, turn) => {
+      const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
+      if (turn === 1) {
+        await call("plan", plan);
+        await call("worker_start", { ...start, mode: "loop" });
+        return { sessionId: "lead-1", summary: "the sky worker is building" };
+      }
+      throw new EngineError("auth", "fake-delegate", disabled);
+    });
+    assert.equal(turns.length, 2, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
+    assert.equal(finished.executionStatus, "paused", String(finished.stoppedBecause));
+    assert.equal(finished.landed, false);
+    assert.equal((finished.landingResult as { why?: string }).why, "paused");
+    assert.equal((finished.limit as { kind?: string }).kind, "auth");
+    assert.match(String(finished.stoppedBecause), /lost its sign-in/);
+    assert.match(String(finished.stoppedBecause), /disabled Claude subscription access/);
+    assert.match(String(finished.stoppedBecause), /nothing was landed/);
+  });
 });
 
 /**
@@ -4548,6 +4576,136 @@ const worked = { ok: true, sessionId: "lead-1", turns: 1 };
  * what the user said; a lead that cannot read input mid-turn was cut short inside a tool call; and
  * the chat's own wakes used up the lead's hourly cap.
  */
+/**
+ * The NFS run (6 Oct 2026): 3 h 05 min in, the provider disabled the account. The lead's failed
+ * turn wrapped up and landed an unchecked build, a worker's round was counted broken and another's
+ * auto-tied, and thirteen judge calls went to the dead account. A lost provider is no verdict on
+ * anybody's work: the night pauses (nothing landed, Resume carries on), and nobody asks it again.
+ */
+describe("a provider lost mid-run (NFS, 2026-10-06)", () => {
+  const DISABLED =
+    "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+  const lostRun: Run = {
+    runId: "run_lost_judge",
+    project: "fixture",
+    goal: "a street race",
+    engine: EngineId.ClaudeCode,
+    judgeEngine: EngineId.ClaudeCode,
+    reference: { name: "fixture", shots: [] },
+    budgets: { wallClockMs: 1000 },
+  };
+  const sides = { run: lostRun, challenger: { state: { score: 2 } }, incumbentEvidence: { state: { score: 1 } } };
+
+  it("D5. a judge whose account is gone is asked once: every later verdict of the run fails at once, until the run starts again", async () => {
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.complete": () => {
+          throw Object.assign(new Error(DISABLED), { kind: "auth" });
+        },
+      },
+    });
+    try {
+      for (let verdict = 0; verdict < 3; verdict++)
+        await assert.rejects(
+          () => blindCompare(recorder.ctx, sides),
+          (err: any) => err?.kind === "auth",
+        );
+      assert.equal(recorder.paramsOf("engine.complete").length, 1, "one call reached the dead account");
+      forgetProviderLosses(lostRun.runId);
+      await assert.rejects(
+        () => blindCompare(recorder.ctx, sides),
+        (err: any) => err?.kind === "auth",
+      );
+      assert.equal(recorder.paramsOf("engine.complete").length, 2, "a resumed run asks again");
+    } finally {
+      forgetProviderLosses(lostRun.runId);
+    }
+  });
+
+  it("D6. a limit that names its reset holds its engine until then and no longer; one that names none is retried as before", () => {
+    const at = Date.UTC(2026, 9, 6, 11, 7, 0);
+    try {
+      const limit = { kind: "rate_limit", message: "session limit", retryAfterMs: 60_000 };
+      noteProviderLoss("run_limit", "claude-code", limit, at);
+      assert.equal(providerLossFor("run_limit", "claude-code", at + 59_000)?.kind, "rate_limit");
+      assert.equal(providerLossFor("run_limit", "claude-code", at + 60_000), null, "reset: the circuit closes");
+      assert.equal(providerLossFor("run_limit", "codex", at), null, "another engine is not lost");
+      assert.equal(providerLossFor("run_other", "claude-code", at), null, "nor another run");
+      assert.equal(noteProviderLoss("run_limit", "claude-code", { kind: "rate_limit", message: "429" }, at), null);
+      assert.equal(noteProviderLoss("run_limit", "claude-code", { kind: "other", message: "boom" }, at), null);
+      assert.equal(noteProviderLoss("run_limit", "claude-code", { kind: "unavailable", message: "529" }, at), null);
+    } finally {
+      forgetProviderLosses("run_limit");
+    }
+  });
+
+  it("D7. a lead whose account is disabled on a wake pauses the night: no wrap-up turn, the loss kept for the close", async () => {
+    const w = clockNight();
+    try {
+      const { talk, calls } = w.lead((turn) => {
+        if (turn === 1) return { ok: true, sessionId: "lead-1" };
+        throw new EngineError("auth", "claude-code", DISABLED);
+      });
+      const outcome = await w.run(talk);
+      assert.equal(calls.length, 2, calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+      assert.equal(outcome.wrapCause, null, "no wrap-up started");
+      assert.equal(w.state.limit?.kind, "auth");
+      assert.match(String(w.state.limit?.message), /disabled Claude subscription access/);
+    } finally {
+      forgetProviderLosses("run_w");
+    }
+  });
+
+  it("D8. a lead's first turn that meets a disabled account pauses the night instead of crashing it", async () => {
+    const w = clockNight();
+    try {
+      const { talk, calls } = w.lead(() => {
+        throw new EngineError("auth", "claude-code", DISABLED);
+      });
+      await w.run(talk);
+      assert.equal(calls.length, 1);
+      assert.equal(w.state.limit?.kind, "auth");
+    } finally {
+      forgetProviderLosses("run_w");
+    }
+  });
+
+  it("D9. a lead turn the provider's outage ended is not a failed turn: the night pauses, it does not wrap up", async () => {
+    const w = clockNight();
+    const { talk, calls } = w.lead((turn) =>
+      turn === 1
+        ? { ok: true, sessionId: "lead-1" }
+        : { ok: false, stopReason: "error", errorText: "API Error: 529 Overloaded", sessionId: "lead-1" },
+    );
+    const outcome = await w.run(talk);
+    assert.equal(outcome.wrapCause, null, calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+    assert.ok(
+      calls.slice(1).every((c) => c.prompt === calls[1]!.prompt),
+      "only the same message, asked again",
+    );
+    assert.equal(w.state.limit?.kind, "unavailable");
+    assert.equal(w.state.limit?.retryAfterMs, null);
+  });
+
+  it("D10. a sign-in a judge lost while the lead slept pauses the night before the lead is woken", async () => {
+    const w = clockNight();
+    try {
+      w.ticks.push((now) => {
+        if (now < w.T0 + MINUTE_MS || w.state.log.length) return;
+        noteProviderLoss("run_w", "claude-code", { kind: "auth", message: DISABLED }, now);
+        w.note("worker sky round 2: verification waits for its judge", NoteKind.WorkerRound);
+      });
+      const { talk, calls } = w.lead(() => ({ ok: true, sessionId: "lead-1" }));
+      await w.run(talk);
+      assert.equal(calls.length, 1, calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+      assert.equal(w.state.limit?.kind, "auth");
+      assert.match(String(w.state.limit?.message), /^claude-code: Your organization has disabled/);
+    } finally {
+      forgetProviderLosses("run_w");
+    }
+  });
+});
+
 describe("live chat during a build, reviewed", () => {
   /**
    * Night one: the lead hears "is the sky dusk yet?" (woken by it) and "then light the lamps"

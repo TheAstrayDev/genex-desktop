@@ -46,7 +46,15 @@ import path from "node:path";
 import { GIT, gitAt } from "./git.ts";
 import { MIN_DELEGATE_TIMEOUT_MS, PLAN_REVIEW_WAIT_MS } from "./config.ts";
 import { HostMethod } from "./host-methods.ts";
-import { EngineFailure, engineLimitOf, isEngineLimit, limitWords, StopReason } from "./outage.ts";
+import {
+  EngineFailure,
+  engineLimitOf,
+  isProviderLoss,
+  noteProviderLoss,
+  pauseDecision,
+  pauseEnding,
+  StopReason,
+} from "./outage.ts";
 import { RunEvent } from "./run-events.ts";
 import { isCommit } from "./shell.ts";
 import { isResumeFailure } from "./chat-session.ts";
@@ -256,10 +264,11 @@ function delegateTurn(
 }
 
 /**
- * The director's session. A session that dies of the engine's limit is not the director failing:
- * remember the limit and let the close choose between waiting, pausing and landing. (A night
- * once ended as a plain "error", retried the wrap-up into the same limit two seconds later, and
- * landed nothing.) What a turn answers with: the delegation's own result, or the limit it died of.
+ * The director's session. A session that dies of a lost provider — the engine's limit, or its
+ * sign-in gone — is not the director failing: remember it and let the loop choose between waiting
+ * and pausing. (A night once ended as a plain "error", retried the wrap-up into the same limit two
+ * seconds later, and landed nothing; another, whose account was disabled, wrapped up and landed an
+ * unchecked build.) What a turn answers with: the delegation's own result, or the loss it died of.
  */
 export function directorTalk(night: Night, images: DelegateImage[], tools: LiveToolSpec[]): DirectorTalk {
   const { ctx, decision, journal, lead, priorJournal, run, saveJournal, state, threadId } = night;
@@ -279,12 +288,12 @@ export function directorTalk(night: Night, images: DelegateImage[], tools: LiveT
         const asked = chat ? `${chat}\n\n${prompt}` : prompt;
         return await delegateTurn(night, stillsFor(sid), tools, asked, sid, timeoutMs);
       } catch (err: any) {
-        if (!isEngineLimit(err?.kind)) throw err;
+        if (!isProviderLoss(err?.kind)) throw err;
         state.limit = engineLimitOf(err);
-        await decision(
-          `the engine hit its ${limitWords(err.kind)}: ${String(err.message ?? err).slice(0, LIMIT_MESSAGE_CHARS)}`,
-          `your plan's ${limitWords(err.kind)} paused the build`,
-        );
+        // Judges on the same engine stop asking it too, until the run resumes or the limit resets.
+        noteProviderLoss(run.runId, run.engine, err);
+        const words = pauseDecision(err.kind, String(err.message ?? err).slice(0, LIMIT_MESSAGE_CHARS));
+        await decision(words.line, words.plain);
         return {
           ok: false,
           stopReason: err.kind,
@@ -523,8 +532,7 @@ function sessionEndWords(
 ): string {
   const { ctx, softDeadline, state } = night;
   if (ctx.cancelled) return "stopped by the user";
-  if (state.limit)
-    return `the engine hit its ${limitWords(state.limit.kind)} before the director called finish (${String(state.limit.message).slice(0, CLIP_QUOTE)}); the run is paused — Resume it when the limit resets`;
+  if (state.limit) return pauseEnding(state.limit.kind, String(state.limit.message).slice(0, CLIP_QUOTE));
   if (wrapCause === WrapCause.Idle || wrapCause === WrapCause.Finish) return WAKE_ENDING[wrapCause];
   const onTheClock = wrapCause !== WrapCause.Failed && at >= softDeadline - OUT_OF_TIME_MS;
   if (onTheClock) return "the director ran out of time without calling finish";
@@ -535,17 +543,20 @@ function sessionEndWords(
  * The night the director left open: the harness stops the workers, looks at the integration
  * branch once more on a window of its own, and lands what runs — the same close `finish` takes
  * (M4.10). The judge's last word on the same head counts too: a health pass that raced the load
- * must not keep a build the judge passed from the user.
+ * must not keep a build the judge passed from the user. A night a lost provider paused lands
+ * nothing: nobody can check the build now, and Resume carries it on from its head.
  */
 async function closeLeftOpen(
   night: Night,
   result: Partial<DelegateResult>,
   wrapCause: WrapCause | null = null,
 ): Promise<void> {
-  const { closeTheNight, ctx } = night;
+  const { closeTheNight, ctx, state } = night;
   const why = sessionEndWords(night, result, Date.now(), wrapCause);
+  const paused = Boolean(state.limit);
   await closeTheNight({
-    land: true,
+    land: !paused,
+    paused,
     stopWhy: "the build is over",
     settleMs: OPEN_NIGHT_SETTLE_MS,
     because: (landed: AnyRecord) =>

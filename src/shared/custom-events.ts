@@ -264,9 +264,11 @@ export const StopCode = {
 export type StopCode = (typeof StopCode)[keyof typeof StopCode];
 
 /**
- * The engine limit a director's night closed on (its report's `limit`): `kind` is an engine failure
- * kind (`EngineFailureKind` in shared/engine-requests.ts), `retryAfterMs` how long after `at` (ms since
- * the epoch; a close that leaves it out is read from its own time) the limit resets.
+ * The provider failure a director's night paused on (its report's `limit`): `kind` is an engine
+ * failure kind (`EngineFailureKind` in shared/engine-requests.ts) — an engine limit, a lost sign-in
+ * (`auth`, an expired login or an account whose access was taken away) or an outage the lead could
+ * not wait out (`unavailable`) — and `retryAfterMs` how long after `at` (ms since the epoch; a close
+ * that leaves it out is read from its own time) a limit resets.
  */
 export interface RunLimit {
   kind?: string;
@@ -286,7 +288,7 @@ export interface RunFinishedPayload extends RunScope {
   landed?: boolean;
   /** Why the run failed, when it did (the director's report). */
   failure?: { message?: string } | null;
-  /** The engine limit that paused it, when one did (a director's night). */
+  /** The provider failure that paused it, when one did (a director's night). */
   limit?: RunLimit | null;
   /** Older closes marked a pause with this flag instead of `executionStatus`. */
   paused?: boolean;
@@ -311,6 +313,8 @@ export const AutoResumeCause = {
   LimitReset: "limit-reset",
   /** The studio's loop crashed under it and is running again. */
   LoopRestart: "loop-restart",
+  /** A provider outage paused it, and the wait after it is over: the provider is tried again. */
+  ProviderOutage: "provider-outage",
 } as const;
 export type AutoResumeCause = (typeof AutoResumeCause)[keyof typeof AutoResumeCause];
 
