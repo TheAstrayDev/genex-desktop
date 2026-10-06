@@ -24,8 +24,7 @@ import { workingGoal } from "./goal-prompts.ts";
 import { scopeLines } from "./scope-prompts.ts";
 import { visionJudgeLines } from "./vision-prompts.ts";
 import { clip, CLIP_REASON } from "./text.ts";
-// Its own module, not text.ts: a workspace that kept an older text.ts still links this one.
-import { clipWords } from "./word-clip.ts";
+import { doNotRegressOf } from "./do-not-regress.ts";
 import {
   BUILD_OUTPUT,
   framesLine,
@@ -43,10 +42,6 @@ export const SHIP_REVIEW_IMAGES = 14;
 export const SHIP_VIEW = { width: 1600, height: 900 } as const;
 /** The most defects one review keeps, worst first. */
 const MAX_SHIP_DEFECTS = 16;
-/** The most items one review's do-not-regress list keeps. */
-export const MAX_DO_NOT_REGRESS = 8;
-/** How much of one do-not-regress item is kept: a short name ("rain on the windscreen"), cut at a word. */
-export const DO_NOT_REGRESS_CHARS = 80;
 /** How much of a camera's name a defect keeps. */
 const CAMERA_CHARS = 60;
 /** How much of the build's state and its warnings the question carries. */
@@ -230,19 +225,6 @@ function defectOf(raw: unknown, partIds: ReadonlySet<string>, cameras: ReadonlyS
   if (!what) return null;
   const part = typeof record.part === "string" && partIds.has(record.part) ? record.part : null;
   return { what, camera: cameraOf(record.camera, cameras), part, severity: severityOf(record.severity) };
-}
-
-/**
- * A judge's do-not-regress list as the review keeps it: at most `MAX_DO_NOT_REGRESS` short names,
- * each cut at a word. A rubric the workspace kept from before the list asks for `strengths`, which
- * name what already works too, so those stand in for it.
- */
-export function doNotRegressOf(raw: AnyRecord | null | undefined): string[] {
-  const named: unknown = Array.isArray(raw?.doNotRegress) ? raw.doNotRegress : raw?.strengths;
-  return (Array.isArray(named) ? named : [])
-    .map((item: unknown) => clipWords(String(item ?? "").trim(), DO_NOT_REGRESS_CHARS))
-    .filter(Boolean)
-    .slice(0, MAX_DO_NOT_REGRESS);
 }
 
 /**

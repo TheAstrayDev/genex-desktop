@@ -20,7 +20,7 @@ import { durationCommission, goalCommission } from "./commission.ts";
  * modules newer than it (director/reopen.ts, loop/ship-review.ts): a seed upgrade keeps a module the
  * agent edited, and a name newer than that copy would not link.
  */
-import { doNotRegressOf } from "../ship-review.ts";
+import { doNotRegressOf } from "../do-not-regress.ts";
 import { WorkerState } from "../outcomes.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
 import { runRef } from "../repo.ts";
