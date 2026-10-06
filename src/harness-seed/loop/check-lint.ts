@@ -34,8 +34,9 @@ export const STUDIO_DRAW_QUANTITIES = [
 ] as const;
 
 /**
- * The template HUD summary's count per item kind (`hud.kinds`, `hud.kinds.bar`): how much of one
- * kind the build draws, so `hud.kinds.bar >= 40` is the three-thousand-rectangle HUD again.
+ * The template HUD summary's counts per item kind (`hud.kinds.bar`): how much of one kind the
+ * build draws, so `hud.kinds.bar >= 40` is the three-thousand-rectangle HUD again. The object
+ * itself is not one: `len(hud.kinds)` counts which kinds are used, bounded by the kind vocabulary.
  */
 const HUD_KINDS = "hud.kinds";
 
@@ -127,10 +128,9 @@ const isDrawQuantity = (path: string): boolean => {
   return (STUDIO_DRAW_QUANTITIES as readonly string[]).includes(quantity) || isHudKindCount(quantity);
 };
 
-/** Whether a bare path is the HUD's per-kind counts or one of them. */
+/** Whether a bare path is one of the HUD's per-kind counts (`hud.kinds.bar`). */
 const isHudKindCount = (quantity: string): boolean =>
-  quantity === HUD_KINDS ||
-  (quantity.startsWith(`${HUD_KINDS}.`) && !quantity.slice(HUD_KINDS.length + 1).includes("."));
+  quantity.startsWith(`${HUD_KINDS}.`) && !quantity.slice(HUD_KINDS.length + 1).includes(".");
 
 /** The draw quantity a `min`/`max` of it and numbers reads — `max(len(hud.items), 0)` — or null. */
 function clampedQuantity(args: readonly ExprNode[]): string | null {

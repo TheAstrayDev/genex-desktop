@@ -44,6 +44,8 @@ import { applySetup, EvidenceFailure, patientEvidence } from "../../src/harness-
 import { FlowPhase as HarnessFlowPhase } from "../../src/harness-seed/loop/page-contract.ts";
 import { FlowPhase as TemplateFlowPhase } from "../../src/game-template/src/studio.js";
 import { PreviewConsoleSource } from "../../src/harness-seed/loop/preview-gone.ts";
+import { blindCompare } from "../../src/harness-seed/loop/judge.ts";
+import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
 interface StubOptions {
   /** Base64 payload per screenshot call, in order; repeats simulate a stale compositor frame. */
@@ -2037,7 +2039,27 @@ describe("after the review: a kill mid-pass, the studio's own console line, and 
     assert.ok(heldThrough(raced.calls, ["w", "ArrowUp"]), "in play, the racer still cruises");
   });
 
-  it("drives no kind's controls into a kept front-end, only a script the game declared itself", async () => {
+  it("tells the judges of a kept front-end that nothing was pressed, not to look for dead input", async () => {
+    const kept = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
+    const game = { kind: "racing" };
+    const evidence = await gather(kept.ctx, { run: { ...run, game }, setup: { begin: false } });
+    assert.equal(evidence.play?.via, "kept");
+    const recorder = ctxRecorder({
+      handlers: { "engine.complete": () => ({ message: { content: '{"pick":"A"}' } }) },
+    });
+    const judged = { ...run, goal: "a racer", game, budgets: { wallClockMs: 1000 } } as never;
+    await blindCompare(recorder.ctx, { run: judged, challenger: evidence, incumbentEvidence: evidence });
+    const asked = JSON.stringify(recorder.paramsOf("engine.complete")[0]?.messages);
+    assert.doesNotMatch(asked, /holds W\/ArrowUp/, "the judge is not told about a drive that did not happen");
+    assert.doesNotMatch(asked, /report \[dead-input\] only if/);
+    assert.match(asked, /pressed nothing/);
+    assert.match(asked, /\[dead-input\] does not apply/);
+    // A build driven in play is still described as driven.
+    assert.match(gameLine(game), /then holds W\/ArrowUp through the rest of the drive/);
+    assert.match(gameLine(game, { kept: false }), /report \[dead-input\] only if/);
+  });
+
+  it("drives no controls at all into a kept front-end, not the kind's nor the game's gameplay script", async () => {
     // A title that starts on any key would be started by the racing exercise's own throttle, and
     // its owner judged on a countdown instead of the title it is building.
     const kept = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
@@ -2051,11 +2073,8 @@ describe("after the review: a kill mid-pass, the studio's own console line, and 
     const declared = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
     await gather(declared.ctx, { run: { ...run, game: { kind: "racing", playScript } }, setup: { begin: false } });
     const taps = sequence(declared.calls).filter((word) => word.startsWith("input:"));
-    assert.ok(
-      taps.some((word) => word.includes('"Enter"')),
-      `the game's own script still drives it: ${taps.join(" ")}`,
-    );
-    assert.ok(!taps.some((word) => word.includes('"w"')), taps.join(" "));
+    // The declared script is written for play: its first Enter would start the title too.
+    assert.deepEqual(taps, [], "a gameplay script does not reach the front-end either");
   });
 
   it("quotes what begin() answered when it would not take the game into play", async () => {

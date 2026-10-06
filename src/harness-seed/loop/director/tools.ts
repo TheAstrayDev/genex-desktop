@@ -349,7 +349,7 @@ async function scoreJudgeChecks(night: Night, pass: JudgePass): Promise<CheckRes
     results.push(...answered);
   }
   const board = toScoreboard(results);
-  out.board = { summary: summarizeScoreboard(board, spec), lines: renderScoreboard(board) };
+  out.board = { summary: summarizeScoreboard(board, spec), lines: renderScoreboard(board, null, spec) };
   judgement.boardAllPass = out.board.summary.total > 0 && out.board.summary.passing === out.board.summary.total;
   return Object.values(board);
 }

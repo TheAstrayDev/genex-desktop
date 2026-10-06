@@ -27,6 +27,7 @@ import {
 import {
   acceptRound,
   defectsToChecks,
+  facetPrompt,
   grownCheckIds,
   judgeChecksToRetire,
   similarDefect,
@@ -580,7 +581,8 @@ describe("facet specs", () => {
       // forty bars is the three-thousand-rectangle HUD again.
       [{ kind: "probe", expr: "hud.kinds.bar >= 40" }, "hud.kinds.bar"],
       [{ kind: "probe", expr: "state.hud.kinds.arc > 6" }, "hud.kinds.arc"],
-      [{ kind: "probe", expr: "len(hud.kinds) >= 5" }, "hud.kinds"],
+      // How many kinds the HUD uses is variety bounded by the kind vocabulary, not an amount drawn.
+      [{ kind: "probe", expr: "len(hud.kinds) >= 5" }, null],
       [{ kind: "probe", expr: "early.hud.kinds.text == 12" }, "hud.kinds.text"],
       [{ kind: "probe", expr: "hud.kinds.bar > 0" }, null],
       [{ kind: "probe", expr: "hud.kinds.text <= 8" }, null],
@@ -829,6 +831,58 @@ describe("the board a game actually carries", () => {
     // Without a spec nothing is a harness check, so nothing is dropped; a missing entry applies to nothing.
     assert.equal(Object.values(board).filter((e) => appliesToBuild(e, null)).length, Object.keys(board).length);
     assert.equal(appliesToBuild(null, validated.spec), false);
+  });
+
+  it("names no check the build cannot answer as unmeasured to its builder, its brief or its lead", () => {
+    // The nudge harness-needs.ts names: "reaches-play — the build does not report flow.playing"
+    // in every builder prompt pushed builders to add a menu nobody asked for.
+    const state = { player: { x: 0, y: 0, z: 0 }, hud: { items: ["speed"] } };
+    const driven = { player: { x: 3, y: 0, z: 0 }, hud: { items: ["speed"] } };
+    const director = { id: "lap-time", kind: "probe", expr: "race.lap > 0", needs: ["race.lap"] };
+    const validated = validateFacetSpec(
+      withHarnessChecks(normalizeFacetSpec({ id: "car", intent: "a car that drives", checks: [director] }), {
+        ownsMain: true,
+        game: { kind: "racing" } as never,
+      }),
+      { state },
+    );
+    const probes = validated.spec.checks.filter((c: { kind: string }) => c.kind === "probe");
+    const board = toScoreboard(probes.map((c: Check) => evaluateProbeCheck(c, { state: driven, stateEarly: state })));
+    assert.equal(board["reaches-play"]?.pass, null, "the fixture has the harness check unmeasured on the board");
+    const run = { runId: "run_car", goal: "a racer" };
+    const prompt = (resumed: boolean) =>
+      String(
+        facetPrompt({
+          run,
+          spec: validated.spec,
+          iteration: 3,
+          resumed,
+          briefFile: null,
+          briefText: "brief",
+          board,
+          worktree: "/w",
+          ownsMain: true,
+        }),
+      );
+    const brief = String(renderBrief({ run, spec: validated.spec, iteration: 3, board } as never));
+    const lead = renderScoreboard(board, null, validated.spec);
+    for (const [reader, text] of [
+      ["the opening prompt", prompt(false)],
+      ["the resumed prompt", prompt(true)],
+      ["the brief", brief],
+      ["the lead's board", lead],
+    ] as const) {
+      const unmeasured = text.split("\n").filter((line) => line.includes("UNMEASURED"));
+      assert.ok(unmeasured.length > 0, `${reader} still names the director's own unmeasured contract`);
+      assert.ok(
+        unmeasured.some((line) => line.includes("lap-time")),
+        `${reader} names lap-time: ${unmeasured}`,
+      );
+      for (const harness of ["reaches-play", "hud-coverage", "hud-overlap"])
+        assert.ok(!unmeasured.some((line) => line.includes(harness)), `${reader} names ${harness}: ${unmeasured}`);
+    }
+    // Without a spec the board renders whole, as it always has.
+    assert.match(renderScoreboard(board), /\[UNMEASURED\] reaches-play/);
   });
 
   it("offers the planner what a sibling family learned, and tells it the truth about its own board", () => {

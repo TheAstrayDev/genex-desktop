@@ -440,10 +440,14 @@ function seconds(ms: unknown): string {
  * The retraction matters as much as the description. A board game and a builder have no player
  * the studio can measure, so an empty input-evidence list would invite exactly the
  * `[dead-input]` report this line exists to prevent: it says the class does not apply.
+ *
+ * `kept` is a pass that judged the build on its front-end (`setup.begin === false`): the drive
+ * pressed nothing, so the line says that instead and the class does not apply either.
  */
-export function gameLine(game: AnyRecord | null | undefined): string {
+export function gameLine(game: AnyRecord | null | undefined, { kept = false }: { kept?: boolean } = {}): string {
   const traits = normalizeGameTraits(game);
   const kind = traits.kind ? GAME_KINDS[traits.kind] : null;
+  if (kept) return keptGameLine(kind, traits);
   const script = playScriptFor(traits);
   const drove = describePlayScript(script);
   const cruise = cruiseFor(traits);
@@ -460,6 +464,14 @@ export function gameLine(game: AnyRecord | null | undefined): string {
     return `GAME: ${kind.says}.${drives} This game has no player the studio can measure, so the artefact class [dead-input] does not apply — do not report it.`;
   }
   return `GAME: ${kind.says}.${drives} The input evidence is ${paths.join(", ")} in __studio.state() — report [dead-input] only if those are unchanged.`;
+}
+
+/** The game line for a build judged on its front-end: no drive to describe, no input to be dead. */
+function keptGameLine(kind: GameKind | null | undefined, traits: GameTraits): string {
+  const kept =
+    " The harness pressed nothing: this build is judged on its front-end, so the artefact class [dead-input] does not apply — do not report it.";
+  if (kind) return `GAME: ${kind.says}.${kept}`;
+  return traits.playScript ? `GAME: nothing declared what kind of game this is.${kept}` : "";
 }
 
 /** `place` for a world a player walks through, `screen` for a game that is a screen to read. */

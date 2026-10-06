@@ -1135,14 +1135,13 @@ function cruiseOf(game: AnyRecord | null | undefined): string[] {
 }
 
 /**
- * The controls the drive presses. A kept front-end (`setup.begin === false`) is driven only by a
- * script the game declared itself: the kind's exercise would start a title that takes any key on
- * its throttle, and judge the worker building that title on its countdown instead.
+ * The controls the drive presses. A kept front-end (`setup.begin === false`) is pressed by
+ * nothing: the kind's exercise would start a title that takes any key on its throttle, and a
+ * script the game declared is written for play, so its first Enter would start it too. The
+ * worker building that title is judged on it, not on the countdown behind it; the clock still runs.
  */
 function driveScriptOf(look: Look): unknown {
-  const game = look.run?.game;
-  if (look.play?.via !== PlayVia.Kept) return kinds.playScriptFor(game);
-  return kinds.normalizeGameTraits(game).playScript ?? [];
+  return look.play?.via === PlayVia.Kept ? [] : kinds.playScriptFor(look.run?.game);
 }
 
 /**

@@ -9,6 +9,7 @@ import { FacetStage, moveEscalated, stageOf } from "./stage.ts";
 import { FINISH_FIX_ASK, FINISH_PROMPT_LINE, finishLossEscalate } from "./stage-prompts.ts";
 import { scopeLines } from "../scope-prompts.ts";
 import { heldHudPromptDraws } from "../held-hud-prompts.ts";
+import { appliesToBuild } from "../applies-to-build.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** Reference stills into the first brief, and pair images later, at most. */
@@ -354,9 +355,15 @@ function lossEscalate(p: PromptInput, buildWords: string): string {
   return p.finishing ? finishLossEscalate(p.loseStreak) : buildWords;
 }
 
-/** The board's failing entries and the ones nobody could measure. */
-function boardState(board: AnyRecord): { failing: AnyRecord[]; unmeasuredNow: AnyRecord[] } {
-  const entries = Object.values(board) as AnyRecord[];
+/**
+ * The board's failing entries and the ones nobody could measure, of this build's questions only: a
+ * harness check the build cannot answer (loop/applies-to-build.ts) is not named to its builder.
+ */
+function boardState(
+  board: AnyRecord,
+  spec: AnyRecord | null | undefined,
+): { failing: AnyRecord[]; unmeasuredNow: AnyRecord[] } {
+  const entries = (Object.values(board) as AnyRecord[]).filter((e) => appliesToBuild(e, spec));
   return {
     failing: entries.filter((e) => e.pass === false),
     unmeasuredNow: entries.filter((e) => e.pass !== true && e.pass !== false),
@@ -380,7 +387,7 @@ function unmeasuredLine(unmeasuredNow: AnyRecord[]): string {
 /** The prompt that continues the builder's own session: what happened, and what is still open. */
 function resumedPrompt(p: PromptInput): string {
   const { run, spec: facet, iteration, pointsAtBrief, integrationNote, spike, failureText } = p;
-  const { unmeasuredNow } = boardState(p.board);
+  const { unmeasuredNow } = boardState(p.board, p.spec);
   return [
     `Iteration ${iteration} of your facet "${facet.title}" (run ${run.runId}). You are resuming your own session — you remember what you tried.`,
     p.briefPointer,
@@ -430,7 +437,7 @@ const byIdentityFirst = (a: AnyRecord, b: AnyRecord): number =>
 
 /** What is still failing, or — when nothing is — what this iteration works on instead. */
 function resumedBoardLine(p: PromptInput): string {
-  const { failing } = boardState(p.board);
+  const { failing } = boardState(p.board, p.spec);
   if (failing.length)
     return `STILL FAILING (identity first): ${cappedList(failing.sort(byIdentityFirst).map((e) => `${e.id} — ${String(e.reason).slice(0, FAILING_REASON_CHARS)}`)).join("; ")}`;
   if (p.legacy) return `THE BIGGEST REMAINING GAP: ${p.defectList[0] ?? ""}`;
@@ -635,7 +642,7 @@ function legacyProgress({ defectList, loseStreak, gapHistory }: PromptInput): st
 /** A checked facet's news: what still fails, what nobody could measure, and a losing streak. */
 function boardProgress(p: PromptInput): string[] {
   const { board, loseStreak } = p;
-  const { failing, unmeasuredNow } = boardState(board);
+  const { failing, unmeasuredNow } = boardState(board, p.spec);
   const lines: string[] = [];
   if (failing.length)
     lines.push(

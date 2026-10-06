@@ -28,6 +28,7 @@ import {
   slug,
 } from "./spec.ts";
 import { renderScoreboard } from "./checks.ts";
+import { appliesToBuild } from "./applies-to-build.ts";
 import { nearestReference } from "./style.ts";
 import { facetNotes } from "./repo.ts";
 import { gameLine, KIND_NAMES } from "./kinds.ts";
@@ -855,7 +856,7 @@ function renderBriefSections(
     ...steeringSection(steering),
     ...(finishing ? finishSection(polish) : moveSection(move)),
     ...fixSection(fix, template, finishing),
-    ...scoreboardSection(board, comparison),
+    ...scoreboardSection(board, comparison, spec),
     ...(integration ? [`## Integration`, clipWords(integration, BRIEF_INTEGRATION_CHARS), ``] : []),
     ...livenessSection(liveness, critic, finishing),
     ...(cuts.has(BriefCut.Style) ? [] : styleSection(style)),
@@ -973,8 +974,15 @@ function fixMechanismLine(template: boolean): string {
     : `Replace the mechanism behind it, do not tune it. A faceted or smooth solid that should read as something organic (a tree, a bush, hay, an animal) is rebuilt out of cards or parts, the way this game already builds its objects; a flat wash that should read as a material gets a material this game's renderer can bake; a thing that floats gets a contact patch and sinks. Land it in the same build as the move — the move comes first, this before the rest of the ledger.`;
 }
 
-/** The board after the last judged build: identity first, and what could not be measured. */
-function scoreboardSection(board: Scoreboard | null | undefined, comparison: BriefOptions["comparison"]): string[] {
+/**
+ * The board after the last judged build: identity first, and what could not be measured. Only this
+ * build's questions: a harness check it cannot answer (loop/applies-to-build.ts) is not named.
+ */
+function scoreboardSection(
+  board: Scoreboard | null | undefined,
+  comparison: BriefOptions["comparison"],
+  spec: BriefOptions["spec"],
+): string[] {
   if (!board || !Object.keys(board).length) {
     return [
       `## Scoreboard`,
@@ -982,10 +990,10 @@ function scoreboardSection(board: Scoreboard | null | undefined, comparison: Bri
       ``,
     ];
   }
-  const entries = Object.values(board);
+  const entries = Object.values(board).filter((e) => appliesToBuild(e, spec));
   const identityFailing = entries.filter((e) => e.pass === false && e.weight === CheckWeight.Identity);
   const unmeasuredEntries = entries.filter((e) => e.pass !== true && e.pass !== false);
-  const lines = [`## Scoreboard after the last judged build`, renderScoreboard(board, comparison), ``];
+  const lines = [`## Scoreboard after the last judged build`, renderScoreboard(board, comparison, spec), ``];
   if (identityFailing.length) {
     lines.push(
       `Work identity checks first: ${identityFailing.map((e) => e.id).join(", ")}. A lower check must not be polished while an identity check still fails.`,

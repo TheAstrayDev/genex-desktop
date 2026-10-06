@@ -4,7 +4,10 @@
  * A harness-owned check the build cannot answer because it does not report what the check names
  * under `needs` (loop/harness-needs.ts) is not this build's question: it is in none of the card's
  * counts, in no list of unmeasured checks and in no list of results. One predicate decides that for
- * every reader of a round, so a record's results agree with its own totals.
+ * every reader that holds the spec — the summary, the round's record, the builder's prompt and
+ * brief, and the board the lead reads — so a record's results agree with its own totals and no
+ * builder is asked to expose what the check does not need. A board rendered without its spec
+ * (an integration board, a worker's status) still lists every entry.
  *
  * Its own module so an upgraded checks.ts or facet/phases/publish.ts never asks a kept, older
  * harness-needs.ts for a name it does not have.

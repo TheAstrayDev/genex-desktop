@@ -1482,6 +1482,8 @@ export function summarizeScoreboard(
   // A judge's guess failed nothing it could see: it reads as couldn't measure, never as failing.
   const couldNotTell = (e: CheckResult): boolean => !isMeasured(e) || guessed(e);
   const identityCounted = identity.filter((e) => !unanswerable(e));
+  // The card's identity ratio, from this build's questions; identityAllPass reads them all.
+  const identityApplying = entries.filter((e) => e.weight === Weight.Identity);
   const planned = entries.filter((e) => !isGrown(e));
   const grown = entries.filter(isGrown);
   return {
@@ -1493,9 +1495,8 @@ export function summarizeScoreboard(
     plannedUnmeasured: planned.filter((e) => !isMeasured(e)).length,
     grownTotal: grown.length,
     grownPassing: grown.filter(measuredPass).length,
-    // Counted like every other total, from this build's questions; identityAllPass reads them all.
-    identityTotal: entries.filter((e) => e.weight === Weight.Identity).length,
-    identityPassing: identity.filter(measuredPass).length,
+    identityTotal: identityApplying.length,
+    identityPassing: identityApplying.filter(measuredPass).length,
     identityAllPass: identityAllPass(identity, identityCounted, entries, spec),
     failing: entries
       .filter((e) => e.pass === false && !guessed(e))
@@ -1550,13 +1551,18 @@ function boardTag(id: string, comparison: { flips?: string[]; regressions?: stri
   return "";
 }
 
-/** One line per check, for briefs, reports and the chat feed. */
+/**
+ * One line per check, for briefs, reports and the chat feed. Given the spec, only this build's
+ * questions (loop/applies-to-build.ts): a harness check the build cannot answer is no line.
+ */
 export function renderScoreboard(
   board: Scoreboard | null | undefined,
   comparison: { flips?: string[]; regressions?: string[] } | null = null,
+  spec?: { checks?: readonly Check[] } | null,
 ): string {
   const lines: string[] = [];
-  for (const entry of Object.values(board ?? {})) {
+  const entries = Object.values(board ?? {}).filter((e) => !spec || appliesToBuild(e, spec));
+  for (const entry of entries) {
     const value =
       entry.kind === Kind.Metric && typeof entry.value === "number"
         ? ` = ${entry.value.toFixed(3)}${entry.nearest ? ` (nearest still: ${entry.nearest})` : ""}`
