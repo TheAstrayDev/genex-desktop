@@ -90,6 +90,7 @@ import { isCommandScript, spawnCommand } from "../command-launch.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { limitResetMs } from "./limit-reset.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { EngineKind, EngineStatusCode, LoginSource } from "../../shared/engine-descriptor.ts";
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
@@ -285,36 +286,8 @@ export function limitKind(
   return null;
 }
 
-/**
- * Milliseconds until the reset a limit message names ("resets 9:50pm", "resets 21:50", "resets
- * in 3 hours"), read against the machine's clock; null when the text names none. A clock time
- * already behind `now` is tomorrow's.
- */
-export function limitResetMs(text: string, now = Date.now()): number | null {
-  const relative = /resets? in (\d+)\s*(min|minute|hour|h|m)/i.exec(text);
-  if (relative) {
-    const n = Number(relative[1]);
-    return /^h/i.test(relative[2] ?? "") ? n * HOUR_MS : n * MINUTE_MS;
-  }
-  const clock = /resets?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(text);
-  if (!clock) return null;
-  const meridiem = clock[3]?.toLowerCase();
-  const hours = twentyFourHour(Number(clock[1]), meridiem);
-  if (!meridiem && hours > 23) return null;
-  const at = new Date(now);
-  at.setHours(hours, Number(clock[2] ?? "0"), 0, 0);
-  const ms = at.getTime() - now;
-  // A clock time already behind `now` (by more than a minute of slack) is tomorrow's.
-  const untilReset = ms < -MINUTE_MS ? ms + 24 * HOUR_MS : ms;
-  return Math.max(MINUTE_MS, untilReset);
-}
-
-/** A clock hour on a 24-hour dial: "9pm" is 21, "12am" is 0, an hour with no meridiem is as written. */
-function twentyFourHour(hours: number, meridiem: string | undefined): number {
-  if (meridiem === "pm" && hours < 12) return hours + 12;
-  if (meridiem === "am" && hours === 12) return 0;
-  return hours;
-}
+/** The wait a limit message names lives beside Codex's reading of it; kept here for its callers. */
+export { limitResetMs } from "./limit-reset.ts";
 
 /**
  * The one directory every judge session runs in.
@@ -1406,7 +1379,7 @@ export class ClaudeCodeEngine implements Engine {
     const limitText = String(run.errorText ?? run.summary ?? "");
     const limit = limitKind(limitText);
     if (limit === EngineFailureKind.UsageLimit) {
-      throw new EngineError(EngineFailureKind.UsageLimit, this.id, limitText);
+      throw new EngineError(EngineFailureKind.UsageLimit, this.id, limitText, limitResetMs(limitText) ?? undefined);
     }
     const limitSubtype = /limit/i.test(run.errorSubtype ?? "");
     if (limit === EngineFailureKind.RateLimit || limitSubtype) {
@@ -1439,12 +1412,14 @@ export class ClaudeCodeEngine implements Engine {
         `Claude Code could not be started (${code}): the studio's bundled Claude Code binary is missing or the app was replaced while this window was open. Quit and reopen the studio, then try again. (${text})`,
       );
     }
-    // Weekly/monthly caps end the run; session/5-hour limits stay waitable rate limits.
+    // Weekly/monthly caps end the run; session/5-hour limits stay waitable rate limits. Either
+    // carries the reset its text names, so the host can resume the run after it.
+    const resetMs = limitResetMs(text) ?? undefined;
     if (USAGE_LIMIT_PATTERN.test(text)) {
-      return new EngineError(EngineFailureKind.UsageLimit, this.id, text);
+      return new EngineError(EngineFailureKind.UsageLimit, this.id, text, resetMs);
     }
     if (RATE_LIMIT_PATTERNS.some((re) => re.test(text))) {
-      return new EngineError(EngineFailureKind.RateLimit, this.id, text);
+      return new EngineError(EngineFailureKind.RateLimit, this.id, text, resetMs);
     }
     if (AUTH_PATTERNS.some((re) => re.test(text))) {
       return new EngineError(EngineFailureKind.Auth, this.id, `${text} — ${this.loginHint()}`);

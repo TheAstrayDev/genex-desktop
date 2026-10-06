@@ -31,6 +31,12 @@ import { toEntries } from "../../src/renderer/chat-entries.ts";
 import { ActivityIndex } from "../../src/shared/studio-activity.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 import { coreLite } from "../helpers/core-lite.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { CodexEngine, type CodexExec } from "../../src/substrate/engines/codex.ts";
+import { engineLimitOf } from "../../src/harness-seed/loop/outage.ts";
+import { fixtureCodingCli } from "../helpers/external-cli.ts";
+import { tmpDir } from "../helpers/tmp.ts";
 
 /** How long the core test lets an asynchronous plan settle: a few short steps, never a deadline. */
 const SETTLE_TRIES = 20;
@@ -729,5 +735,56 @@ describe("the core: the switch, its default, and who may write the record", () =
     for (let i = 0; i < SETTLE_TRIES; i++) await sleep(SETTLE_STEP_MS);
     assert.deepEqual(delays, [0], "looked at, and nothing planned");
     await lite.close();
+  });
+});
+
+describe("an engine's own limit, from its error to the planned resume", () => {
+  /** A signed-in Codex engine whose `codex exec` fails its turn with `message`. */
+  async function codexFailing(message: string): Promise<{ engine: CodexEngine; cwd: string }> {
+    const root = await tmpDir("studio-codex-limit-");
+    const home = path.join(root, "codex-home");
+    const cwd = path.join(root, "game");
+    await mkdir(home, { recursive: true });
+    await mkdir(cwd, { recursive: true });
+    await writeFile(path.join(home, "auth.json"), "{}");
+    const execFn: CodexExec = () => ({
+      async *[Symbol.asyncIterator]() {
+        yield { type: "thread.started", thread_id: "t" };
+        yield { type: "turn.failed", error: { message } };
+      },
+    });
+    const engine = new CodexEngine({
+      resolveCli: fixtureCodingCli,
+      engineHome: home,
+      systemHome: path.join(root, "no-system-login"),
+      executable: "/fake/codex",
+      authStatusFn: async () => ({ loggedIn: true, method: "chatgpt", detail: "Logged in using ChatGPT" }),
+      execFn,
+    });
+    return { engine, cwd };
+  }
+
+  it("a Codex usage limit that names its wait is resumed after it", async () => {
+    const { engine, cwd } = await codexFailing(
+      "You've hit your usage limit. Upgrade to Pro (https://openai.com/chatgpt/pricing) or try again in 1 hour 30 minutes.",
+    );
+    const err = await engine.delegate({ prompt: "build", cwd }).then(
+      () => assert.fail("a limit is an error"),
+      (e: unknown) => e,
+    );
+    // The close the harness writes keeps the limit as the seed's engineLimitOf reads it.
+    const limit = engineLimitOf(err, PAUSED_AT);
+    const events = [registered(), ...limitPause(PAUSED_AT, { ...limit })];
+    const due = PAUSED_AT + 90 * MINUTE_MS + LIMIT_RESET_MARGIN_MS;
+    assert.deepEqual(autoResumePlan(events, PAUSED_AT + MINUTE_MS, facts()), {
+      action: AutoResumeAction.Wait,
+      at: due,
+      hold: AutoResumeHold.Reset,
+    });
+    assert.deepEqual(autoResumePlan(events, due, facts()), {
+      action: AutoResumeAction.Resume,
+      cause: AutoResumeCause.LimitReset,
+      attempt: 1,
+    });
   });
 });

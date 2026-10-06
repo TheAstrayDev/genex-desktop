@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { limitKind, limitResetMs } from "../../src/substrate/engines/claude-code.ts";
 import { consoleProblems } from "../../src/harness-seed/loop/gauntlet.ts";
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "../../src/shared/duration.ts";
 
 describe("engine limits", () => {
   it("classifies session, usage and rate limits by their text, and nothing else", () => {
@@ -33,6 +34,42 @@ describe("engine limits", () => {
     assert.equal(limitResetMs("resets in 3 hours", now), 3 * 3_600_000);
     assert.equal(limitResetMs("resets in 45 min", now), 45 * 60_000);
     assert.equal(limitResetMs("no reset named here", now), null);
+  });
+
+  it("reads the wait a Codex limit names, and a Claude reset said with 'at'", () => {
+    const now = new Date("2026-09-07T19:56:00").getTime(); // local wall clock of the test machine
+    const rows: Array<[text: string, ms: number | null]> = [
+      [
+        "You've hit your usage limit. Try again in 4 days 20 hours 9 minutes.",
+        4 * DAY_MS + 20 * HOUR_MS + 9 * MINUTE_MS,
+      ],
+      [
+        "You've hit your usage limit. Upgrade to Pro (https://openai.com/chatgpt/pricing) or try again in 1 hour 30 minutes.",
+        90 * MINUTE_MS,
+      ],
+      ["Rate limit reached for gpt-5 on tokens per min. Please try again in 1.5s.", 1.5 * SECOND_MS],
+      ["Rate limit reached. Please try again in 1m12s.", 72 * SECOND_MS],
+      ["You've hit your usage limit. Try again in less than a minute.", MINUTE_MS],
+      ["You've hit your usage limit. Try again at 9:50 PM.", 114 * MINUTE_MS],
+      ["You've hit your usage limit. Try again at 21:50.", 114 * MINUTE_MS],
+      [
+        "You've hit your usage limit. Try again at Sep 12th, 2026 3:45 PM.",
+        new Date("2026-09-12T15:45:00").getTime() - now,
+      ],
+      ["Claude usage limit reached; resets at 9:50pm", 114 * MINUTE_MS],
+      // Nothing to read: no number, a date with no time, an unknown month, a wait in the past.
+      ["Something went wrong, try again in a moment.", null],
+      ["You've hit your weekly limit. It resets Nov 3.", null],
+      ["You've hit your usage limit. Try again at Foo 12th, 2026 3:45 PM.", null],
+    ];
+    for (const [text, ms] of rows) assert.equal(limitResetMs(text, now), ms, text);
+    const tomorrow = limitResetMs("You've hit your usage limit. Try again at 9:50 AM.", now)!;
+    assert.ok(tomorrow > 12 * HOUR_MS && tomorrow < DAY_MS, `a clock time already behind is tomorrow's: ${tomorrow}`);
+    assert.equal(
+      limitResetMs("You've hit your usage limit. Try again at Sep 1st, 2026 3:45 PM.", now),
+      MINUTE_MS,
+      "a dated reset already past is a minute away, never negative",
+    );
   });
 });
 

@@ -657,7 +657,9 @@ A paused build is the user's to resume, with two exceptions the host takes itsel
 (`main/core/auto-resume.ts`) while Settings → Harness **Resume builds automatically** is on (the
 default). A director night closed on an engine limit (`run_finished.limit`: `rate_limit` or
 `usage_limit` with `retryAfterMs`, counted from `limit.at` when the close has it) resumes two
-minutes after the limit resets. A run the loop's
+minutes after the limit resets. Both engines read that wait from the limit's own text
+(`engines/limit-reset.ts`: Claude Code's "resets 9:50pm", Codex's "try again in 1 hour 30
+minutes" or "try again at 3:45 PM"); a limit that names no reset is the user's to resume. A run the loop's
 crash paused (the host saw the harness exit with it open, `onHarnessDied`, and the reborn loop's
 close came after) resumes once the harness is ready. The pure planner `autoResumePlan` reads typed
 fields only, never a close's words. A resume goes through the Resume button's own

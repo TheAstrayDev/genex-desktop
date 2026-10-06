@@ -102,6 +102,7 @@ import {
   studioToolName,
 } from "./studio-tool-prompts.ts";
 import { captureArgs } from "./capture-args.ts";
+import { limitResetMs } from "./limit-reset.ts";
 import { JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
@@ -1139,11 +1140,14 @@ export class CodexEngine implements Engine {
     }
     // A weekly cap won't reset within any run's lifetime — it must end the run with an honest
     // reason, not burn retry strikes. A shorter window stays a rate limit the loop can wait out.
+    // Either carries the wait its text names ("try again in 1 hour 30 minutes"), so the run can
+    // wait it out and the host can resume a paused run after it.
+    const resetMs = limitResetMs(text) ?? undefined;
     if (USAGE_LIMIT_PATTERNS.some((re) => re.test(text))) {
-      return new EngineError(EngineFailureKind.UsageLimit, this.id, text);
+      return new EngineError(EngineFailureKind.UsageLimit, this.id, text, resetMs);
     }
     if (RATE_LIMIT_PATTERNS.some((re) => re.test(text))) {
-      return new EngineError(EngineFailureKind.RateLimit, this.id, text);
+      return new EngineError(EngineFailureKind.RateLimit, this.id, text, resetMs);
     }
     if (AUTH_PATTERNS.some((re) => re.test(text))) {
       return new EngineError(EngineFailureKind.Auth, this.id, `${text} — ${this.loginHint()}`);

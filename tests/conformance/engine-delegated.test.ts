@@ -277,6 +277,9 @@ describe("claude code delegated engine", () => {
       (err: unknown) => {
         assert.ok(err instanceof EngineError);
         assert.equal(err.kind, "rate_limit");
+        // The reset the thrown text names rides with it, so the host can resume after it.
+        const wait = err.retryAfterMs ?? 0;
+        assert.ok(wait > 0 && wait <= 24 * 3_600_000, `the wait until 5pm: ${err.retryAfterMs}`);
         return true;
       },
     );

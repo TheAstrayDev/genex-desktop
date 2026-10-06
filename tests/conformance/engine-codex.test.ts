@@ -472,6 +472,37 @@ describe("codex engine", () => {
     );
   });
 
+  it("hands the wait a Codex limit names to the run, so the host can resume after it", async () => {
+    const rows = [
+      {
+        message:
+          "You've hit your usage limit. Upgrade to Pro (https://openai.com/chatgpt/pricing) or try again in 1 hour 30 minutes.",
+        kind: "usage_limit",
+        retryAfterMs: 90 * 60_000,
+      },
+      { message: "Rate limit reached for gpt-5. Please try again in 20s.", kind: "rate_limit", retryAfterMs: 20_000 },
+      { message: "You've hit your weekly limit. It resets Nov 3.", kind: "usage_limit", retryAfterMs: undefined },
+    ];
+    for (const [i, row] of rows.entries()) {
+      const { fn } = fakeExec([
+        { type: "thread.started", thread_id: "t" },
+        { type: "turn.failed", error: { message: row.message } },
+      ]);
+      const { engine, root } = await signedInEngine(fn);
+      const cwd = path.join(root, `limit${i}`);
+      await mkdir(cwd, { recursive: true });
+      await assert.rejects(
+        () => engine.delegate({ prompt: "build", cwd }),
+        (err: EngineError) => {
+          assert.ok(err instanceof EngineError, row.message);
+          assert.equal(err.kind, row.kind, row.message);
+          assert.equal(err.retryAfterMs, row.retryAfterMs, row.message);
+          return true;
+        },
+      );
+    }
+  });
+
   it("reports a stale sign-in as auth, so the remedy is a login and not a retry", async () => {
     const { fn } = fakeExec([{ type: "turn.failed", error: { message: "Not logged in. Run `codex login`." } }]);
     const { engine, root } = await signedInEngine(fn);
