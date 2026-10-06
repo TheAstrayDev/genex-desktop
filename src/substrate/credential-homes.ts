@@ -53,3 +53,14 @@ export function openCodeDataHome(
     env.XDG_DATA_HOME && path.isAbsolute(env.XDG_DATA_HOME) ? env.XDG_DATA_HOME : path.join(home, ".local", "share");
   return path.join(data, "opencode");
 }
+
+/**
+ * The sign-in homes of the CLIs that run inside the studio's own sandbox (OpenCode, which has no
+ * sandbox of its own): the only homes a sandbox may exempt for the CLI it runs (`SandboxOptions.ownHome`).
+ */
+export function sandboxedCliHomes(
+  env: Record<string, string | undefined> = process.env,
+  home: string = os.homedir(),
+): string[] {
+  return [openCodeDataHome(env, home)];
+}

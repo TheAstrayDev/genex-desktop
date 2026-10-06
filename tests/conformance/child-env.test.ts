@@ -477,6 +477,38 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
     }
   });
 
+  it("the sandbox OpenCode runs in lets it reach its own sign-in home and no other (hostile table)", async () => {
+    const root = await tmpDir("child-env-own-home-");
+    const opencode = path.join(os.homedir(), ".local", "share", "opencode");
+    const secrets = path.join(root, "secrets");
+    const sandbox = await ProcessSandbox.create({
+      writableRoots: [root],
+      scratchDir: path.join(root, "scratch"),
+      secretPaths: [secrets],
+      enabled: false,
+      // Only an exact credential home is exempted: a studio secret, another CLI's home, a parent of
+      // a home, the home folder and a relative path named here all stay as they were.
+      ownHome: [opencode, secrets, dotCodex, path.dirname(opencode), os.homedir(), "relative/opencode"],
+    });
+    assert.ok(!sandbox.policy.denyRead.includes(opencode), "OpenCode reads its own sign-in");
+    assert.ok(!sandbox.policy.denyWrite.includes(opencode), "and keeps its sessions there");
+    assert.ok(sandbox.policy.allowWrite.includes(opencode));
+    for (const dir of [secrets, dotCodex, dotClaude]) {
+      assert.ok(sandbox.policy.denyRead.includes(dir), `denyRead still holds ${dir}`);
+      assert.ok(sandbox.policy.denyWrite.includes(dir), `denyWrite still holds ${dir}`);
+    }
+    for (const dir of [path.dirname(opencode), os.homedir(), "relative/opencode"])
+      assert.ok(!sandbox.policy.allowWrite.includes(dir), `nothing but the exempted home is opened: ${dir}`);
+
+    const other = await ProcessSandbox.create({
+      writableRoots: [root],
+      scratchDir: path.join(root, "scratch-2"),
+      secretPaths: [],
+      enabled: false,
+    });
+    assert.ok(other.policy.denyRead.includes(opencode), "every other sandbox denies OpenCode's sign-in");
+  });
+
   it("an environment pointing a login home at the whole home folder does not deny the home folder", async () => {
     const root = await tmpDir("child-env-home-");
     const sandbox = await withEnv({ CODEX_HOME: os.homedir(), CLAUDE_CONFIG_DIR: "/" }, () =>

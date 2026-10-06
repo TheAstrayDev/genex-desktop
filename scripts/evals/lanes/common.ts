@@ -310,10 +310,11 @@ export function evalHomesEnv(homes: EvalCliHomes): Record<string, string> {
 }
 
 /** The vendor the app's contractor filter (`childEnv`) knows each coding CLI by. */
-const CONTRACTOR_VENDOR = { [EngineId.ClaudeCode]: "claude", [EngineId.Codex]: "codex" } as const satisfies Record<
-  CodingProvider,
-  string
->;
+const CONTRACTOR_VENDOR = {
+  [EngineId.ClaudeCode]: "claude",
+  [EngineId.Codex]: "codex",
+  [EngineId.OpenCode]: "opencode",
+} as const satisfies Record<CodingProvider, string>;
 
 /** The marker `laneFlagsDigest` folds in for the raw lanes' credential policy, so a change to it moves the pin. */
 export const RAW_LANE_CREDENTIAL_POLICY = "credentials:contractor";
