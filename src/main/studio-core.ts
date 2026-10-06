@@ -962,7 +962,7 @@ export class StudioCore {
       // Metered: OpenCode on whatever the person signed it in to, OpenRouter on the key pasted in
       // Settings. Registered like the subscriptions, so the picker can offer them.
       new OpenCodeEngine({
-        root: path.join(this.layout.engineHomes, EngineId.OpenCode),
+        scratchRoot: path.join(this.layout.scratch, EngineId.OpenCode),
         protectedPaths: this.#protectedPaths(),
         toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
         lockRecovery: path.join(this.layout.engineHomes, LOCK_RECOVERY_DIR),

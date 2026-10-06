@@ -40,9 +40,10 @@ async function engineWith(stream: (invocation: OpenCodeInvocation) => AsyncItera
     seen.push(invocation);
     return stream(invocation);
   };
+  // As in the app: the engine homes are a folder every sandbox denies; the scratch root is not in it.
   const engine = new OpenCodeEngine({
-    root,
-    protectedPaths: [path.join(root, "secrets")],
+    scratchRoot: path.join(root, "scratch"),
+    protectedPaths: [path.join(root, "secrets"), path.join(root, "engine-homes")],
     execFn,
     resolveCli: ready,
     listModels: () => fixture("opencode-models-1.18.txt"),
@@ -95,7 +96,7 @@ describe("OpenCode's status", () => {
   it("says what to do at each step: install, fix the install, sign in, or go", async () => {
     const root = await tmpDir("opencode-status-");
     const status = (resolveCli: () => Promise<{ ready: boolean; path?: string; detail: string }>, listing = "") =>
-      new OpenCodeEngine({ root, resolveCli, listModels: async () => listing }).status();
+      new OpenCodeEngine({ scratchRoot: root, resolveCli, listModels: async () => listing }).status();
     const missing = await status(async () => ({ ready: false, detail: "missing" }));
     assert.equal(missing.code, "not_installed");
     assert.match(missing.remedy ?? "", /Install OpenCode/);
@@ -193,6 +194,10 @@ describe("OpenCode sessions", () => {
     assert.equal(result.ok, true);
     const [invocation] = seen;
     assert.ok(invocation?.cwd.startsWith(path.join(root, "scratch")), "never the game folder");
+    assert.ok(
+      invocation?.sandbox.secretPaths.every((denied) => !invocation.cwd.startsWith(denied)),
+      "and never inside a folder the sandbox denies",
+    );
     const config = JSON.parse(invocation?.env.OPENCODE_CONFIG_CONTENT ?? "{}");
     assert.equal(config.permission.edit, "deny");
     assert.equal(config.permission.external_directory, "allow", "it reads the game by its full path");

@@ -97,8 +97,11 @@ export interface OpenCodeInvocation {
 export type OpenCodeExec = (invocation: OpenCodeInvocation) => AsyncIterable<Record<string, unknown>>;
 
 export interface OpenCodeEngineOptions {
-  /** The engine's home: read-only sessions' scratch folders and stills live under it. */
-  root: string;
+  /**
+   * Where read-only sessions run and their temporary files go: never under the engine homes, which
+   * every sandbox denies. The system temporary folder when not given.
+   */
+  scratchRoot?: string;
   /** What no OpenCode session may read: the studio's secrets, the engines' homes. */
   protectedPaths?: string[];
   toolPath?: () => Promise<string>;
@@ -128,7 +131,7 @@ export class OpenCodeEngine implements Engine {
   readonly label = "OpenCode";
   readonly kind = EngineKind.Delegated;
   readonly supportsSessions = true;
-  readonly #root: string;
+  readonly #scratchRoot: string;
   readonly #protectedPaths: string[];
   readonly #toolPath: (() => Promise<string>) | undefined;
   readonly #catalog: ModelCatalog;
@@ -139,7 +142,7 @@ export class OpenCodeEngine implements Engine {
   #hosts = new Map<string, string | null>();
 
   constructor(options: OpenCodeEngineOptions) {
-    this.#root = options.root;
+    this.#scratchRoot = options.scratchRoot ?? path.join(os.tmpdir(), `studio-${EngineId.OpenCode}`);
     this.#protectedPaths = options.protectedPaths ?? [];
     this.#toolPath = options.toolPath;
     this.#catalog = new ModelCatalog(options.onModelsChanged);
@@ -308,14 +311,10 @@ export class OpenCodeEngine implements Engine {
     }
   }
 
-  #scratchRoot(): string {
-    return path.join(this.#root, "scratch");
-  }
-
   /** A new folder of its own under the engine's scratch root. */
   async #scratch(prefix: string): Promise<string> {
-    await mkdir(this.#scratchRoot(), { recursive: true });
-    return mkdtemp(path.join(this.#scratchRoot(), prefix));
+    await mkdir(this.#scratchRoot, { recursive: true });
+    return mkdtemp(path.join(this.#scratchRoot, prefix));
   }
 
   async #openBridge(request: DelegateRequest, runDir: string): Promise<StudioBridge | null> {
@@ -424,7 +423,7 @@ export class OpenCodeEngine implements Engine {
       runDir: ctx.runDir,
       gameDir: ctx.cwd,
       gitDirs: ctx.access === OpenCodeAccess.Build ? await gitMetadata(ctx.cwd) : [],
-      scratchDir: path.join(this.#scratchRoot(), "tmp"),
+      scratchDir: path.join(this.#scratchRoot, "tmp"),
       secretPaths: [...this.#protectedPaths, ...denyReads],
       ...(this.#toolPath ? { toolPath: this.#toolPath } : {}),
     });

@@ -58,22 +58,7 @@ export function registerModelsIpc(handle: IpcHandle, { core, subscription, pushU
     await core.engines.get(provider).refreshModels?.(true);
     return true;
   });
-  // The OpenRouter key: checked with OpenRouter, kept in the OS secret store, never sent back.
-  const keyEngine = (): ApiKeyEngine => {
-    const engine = core.engines.has(EngineId.OpenRouter) ? core.engines.get(EngineId.OpenRouter) : null;
-    if (!isApiKeyEngine(engine)) throw new Error(MESSAGE.noKeyEngine);
-    return engine;
-  };
-  handle("studio:openrouter.key.save", async (payload) => {
-    const status = await keyEngine().saveKey(payload?.key);
-    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
-    return status;
-  });
-  handle("studio:openrouter.key.clear", async () => {
-    const status = await keyEngine().clearKey();
-    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
-    return status;
-  });
+  registerApiKeyIpc(handle, { core, pushUiEvent });
   // The composer's plan limits: every signed-in subscription, read without starting a turn.
   handle("studio:provider-usage", async () => {
     const reports = await Promise.all(
@@ -160,5 +145,27 @@ export function registerModelsIpc(handle: IpcHandle, { core, subscription, pushU
       progressUpdates.flush();
     }
     return true;
+  });
+}
+
+/** The OpenRouter key: checked with OpenRouter, kept in the OS secret store, never sent back. */
+function registerApiKeyIpc(
+  handle: IpcHandle,
+  { core, pushUiEvent }: Pick<ModelsIpcDeps, "core" | "pushUiEvent">,
+): void {
+  const keyEngine = (): ApiKeyEngine => {
+    const engine = core.engines.has(EngineId.OpenRouter) ? core.engines.get(EngineId.OpenRouter) : null;
+    if (!isApiKeyEngine(engine)) throw new Error(MESSAGE.noKeyEngine);
+    return engine;
+  };
+  handle("studio:openrouter.key.save", async (payload) => {
+    const status = await keyEngine().saveKey(payload?.key);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
+    return status;
+  });
+  handle("studio:openrouter.key.clear", async () => {
+    const status = await keyEngine().clearKey();
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
+    return status;
   });
 }
