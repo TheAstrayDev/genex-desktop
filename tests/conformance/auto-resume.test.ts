@@ -1012,8 +1012,8 @@ describe("an engine's own limit, from its error to the planned resume", () => {
   });
 
   /**
-   * The NFS run (6 Oct 2026): "Your organization has disabled Claude subscription access…", in a
-   * `success`-subtype result flagged `is_error`. No reset ends that: the pause waits for the user.
+   * "Your organization has disabled Claude subscription access…", in a `success`-subtype result
+   * flagged `is_error`. No reset ends that: the pause waits for the user.
    */
   it("an account whose access was taken away pauses for the user, never for a reset", async () => {
     const disabled =

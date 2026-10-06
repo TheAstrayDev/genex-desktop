@@ -761,12 +761,11 @@ separate from wall-time union; neither is a measured model-speed improvement.
 
 ### A lost provider
 
-A provider that stops answering is no verdict on anybody's work (the NFS run, 2026-10-06, had its
-account disabled 3 h 05 min in, wrapped up, and landed an unchecked build). The engines call a
-revoked or disabled access a sign-in failure (`auth`): Claude Code from the CLI's own error code on
-the reply (`authentication_failed`, `oauth_org_not_allowed`, `account_on_hold`, `billing_error`) or
-the access words both engines share (`engines/common.ts` `isAccessLost`), also when the result's
-subtype says success. A lead turn a lost provider ended — a sign-in, a limit it will not wait out,
+A provider that stops answering is no verdict on anybody's work: the run pauses rather than wrap
+up and land a build nobody could check. The engines call a revoked or disabled access a sign-in
+failure (`auth`): Claude Code from the CLI's own error code on the reply (`authentication_failed`,
+`oauth_org_not_allowed`, `account_on_hold`, `billing_error`) or the access words both engines share
+(`engines/common.ts` `isAccessLost`), also when the result's subtype says success. A lead turn a lost provider ended — a sign-in, a limit it will not wait out,
 an outage the patience ladder could not outlast, a 529 the session returned included — pauses the
 night (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
 or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and no learning pass

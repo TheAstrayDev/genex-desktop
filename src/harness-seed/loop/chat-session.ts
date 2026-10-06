@@ -185,7 +185,7 @@ export function originalAsk(messages: readonly BriefMessage[] | undefined): stri
  * `contractor_session` is the durable bookmark, and the chat's own delegations always write it;
  * `delegation_incomplete` and a mirrored init event are fallbacks for chats that started before
  * the bookmark existed. A later one of those never outranks a bookmark: a coordinator, worker or
- * reviewer that ran in this thread leaves them too, and its session is not the chat's (P07-V1).
+ * reviewer that ran in this thread leaves them too, and its session is not the chat's.
  */
 export function lastContractorSession(
   events: readonly AnyRecord[] | undefined,
@@ -251,7 +251,7 @@ export function isResumeFailure(err: any): boolean {
  * The rule that describes the game itself. The studio's own template is an empty project with
  * no build, no package manager and no network, and this sentence says so. A folder the user
  * brought is none of those things — see `ownShapeRules` — and telling its contractor otherwise
- * is how one night was spent moving a real game's DOM UI into a HUD it never had.
+ * would have it move a real game's DOM UI into a HUD it never had.
  */
 const TEMPLATE_RULE =
   "When you build, follow CLAUDE.md in the workspace root: keep window.__studio (seed/start/pause/step/state/debugCamera) working, keep gameplay deterministic (rng from reset(seed), never Math.random), assets come from procedural code, imports, or the currently enabled plugin tools. Follow the selected tool’s returned file paths and verification guidance.";
@@ -435,7 +435,7 @@ export function buildContractorBrief({
  * A fresh brief's opening: for a follow-up, the same chat's original request and its latest
  * instruction; else the ask and where the game stands. After a compaction the first kept
  * message is not the original request (the handover says it), so only the latest is quoted.
- * A game nothing has been made in is a blank page: "continue from the existing code" once sent
+ * A game nothing has been made in is a blank page: "continue from the existing code" would send
  * a "Hello" off to inspect an empty template.
  */
 function briefHead(

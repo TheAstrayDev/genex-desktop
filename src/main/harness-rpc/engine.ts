@@ -25,7 +25,7 @@ export function engineRpc(core: StudioCore, x: CoreInternals) {
         x.consent.cancel(scope, "stop");
         x.permissions.cancel(scope, ToolPermissionBy.Stop);
       }
-      // One worker (director, 2026-09-07): the delegation building in this worktree, nothing else.
+      // One worker: the delegation building in this worktree, nothing else.
       if (p.cwd) {
         const running = x.activeDelegations.get(path.resolve(p.cwd));
         if (running) {

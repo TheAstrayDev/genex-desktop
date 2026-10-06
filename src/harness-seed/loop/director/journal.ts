@@ -93,7 +93,7 @@ export interface PriorWorker {
 export interface RestoredWake {
   idleAsked: boolean;
   wakesAt: number[];
-  /** Lost sessions the night has already replaced: the allowance does not start again on a Resume (P08-F9). */
+  /** Lost sessions the night has already replaced: the allowance does not start again on a Resume. */
   freshSessions?: number;
   /** The finish mark was said: a Resume does not say it again. */
   finishMarkSaid?: boolean;

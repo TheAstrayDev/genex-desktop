@@ -74,8 +74,8 @@ async function gatherOnce(loop: FacetLoop, round: FacetRound): Promise<AnyRecord
       ...(role === FacetRole.Integration ? { maxDemos: Infinity } : {}),
       setup: facetSetup,
       // An error the incumbent (or the base, before any incumbent) already logs is the
-      // build's, not this challenger's: five workers once lost their first iteration to
-      // one shader line in a base nobody owned.
+      // build's, not this challenger's: one shader line in a base nobody owns must not cost
+      // every worker its first iteration.
       // `consoleBaseline` is every message the incumbent logged; `consoleErrors` is the last
       // five a prompt shows — a baseline built from five forgives the wrong ones.
       inheritedConsole: [

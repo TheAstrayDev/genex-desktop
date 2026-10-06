@@ -568,7 +568,7 @@ export class RecoveryService {
    * The loop died — it crashed, or the watchdog is about to rewind it. Everything it briefed is
    * now unsupervised: a contractor keeps editing its worktree for another forty minutes with
    * nobody left to judge, commit or land the round, and the run reads as running until the next
-   * app boot (the first night's crash cost exactly that). So every delegation is aborted — none
+   * app boot. So every delegation is aborted — none
    * of them can be judged or committed without the loop, whatever the cwd — and every run that
    * was holding the Mac awake is settled here, which frees the power blocker, the quit gate and
    * the idle watch. The *cards* are not written here: a run's ending belongs to the harness's
@@ -762,8 +762,7 @@ export class RecoveryService {
   /**
    * A harness restore moves seed files back in time without touching the manifest, and the
    * boot-time ownership rule would then read every rewound file as an agent edit and pin it
-   * forever (this happened: four watchdog rewinds in one night, then no shipped fix could
-   * land). Re-owning is delegated to seed-upgrade.ts, which owns the manifest's semantics;
+   * forever, and after a few watchdog rewinds no shipped fix could land. Re-owning is delegated to seed-upgrade.ts, which owns the manifest's semantics;
    * a failure is logged and swallowed — bookkeeping must never abort a recovery. Public
    * because every path that rewinds the harness owes this call — the user's manual rollback
    * (main/index.ts) included, not just the watchdog and the agent's own restores.

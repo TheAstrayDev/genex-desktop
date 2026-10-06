@@ -117,7 +117,7 @@ const STUDIO_CONTRACT = "src/studio.js";
 const MAX_EMPTY_INTERRUPTS = 2;
 
 /**
- * A worker's engine hit its limit (cross-provider roles, 2026-09-10). On a night whose workers
+ * A worker's engine hit its limit. On a night whose workers
  * run on the other subscription this is not the director's own limit and must not pause the
  * run: the director keeps its session, and run_status says which engine is out, since when
  * and for how long, so it can wait it out or do the work with its own hands.
@@ -215,9 +215,8 @@ async function lookedFindings(night: Night, worker: Worker, status: string, labe
 
 /**
  * The worker monitor. Between "worker started" and "iteration 1 accepted" nothing wrote a
- * note, so nothing could wake the lead: one night the director asked nine times over
- * thirty-three minutes and was told "nothing yet" every time, while all five workers were
- * making the same contract mistake — and it learned that only when their rounds were over.
+ * note, so nothing could wake the lead: a director asking for news heard "nothing yet" while
+ * every worker made the same mistake, and learned of it only when their rounds were over.
  *
  * So the studio looks for it. Every few minutes (`monitorEveryMs`) it reads each running
  * loop worker's worktree with the reviewer it already owns — `git status`, `git diff` and
@@ -1369,7 +1368,7 @@ function goalRefusal(night: Night, id: string, args: AnyRecord): string | null {
   if (decision === GoalStatus.Blocked)
     return "Required work is blocked: finish honestly without victory and report the prerequisite.";
   // A conflict worker finishes work a goal's worker already did: resolving its merge is not a new
-  // attempt at any goal, and it names none (P10-F2).
+  // attempt at any goal, and it names none.
   if (conflictMergeOf(args)) return null;
   return goalAttemptRefusal(state.goals, String(args.goal ?? id));
 }
@@ -1761,7 +1760,7 @@ function resumable(night: Night, worker: Worker, delegation: AnyRecord): boolean
 /**
  * The session's turns: its brief, then each interrupt resumed with the steers that caused it. An
  * interrupt with nothing new to hear — a second steer's, landing on the turn that already took
- * it — resumes it to carry on, a few times in a row at most (P10-F8). Answers the last turn.
+ * it — resumes it to carry on, a few times in a row at most. Answers the last turn.
  */
 async function runSingleSession(night: Night, worker: Worker, brief: string): Promise<AnyRecord> {
   const { appendRun, run } = night;

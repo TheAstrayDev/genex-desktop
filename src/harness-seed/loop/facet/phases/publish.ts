@@ -44,7 +44,7 @@ export async function publishRound(loop: FacetLoop, round: FacetRound): Promise<
     // The defect list the UI shows: failing checks (identity first) then the taste judge's.
     defects: recordDefects(round),
     reason: round.verdict.reason ?? "",
-    // Which judge said so (P14-F5): model, prompt hash, reply, usage.
+    // Which judge said so: model, prompt hash, reply, usage.
     judgeCall: round.verdict.judgeCall ?? null,
     verdictSource: round.verdictSource,
     partial: round.partialWork,

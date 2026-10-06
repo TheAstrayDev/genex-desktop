@@ -1,10 +1,8 @@
 /**
  * Who lays a game's foundation when the project is empty: the studio's starting scene, or the lead
- * itself. The NFS ∞ Loop run's starting scene (six minutes, the goal and a mood) was a straight
- * sprint its lead threw away six minutes later, when it laid the module split itself; Midnight Apex
- * laid its interfaces and crude stubs first and handed the content to its owners. A run with room
- * for a team now starts like Apex (setup.ts `buildStartingPoint`); a short run or a pool of one
- * still gets a starting scene.
+ * itself. A lead that splits the game into modules throws a starting scene away, so a run with room
+ * for a team starts with the lead laying interfaces and crude stubs and handing the content to its
+ * owners (setup.ts `buildStartingPoint`); a short run or a pool of one still gets a starting scene.
  *
  * Pure, and a new module: a kept older budgets.ts never shadows these names.
  */

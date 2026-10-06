@@ -1,5 +1,5 @@
 /**
- * A folder the user brings keeps its own shape (skate-prod, 2026-09-06): the studio detects the
+ * A folder the user brings keeps its own shape: the studio detects the
  * entry, build and output, adds only what it needs, builds before serving, and every rule that
  * named src/main.js names the real entry instead.
  */
@@ -245,8 +245,8 @@ describe("a project's own shape", () => {
   });
 
   it("keeps the game whose entry is src/main.js — the studio's own name is not the studio's proof", async () => {
-    // The exact folder the studio adopted as "the studio template", built nothing for, served
-    // raw, and then judged as a black frame (flautout-remix/wreckage, 2026-09-07).
+    // A folder the studio would adopt as "the studio template", build nothing for, serve raw,
+    // and then judge as a black frame.
     const dir = path.join(await tmpDir("studio-shape-"), "wreckage");
     await wreckageFolder(dir);
     assert.deepEqual(await detectProjectShape(dir), {
@@ -278,7 +278,7 @@ describe("a project's own shape", () => {
     await wreckageFolder(dir);
     await writeFile(path.join(dir, "package-lock.json"), "{}\n");
     // studio.json rides inside the folder the user downloaded, and any contractor can rewrite it
-    // mid-night. Running the install is the one thing that opens the network (decision 3), so a
+    // mid-run. Running the install is the one thing that opens the network, so a
     // recorded value that is not a manager's install is not what that exemption may wrap.
     const recorded = (install: unknown): string =>
       JSON.stringify({
@@ -603,7 +603,7 @@ describe("a project's own shape", () => {
   });
 
   it("sees an empty studio template wrapped around the real game, and leads with the game", async () => {
-    // The shape of the folder that produced the finding (flautout-remix, 2026-09-07), owned by
+    // The shape of the folder that produced the finding, owned by
     // this repository so it holds everywhere: a template the studio itself wrote, with the
     // user's own Genex game one folder down.
     const { games, base } = await workspaces();
@@ -747,7 +747,7 @@ describe("a project's own shape", () => {
     await games.adopt(dir);
 
     // The template's CLAUDE.md ("This project starts empty", "no DOM", "Nothing is downloaded")
-    // was merged into somebody's real game and obeyed (flautout-remix, 2026-09-07).
+    // was merged into somebody's real game and obeyed.
     const claude = await readFile(path.join(dir, "CLAUDE.md"), "utf8");
     assert.ok(!/starts empty/.test(claude), claude.slice(0, 300));
     assert.ok(!/All UI through `__studio\.hud`/.test(claude), "this game's UI is its own");
@@ -1458,7 +1458,7 @@ describe("the Open Game sheet", () => {
     const inspection = await games.inspect(parent);
     // "This project starts empty", "Empty project" and a contract page headed "No build step, no
     // package manager, no network" are all false about a folder wrapped around somebody's real
-    // game — and the contractor obeys them, which is what lost flautout-remix a night.
+    // game — and the contractor obeys them, losing the run.
     for (const page of ["CLAUDE.md", "NOTES.md", "docs/CONTRACT.md", "index.html", "src/main.js"]) {
       assert.ok(!inspection.starter.includes(page), `${page} is promised: ${inspection.starter.join(", ")}`);
     }
@@ -1682,7 +1682,7 @@ describe("the contract upgrade", () => {
 
   const m4Studio = () =>
     readFile(path.join(repo, "tests", "fixtures", "shipped", "studio-generation-4.js.txt"), "utf8");
-  /** The contract the template shipped before the racing-line assist (the NFS run, 2026-10-06). */
+  /** The contract the template shipped before the racing-line assist. */
   const arcsStudio = () =>
     readFile(path.join(repo, "tests", "fixtures", "shipped", "studio-generation-5.js.txt"), "utf8");
   const firstHud = () => readFile(path.join(repo, "tests", "fixtures", "hud-generation-1.js.txt"), "utf8");
@@ -1709,7 +1709,7 @@ describe("the contract upgrade", () => {
 
   it("reads the shipped template as newer than every copy that came before it", async () => {
     const shipped = await readFile(path.join(repo, "src", "game-template", "src", "studio.js"), "utf8");
-    // Flipped for the NFS run (2026-10-06): the racing-line assist is generation 6.
+    // Flipped: the racing-line assist is generation 6.
     assert.equal(studioContractGeneration(shipped), 6, "the shipped contract is the current one");
     // The contract every game scaffolded since M4 holds: its HUD facade has no arc, panel or path.
     assert.equal(studioContractGeneration(await m4Studio()), 4);
@@ -1773,7 +1773,7 @@ describe("the contract upgrade", () => {
     assert.equal(result.backup, "src/studio.v4.js", "its predecessor is kept beside it, named for its vintage");
     assert.equal(await readFile(path.join(dir, "src", "studio.v4.js"), "utf8"), await m4Studio());
     const upgraded = await readFile(studio, "utf8");
-    // Flipped for the NFS run (2026-10-06): the template is generation 6.
+    // Flipped: the template is generation 6.
     assert.equal(studioContractGeneration(upgraded), 6);
     assert.match(upgraded, /returnCamera/, "the eye camera is given back — the bug M4 fixed");
 

@@ -212,8 +212,8 @@ async function countFixLoss(loop: FacetLoop, round: FacetRound, fix: AnyRecord, 
 
 /**
  * The judge's defects and the notes no camera can answer, in one ledger for the next brief; its
- * polish notes and its big move beside it. The critic's polish fixes no longer pad the ledger:
- * the golden-goal night's ledgers were mostly nits, and the builders spent their rounds on them.
+ * polish notes and its big move beside it. The critic's polish fixes do not pad the ledger: a
+ * ledger of nits has the builders spend their rounds on them.
  */
 function updateDefectLedger(loop: FacetLoop, round: FacetRound): void {
   if (round.verdict.defects?.length) loop.defectList = round.verdict.defects;

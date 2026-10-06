@@ -1,5 +1,5 @@
 /**
- * Memory admission before a round (the Midnight Apex report, recommendation 7). `worker_start`
+ * Memory admission before a round. `worker_start`
  * checks free memory once, when the worker's window opens; a round hours later starts a build
  * and three game loads on whatever the machine has left, and a window the OS kills mid-pass
  * costs the round. A worker whose machine is short of memory waits for it at the round's

@@ -57,8 +57,7 @@ it("host staging of a nested repository also excludes newly introduced environme
 
 /**
  * A project folder holding the user's own game one level down, as a repository of its own with
- * its own build and its own packages — the shape that lost a night's work (flautout-remix,
- * 2026-09-07). Git records `wreckage/` as a pointer, not as files.
+ * its own build and its own packages — a shape that can lose a run's work. Git records `wreckage/` as a pointer, not as files.
  */
 async function nestedGame(): Promise<{ engine: SnapshotEngine; live: string; wreckage: string }> {
   const live = path.join(await tmpDir("studio-nested-"), "stunt");
@@ -146,7 +145,7 @@ describe("snapshot engine", () => {
     await writeFile(path.join(games, "index.html"), "<h1>v2</h1>\n");
     await engine.snapshot({ scope: "game", reason: "iteration 1", gameWorkspace: "pong" });
     // Author and committer, every commit in the game: the substrate's initial one and the
-    // snapshot on top of it. A user's game once carried five studio identities after one night.
+    // snapshot on top of it, never a studio identity in the user's history.
     const who = new Set((await git(games, ["log", "--format=%an|%ae|%cn|%ce"])).trim().split("\n"));
     assert.deepEqual(
       [...who],
@@ -227,7 +226,7 @@ describe("snapshot engine", () => {
 });
 
 /**
- * Decision 1 (2026-09-08): the game inside the folder is opened as *the* game by default, and a
+ * The game inside the folder is opened as *the* game by default, and a
  * user who keeps the parent lets the studio version it instead. Everything below is the second
  * half — what "versioned" has to mean for a night's work to survive.
  */

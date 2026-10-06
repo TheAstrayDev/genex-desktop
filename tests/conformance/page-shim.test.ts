@@ -482,7 +482,7 @@ describe("what a game page's renderer is given", () => {
   const prefs = gameViewPreferences("game-session", false);
 
   it("has no on-device speech recognition, whose missing binder kills the whole renderer", () => {
-    // Both, never one (2026-09-23): OnDeviceWebSpeechAvailable alone leaves
+    // Both, never one: OnDeviceWebSpeechAvailable alone leaves
     // install({ processLocally: true }) killing the page, and InstallOnDeviceSpeechRecognition
     // alone leaves available() and a processLocally start() doing it.
     assert.ok(

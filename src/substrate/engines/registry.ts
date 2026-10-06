@@ -19,7 +19,7 @@ const MESSAGE = {
   UnknownEngine: (id: string) => `unknown engine: ${id}`,
 } as const;
 
-/** How long a fallback choice waits on one engine's status before counting it not ready (P01-F8). */
+/** How long a fallback choice waits on one engine's status before counting it not ready. */
 const STATUS_PROBE_MS = 5 * SECOND_MS;
 
 /** What a failed call needs from the engine that takes it over. */
@@ -151,7 +151,7 @@ export class EngineRegistry {
   async fallbackFor(failed: string, error: Pick<EngineError, "kind">, needs: FallbackNeeds = {}): Promise<string[]> {
     if (error.kind === EngineFailureKind.ContextOverflow || error.kind === EngineFailureKind.Auth) return [];
     // A local engine is the only fallback that cannot itself be rate limited, and the only one
-    // whose complete() runs a tool loop: a delegated engine's refuses tools (P01-F1).
+    // whose complete() runs a tool loop: a delegated engine's refuses tools.
     const directOnly = error.kind === EngineFailureKind.RateLimit || needs.tools === true;
     const ready = await this.#readyInOrder(
       (engine) => engine.id !== failed && (!directOnly || engine.kind === EngineKind.Direct),

@@ -1,8 +1,8 @@
 /**
  * Rebuild a game's last unattended night from the event log.
  *
- * Review used to walk the merged log and take the global last run / last 24 iterations, so two
- * games in one night mashed into one page. The log already names `project` and (now) `runId` on
+ * Review reads one run, never the merged log's global last run or last iterations, so two games
+ * built close together never mash into one page. The log already names `project` and (now) `runId` on
  * every run event; this is the reconstruction the filmstrip reads.
  *
  * Lives in shared because both processes must agree on it: main replays a game's threads

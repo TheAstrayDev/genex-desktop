@@ -551,9 +551,8 @@ function gitPlace(ctx: HarnessCtx, facet: AnyRecord, options: FacetOptions) {
   };
   /**
    * A worker's work, kept reachable. Its worktree is detached, so a commit that is never
-   * integrated is unreferenced the moment the worktree is removed — a morning once found the
-   * report naming two accepted iterations and a "preserved as commit …" that `git
-   * for-each-ref --contains` could not find anywhere. One ref per worker, moved forward each
+   * integrated is unreferenced the moment the worktree is removed, and a report could name
+   * accepted iterations "preserved as commit …" that nothing can find. One ref per worker, moved forward each
    * time: every earlier accepted build is an ancestor of the last one. Best-effort — a ref
    * that will not write must never cost the round.
    */

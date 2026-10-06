@@ -1,5 +1,5 @@
 /**
- * The evidence pass after the doomer-test night — three rules born from run_mtfqm8p66yq5:
+ * The evidence pass — three rules:
  *
  *  1. A capture that raced the compositor (stale frame wearing another camera's label) gets ONE
  *     retake before the duplicate guard may call debugCamera dead — 10 of 36 iterations died to
@@ -273,7 +273,7 @@ describe("gatherEvidence after the stale-frame night", () => {
     // counts, or the cap would drop the demo and leave its check permanently unmeasured.
     const requiredDemos = demosNamedByChecks([{ kind: "probe", demo: "five", expr: "state.done > 0" }] as never);
     assert.deepEqual(requiredDemos, ["five"]);
-    // A cap of three, named: the default is DEMOS_PER_LOOK since the NFS run (NFS-F1 below).
+    // A cap of three, named: the default is DEMOS_PER_LOOK (the judges' evidence, below).
     const evidence = await gatherEvidence(
       ctx as never,
       {
@@ -1637,7 +1637,7 @@ describe("the order a pass touches the page in, and the state it leaves it in", 
 // ── the game's front-end, the drive held in play, and what the pass now always says ──────────
 
 /**
- * A racer with a title → countdown → race front-end, the Midnight Apex shape: `seed` puts it back
+ * A racer with a title → countdown → race front-end: `seed` puts it back
  * on its menu, `begin` starts the countdown, each step of the countdown counts it down, and a held
  * W moves the car only once the race is on.
  */
@@ -1701,7 +1701,7 @@ function sequence(calls: Array<{ method: string; payload: Record<string, unknown
   });
 }
 
-describe("a game with a front-end: the drive starts in play (NFS-1)", () => {
+describe("a game with a front-end: the drive starts in play", () => {
   it("speaks the template's phase words", () => {
     assert.deepEqual({ ...HarnessFlowPhase }, { ...TemplateFlowPhase });
   });
@@ -2122,12 +2122,11 @@ describe("after the review: a kill mid-pass, the studio's own console line, and 
 });
 
 /**
- * The NFS run (run_muwe8k92lv4t, 2026-10-06) lost rounds the judges could not see: a registered
- * `contact` demo the cap of three never photographed (42.8 min of no-move rounds), no frame that
- * showed a corner when the move was corner warnings (16.3 min), a drive that held the throttle into
- * the wall, and a race a bot that only holds the throttle wins in both games.
+ * What a racer's judges must see: every registered demo's end (a builder's new demo above all),
+ * a frame of a corner, a drive the game's racing line steers rather than one held into a wall, and
+ * whether a bot that only holds the throttle wins the race.
  */
-const NFS_DEMOS = [
+const RACER_DEMOS = [
   "title",
   "countdown",
   "race-finish",
@@ -2221,17 +2220,17 @@ const racingRun = { run: { ...run, game: { kind: "racing" } } };
 const CORNER_CAMERA = "drive:corner";
 const throttleBot = (): Check => ({ id: "throttle-bot-loses", ...HARNESS_CHECKS["throttle-bot-loses"] }) as Check;
 
-describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
-  it("NFS-F1. a registered contact demo was never photographed: every registered demo's end is photographed", async () => {
-    const { ctx } = stubCtx({ frames: uniqueFrames(40), cameras: ["default", "pack"], demos: NFS_DEMOS });
+describe("judges get the evidence they need", () => {
+  it("photographs the end of every registered demo", async () => {
+    const { ctx } = stubCtx({ frames: uniqueFrames(40), cameras: ["default", "pack"], demos: RACER_DEMOS });
     const evidence = await gather(ctx, { requiredDemos: ["rival-battle"] });
     assert.deepEqual(evidence.skippedDemos, [], "the cap of three left contact unseen for four rounds");
     const demoFrames = cameraList(evidence).filter((camera) => camera.startsWith("demo:"));
-    assert.equal(demoFrames.length, NFS_DEMOS.length, demoFrames.join(", "));
+    assert.equal(demoFrames.length, RACER_DEMOS.length, demoFrames.join(", "));
     assert.ok(demoFrames.includes("demo:contact"));
   });
 
-  it("NFS-F1b. a vision check on demo:<name> waits on that demo, so the cap can never drop it", () => {
+  it("a vision check on demo:<name> waits on that demo, so the cap can never drop it", () => {
     const checks = [
       { id: "contact-reads", kind: "vision", camera: "demo:rival-battle", ask: "Is the contact physical?" },
       { id: "lit", kind: "pixel", camera: "default", expr: "litFraction > 0.2" },
@@ -2239,7 +2238,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     assert.deepEqual(demosNamedByChecks(checks), ["rival-battle"]);
   });
 
-  it("NFS-F1c. a capped look runs the build's new demos first, and tells the judge and the builder what it left out", async () => {
+  it("a capped look runs the build's new demos first, and tells the judge and the builder what it left out", async () => {
     const { ctx, calls } = stubCtx({
       frames: uniqueFrames(20),
       cameras: ["default"],
@@ -2263,7 +2262,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     );
   });
 
-  it("NFS-F1e. the builder is told which of its demos its last look left unphotographed", () => {
+  it("the builder is told which of its demos its last look left unphotographed", () => {
     const lastAttempt = { won: false, flips: [], why: "no check moved", skippedDemos: ["contact", "drift-hold"] };
     const prompt = facetPrompt({
       resumed: true,
@@ -2284,7 +2283,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     assert.doesNotMatch(quiet, /did not photograph/);
   });
 
-  it("NFS-F1d. a facet camera that is a demo's frame or the drive's corner is never asked of debugCamera", async () => {
+  it("a facet camera that is a demo's frame or the drive's corner is never asked of debugCamera", async () => {
     const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), cameras: ["default", "pack"], demos: ["rival-battle"] });
     const evidence = await gather(ctx, {
       cameras: ["pack", "demo:rival-battle", "drive:corner"],
@@ -2297,7 +2296,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     assert.equal(cameraList(evidence).filter((camera) => camera === "demo:rival-battle").length, 1);
   });
 
-  it("NFS-F2. no judged frame showed a corner: the drive photographs the turn-in of a racer", async () => {
+  it("photographs the turn-in of a racer's first corner", async () => {
     const game = racer({ cornerAfter: 10 });
     const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), ...game });
     const evidence = await gather(ctx, racingRun);
@@ -2313,7 +2312,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     );
   });
 
-  it("NFS-F2b. a racer that never turns or reports nothing gets no corner frame, never a failure, and a walker is not watched", async () => {
+  it("a racer that never turns or reports nothing gets no corner frame, never a failure, and a walker is not watched", async () => {
     const straight = stubCtx({ frames: uniqueFrames(20), ...racer({ cornerAfter: 1_000 }) });
     const flat = await gather(straight.ctx, racingRun);
     assert.equal(flat.ok, true, flat.problems.join("; "));
@@ -2331,7 +2330,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     assert.deepEqual(probed, [], "a walker's drive is not watched for corners");
   });
 
-  it("NFS-F3. the scripted drive pinned the car to the wall: the cruise steers by the game's racing line", async () => {
+  it("steers the cruise by the game's racing line", async () => {
     const game = racer({ cornerAfter: 1_000 });
     const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), ...game });
     const evidence = await gather(ctx, racingRun);
@@ -2358,7 +2357,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     assert.deepEqual(pageCalls(walker.calls, "assist"), []);
   });
 
-  it("NFS-F4. a throttle-only bot won the race: the challenge race is run, and the harness check fails on it", async () => {
+  it("races the throttle-only bot, and the harness check fails when it wins", async () => {
     const game = racer({ cornerAfter: 1_000, raceMs: 226_600, position: 1 });
     const { ctx, calls } = stubCtx({ frames: uniqueFrames(20), ...game });
     const evidence = await gather(ctx, { ...racingRun, challenge: true });
@@ -2381,7 +2380,7 @@ describe("judges get the evidence they need (NFS run, 2026-10-06)", () => {
     assert.equal(evaluateProbeCheck(throttleBot(), fair).pass, true);
   });
 
-  it("NFS-F4b. the challenge race is bounded, skipped for a game with no race result, and never run unasked", async () => {
+  it("the challenge race is bounded, skipped for a game with no race result, and never run unasked", async () => {
     const endless = stubCtx({
       frames: uniqueFrames(20),
       ...racer({ cornerAfter: 1_000, raceMs: Number.POSITIVE_INFINITY }),

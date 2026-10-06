@@ -1,5 +1,5 @@
 /**
- * The same agent after the build (2026-09-26): once a night a lead led as its chat's own session
+ * The same agent after the build: once a night a lead led as its chat's own session
  * (one session, director/lead-session.ts) has closed — finished or paused — the chat's next message
  * goes to that same session, in the game folder, with its hands back, instead of to a separate
  * read-only coordinator. It answers, and does the work it is asked for itself; it keeps the run's

@@ -206,7 +206,7 @@ describe("codex engine", () => {
     assert.equal(result.billing, "subscription");
     assert.equal(result.sessionId, "01a0-thread");
     assert.equal(result.summary, "Built a playable pong prototype.");
-    // Flipped (P03-F10): Codex's output_tokens already include its reasoning (its total_tokens is
+    // Flipped: Codex's output_tokens already include its reasoning (its total_tokens is
     // input + output), so the 50 reasoning tokens are not added a second time; they are named apart.
     assert.deepEqual(result.usage, {
       input_tokens: 1200,
@@ -586,7 +586,7 @@ describe("codex engine", () => {
   });
 });
 
-describe("codex endings that must not lose the interview (skate-prod, 2026-09-06)", () => {
+describe("codex endings that must not lose the interview", () => {
   it("survives a notice Codex reports as an error and then carries on past", async () => {
     // `codex exec` opened with "Skill descriptions were shortened to fit the skills context
     // budget…" as an `error` event, ran a seven-turn interview, and completed the turn. The
@@ -1018,7 +1018,7 @@ describe("ownership locks", () => {
     assert.match(seen[0]!.prompt, /this game is the user's own/);
   });
 
-  it("a delegation whose bridge cannot open leaves no file locked (P03-V1)", async () => {
+  it("a delegation whose bridge cannot open leaves no file locked", async () => {
     const { fn, seen } = fakeExec(successRun);
     const { engine, root } = await signedInEngine(fn);
     const cwd = path.join(root, "planted");

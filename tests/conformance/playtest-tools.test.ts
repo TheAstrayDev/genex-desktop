@@ -117,7 +117,7 @@ describe("playtest shorthands", () => {
     assert.match(byName.get(PlaytestTool.Wait) ?? "", /max 5000/);
   });
 
-  it("NFS-F3d. lets the game's racing line steer a held throttle when asked, and lets go after", async () => {
+  it("lets the game's racing line steer a held throttle when asked, and lets go after", async () => {
     const { port, inputs, calls } = fakeWindow();
     const { ctx } = await context(await tmpDir("playtest-"));
     await runPlaytestTool(PlaytestTool.PressKeys, { keys: "w", holdMs: 3_000, autosteer: true }, port, ctx);
@@ -134,7 +134,7 @@ describe("playtest shorthands", () => {
 });
 
 describe("the direct playtester's press_keys", () => {
-  it("NFS-F3e. lets the game's racing line steer a held throttle when asked, and lets go after", async () => {
+  it("lets the game's racing line steer a held throttle when asked, and lets go after", async () => {
     const press = previewTools.find((tool) => tool.name === "press_keys");
     assert.ok(press);
     const sent: Array<{ method: string; payload: Record<string, unknown> }> = [];

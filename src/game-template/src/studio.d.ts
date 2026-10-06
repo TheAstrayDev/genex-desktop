@@ -4,7 +4,7 @@
  * A game the user brings is often TypeScript, and its build is `tsc -b && vite build`: the
  * moment its entry does what every brief asks it to do — `import { installStudio } from
  * "./studio.js"` — an untyped contract is TS7016/TS2307, the build exits non-zero, the preview
- * has nothing to serve, and every critic scores a black frame (skate-prod, 2026-09-06).
+ * has nothing to serve, and every critic scores a black frame.
  * TypeScript resolves `./studio.js` to this declaration, so the same import line compiles under
  * `strict` and still runs as plain JavaScript in a folder with no build at all.
  *

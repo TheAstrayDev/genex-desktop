@@ -4,8 +4,8 @@
  * part of the night may type its lines with it.
  *
  * The lead used to live inside one long turn: `wait` in a loop, and a "continue" prompt whenever
- * the turn ended with time left — one night stretched a single session over seventeen hours that
- * way. Now it ends its turn after every decision, nothing of it runs between turns, and the
+ * the turn ended with time left, which stretched a single session over the whole run. Now it
+ * ends its turn after every decision, nothing of it runs between turns, and the
  * studio wakes the same session when something happens. What counts as something is decided
  * here, by typed fields and never by reading a line's English.
  */

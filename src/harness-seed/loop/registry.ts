@@ -1,9 +1,9 @@
 /**
  * What a build registers with the studio — its cameras, its demos and the state its probes read —
- * and which of those another part depends on (D7). On the Midnight Apex build one worker deleted
- * cameras three other workers' checks looked through, and nothing noticed: a facet photographs
- * only its own cameras, the health pass photographs whatever the merged page still declares, and
- * the other workers' checks simply turned into failures nobody had caused.
+ * and which of those another part depends on. A worker that deletes cameras other workers' checks
+ * look through goes unnoticed otherwise: a facet photographs only its own cameras, the health pass
+ * photographs whatever the merged page still declares, and the other workers' checks simply turn
+ * into failures nobody caused.
  *
  * `lostRegistrations` compares two looks at a build (before and after a change) against what the
  * other parts' checks use. The facet loop refuses a round that loses one (facet/phases/verify.ts),

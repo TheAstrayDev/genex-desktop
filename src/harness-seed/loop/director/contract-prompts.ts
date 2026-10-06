@@ -111,8 +111,8 @@ function moduleLines(module: ContractModule, title: string): string[] {
 }
 
 /**
- * What the contract freezes and what it leaves to its owners: the NFS lead froze its whole world
- * (the loop, its corners, the cut list) in the contract, and the track never grew again.
+ * What the contract freezes and what it leaves to its owners: a world laid out in the contract
+ * (the course, its corners) would never grow again.
  */
 const FROZEN = `Frozen: these interfaces and conventions. Not frozen: content, layout, scale. Each part grows its own content within the conventions' ranges, toward ${VISION_FILE} when the build has one. Change it by re-planning, never by editing another part's module.`;
 

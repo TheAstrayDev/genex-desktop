@@ -1,6 +1,6 @@
 /**
- * Text cut at a word, never inside one (the Midnight Apex report: a brief whose notes ended
- * "…the needle cli" told the next builder half a sentence). Its own module so a workspace that
+ * Text cut at a word, never inside one: notes that end "…the needle cli" tell the next builder half
+ * a sentence. Its own module so a workspace that
  * kept an older `text.ts` still links the callers that need these; `text.ts` re-exports them.
  */
 

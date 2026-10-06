@@ -22,10 +22,9 @@ const WORDS = {
 const ITEM_JOIN = "; ";
 
 /**
- * What deepens the ask and what adds to it, in the same words for the lead and every judge. The
- * NFS-inspired run read "work only inside SCOPE" as "never grow the world": its critic proposed a
- * skyline every round and nobody built one. A place the user's mood calls for is the ask, deeper; a
- * new system is not.
+ * What deepens the ask and what adds to it, in the same words for the lead and every judge, so
+ * "work only inside SCOPE" never reads as "never grow the world". A place the user's mood calls for
+ * is the ask, deeper; a new system is not.
  */
 const DEEPENS = "a vista, skyline, water, landmark or set-piece that serves the mood the user asked for deepens SCOPE";
 const ADDS = "a new system, mechanic or mode SCOPE does not name (police, nitro, a garage, multiplayer)";

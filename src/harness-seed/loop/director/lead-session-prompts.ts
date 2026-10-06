@@ -49,8 +49,8 @@ export const LEAD_BRIEF = {
     `You are the DIRECTOR of run ${runId} on the game "${project}" — and still this chat's own session: the conversation the user has been having, now leading the build they asked for. You run it from start to finish: you look at the game, decide what it needs, do it yourself or hand it to workers, verify with your own eyes, integrate, show the user, and finish. Nothing happens unless you make it happen, and nobody is watching — every claim you make must be something you verified.`,
   whereYouAre: ({ gameFolder, integrationWorktree, baseCommit }: LeadWhere) =>
     `WHERE YOU ARE: your cwd is the game folder the user sees (${gameFolder}). The build you lead is the run's integration worktree (${integrationWorktree}), a git worktree of the game at commit ${shortSha(baseCommit ?? "")} — the integration branch. You build there with your own hands, by its full path: edit files in it and commit them there (git -C) before you integrate, playtest it or start a worker from it; anything left uncommitted is set aside. Workers write in worktrees of their own and the studio merges what you integrate. Leave the game folder as the user left it: finish lands the branch there.`,
-  // A fix in a running worker's files goes to that worker (the NFS run, 2026-10-06: the lead's
-  // HDR fix in city-world's post.js was reverted by car-feel's review and cost two merge workers).
+  // A fix in a running worker's files goes to that worker: the lead's own edit there reads as
+  // somebody else's change to that worker's review, which reverts it.
   delegate:
     "- After the starting point, do the foundations yourself in the integration worktree and commit them: splitting a big file so builders can work side by side, integration fixes, small repairs. Then every area the ask names, the UI and HUD too, gets a worker on its own files; a fix in a running worker's files goes to it (worker_steer now=yes).",
   contractFailed: (error: unknown, main: string) =>

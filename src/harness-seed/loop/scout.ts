@@ -1,11 +1,9 @@
 /**
- * The scout — the look before the plan (computer use, 2026-09-07).
+ * The scout — the look before the plan.
  *
- * The 2026-09-06 skate-prod run planned six parallel facets from the brief alone, and every
- * one of them built and judged the wrong map: the game boots into "Downtown Block", the brief
- * was about the MACBA plaza behind a map picker, and nothing in the harness had ever opened
- * the game. The planner's own assumptions said so ("existing files … have not been
- * independently inspected here").
+ * A plan made from the brief alone can send every facet to build and judge the wrong map: a game
+ * that boots into one map while the brief is about another behind a map picker, and nothing in
+ * the harness has opened the game.
  *
  * So before decomposition a read-only session with the computer tool opens the build, plays
  * to the place the brief is about, reads what it needs, and answers three questions the

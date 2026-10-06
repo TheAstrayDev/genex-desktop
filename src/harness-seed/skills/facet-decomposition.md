@@ -85,8 +85,7 @@ Rules that never change:
   BUILDERS count is the ceiling: produce that many facets or fewer, and with 1 produce exactly
   one facet for the whole ask. Without a scout, decide from the ask alone: a refinement of one
   existing scene, one map, one look or one mechanic is ONE facet — parallel builders on one
-  scene edit the same files and lose their work in the merge (skate-prod, 2026-09-06: six
-  facets on one plaza, nothing merged). Split only along seams a player can name, each big
+  scene edit the same files and lose their work in the merge. Split only along seams a player can name, each big
   enough to fill an hour on its own. The engine hint's maxParallel is a pool size, never a
   target.
 - One facet is a valid answer for a small or tightly-coupled ask — do not split for the sake

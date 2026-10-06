@@ -603,9 +603,8 @@ interface GraphDraft {
   /**
    * A part that was restarted (`director_worker.replaces`) is one part, not two. The lead names
    * the worker it is replacing; everything the replacement then does is read as the part's own,
-   * its rounds carrying on after the ones it replaced (both builders count from 1). The night of
-   * 2026-09-07 restarted all five of its parts and the Builds page drew ten, five of them red
-   * with nothing kept.
+   * its rounds carrying on after the ones it replaced (both builders count from 1), so a
+   * restarted part is never drawn twice, once red with nothing kept.
    */
   restarts: Map<string, PartRef>;
   notes: NoteInfo[];
@@ -1077,7 +1076,7 @@ function onFacetOutage(graph: GraphDraft, entry: RunEntry): void {
 }
 
 /**
- * A director's worker (director, 2026-09-07): a node the moment it starts, its stop reason when
+ * A director's worker: a node the moment it starts, its stop reason when
  * it ends — a single-session worker has no iterations of its own to draw.
  */
 function onDirectorWorker(graph: GraphDraft, payload: Payload): void {

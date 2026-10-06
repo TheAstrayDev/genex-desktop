@@ -1,8 +1,8 @@
 /**
  * The scope contract (loop/scope.ts, loop/scope-prompts.ts): the user's literal ask, what a build
  * delivers, what it cut, and how scope changes — only with the user's own words, each used once.
- * A Midnight Apex night grew police, traffic and a pursuit meter out of "an NFS-inspired racing
- * game" because nothing kept what the user asked apart from what the contractor wrote.
+ * What the user asked is kept apart from what the contractor wrote, so a street race does not grow
+ * police, traffic and a pursuit meter nobody asked for.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";

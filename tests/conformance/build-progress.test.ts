@@ -195,7 +195,7 @@ test("a lead night with no builders yet says it is getting started, not building
   assert.equal(progress.nodeId, "base");
   assert.equal(progress.title, "Getting started");
   assert.doesNotMatch(progress.title, /base/i);
-  // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+  // Flipped: no time-of-day words in the app's copy.
   assert.match(progress.health, /deciding what this build needs/);
 });
 
@@ -306,7 +306,7 @@ test("a finished night reads off what happened to the build, not off a victory f
     }).title,
     "Finished after 1 round · not made live yet",
   );
-  // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+  // Flipped: no time-of-day words in the app's copy.
   assert.equal(
     of({ victory: false, landed: false, stoppedBecause: "land=no" }).title,
     "Finished after 1 round · nothing new",
@@ -382,8 +382,8 @@ test("the stage's mount read of Live never undoes an event main sent while it wa
 });
 
 /**
- * Live never changes while the person watches it (the user, 2026-09-28: "if I'm sitting in Live
- * the game must not update on its own; only Reload is highlighted, with a changed tooltip").
+ * Live never changes while the person watches it: the game does not update on its own, and only
+ * Reload is highlighted, with a changed tooltip.
  * Reload names what it would bring: what main holds first, then a healthy build of the night,
  * then the way back from a build found broken.
  */

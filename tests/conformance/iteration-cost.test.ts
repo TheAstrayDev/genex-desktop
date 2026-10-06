@@ -1,5 +1,5 @@
 /**
- * The cost of one iteration (the Midnight Apex report, recommendation 7): a bounded brief cut at
+ * The cost of one iteration: a bounded brief cut at
  * word boundaries, recipes that fit this game, memory admission before a round, a fast self-look
  * at a bench page, and a re-baseline that measures only what the board reads. Every case drives
  * the seed's or the host's own functions with fakes: no rig, no window, no real clock.

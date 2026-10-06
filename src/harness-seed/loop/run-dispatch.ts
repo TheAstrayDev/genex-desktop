@@ -157,7 +157,7 @@ export async function handleRunStart(
   const { stopped } = await afterClosedRuns(studio, action);
   if (stopped) return;
   // Read again after that await, in the same step as the reservation below: another start of this
-  // chat or project may have reserved it while this one waited (P07-F1). A run that closed since
+  // chat or project may have reserved it while this one waited. A run that closed since
   // is waited out again.
   const conflict = conflictOf(studio, action);
   if (conflict?.done) return handleRunStart(studio, action, { keepStop });
@@ -416,9 +416,9 @@ export async function resumeRun(studio: Studio, threadId: string, runId: string)
  *
  * Two refusals, and both are about the folder rather than the model. A folder that cannot load
  * has nothing for six builders to work on: say what is missing now instead of judging black
- * frames all night (skate-prod, 2026-09-06). And an engine export is already compiled — there is
+ * frames all night. And an engine export is already compiled — there is
  * no source to edit and no contract to read, so the night would photograph a page nobody can
- * change (Godot/Unity exports, 2026-09-07); the studio still opens it, plays it and screenshots
+ * change (Godot/Unity exports); the studio still opens it, plays it and screenshots
  * it. A missing studio contract is *not* a refusal: installing it is the base builder's first job.
  */
 export function nightRefusal(

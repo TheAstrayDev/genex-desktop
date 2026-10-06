@@ -532,8 +532,8 @@ describe("autopilot: a 2-facet run on the fake engine", () => {
     });
 
     // The game declares one scripted demo, so accepted facets must record its `demo:` camera
-    // (run_mtidvyqlpocx reported demos: [] on every facet — the filter matched the on-disk
-    // demo_ file prefix instead of the demo: camera name, leaving the loss check inert).
+    // (a filter that matches the on-disk demo_ file prefix instead of the demo: camera name
+    // reports demos: [] on every facet and leaves the loss check inert).
     rig.preview.demoNames = ["boot"];
 
     const runId = rig.core.newRunId();
@@ -708,7 +708,7 @@ describe("autopilot: a 2-facet run on the fake engine", () => {
           };
         }
         if (request.director) {
-          // The intake leads to a director's night (director, 2026-09-07): this director starts one judged
+          // The intake leads to a director's night: this director starts one judged
           // worker, waits for it, and finishes without landing.
           delegateModels.push(request.model);
           const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
@@ -1066,9 +1066,8 @@ describe("autopilot: a 2-facet run on the fake engine", () => {
 
 /**
  * M3.3 — who owns the move. The harness's planner and its liveness critic used to name "the ONE
- * structural move" every iteration and make it mandatory: on one night five workers were told
- * that puddles, a wreck-cam and a tow truck were what mattered while the director's brief said
- * mud, and the rounds they spent on the brief were reset for missing what nobody had asked for.
+ * structural move" every iteration and make it mandatory, so rounds spent on the director's
+ * brief were reset for missing what nobody had asked for.
  */
 /** A seed loop module and every module under its folder, joined, so a count covers the split. */
 function loopTree(module: string, folder: string): string {

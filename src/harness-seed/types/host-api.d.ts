@@ -214,7 +214,7 @@ export type PreviewInputAction =
  * anyone looks: the scout writes it (a key that opens the map picker, the click on the map,
  * a demo that does the same), the harness applies it before judges, captures and the computer
  * tool's first frame. `verify` is a probe over `__studio.state()` that says the state landed —
- * the 2026-09-06 run judged and built the wrong map for two hours because nothing checked.
+ * without it a run can build and judge the wrong map for hours because nothing checked.
  */
 export interface PreviewSetup {
   /**
@@ -373,9 +373,9 @@ export interface HarnessDelegateParams {
   images?: DelegateImage[];
   /** Edit-time ownership the engine enforces before a Write lands. */
   ownership?: DelegateOwnership;
-  /** The computer (computer use, 2026-09-07): `false` withholds the builder's hands; default on with a capture grant. */
+  /** The computer: `false` withholds the builder's hands; default on with a capture grant. */
   computer?: boolean;
-  /** The director (director, 2026-09-07): the run's orchestrating session, with the harness's run tools forwarded. */
+  /** The director: the run's orchestrating session, with the harness's run tools forwarded. */
   director?: DelegateDirectorGrant & { tools?: LiveToolSpec[] };
   candidateId?: string;
 }
@@ -1042,7 +1042,7 @@ export interface GameLibraryEntry {
  * What kind of game a folder holds, decided from the libraries and runtimes it actually loads —
  * never from the entry filename. `src/main.js` is Vite's stock layout as much as the studio's,
  * and reading it as "the template" is what served the user's own three.js game raw, with a bare
- * `three` import nothing could resolve (flautout-remix/wreckage, 2026-09-07).
+ * `three` import nothing could resolve.
  *
  * The kind says what the game *is*; `build` and `serve` say how it runs. A bundled Phaser game
  * is `phaser`, not `three-vite`.
@@ -1061,8 +1061,7 @@ export type ProjectKind =
  * How a project runs. The studio's own template needs no build: `index.html` loads `src/main.js`
  * as a native ES module. A folder the user brings — Vite, TypeScript, any bundler — keeps its
  * own entry and build; the studio runs the build and serves its output instead of the sources
- * (skate-prod, 2026-09-06: served raw, `/src/main.ts` was refused by the browser and every
- * critic judged a black frame).
+ * (served raw, `/src/main.ts` is refused by the browser and every critic judges a black frame).
  */
 export interface ProjectShape {
   /** The page the preview serves, relative to the project — inside the build output when there is a build. */
@@ -1824,7 +1823,7 @@ export interface RunSpec {
   /** "autopilot" decomposes into facet loops; absent = the plain gauntlet. */
   mode?: "autopilot";
   /**
-   * The programmed pipeline on purpose (director, 2026-09-07): planner → base → facet loops → merge. A
+   * The programmed pipeline on purpose: planner → base → facet loops → merge. A
    * delegated engine's Autopilot is otherwise the director's — one session that decides the night.
    */
   classic?: boolean;
@@ -1942,7 +1941,7 @@ export type DispatchAction =
   | { type: "run_stop"; runId: string }
   | { type: "autopilot_resume"; threadId: string; runId: string }
   /**
-   * The director's tools (director, 2026-09-07): a live tool call from the run's director session, hosted
+   * The director's tools: a live tool call from the run's director session, hosted
    * by the studio, forwarded to the harness that owns the workers, the judges and the merge.
    * Unlike every other dispatch this one answers with a value — the tool's result.
    */

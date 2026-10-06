@@ -1,7 +1,7 @@
 /**
- * Steps beyond what the user asked for (scope.ts `isBeyondScope`), put to the user as decision cards:
- * the Midnight Apex night built police, traffic and a pursuit meter into a street race nobody asked
- * for, one reviewer's move at a time. Each proposal is asked about once, and a part asks at most
+ * Steps beyond what the user asked for (scope.ts `isBeyondScope`), put to the user as decision cards,
+ * so reviewers' moves never grow a game into systems nobody asked for (police and a pursuit meter
+ * in a street race). Each proposal is asked about once, and a part asks at most
  * `BEYOND_CARDS_PER_PART` times: a taste judge names a big move every round, and one that rewords
  * the same idea each time would otherwise post a card a round. The cap is the part's for the whole
  * run: a card names its part and its proposal in typed fields, and a new start of the part's loop

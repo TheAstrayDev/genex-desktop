@@ -363,7 +363,7 @@ describe("harness host: self-modification", () => {
 
   it("a Mac that slept is not a wedged harness", async () => {
     // Asleep, neither the harness's drumbeat nor the watchdog's own ticks run; on waking the
-    // wall clock has jumped for both of them. The watchdog once read that jump as silence.
+    // wall clock has jumped for both of them, and that jump is not silence.
     let slept = 0;
     const r = await rig("slept", {}, () => Date.now() + slept);
     await r.host.start();

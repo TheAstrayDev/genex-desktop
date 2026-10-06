@@ -236,7 +236,7 @@ describe("one engine voice", () => {
 });
 
 /**
- * Two subscriptions in one night (cross-provider roles): a worker's brief is read by the
+ * Two subscriptions in one run (cross-provider roles): a worker's brief is read by the
  * workers' engine, the director's by its own. On a night planned on Claude Code and built on
  * Codex the worker briefs must spell the bridge and the director's brief the MCP names — the
  * same rule as above, now with two engines on one run.

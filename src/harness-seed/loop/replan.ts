@@ -262,8 +262,7 @@ function correctedCheck(spec: PlannedFacet, check: Check, raw: AnyRecord): Repla
  * facet", "belongs to lighting-daycycle", "please re-point this check at village-fabric".
  * Returns the other facet's id when the flag names one (and it is not the flagging facet),
  * else null. The loop then drops the check here, blocks its class from re-growing, and routes
- * the defect to the facet named — the village run burned nine iterations on a mist band that
- * was never village-fabric's to fix.
+ * the defect to the facet named, so no facet burns iterations on a defect that is not its to fix.
  */
 export function flagTarget(
   flag: unknown,

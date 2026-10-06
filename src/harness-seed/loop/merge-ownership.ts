@@ -1,5 +1,5 @@
 /**
- * Ownership across the mandatory merge (Midnight Apex, 2026-10).
+ * Ownership across the mandatory merge.
  *
  * Every round a worker merges the integration branch into itself, and every round the ownership
  * reviewer judges what the worker changed. The two used to fight: the reviewer reverted content

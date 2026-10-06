@@ -227,7 +227,7 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   if (d.event_type === RunEvent.RunRegistered) fold.finishing = false;
   if (d.event_type === RunEvent.RunControl && p.action === RunControlAction.Finish) fold.finishing = true;
   // The director's own worker_steer events are steering too — but its own, not the
-  // user's (a director once asked the user to repeat "1 unread instruction" it had written).
+  // user's (a director must never ask the user to repeat an instruction it wrote itself).
   const userSteer = d.event_type === RunEvent.RunSteering && p.text?.trim() && p.source !== SteeringSource.Director;
   if (userSteer) fold.instructions.push({ id: event.id, ...p, loggedAt: event.created_at ?? null });
   if (d.event_type === RunEvent.RunSteeringDelivered) absorbDelivery(fold, p);
@@ -302,7 +302,7 @@ export function createRunInbox(
   /**
    * Remember steers as delivered, then record them as handed over (stage `next brief` or `now`).
    * Remembered first, in the step that chose them: a second reader arriving while the record is
-   * written must not take them too (P09-F10). A record the log refuses forgets them again.
+   * written must not take them too. A record the log refuses forgets them again.
    */
   async function handOver(steers: Array<{ steer: Steer; address: string }>, stage: string): Promise<void> {
     const keys = steers.map(({ steer, address }) => deliveryKey(steer.id, address));

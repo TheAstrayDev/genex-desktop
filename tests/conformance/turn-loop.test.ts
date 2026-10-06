@@ -925,8 +925,8 @@ describe("engine fallback (M2)", () => {
   });
 
   it("launches a recorded intake call even when the engine reports the interview ended badly", async () => {
-    // 2026-09-06, skate-prod: Codex recorded start_autopilot through the bridge, then its session
-    // was reported as failed over a non-fatal notice. The launch must survive the ending — the
+    // Codex records start_autopilot through the bridge, then its session is reported as failed
+    // over a non-fatal notice. The launch must survive the ending — the
     // studio told the contractor "the run starts when your reply ends" — and the chat must not
     // send the user back to a session that believes it already launched.
     const rig = await turnRig([]);

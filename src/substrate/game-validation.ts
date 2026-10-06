@@ -154,7 +154,7 @@ const SHIPPED_STUDIO_DIGESTS: Readonly<Record<string, number>> = {
   "64dc5359ff81f8edd7ab815c2d48ca114db0a065dd95bb8a72df1dbccc4faf31": 4,
   a7221ced2600350b8d8ade6dd6da421fe766132c611c5b6651fa7fad86ea9102: 4,
   // Generation 5: arcs, panels, paths, images and fonts, in its two revisions before the
-  // racing-line assist (the second is the NFS run's, 2026-10-06).
+  // racing-line assist.
   "77f1c1d367c1e63225ff34b10136c04c4866932793a754ce0ff381ae1c7cd384": 5,
   f5f4cc72c37a789c4f1c1b66bf69bd7e63fa7fe0f1993498f36a72872a62b2da: 5,
 };

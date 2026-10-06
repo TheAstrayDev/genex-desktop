@@ -72,7 +72,7 @@ export interface SpikeOutcome {
   recipe: Recipe | null;
   durationMs: number;
   unsatisfiable: string | null;
-  /** The user stopped it: no verdict on the check, and nothing to replan (P12-F10). */
+  /** The user stopped it: no verdict on the check, and nothing to replan. */
   stopped?: boolean;
 }
 

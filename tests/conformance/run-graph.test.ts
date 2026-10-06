@@ -1236,7 +1236,7 @@ describe("a synthetic lead night, replayed", () => {
       const progress = buildProgress(buildRunGraph(upTo(stage))!);
       // The phrases a fall-through to the classic base path would actually produce today — the
       // old "shared base" wording was renamed by the same change, so looking for it proved nothing.
-      // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+      // Flipped: no time-of-day words in the app's copy.
       assert.doesNotMatch(progress.title, /starting point|Planning the parts/i, stage);
       assert.doesNotMatch(progress.health, /Every part starts from it/i, stage);
       assert.match(progress.title, /part/i, stage);

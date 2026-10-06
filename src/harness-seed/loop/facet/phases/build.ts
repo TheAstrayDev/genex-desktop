@@ -324,8 +324,8 @@ function noteFailedDelegation(loop: FacetLoop, round: FacetRound, delegation: An
 /**
  * A provider hiccup (529 Overloaded, 500, a dropped socket) is weather: the half-written
  * attempt is rolled back, the loop waits, and the SAME iteration is tried again. It is never a
- * "broken build with the same cause" — that policy tripped four circuit breakers in one outage
- * on the village run. Null when the failure was no outage, or no wait is left.
+ * "broken build with the same cause" — that policy trips every circuit breaker in one outage.
+ * Null when the failure was no outage, or no wait is left.
  */
 async function waitOutProviderOutage(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
   const { appendRun, ctx, deadline, facet, gitOptions, gitWhere, run, sleepFor, worktree } = loop;
@@ -373,7 +373,7 @@ async function buildAgain(loop: FacetLoop, round: FacetRound, reset = true): Pro
 
 /**
  * A build turn a lost provider failed — its sign-in, one of its limits, an outage the ladder could
- * not outlast — is never a broken build (the NFS run struck one, and rolled its work back): it is
+ * not outlast — is never a broken build, struck and rolled back: it is
  * recorded as an outage and waits for the provider (facet/provider.ts), then the same iteration is
  * built again; a stop while it waits keeps the attempt on its `…-stopped` ref. A usage cap stops
  * the facet at once, as it always has, with the limit for the director. Null for any other failure.

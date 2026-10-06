@@ -507,8 +507,8 @@ export function monitorNote(
  * A defect the judge named while looking at one worker, handed to the worker whose seam it is.
  * The facet loop routes through this (`defectsToChecks`, and a builder's own HARNESS flag);
  * with no router every defect became a question on the board of whichever worker happened to
- * be judged — one night scored the crumple worker on whether another worker's props floated,
- * and neither board could ever reach "satisfied". Returning false leaves the defect where it
+ * be judged — one worker scored on whether another worker's props float, and neither board
+ * ever reaching "satisfied". Returning false leaves the defect where it
  * was named, so a worker can never hand itself its own defect, and when the owner is finished
  * there is nobody to take it: it goes on the run's ledger for the director's next integration
  * instead of being dropped (the classic pipeline gives it to the integration facet the same way).

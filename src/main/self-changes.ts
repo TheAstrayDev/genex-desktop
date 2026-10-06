@@ -83,8 +83,7 @@ export function proposalTarget(proposal: StagedRecord): ProposalTarget {
 /**
  * The text a suggestion should leave in its file now. A suggestion carries the whole file as
  * it would read after the change, written against the text it was staged on; writing that over
- * a file another change had edited since undid that change without a trace (two approvals of
- * one file, 2026-09-03). So it lands whole only on the text it was written for; otherwise its
+ * a file another change had edited since undid that change without a trace. So it lands whole only on the text it was written for; otherwise its
  * own edits are replayed on the current text — all of them, or it is refused.
  */
 export function rebaseProposal(proposal: StagedRecord, current: string): string {

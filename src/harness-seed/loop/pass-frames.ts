@@ -4,7 +4,7 @@
  * view the user left the window on (`user:view`). Never asked of the game, never "not registered
  * in config.cameras", and a check on one depends on what takes it (a demo, the drive).
  *
- * A module of its own (the NFS run, 2026-10-06): a seed upgrade keeps a cameras.ts the agent
+ * A module of its own: a seed upgrade keeps a cameras.ts the agent
  * edited, and a name added there would stop every importer linking beside that older copy.
  */
 

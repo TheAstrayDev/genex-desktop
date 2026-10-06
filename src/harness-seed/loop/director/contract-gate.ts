@@ -1,5 +1,5 @@
 /**
- * The module contract on the integration branch, and the gate that holds loop workers to it (D7).
+ * The module contract on the integration branch, and the gate that holds loop workers to it.
  *
  * When a plan of two or more looping parts carries a contract, the harness renders it into
  * docs/MODULE-CONTRACT.md (a file of its own, never the game's docs/ARCHITECTURE.md) and commits
@@ -14,8 +14,8 @@
  *
  * The plan's vision (vision.ts) is committed in the same commit as docs/VISION.md, and held to the
  * same gate: no loop worker starts under such a plan before the vision is on the branch — refused
- * twice by name, then the build goes on without one and the lead hears it. The NFS lead froze its
- * world inside the contract; the vision is where the world's ambition lives instead, never frozen.
+ * twice by name, then the build goes on without one and the lead hears it. The contract freezes
+ * interfaces; the vision is where the world's ambition lives, never frozen.
  *
  * Its functions take the night explicitly; they are not bound onto it. A new module: workers.ts
  * calls it, and a kept older workers.ts simply never does.

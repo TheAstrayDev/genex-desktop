@@ -335,7 +335,7 @@ async function deletedBeforeMigration(
  * in the skill list, in the architect's file menu. These four skills were read by no run code
  * (only `director.md` and `facet-decomposition.md` are) and said things about a loop that no
  * longer exists. The workers' handover modules went when Claude Code and Codex workers were left
- * to their own compaction (2026-10-05): nothing imports them, and a copy left behind would fail
+ * to their own compaction: nothing imports them, and a copy left behind would fail
  * the self-edit gate's type check over `loop/` (it reads facet state that no longer exists).
  *
  * The rule is the ownership rule, backwards: a workspace copy whose bytes still equal what the

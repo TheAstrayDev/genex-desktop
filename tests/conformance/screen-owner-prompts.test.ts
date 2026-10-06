@@ -1,12 +1,12 @@
 /**
  * Builders hear who owns the screen. The screen-owner rule (loop/screen-owner.ts) turns a non-owner's
- * call into the contract HUD into a code-review finding, but nothing a builder read said the screen
- * had an owner: in the Midnight Apex run the race part drew a pursuit meter beside the HUD part's
- * readouts and only learnt the rule from the review. The brief and the opening prompt now say it,
+ * call into the contract HUD into a code-review finding, but a builder that reads nothing about the
+ * owner draws its own readouts beside the HUD part's and learns the rule only from the review. The
+ * brief and the opening prompt say it,
  * from the spec's typed `ownsScreen` / `screenOwner` fields; a run with no owner reads as before.
  *
  * And the chat that launches a build narrows it without cutting the game's own front-end: "a
- * system they did not name goes in cut" once read a title screen and a start key as systems.
+ * system they did not name goes in cut" must not read a title screen and a start key as systems.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";

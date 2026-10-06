@@ -253,7 +253,7 @@ async function delegatedPlaytest(
       iteration: iteration ?? 0,
       ...(handle ? { handle } : {}),
       ...(entry ? { entry } : {}),
-      // The requested state (computer use, 2026-09-07): the playtester's window opens where the run
+      // The requested state: the playtester's window opens where the run
       // is about — and on the game's own title or menu, never past it: the one look that meets the
       // front-end as a player does (`begin: false`; the studio begins every other window).
       setup: { ...(run.setup ?? {}), begin: false },

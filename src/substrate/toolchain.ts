@@ -4,7 +4,7 @@
  * An app launched from Finder inherits launchd's PATH — `/usr/bin:/bin:/usr/sbin:/sbin` — not
  * the one the user's terminal has. Homebrew, nvm, Volta and Bun all live outside it, so
  * `npm run build` exits 127 (`sh: npm: command not found`), the stage stays black and every
- * judge reports a dead build (skate-prod / flautout-remix, 2026-09-07). The app already knew
+ * judge reports a dead build. The app already knew
  * this for one binary — `engines/claude-cli.ts` hard-codes three Homebrew-ish directories to
  * find `claude` — and nothing did it for node.
  *

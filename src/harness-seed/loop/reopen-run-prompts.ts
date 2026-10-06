@@ -78,8 +78,8 @@ function startOverRules(engine: string | undefined, reopen: string, grant: Reope
 
 /**
  * The after-night note's rules for a finished build with Loop on, its tools spelled the way `engine`
- * calls them. Loop allows the build to go on; it never orders it (golden-boot-glory: "work of any
- * size — a fix…" once sent a seventy-second fix to a three-hour build). A question is answered, a
+ * calls them. Loop allows the build to go on; it never orders it ("work of any size — a fix…"
+ * would send a seventy-second fix to a three-hour build). A question is answered, a
  * contained change is the session's own edit, more work reopens the same build, and only an explicit
  * start over launches a new one.
  */

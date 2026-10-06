@@ -62,7 +62,7 @@ export async function handleBootNotice(studio: Studio, messages: MessageQueue, n
   // Replay unanswered inbox entries in order. Completed requests are never re-enqueued. The host
   // hands over only the queue records still open, not every conversation's whole log.
   // Each conversation on its own: one whose queue cannot be put back must not leave every other
-  // one unanswered (P07-F4). Its records stay in the log for the next boot to try again.
+  // one unanswered. Its records stay in the log for the next boot to try again.
   for (const { threadId, events } of await host.call(HostMethod.EventsInbox, {}).catch(() => [])) {
     await messages.restore(threadId, events).catch(async (err: unknown) => {
       const message = QUEUE_NOT_RESTORED(err instanceof Error ? err.message : String(err));

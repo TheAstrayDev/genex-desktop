@@ -424,8 +424,8 @@ export function appendRun(night: Night, event_type: RunEvent, payload: AnyRecord
 /**
  * A decision card. `text` (and `decision`, its older name) is the record — shas, worker ids,
  * the engine's own words. `plain` is the one sentence the chat shows someone who is not
- * reading git; every card the director writes carries one, because the first night's cards
- * reached the owner as `run_fixture123456`, `attempt/shine/3-stopped` and a rate-limit error.
+ * reading git; every card the director writes carries one, so the owner never reads
+ * `run_fixture123456`, `attempt/shine/3-stopped` or a rate-limit error.
  */
 export function decision(night: Night, text: string, plain?: string | null): Promise<unknown> {
   const { appendRun } = night;
@@ -596,8 +596,8 @@ export function currentHead(night: Night) {
 /**
  * The director edits in its worktree and commits with its own hands; `integrationHead` used
  * to move only on integrate, so a director commit made the judge, the health pass, the close
- * and the merge disagree about which build they were talking about (one night judged a fix
- * the close then left unreachable). Every tool call starts here: whatever HEAD says is the
+ * and the merge disagree about which build they were talking about (a judged fix the close
+ * then left unreachable). Every tool call starts here: whatever HEAD says is the
  * integration head, it is protected by the ref, written to the journal, and named to the
  * director so it knows the studio saw what it did.
  */
@@ -773,9 +773,8 @@ export function consoleInheritedBy(night: Night, worker: Worker | null = null): 
 }
 
 // A load that raced the window (no __studio yet, a capture before the first frame) is not a
-// broken build: look again before saying so. Eight health passes in one night failed this way
-// while the judge, forty seconds later, found every one of those builds fine (evidence.ts
-// `loadRaced` decides what a race is).
+// broken build: look again before saying so, or a health pass fails builds the judge finds fine
+// seconds later (evidence.ts `loadRaced` decides what a race is).
 export async function patientEvidence(
   night: Night,
   root: string,
@@ -830,10 +829,9 @@ export async function workerCommit(night: Night, worker: Worker): Promise<string
   const { ctx } = night;
   if (worker.lastCommit) return worker.lastCommit;
   // A worker still building stands on whatever its round has just committed — an attempt the
-  // judge may yet reject — so only what it accepted is its work until it ends (P10-F3): the
-  // commit its last accepted round left (`lastAccepted`). Reading only `lastCommit`, which is
-  // set when a worker ends, told the golden-goal night's lead "no commit yet" about three
-  // workers with accepted rounds, and it merged every one of them by hand.
+  // judge may yet reject — so only what it accepted is its work until it ends: the
+  // commit its last accepted round left (`lastAccepted`). `lastCommit` alone is set only when a
+  // worker ends, and would tell the lead "no commit yet" about workers with accepted rounds.
   if (isRunning(worker)) return worker.lastAccepted ?? null;
   if (!worker.worktree) return null;
   return headOf(ctx, worker.worktree).catch(() => null);

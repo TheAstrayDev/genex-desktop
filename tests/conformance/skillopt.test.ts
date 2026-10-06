@@ -74,7 +74,7 @@ describe("bounded edit operations", () => {
     assert.ok(!deleted.text.includes("Keep the camera behind"));
   });
 
-  it("rejects an anchored edit with no anchor — it once landed above the frontmatter", () => {
+  it("rejects an anchored edit with no anchor, which would land above the frontmatter", () => {
     const result = applyEdits(SKILL, [
       { op: "insert_after", text: "- Stray rule." },
       { op: "replace", anchor: "  ", text: "x" },
@@ -187,8 +187,8 @@ function makeResponder(script: SkillOptScript) {
         counts.gate++;
         // The candidate is the version carrying the proposed edit. Sections are extracted
         // explicitly: the versions are shuffled per vote, so the judge must recognise the
-        // candidate by the edit's own text — matching a hardcoded phrase here once made every
-        // test whose edit used different wording a literal coin flip.
+        // candidate by the edit's own text — a hardcoded phrase would make every test whose edit
+        // uses different wording a literal coin flip.
         const sectionA = text.split("VERSION A:")[1]?.split("VERSION B:")[0] ?? "";
         const aIsCandidate = script.edits.some((edit) => edit.text && sectionA.includes(edit.text));
         const pick = script.gate === "accept" ? (aIsCandidate ? "A" : "B") : aIsCandidate ? "B" : "A";

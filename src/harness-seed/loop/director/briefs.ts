@@ -34,10 +34,10 @@ import type { Worker } from "./night.ts";
 export const SERVES_LEAD = true;
 
 /**
- * The pool is a ceiling, not a quota (D8): the fewest workers that cover independent files. It used
- * to call an idle window time lost, and Midnight Apex grew a police pursuit to fill one; the wake
- * digest's room line says where more goes (a deeper layer of an in-scope area). Short, because the
- * brief's own words are bounded (director-wake P5).
+ * The pool is a ceiling, not a quota: the fewest workers that cover independent files. A lead told
+ * that an idle window is time lost fills it with something nobody asked for; the wake digest's room
+ * line says where more goes (a deeper layer of an in-scope area). Short, because the brief's own
+ * words are bounded.
  */
 const CAPACITY_RULE = "A ceiling, not a quota: start the fewest workers that cover independent files.";
 
@@ -121,8 +121,7 @@ export interface DirectorBriefFacts {
 /**
  * The pool as the brief states it: how many workers may run at once (the user's Maximum
  * concurrent workers — the pool less the lead's own two windows) and the memory free, or that
- * nobody knows. The golden-goal night's brief said "8 of 8 worker windows free" of a pool whose
- * workers could use six, and the lead started three.
+ * nobody knows — never the raw window count, which overstates what workers can use.
  */
 function poolWords(capacity: AnyRecord | null): string {
   if (!capacity?.max) return "the pool size is unknown";
@@ -180,8 +179,8 @@ function unobservedStartLine(startObserved: boolean, startingPoint: AnyRecord | 
 
 /**
  * The foundation a run with room for a team lays itself (foundation.ts `foundationFirst`): no starting
- * scene was built, so the lead writes the contract, the vision and crude stubs — Midnight Apex's
- * start, where the NFS run's discarded straight sprint cost it its first twelve minutes.
+ * scene was built, so the lead writes the contract, the vision and crude stubs, and each part's
+ * owner builds the content.
  */
 function foundationLine(leads: boolean): string {
   const where = leads ? "yourself in the integration worktree by its full path" : "in your worktree";
@@ -339,8 +338,7 @@ function whereLine({
 /**
  * Which world this night is in is a question the worktree answers, not the brief: with the
  * user's consent the studio versions a nested repository inside every fork of the game
- * (M2.5), and a lead told otherwise hand-ports 85k lines it already has under version
- * control — the 2026-09-07 night, again.
+ * (M2.5), and a lead told otherwise hand-ports code it already has under version control.
  */
 function nestedLine(nestedRepos: readonly string[], leads: boolean): string {
   if (!nestedRepos.length) return "";

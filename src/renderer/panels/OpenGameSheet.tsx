@@ -3,7 +3,7 @@
  *
  * Picking a folder used to *be* opening it: the studio scaffolded its template into whatever the
  * dialog returned, which is how somebody's 85k-line game in `wreckage/` was wrapped in an empty
- * project and hand-ported all night (flautout-remix, 2026-09-07). Now the picker only answers
+ * project and hand-ported all night. Now the picker only answers
  * *which folder*; this sheet says what is in it, what would run it, what would stop a night on
  * it, and exactly which files would appear — and nothing is written until its button is pressed.
  *

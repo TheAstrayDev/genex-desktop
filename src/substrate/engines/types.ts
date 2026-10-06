@@ -254,7 +254,7 @@ export interface DelegateRequest {
   /** `page`: a bench page (a .html file in the workspace) to capture in place of the game. */
   onCapture?: (args: { cameras?: string; page?: string }) => Promise<string>;
   /**
-   * The computer (computer use, 2026-09-07): with a `selfCapture` grant the builder also gets `computer` — hands
+   * The computer: with a `selfCapture` grant the builder also gets `computer` — hands
    * and eyes on one pooled window that keeps running between actions. `false` withholds it
    * (a session that must only capture).
    */
@@ -268,7 +268,7 @@ export interface DelegateRequest {
    */
   playtest?: DelegatePlaytestGrant;
   /**
-   * The director (director, 2026-09-07): the run's orchestrating session. Its cwd is the run's integration
+   * The director: the run's orchestrating session. Its cwd is the run's integration
    * worktree (`root`) — or, for a waking night's lead, the game folder, leading that worktree; it gets the computer tool on a window of its own (`look` points that window at
    * any build of the run), capture, and the harness's run tools — workers, judges, playtests,
    * merges, finish — which the studio forwards to the harness process that owns them. The

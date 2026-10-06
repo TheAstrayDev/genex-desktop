@@ -444,7 +444,7 @@ function lastAttemptLine(lastAttempt: AnyRecord | null): string {
 
 /**
  * The demos the last round's look registered but did not photograph (the look's cap): a builder
- * whose new demo was never seen once spent four rounds on a move no judge could look at (NFS run).
+ * whose new demo is never seen spends rounds on a move no judge can look at.
  */
 function unseenDemosLine(skipped: unknown): string {
   const names = Array.isArray(skipped) ? skipped.map(String).filter(Boolean) : [];

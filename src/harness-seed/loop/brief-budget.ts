@@ -1,7 +1,6 @@
 /**
- * BRIEF.md's budget (the Midnight Apex report, recommendation 7). Briefs ran 20-39 KB with no
- * total bound, and the inline copy a direct engine gets was cut at 12,000 characters from the
- * end, which is where the seam and the entry rule were. The brief now has one ceiling, each long
+ * BRIEF.md's budget. Without a total bound a brief grows past what an engine reads, and an inline
+ * copy cut from the end loses the seam and the entry rule. The brief has one ceiling, each long
  * section a cap of its own, and a fixed order in which the lowest sections leave when it is over:
  * what governs the round (the goal and scope, the steering, the move or the finish, THE FIX, the
  * checks, Done means and the rules) never does.

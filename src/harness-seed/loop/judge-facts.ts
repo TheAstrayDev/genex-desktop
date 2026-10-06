@@ -8,10 +8,10 @@
  * carries both. A build whose HUD did not measure (an older HUD, a game with its own UI) gets no
  * line: a judge is never handed a number nobody measured.
  *
- * Then the drive's, from the NFS run (2026-10-06): no judged frame showed a corner when the move
- * was corner warnings, the judges blamed the handling for a car the drive itself had held against
- * a wall, and nobody was told that a bot holding only the throttle wins the race. Each line is only
- * there when the evidence pass measured it (evidence.ts `corner`, `drive`, `challenge`).
+ * Then the drive's: where the corner frame is (a move about corners is judged on it), whether the
+ * game's racing line steered the drive (a car the drive held against a wall is not the handling's
+ * fault), and how a bot holding only the throttle placed in the race. Each line is only there when
+ * the evidence pass measured it (evidence.ts `corner`, `drive`, `challenge`).
  */
 import { isRecord } from "./json.ts";
 import { CORNER_CAMERA } from "./pass-frames.ts";

@@ -1,7 +1,7 @@
 import { tracedContext } from "./director/trace.ts";
 import { retainSpan, type OperationSpan } from "./director/timing.ts";
 /**
- * The director (director, 2026-09-07) — the run as one agent's decisions, not a program's phases.
+ * The director — the run as one agent's decisions, not a program's phases.
  *
  * Before this, a run was a fixed pipeline: scout → planner → base → N facet loops → merge →
  * ledger → integration facet → land. The pipeline never looked at the game; the loops decided
@@ -259,9 +259,8 @@ function delegateTurn(
 /**
  * The director's session. A session that dies of a lost provider — the engine's limit, or its
  * sign-in gone — is not the director failing: remember it and let the loop choose between waiting
- * and pausing. (A night once ended as a plain "error", retried the wrap-up into the same limit two
- * seconds later, and landed nothing; another, whose account was disabled, wrapped up and landed an
- * unchecked build.) What a turn answers with: the delegation's own result, or the loss it died of.
+ * and pausing, never wrap up into the same loss or land a build nobody could check. What a turn
+ * answers with: the delegation's own result, or the loss it died of.
  */
 export function directorTalk(night: Night, images: DelegateImage[], tools: LiveToolSpec[]): DirectorTalk {
   const { ctx, decision, journal, lead, priorJournal, run, saveJournal, state, threadId } = night;
@@ -561,8 +560,8 @@ async function closeLeftOpen(
 
 /**
  * A night that threw before it closed. What ends up on the morning card is a sentence, never an
- * exception: a night once greeted its owner with "the director failed: ENOENT: no such file or
- * directory, open '/Users/…'". The message itself stays in the report, where a developer can
+ * exception such as "the director failed: ENOENT: no such file or directory, open '/Users/…'".
+ * The message itself stays in the report, where a developer can
  * read it.
  */
 async function closeAfterCrash(night: Night, err: any): Promise<void> {

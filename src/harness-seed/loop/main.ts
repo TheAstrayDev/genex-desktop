@@ -186,7 +186,7 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
         studio.cancels.add(active.threadId);
         abortEngineWork(host, active.threadId);
         // The director and its workers are delegations of the project, not completions
-        // of the thread (director, 2026-09-07).
+        // of the thread.
         void host.call(HostMethod.EngineAbort, { project: active.run.project }).catch(() => {});
       } else {
         // Nobody here started this run — the loop that did died under it. Its contractors

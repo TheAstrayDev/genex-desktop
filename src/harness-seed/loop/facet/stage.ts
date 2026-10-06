@@ -1,5 +1,5 @@
 /**
- * The facet's stage (owner decision D1, after the Midnight Apex report): a worker either BUILDS —
+ * The facet's stage: a worker either BUILDS —
  * bold structural moves, a ladder, polish that only escalates — or FINISHES what exists, where
  * polish is the work and wins on the judge's blind preference. The stage lives on the spec
  * (`spec.stage`), like `moveOwner`: a director sets it with `worker_start stage=` and flips it

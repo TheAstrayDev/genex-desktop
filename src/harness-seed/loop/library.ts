@@ -86,8 +86,8 @@ const MAX_RECIPE_EVIDENCE = 24;
 /**
  * What a builder's brief carries: ledger defects, the judge's polish notes, earlier rounds (the
  * latest), diff-stat lines each, this game's lessons and past runs' lessons. Six defects, not
- * twelve: the golden-goal night's briefs were 27K, more than half of it defect material, and the
- * builders spent their rounds on it instead of the move.
+ * twelve: a brief that is mostly defect material has the builders spend their rounds on it
+ * instead of the move.
  */
 const MAX_BRIEF_DEFECTS = 6;
 const MAX_BRIEF_POLISH = 3;

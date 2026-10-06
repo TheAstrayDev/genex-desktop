@@ -1942,8 +1942,8 @@ const reloadState = (reason: string | null, label?: string): string =>
     : `!!document.querySelector('[data-stage-reload=""]')`;
 
 /**
- * The user, 2026-09-28: "if I'm sitting in Live the game must not update on its own when code
- * changes; only Reload is highlighted, with a changed tooltip". A later healthy build and a
+ * A game on screen in Live never updates on its own when code changes: only Reload is
+ * highlighted, with a changed tooltip. A later healthy build and a
  * builder's checkpoint light Reload while Live is on screen and load nothing; Reload plays the
  * build; leaving Live for Builds brings the changed game folder in.
  */
@@ -2643,7 +2643,7 @@ type Seen = Record<string, unknown>;
 type DirectorSeen = Record<string, any>;
 
 /**
- * The computer tool over a real hidden window (computer use, 2026-09-07): a fixture game with a map picker
+ * The computer tool over a real hidden window: a fixture game with a map picker
  * on I, a click that chooses the map, W that moves the player — driven end to end
  * through engine.delegate with a scripted contractor, exactly as a run's builder is.
  */
@@ -3034,7 +3034,7 @@ function checkWebGpuWorker({ check }: ComputerSmoke, gpu: Seen): void {
 }
 
 /**
- * The director (director, 2026-09-07): a run on this Electron — the real harness child, real offscreen
+ * The director: a run on this Electron — the real harness child, real offscreen
  * windows, the dispatch that answers — with a scripted director that looks, starts a
  * single worker, integrates, shows and finishes; its screen is the lead's node in Builds meanwhile.
  */

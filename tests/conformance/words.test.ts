@@ -144,7 +144,7 @@ describe("statusWords", () => {
       line: "The lead is playing Crash damage",
       short: "Playing Crash damage",
     });
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.deepEqual(statusWords(`${run} · director finishing`), {
       line: "The lead is finishing the build",
       short: "Finishing",
@@ -172,10 +172,10 @@ describe("statusWords", () => {
   });
 
   it("translates the run stages and the chat's own work", () => {
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(statusWords("run run_x").line, "The build is running");
     assert.equal(statusWords("run run_x · building the shared base").line, "Building the starting point");
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(statusWords("run run_x · integrating facets").line, "Putting the parts together");
     assert.equal(statusWords("run run_x · iteration 4 — judging blind").line, "Round 4 · reviewing");
     assert.equal(statusWords("thinking").line, "Thinking");
@@ -265,7 +265,7 @@ describe("how a night reads when it is over", () => {
       nightWords({ rounds: 3, landed: null, stoppedBecause: "autopilot finished" }).headline,
       "Finished after 3 rounds",
     );
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(
       nightWords({ rounds: 3, landed: null, stoppedBecause: "autopilot finished" }).because,
       "The build finished.",
@@ -286,7 +286,7 @@ describe("how a night reads when it is over", () => {
       hasBuild: false,
       stoppedBecause: "the director ran out of time without calling finish; nothing was landed (land=no)",
     });
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(nothing.headline, "Finished after 4 rounds · nothing new");
     assert.doesNotMatch(nothing.because, /playable/);
     assert.match(nothing.because, /as you left it/);
@@ -313,7 +313,8 @@ describe("how a night reads when it is over", () => {
   });
 
   it("tells the owner what to fix when the provider stopped accepting the account, from the close's typed kind", () => {
-    // The NFS run (6 Oct 2026): "Your organization has disabled Claude subscription access…".
+    // A provider that took the account's access away ("Your organization has disabled Claude
+    // subscription access…").
     const lost = nightWords({
       rounds: 5,
       landed: false,
@@ -418,7 +419,7 @@ describe("the morning card", () => {
     assert.match(judged.because, /a reviewer preferred it/);
     // An older night wrote no landing sentence: the card keeps the plain one.
     const older = night({ landed: true, hasBuild: false, stoppedBecause: "the director finished the run" });
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(older.because, "This build is your game now — open Live to play it.");
   });
 
@@ -443,14 +444,14 @@ describe("the morning card", () => {
     assert.equal(words.actions[0], "resume");
     assert.doesNotMatch(words.headline, /Finished/);
     assert.match(words.headline, /^Paused/);
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(words.noReport, "It was paused before it could write up the build.");
   });
 
   it("says the night wrote no report rather than printing the lead's own note", () => {
     const words = night();
     assert.equal(words.summary, null);
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(words.noReport, "It ended before it could write up the build.");
   });
 
@@ -564,9 +565,9 @@ describe("verdicts", () => {
   it("turns the harness's stop reasons into plain ones", () => {
     assert.equal(stoppedWords("stopped by the user"), "you stopped it");
     assert.equal(stoppedWords("finishing the current work at the user’s request"), "you asked it to wrap up");
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(stoppedWords("the director finished the run"), "the lead finished the build");
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.equal(stoppedWords("autopilot finished"), "the build finished");
     assert.equal(stoppedWords(""), "it finished");
     assert.doesNotMatch(stoppedWords("the director failed on run_fixture123456"), RUN_ID);
@@ -738,7 +739,7 @@ describe("what the night says as it goes", () => {
     assert.match(line, /the model provider is busy/);
     assert.doesNotMatch(line, /overloaded|Error|429/);
     // No part named: the night itself is waiting, and it is still not called a run.
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.match(outageWords({ phase: "plan", minutes: 3, attempt: 1 }), /^this build:/);
   });
 
@@ -833,8 +834,8 @@ describe("what the night says as it goes", () => {
     // No reference: the rule still reaches the user, without a bar literally named "unnamed".
     assert.doesNotMatch(runStartWords({ name: "unnamed", kind: "bar" }), /unnamed/);
     assert.match(runStartWords(null), /beat the one before/);
-    // Which model judges is part of what the night IS: a saved preference once made the
-    // orchestrator's model answer every crop question and no screen said so (M3.10).
+    // Which model judges is part of what the run IS: a saved preference could make the
+    // orchestrator's model answer every crop question with no screen saying so (M3.10).
     assert.match(runStartWords(null, "Opus"), /Opus, reviewing without being told which build is which/);
     assert.match(runStartWords(null, "default"), /a reviewer that cannot see which is which/);
     const lead = autopilotStartWords({ director: true, maxParallel: 2, facets: [] });
@@ -862,7 +863,7 @@ describe("what the night says as it goes", () => {
     const health = decisionWords(
       "the integrated build a82ee734ce did not pass its health pass: the game did not draw anything — the director must fix it or judge it before it can land",
     );
-    // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+    // Flipped: no time-of-day words in the app's copy.
     assert.match(health, /this build/);
     assert.doesNotMatch(health, /a82ee734ce|director|health pass/);
     assert.match(health, /did not run when it was checked/);

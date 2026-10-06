@@ -999,9 +999,8 @@ function narrateSkillAccepted(chat: ChatDraft, event: EventEnvelope): void {
 function narrateRunStart(chat: ChatDraft, event: EventEnvelope): void {
   const started = customPayload(event.data, CustomEvent.RunStarted);
   if (!started) return;
-  // Which model judges tonight, by name. The night this milestone came from was judged by
-  // the orchestrator's model because a stale saved preference said so, and nothing on screen
-  // ever said which model was answering — so the card says it (open decision 6). And on
+  // Which model judges this run, by name: a stale saved preference can put the judging on the
+  // orchestrator's model, and nothing else on screen says which model is answering. And on
   // which subscription, when the judges are not on the run's own (cross-provider roles).
   const judge = started.judgeModel ?? started.roles?.judge;
   const judgeEngine = started.judgeEngine ?? started.engine ?? "";

@@ -1072,7 +1072,7 @@ describe("a finished build reopened (director/reopen.ts)", () => {
     );
   });
 
-  it("K27 (P10-F2). a conflict worker starts on a night with required outcomes: resolving a merge is not a new attempt at a goal", async () => {
+  it("K27. a conflict worker starts on a night with required outcomes: resolving a merge is not a new attempt at a goal", async () => {
     const { resolveByWorker } = await import("../../src/harness-seed/loop/director/conflict-worker.ts");
     const reopened = reopenedWith(finishedGoalJournal(), null);
     const host = fakeHost();

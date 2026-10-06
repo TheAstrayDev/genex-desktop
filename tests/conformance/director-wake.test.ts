@@ -4,8 +4,7 @@
  * the typed lines the night's producers write so the waker never reads English.
  *
  * The lead used to stay inside one long turn — `wait` in a loop and a "continue" prompt whenever
- * the turn ended with time left — which is how one night stretched a single session over
- * seventeen hours. Now it ends its turn after every decision and the studio wakes the same
+ * the turn ended with time left, which stretched a single session over the whole run. Now it ends its turn after every decision and the studio wakes the same
  * session with a digest when something happens. Every clock here is a number the test chooses.
  */
 import assert from "node:assert/strict";
@@ -238,8 +237,7 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
   });
 
   it("W7b (provider lost). a turn a lost provider failed closes the night paused — never the wrap-up that lands a build", () => {
-    // The NFS run (6 Oct 2026): the account was disabled, the failed turn started the wrap-up, and
-    // the wrap-up's close landed a build nobody could check.
+    // A wrap-up after a lost provider would land a build nobody could check.
     const lost = {
       ok: false,
       closed: false,
@@ -526,7 +524,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     assert.doesNotMatch(hands, /Your notes and the run so far are below/);
   });
 
-  it("P3b (P08-V1). a fresh session gets the build card the lost one had already been shown", () => {
+  it("P3b. a fresh session gets the build card the lost one had already been shown", () => {
     const card = "THE BUILD — run run_w · a dusk plaza · plan: sky, plaza";
     const fresh = freshStart({
       why: "the session was not found",
@@ -744,7 +742,7 @@ describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () =
     assert.deepEqual(record, {
       loop: DirectorLoop.Wake,
       idleAsked: true,
-      // P08-F9: the lost sessions it replaced, so a Resume does not start that allowance again.
+      // The lost sessions it replaced, so a Resume does not start that allowance again.
       freshSessions: 0,
       wrapCause: WrapCause.Idle,
       wakes: 2,
@@ -974,7 +972,7 @@ describe("a conflict worker's files, read for conflict markers (conflict-worker.
   });
 });
 
-describe("a wake digest over its budget (P08-F7)", () => {
+describe("a wake digest over its budget", () => {
   it("leaves out the oldest news and says so, keeping the newest", async () => {
     const { fitHappened } = await import("../../src/harness-seed/loop/director/wake.ts");
     const happened = Array.from({ length: 400 }, (_, i) => `worker sky landed round ${i}: ${"detail ".repeat(30)}`);
@@ -991,7 +989,7 @@ describe("a wake digest over its budget (P08-F7)", () => {
   });
 });
 
-describe("the lost-session allowance across a Resume (P08-F9)", () => {
+describe("the lost-session allowance across a Resume", () => {
   it("is kept on the journal, so a Resume does not hand a night fresh sessions it already spent", async () => {
     const { wakeRecord, restoredWake } = await import("../../src/harness-seed/loop/director/journal.ts");
     const now = Date.now();

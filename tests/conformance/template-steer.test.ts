@@ -1,8 +1,8 @@
 /**
  * The template's racing-line assist (src/game-template/src/studio.js `config.steer`, `assist()`).
  *
- * The NFS run (2026-10-06): the evidence drive held the throttle and steered nothing, so the car
- * ended every drive against a wall and the judges rated a parked car. A racing game now hands the
+ * A drive that holds the throttle and steers nothing ends against a wall, and the judges rate a
+ * parked car. A racing game hands the
  * studio the steering a driver on its racing line would apply; while the harness asks for it, the
  * studio steers through the same keys a player holds, for the share of frames the line asks.
  */
@@ -46,7 +46,7 @@ const steersRight = (keys: string[]) => keys.includes("ArrowRight") && keys.incl
 const steersLeft = (keys: string[]) => keys.includes("ArrowLeft") && keys.includes("KeyA");
 
 describe("the racing-line assist", () => {
-  it("NFS-F3c. holds the steer keys for the share of frames config.steer asks, through ctx.keys", () => {
+  it("holds the steer keys for the share of frames config.steer asks, through ctx.keys", () => {
     let line = 0.5;
     const { api, frames } = steeredGame(() => line);
     assert.deepEqual(api.assist({ steer: true }), { ok: true, steer: true });

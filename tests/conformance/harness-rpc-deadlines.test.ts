@@ -106,7 +106,7 @@ describe("harness call deadlines (B4)", () => {
     await r.host.stop();
   });
 
-  it("an answer for a harness that has since restarted never reaches the new one (P05-F6)", async () => {
+  it("an answer for a harness that has since restarted never reaches the new one", async () => {
     const r = await hungPage(null);
     await r.host.start();
     void r.host.dispatch({ type: "user_message", threadId: r.thread, text: "look" }).catch(() => {});

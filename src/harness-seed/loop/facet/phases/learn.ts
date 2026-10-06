@@ -48,8 +48,7 @@ export async function critiqueLiveness(loop: FacetLoop, round: FacetRound): Prom
     round.liveness = null;
   }
   if (!(round.liveness?.max > 0)) return;
-  // A principle kept short of convincing card after card is stuck, and actionable at a 2: the
-  // NFS-inspired run's extent stood at 2 every round and its skyline never became a move.
+  // A principle kept short of convincing card after card is stuck, and actionable at a 2.
   loop.principleStreaks = countPrincipleStreaks(loop.principleStreaks, round.liveness);
   round.liveness = withStuckPrinciples(round.liveness, loop.principleStreaks);
   loop.lastLiveness = round.liveness;

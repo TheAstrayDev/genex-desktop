@@ -3,9 +3,8 @@
  *
  * The harness already learned two things between runs: skills (skillopt, the blind pairwise
  * gate) and techniques (the recipe library, promoted and retired by check outcomes). Neither
- * remembered a *game*, so the second night on a game paid for the first night's mistakes again.
- * The first real director night lost eight of its twenty-one rounds to one inherited console
- * error and nothing anywhere wrote that down.
+ * remembered a *game*, so the second night on a game paid for the first night's mistakes again:
+ * rounds lost to one inherited console error, and nothing anywhere wrote that down.
  *
  * What is tested here: the ledger records a night leaves (judged rounds, stopped rounds, the
  * builders the fork gate refused, the close), the lessons those records add up to, that both

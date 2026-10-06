@@ -1,8 +1,7 @@
 /**
- * The module contract a plan may carry (D7): which plan part owns which module, what each module
+ * The module contract a plan may carry: which plan part owns which module, what each module
  * exposes, the conventions every part keeps, and the shared files one part owns and the others
- * read. The Midnight Apex build split its game into systems around one shared state object with
- * nothing written down between them, and parallel workers rewrote each other's modules all night.
+ * read. Without it, parallel workers around one shared state object rewrite each other's modules.
  *
  * The contract is data: `parseModuleContract` holds it to its shape (one owner per path, every
  * owner a part of the plan) and answers a typed `ContractRefusal`, never a sentence to match. The
@@ -37,9 +36,8 @@ const MAX_API_LINES = 12;
 const MAX_REGISTERED = 12;
 /**
  * How long one convention, one API line, a path or a registered name may be. A convention or an API
- * line longer than its room is cut at a word, with an ellipsis: the NFS contract read "Road
- * half-width is tr" when both were cut at 200 characters mid-word. The counts above keep the whole
- * contract bounded.
+ * line longer than its room is cut at a word, with an ellipsis, never mid-word. The counts above
+ * keep the whole contract bounded.
  */
 const CONVENTION_CHARS = 400;
 const API_CHARS = 400;

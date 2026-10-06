@@ -339,7 +339,7 @@ interface DelegationSeat {
 }
 
 /**
- * The director (director, 2026-09-07): honoured only for the worktree the session runs in — its own
+ * The director: honoured only for the worktree the session runs in — its own
  * integration worktree, under scratch — or, for a waking night's lead, for its game's folder while
  * it leads that worktree (`#seatOf`), which the grant then names by its checked real path.
  */
@@ -438,7 +438,7 @@ export class DelegationService {
   }
 
   /**
-   * The computer (computer use, 2026-09-07): hands and eyes on one pooled window for the whole session — the
+   * The computer: hands and eyes on one pooled window for the whole session — the
    * builder's worktree, the playtester's build under test, the scout's live folder. Loaded
    * once through the served entry, the setup script applied, then kept running between
    * actions so a map the worker switched to stays switched. Actions are Anthropic's computer
@@ -454,7 +454,7 @@ export class DelegationService {
   }
 
   /**
-   * The director's tools (director, 2026-09-07): the computer on a window of its own, `look` to point that
+   * The director's tools: the computer on a window of its own, `look` to point that
    * window at any build of the run, capture of whatever it is looking at, and the harness's
    * run tools — plan, worker_start, wait, judge, playtest, integrate, show, note, finish — which
    * live in the harness process (it owns the loops and the merge) and are reached through a
@@ -811,7 +811,7 @@ export class DelegationService {
     } finally {
       session.ended.abort();
       asking?.end();
-      // P05-F7: a release that throws (a pending plugin update that cannot activate) is logged and
+      // A release that throws (a pending plugin update that cannot activate) is logged and
       // never skips the rest: the folder's lock, the budget and the windows are freed below.
       await releasePlugins().catch((error) => this.#logCleanupFailure("plugin lease", error));
       await releaseMcp().catch((error) => this.#logCleanupFailure("connector lease", error));

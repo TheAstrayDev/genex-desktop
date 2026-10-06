@@ -380,7 +380,7 @@ function wave(silent = false): Buffer {
 }
 
 /**
- * On-device speech (2026-09-23): a page probing it keeps its renderer.
+ * On-device speech: a page probing it keeps its renderer.
  * Each call below got the whole game renderer killed for a bad Mojo message until
  * GAME_DISABLED_BLINK_FEATURES (game-view.ts) took the members away, and Chromium ignores a feature name it
  * no longer knows, so this is the check that notices an Electron upgrade renaming one. The
@@ -481,8 +481,7 @@ async function checkContainment({ preview, userData, check }: SelfTest): Promise
  * The Open Game sheet: looking is not opening. The folder a user picks is read before anything
  * is written to it, and what the sheet promises is exactly what lands. This is the whole reason
  * picking and opening were split: the studio used to scaffold its template into the folder the
- * dialog returned, which is how somebody's real game in wreckage/ was wrapped in an empty
- * project (flautout-remix).
+ * dialog returned, which wraps a real game in a subfolder in an empty project.
  */
 async function checkOpenGameSheet(t: SelfTest): Promise<void> {
   const { core, check } = t;
@@ -569,7 +568,7 @@ async function filesUnder(dir: string): Promise<string[]> {
 /**
  * …and the pages it was given describe that game. The template's own say "This project
  * starts empty" and "Empty project", and a contractor that read them in somebody's real
- * game built as if it were (flautout-remix, 2026-09-07).
+ * game built as if it were.
  */
 async function checkOpenedPages({ check }: SelfTest, inner: string): Promise<void> {
   const openedRules = await readFile(path.join(inner, "CLAUDE.md"), "utf8").catch(() => "");

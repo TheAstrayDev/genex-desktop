@@ -127,8 +127,8 @@ function takeMilestone(loop: FacetLoop, milestone: AnyRecord): void {
 
 /**
  * A pending or critic-named move costs nothing — it is asked even on the facet's last iteration.
- * Only the planner's call is gated by the clock: the village run's final round on every facet
- * ran with no move at all because this whole branch was.
+ * Only the planner's call is gated by the clock; gating the whole branch left every facet's final
+ * round with no move at all.
  */
 function takePendingMove(loop: FacetLoop, pending: AnyRecord): void {
   pending.attempts = (pending.attempts ?? 1) + 1;

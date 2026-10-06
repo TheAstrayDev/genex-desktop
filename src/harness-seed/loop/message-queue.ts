@@ -907,7 +907,7 @@ export class MessageQueue {
       });
     } finally {
       await this.#endTurn(threadId, thread, turn);
-      // Handled either way — never answered twice — but a failed one says so (P07-F3).
+      // Handled either way — never answered twice — but a failed one says so.
       await this.#event(threadId, RunEvent.CoordinatorMessageHandled, {
         messageId: action.messageId,
         ...(failed ? { failed: true } : {}),

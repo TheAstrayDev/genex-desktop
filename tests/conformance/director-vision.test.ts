@@ -1,13 +1,10 @@
 /**
- * The vision, apart from the contract, and a start like Midnight Apex's (the NFS ∞ Loop run).
+ * The vision, apart from the contract, and a foundation the lead lays itself.
  *
- * In its first 25 minutes the NFS lead froze its world inside docs/MODULE-CONTRACT.md — an 8-block
- * loop of façades, its scale, corners and cut list — and the track file never changed again, while
- * the critic asked for a skyline, water and a vista every round. Its contract lines were cut at 200
- * characters mid-word ("Road half-width is tr"), and the studio's starting scene — the goal and a
- * mood, no scope — built a straight sprint the lead threw away six minutes later. Midnight Apex froze
- * interfaces and ranges, wrote the ambition into its brief, and laid crude stubs before its owners
- * designed the content.
+ * The contract freezes interfaces and ranges, never a world laid out inside it; the vision holds
+ * the ambition every part grows toward. Contract lines are cut at a word, never mid-word. A run with
+ * room for a team skips the starting scene: its lead lays crude stubs before the owners design the
+ * content, and a short run's starting scene reads the user's scope.
  */
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -330,7 +327,7 @@ describe("contract lines are never clipped mid-word (P2)", () => {
   });
 });
 
-describe("start like Midnight Apex: the lead lays the foundation (P1)", () => {
+describe("a run with room for a team: the lead lays the foundation", () => {
   it("V9. a run with room for a team and an hour of work lays its own foundation; a short run or a pool of one still gets a starting scene", () => {
     const pool = (max: number, headless = true) => ({ max, headless });
     assert.equal(foundationFirst({ remainingMs: 24 * 60 * MINUTE, capacity: pool(6) }), true);

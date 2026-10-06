@@ -526,7 +526,7 @@ export function unmeasuredTally(records: readonly LedgerRecord[]): Map<string, M
 /**
  * The checks this kind of game has never been able to measure. A check the harness cannot read
  * is worse than no check: it holds "satisfied" out of reach forever while reading as neither a
- * pass nor a failure, which is how one night finished with `identityTotal 0` on every board.
+ * pass nor a failure, and a run could finish with `identityTotal 0` on every board.
  */
 export function rarelyMeasurable(
   records: readonly LedgerRecord[],

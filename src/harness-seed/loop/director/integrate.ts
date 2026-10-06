@@ -376,7 +376,7 @@ async function mergeWorker(
  * The health pass: does the integrated build run, on the requested state? The user's own game
  * may be a repository of its own inside the folder. When the studio was not allowed to version
  * it, this build carries none of the work done inside it — said on the health pass rather than
- * landing a build that silently contains nothing (2026-09-07). The build runs; it is empty, and
+ * landing a build that silently contains nothing. The build runs; it is empty, and
  * only `git ls-tree` can see that (a gitlink is a path git does not walk). Answers the look, and
  * whether the build started at all.
  */
@@ -885,7 +885,7 @@ export function landingClaim(
  * Landing that is not a merge — the folder's own `.git` is renamed aside and the fork's
  * conversion commit joined as a second parent (`versionNestedForLanding`) — and it is the one
  * place the studio touches somebody else's version history, so it belongs to the user's own
- * button, not to the night (decision 1, 2026-09-08). Git would refuse it here anyway, over
+ * button, not to the night. Git would refuse it here anyway, over
  * files it is not tracking; this says why in words the user can act on.
  */
 async function nestedRefusal(night: Night): Promise<AnyRecord | null> {
@@ -1086,7 +1086,7 @@ async function announceClose(night: Night): Promise<void> {
 
 /**
  * A night's close, written to its thread — tried again when the log refuses it: a `run_finished`
- * that is never written leaves the night running for good, with nothing to Resume (P19-F6).
+ * that is never written leaves the night running for good, with nothing to Resume.
  * Throws the last refusal.
  */
 export async function appendClose(ctx: HarnessCtx, threadId: string, batch: EventData[]): Promise<void> {

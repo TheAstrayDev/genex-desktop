@@ -117,7 +117,7 @@ export async function runCoordinatorTurn(ctx: HarnessCtx, options: CoordinatorTu
 
 /**
  * How much of the run's record a model whose window is known can take: half its window, in
- * characters. An unknown window keeps the prompt's own ceiling (P07-F6).
+ * characters. An unknown window keeps the prompt's own ceiling.
  */
 function recordBudget(contextWindow: number | null): { budgetChars?: number } {
   return contextWindow ? { budgetChars: Math.floor(contextWindow * CHARS_PER_TOKEN * RECORD_WINDOW_SHARE) } : {};

@@ -12,8 +12,8 @@
  * owner's board in the director's name, so its fix keeps the round (a strong flip). The verdict
  * is reported, never a landing veto, and it turns a goal build's finish back at most once.
  *
- * Nor does the look wait for the mark: four busy workers kept one ∞ build's lead from ever idling,
- * and nobody looked at the whole game in three hours. So the studio also looks on its own while
+ * Nor does the look wait for the mark: busy workers can keep a lead from ever idling, and nobody
+ * would look at the whole game for hours. So the studio also looks on its own while
  * loop workers build (`shipLookAt`): once the first wave is in (every running loop worker has
  * kept work merged, or after `SHIP_LOOK_EVERY_MS` of working time), then every `SHIP_LOOK_EVERY_MS`
  * on a head it has not reviewed — never within `SHIP_LOOK_GAP_MS` before a timed build's mark,

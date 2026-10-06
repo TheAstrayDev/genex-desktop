@@ -336,7 +336,7 @@ test("a run control the host records itself is one row, and a recorded resume sh
   const labels = (events: EventEnvelope[]) =>
     toEntries(events).flatMap((e) => (e.kind === "tools" ? e.rows.map((row) => row.label) : []));
 
-  // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+  // Flipped: no time-of-day words in the app's copy.
   assert.deepEqual(
     labels([mirrored(1, "mcp__studio__run_status", "t1"), ...hosted(2, "run_status", "coord_1", "{}")]),
     ["checked on the build"],

@@ -1,9 +1,8 @@
 /**
  * One owner of the screen. The part the director starts with `critic=screen` owns what the player
  * sees laid over the game — the HUD, the menus, the layout — and every other part publishes its
- * values (in `__studio.state()`, or the owner's model) instead of drawing them. The Midnight Apex
- * night's race part drew a pursuit meter of its own through the contract HUD beside the HUD part's
- * readouts, and nothing said the screen had an owner.
+ * values (in `__studio.state()`, or the owner's model) instead of drawing them, so no part draws
+ * readouts of its own beside the HUD part's.
  *
  * The rule is a source-code pattern over a diff's added lines, like the reviewer's Math.random rule:
  * a call into the template's contract HUD (`__studio.hud.…`, or `hud.text(…)` and its siblings) in

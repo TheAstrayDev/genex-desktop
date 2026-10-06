@@ -1,5 +1,5 @@
 /**
- * A finished build reopened (2026-09-29). After a build its lead led as the chat's own session has
+ * A finished build reopened. After a build its lead led as the chat's own session has
  * finished (after-night.ts), a message with Loop on that asks for more work reopens the SAME run — its
  * runId, plan, workers and Builds graph — with the working time the Loop gives it, led again by that
  * same session (director/lead-session.ts). The session decides from the message and records

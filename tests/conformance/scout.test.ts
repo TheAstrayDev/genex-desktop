@@ -1,6 +1,6 @@
 /**
- * The scout and the requested state (computer use, 2026-09-07) — born from run_mtq96bu1z3x0, where six facets
- * built and judged the wrong map for two hours because nothing had opened the game first:
+ * The scout and the requested state, so facets never build and judge the wrong map because
+ * nothing had opened the game first:
  *
  *  1. the scout's answer is normalised into a setup the studio can replay and a builder count
  *     the planner must respect;

@@ -49,10 +49,9 @@ const wholeMinutes = (ms: number): number => Math.max(1, Math.round(ms / MINUTE_
 
 /**
  * A round is started only when what is left covers a whole one of this worker's own rounds,
- * with this much headroom. The clock used to be the only gate — "is there any time left?" —
- * and one night's five round-two workers all began a round they could not finish: the build
- * turn was cut mid-edit, the half-written game was judged as a partial, three of them lost,
- * and the morning counted those rounds as undone.
+ * with this much headroom. "Is there any time left?" alone starts rounds that cannot finish: the
+ * build turn is cut mid-edit, the half-written game is judged as a partial, and those rounds count
+ * as undone.
  */
 export const ITERATION_HEADROOM = 1.25;
 
@@ -76,7 +75,7 @@ export const brokenStreakWords = (limit: number): string =>
   `${countWord(limit)} unjudgeable build${limit === 1 ? "" : "s"}`;
 
 /**
- * A model review finding worded like this once read as a check being gamed. The loop now reads
+ * A model review finding worded like this reads as a check being gamed. The loop now reads
  * the reviewer's own `gaming` flag (phases/review.ts); this stays for a kept copy that imports it.
  */
 export const GAMING_FINDING =
@@ -273,9 +272,8 @@ export function strongFlips(
  * pick, which is the one judgement that looked at both builds at once.
  *
  * A missing move somebody asked for undoes a preferred round only when the round fixed nothing it
- * owed. The NFS run threw car-feel's round 5 away whole — two of the judge's defect questions
- * flipped and the judge preferred it — for the rung it missed, and the lead had it redone. Such a
- * round is kept and its move stays owed (`moveVerdict` never climbs it).
+ * owed: one that flipped the judge's own defect questions is kept, so its fixes are not thrown
+ * away, and its move stays owed (`moveVerdict` never climbs it).
  */
 export function acceptRound({
   spec,
@@ -361,20 +359,17 @@ export interface MoveChoice {
  * "critic" | "planner" | "none".
  *
  * The ladder goes first, and growth has a way into it. The lead's rungs are the round's mandate in
- * their order: a night once told five workers that puddles, a wreck-cam and a tow truck were
- * mandatory while the director's brief said mud, and the workers lost the rounds they had spent on
- * the brief, so the harness never puts a move of its own ahead of them. A rung the director steered
- * in (`steered`) is next, ahead of the rest: the golden-goal night's lead steered past a rung its
- * worker was stuck on, was told "its next round builds it", and the steer waited behind the stuck
- * rung for good. A rung set aside after missing round after round (`setAside`) is passed over.
+ * their order, and the harness never puts a move of its own ahead of them: a harness move made
+ * mandatory over the brief costs the workers the rounds they spend on the brief. A rung the
+ * director steered in (`steered`) is next, ahead of the rest, so a steer past a rung its worker is
+ * stuck on never waits behind that rung. A rung set aside after missing round after round (`setAside`) is passed over.
  *
  * Every director ladder ends with an open rung (facet/growth.ts `withOpenRung`): when it is reached
  * it is filled with the reviewers' best structural step inside the ask — a principle the critic has
  * kept short of convincing three cards running, the taste judge's big move, the critic's biggest —
  * and is mandatory like the lead's rungs, because it is one of them, delegated. With no step to fill
- * it, it is passed over that round. The NFS-inspired run's critic scored the world's extent 2 in
- * every round and proposed a skyline every round; the lead's ladders chose 24 of 25 moves, and none
- * was the skyline.
+ * it, it is passed over that round. Without it, a critic's growth never reaches a worker whose lead
+ * wrote a ladder.
  *
  * Past the director's ladder the next step is the director's call — but a worker that waits for one
  * spends its rounds on polish. It builds the taste judge's big move for the facet (`lastBigMove`) as
@@ -480,8 +475,8 @@ function isOpenMove(move: AnyRecord, policy: FacetPolicy): boolean {
  *
  * A move the judge saw already in the accepted build (`moveAlreadyPresent`) was delivered by an
  * earlier round: it is never missing, and its rung climbs whatever this round's fate. Asked
- * "visible here and absent from the other", the golden-goal night's judge answered no about a
- * restart loop both builds had, four rounds running, and each of those rounds was thrown away.
+ * "visible here and absent from the other", a judge answers no about a move both builds have,
+ * and every such round would be thrown away.
  */
 export function moveVerdict({
   move = null,

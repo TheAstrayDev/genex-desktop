@@ -36,7 +36,7 @@ export async function keepOrRollBack(loop: FacetLoop, round: FacetRound): Promis
   // ── commit or retain-and-roll-back ──
   round.attemptBranch = null;
   round.diffStat = "";
-  // Read before a rollback takes them: a lost attempt's notes are what it tried (P12-V1).
+  // Read before a rollback takes them: a lost attempt's notes are what it tried.
   round.attemptNotes = await builderNotes(loop);
   await logRoundLessons(loop, round.attemptNotes);
   if (round.won) {
@@ -48,7 +48,7 @@ export async function keepOrRollBack(loop: FacetLoop, round: FacetRound): Promis
   // loop erased all of this and re-attempted the same idea because it could not see it.
   const kept = loop.worktree ? await retainAttemptOnRef(loop, round) : await retainAttemptSnapshot(loop, round);
   if (kept) return;
-  // Rolling back an attempt nobody kept throws it away for good (P12-F8): it stays where it is,
+  // Rolling back an attempt nobody kept throws it away for good: it stays where it is,
   // and the facet stops on it.
   stopWith(
     loop.result,

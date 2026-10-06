@@ -728,8 +728,7 @@ describe("the board a game actually carries", () => {
       { id: "f", checks: [] as Check[] },
       { ownsMain: true, game: { kind: "racing" } as never },
     ).checks as { id: string; expr?: string; needs?: string[]; weight: string }[];
-    // Flipped for the NFS run (2026-10-06): the entry owner of a racer also carries the race a
-    // throttle-only bot must not win.
+    // Flipped: the entry owner of a racer also carries the race a throttle-only bot must not win.
     assert.deepEqual(racing.map((c) => c.id).sort(), [
       "hud-coverage",
       "hud-overlap",
@@ -755,7 +754,7 @@ describe("the board a game actually carries", () => {
     ]);
   });
 
-  it("NFS-F4d. a throttle-only bot won both games: its race rides on the entry owner of a racer or a craft, never a part or the front-end's owner", () => {
+  it("puts the throttle-only bot's race on the entry owner of a racer or a craft, never a part or the front-end's owner", () => {
     const owned = (game: Record<string, unknown>, options: Record<string, unknown> = {}) =>
       withHarnessChecks({ id: "f", checks: [] as Check[] }, { ownsMain: true, game, ...options } as never).checks;
     const bot = owned({ kind: "racing" }).find((c: Check) => c.id === "throttle-bot-loses");
@@ -1391,7 +1390,7 @@ describe("scoreboard", () => {
 });
 
 /**
- * M3.2 — the judges of one night, corrected. Every case here is one the run of 7 Sep produced:
+ * M3.2 — the judges, corrected. Every case here is a real misjudgement:
  * a round kept on a question the judge had written for itself, two questions about one trunk
  * that answered differently, a crop question about a number, and a question nobody could answer
  * that held its slot to the end.
@@ -1854,7 +1853,7 @@ describe("technique library", () => {
     } as never);
     assert.match(text, /USER STEERING[\s\S]*make the water darker/);
     assert.match(text, /\[FAIL\] mirror-rt \(scene, identity\)/);
-    // Flipped (golden-goal night, 2026-10-02): every round used to read "kept on <ref>", accepted
+    // Flipped: every round used to read "kept on <ref>", accepted
     // or not; a round now says whether it was kept or lost, and where its code is.
     assert.match(text, /iteration 2, lost — its code is on refs\/studio\/runs\/run_x\/attempts\/water\/2/);
     assert.match(text, /Planar mirror water/);
@@ -1997,9 +1996,8 @@ describe("code reviewer, mechanical half", () => {
   });
 
   /**
-   * One owner of the screen (Midnight Apex, 2026-10-05): the race part drew a pursuit meter of its
-   * own through the contract HUD while the HUD part owned the screen. A part that does not own the
-   * screen publishes its values; drawing them is the owner's call.
+   * One owner of the screen: a part that does not own the screen publishes its values; drawing
+   * them is the owner's call.
    */
   it("finds a part drawing on a screen another part owns, and says nothing when no part owns it", () => {
     const meter = [

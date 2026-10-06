@@ -1,7 +1,7 @@
 /**
  * A reviewer's one big move for a part (`{ what, why }`): the bold step the taste judge and the
- * playtester name beside their defects. The golden-goal night's judges listed 189 defects and were
- * never asked for the one step their part needed; this is that step, as the director and a worker
+ * playtester name beside their defects. Judges asked only for defects list hundreds of them and
+ * never the one step their part needs; this is that step, as the director and a worker
  * read it. A module of its own, so a workspace that kept an older judge.ts still loads the parts
  * that read it.
  *

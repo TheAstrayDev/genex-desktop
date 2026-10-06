@@ -1068,7 +1068,7 @@ export function evaluateProbeCheck(check: CheckLike, evidence: CheckEvidence | n
       { missing: notReported, unavailable: true },
     );
   const outcome = evaluateBoolean(check.expr, probeScope(state, early));
-  // P15-F1: `!=`, `!`, `==` and `||` over a path the build never reported still yield a value, so
+  // `!=`, `!`, `==` and `||` over a path the build never reported still yield a value, so
   // an absent field could pass a check. Whatever the expression read that the state lacks makes
   // the check unmeasured — "I did not see it", never a pass or a fail.
   if (outcome.missing.length)
@@ -1213,7 +1213,7 @@ export async function evaluateSceneCheck(
   if (unavailable) return unmeasured(check, `scene check could not be measured: ${unavailable}`, { unavailable: true });
   if (outcome.__error) return result(check, false, `scene check error: ${outcome.__error}`);
   // The page-side wrapper always answers {value} or {__error}; anything else means the
-  // expression never ran there (an undefined once read as a pass — nothing may pass unlooked-at).
+  // expression never ran there (an undefined is never a pass — nothing may pass unlooked-at).
   if (!("value" in outcome))
     return unmeasured(check, "scene check produced no value — the page did not run the inspect() wrapper");
   const verdict = sceneVerdict(check, outcome.value);
@@ -1497,9 +1497,9 @@ function settleMeasured(
 /**
  * The board as a card can read it. `total`/`passing`/`unmeasured` count everything, as they
  * always have; `planned*` counts only the checks the plan and the harness wrote and `grown*`
- * only the questions a judge grew from its own defect list. They are two different things and
- * one night proved it: a part whose nine planned checks all passed read "1 of 10" because the
- * judge had grown a question about a number no camera can see. The screen says "Passed 3 ·
+ * only the questions a judge grew from its own defect list. They are two different things: mixed,
+ * a part whose nine planned checks all pass reads "1 of 10" because the judge grew a question
+ * about a number no camera can see. The screen says "Passed 3 ·
  * Failed 2 · Couldn't measure 4 · 3 judge notes" off these fields. A harness-owned check that
  * does not apply to this build (loop/applies-to-build.ts) is in none of those counts; identity
  * still reads the whole board, so it never turns an unanswerable board into a satisfied one.

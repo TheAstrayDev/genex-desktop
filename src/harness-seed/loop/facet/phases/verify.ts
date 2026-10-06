@@ -101,8 +101,8 @@ type JudgeWait = { again: true } | { again: false; flow: RoundFlow };
 /**
  * A judge (or a follow-up, or a playtester) whose provider is lost — its sign-in, a limit, an
  * outage past the ladder — is no verdict: the round waits for it (facet/provider.ts) and is
- * verified again once it is back (the NFS run auto-tied a round on a disabled account). Null for
- * any other failure, which keeps its own policy.
+ * verified again once it is back, never auto-tied. Null for any other failure, which keeps its own
+ * policy.
  */
 async function waitForJudge(loop: FacetLoop, round: FacetRound, err: unknown): Promise<JudgeWait | null> {
   const lost = lostProviderOf(loop, err, loop.engineId);

@@ -387,7 +387,7 @@ async function buildIteration(loop: GauntletLoop, round: GauntletRound): Promise
       turn: {
         text: round.taskBrief,
         iteration: round.iteration,
-        // The requested state (computer use, 2026-09-07): the builder's window opens where the run is about.
+        // The requested state: the builder's window opens where the run is about.
         ...(run.setup ? { setup: run.setup } : {}),
       },
     });
@@ -649,7 +649,7 @@ async function recordIteration(loop: GauntletLoop, round: GauntletRound): Promis
     winner: round.challengerWon ? Side.Challenger : Side.Incumbent,
     biggest_gap: round.verdict.biggest_gap ?? loop.biggestGap,
     reason: round.verdict.reason ?? "",
-    // Which judge said so (P14-F5): model, prompt hash, reply, usage.
+    // Which judge said so: model, prompt hash, reply, usage.
     judgeCall: round.verdict.judgeCall ?? null,
     snapshot: loop.incumbent.snapshot_id,
     attemptSnapshot: round.attemptSnapshot?.snapshot_id ?? null,

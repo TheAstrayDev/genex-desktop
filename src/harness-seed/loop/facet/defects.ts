@@ -270,8 +270,7 @@ function facetVocabulary(spec: AnyRecord | null | undefined): Set<string> {
   for (const own of spec?.owns ?? []) texts.push(fileStem(own));
   texts.push(...(spec?.cameras ?? []));
   // The plan's own words: "chickens peck… the dog trots a loop" is how a dog defect finds the
-  // life facet — the village run grew the dog on ground-and-atmosphere, whose vocabulary was
-  // file names and camera names only.
+  // life facet rather than one whose vocabulary is file names and camera names only.
   texts.push(spec?.intent, ...ladderWords(spec));
   for (const check of spec?.checks ?? []) {
     if (check.origin === CheckOrigin.Harness || check.origin === CheckOrigin.Judge) continue;
@@ -322,8 +321,8 @@ interface Candidate {
  * that happened to be judged. The live count is capped.
  *
  * A defect about a reading rather than a sight never becomes a picture question at all (M3.2):
- * "the live probe reports speedKept 0.069" was asked of a JPEG twelve times in one night and
- * answered "no, no readout is visible" every time. Those go to `noteDefect` — the ledger the
+ * "the live probe reports speedKept 0.069", asked of a JPEG, is answered "no, no readout is
+ * visible" every time. Those go to `noteDefect` — the ledger the
  * builder's brief already carries — with the probe expression that would measure them.
  */
 export function defectsToChecks(

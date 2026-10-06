@@ -814,7 +814,7 @@ export class CodexEngine implements Engine {
    * Where the session runs and its bridge. A read-only session is started somewhere of its own,
    * so the only folder its sandbox lets it write is the studio's bridge. The locks and the scratch
    * folder are this call's: a bridge that cannot open (a planted `.studio`) must not leave the
-   * game read-only until the next delegation (P03-V1).
+   * game read-only until the next delegation.
    */
   async #openRunDir(
     request: DelegateRequest,
@@ -1615,7 +1615,7 @@ function threadStarted(event: Record<string, unknown>): Translated {
  * A turn finished: its tokens. Codex's `output_tokens` already holds its reasoning (its
  * `total_tokens` is input plus output), so `reasoning_tokens` is that part of it, never added
  * again; its `input_tokens` already holds the cache reads. A count the CLI did not report — an
- * older CLI writes no cache writes — stays absent (P03-F10).
+ * older CLI writes no cache writes — stays absent.
  */
 function turnCompleted(event: Record<string, unknown>): Translated {
   const raw = (event.usage ?? {}) as Record<string, number>;

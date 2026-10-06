@@ -1,9 +1,8 @@
 /**
- * The build block (the NFS run against Midnight Apex, 2026-10-06). Apex gave each builder about
- * two hours of its own module, with a bench page and a screenshot-and-fix loop, before anything
- * judged the whole game; the NFS run's workers were judged blind from their first 20–40 minutes,
- * and spent their rounds on what one look at a time could reward. A new loop worker's first round
- * is now one long build of BUILD_BLOCK_MIN_MS to BUILD_BLOCK_MAX_MS: whenever the builder ends its
+ * The build block. A worker judged blind from its first short round spends its rounds on what one
+ * look at a time can reward; a part needs a long stretch of its own module, with a bench page and
+ * a screenshot-and-fix loop, before anything judges it. A new loop worker's first round is one
+ * long build of BUILD_BLOCK_MIN_MS to BUILD_BLOCK_MAX_MS: whenever the builder ends its
  * turn early, the same session is asked to keep going on its bench page, and the block is kept on
  * the checks alone — it must run, regress nothing and change what a player sees. The taste judge
  * looks once for its notes (the defects, the polish, the big move, whether the move is there),

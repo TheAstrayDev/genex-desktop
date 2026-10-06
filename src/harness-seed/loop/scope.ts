@@ -6,8 +6,8 @@
  * and a Resume or a reopen reads it back; scope-prompts.ts renders it for every agent that reads the
  * goal. A run without it is a run from before it existed, and every reader behaves as before.
  *
- * A Midnight Apex night grew police, traffic and a pursuit meter out of "an NFS-inspired racing
- * game": the contractor's paraphrase was the only ask any agent read, and nothing said what was cut.
+ * The user's own words are kept because a paraphrase drifts: with only the contractor's goal to
+ * read, and nothing saying what was cut, a street race grows police, traffic and a pursuit meter.
  *
  * A new module, so a kept older sibling can never shadow these names; it imports only the log's own
  * folds (run-inbox.ts `conversationThrough`, message-queue.ts `messageQueueState`), which every seed has.

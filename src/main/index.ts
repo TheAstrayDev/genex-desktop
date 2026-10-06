@@ -759,7 +759,7 @@ function attachPreviews(studio: StudioCore, win: BrowserWindow): void {
   // (__studio.capture() renders straight from the canvas), so the window needs no compositor
   // surface and stays genuinely hidden. The previous shown-but-parked windows (x=-4400)
   // resurfaced whenever macOS reshuffled displays or Mission Control ran — four ghost windows
-  // on the user's desktop mid-run. Rendering is offscreen (computer use, 2026-09-07): a hidden window with a
+  // on the user's desktop mid-run. Rendering is offscreen: a hidden window with a
   // normal compositor never fires requestAnimationFrame, whatever backgroundThrottling says,
   // so a game in it stood still — the computer-smoke fixture reported frame 0 after a
   // 600 ms W hold. Offscreen rendering paints the frames itself at 60 fps, so a worker's
@@ -863,8 +863,8 @@ function collectRendererConsole(win: BrowserWindow): void {
  * A link in chat is a contractor's markdown, and this window is the studio's only UI: nothing
  * a report links to may replace it. A click opens outside the window — the browser, the
  * file's own app for a document in a game folder, or Finder for anything that could run — or
- * is refused in words, and the studio stays on screen. (2026-09-06: "[Base handoff](/…/NOTES.base-builder.md)"
- * navigated the window to a file that did not exist and left the whole app black.)
+ * is refused in words, and the studio stays on screen, never navigated to a file that does not
+ * exist and left black.
  */
 function keepLinksOutside(studio: StudioCore, win: BrowserWindow): void {
   win.webContents.on("will-navigate", (event, url) => {
@@ -945,8 +945,8 @@ function watchWindowLifecycle(win: BrowserWindow): void {
     void claudeLogin.cancel();
     void terminals.dispose();
   });
-  // A crashed renderer leaves an empty window while runs carry on (2026-09-23: the UI ran out of
-  // memory an hour into an Autopilot run and the window stayed blank while the run continued).
+  // A crashed renderer (out of memory an hour into a run, say) leaves an empty window while runs
+  // carry on.
   // Reload it and leave a note in the Studio chat, but only a couple of times a minute, so a page
   // that crashes on load does not spin; past that the person decides.
   const reloads = createReloadPolicy();

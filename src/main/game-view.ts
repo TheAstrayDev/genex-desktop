@@ -7,7 +7,7 @@
  * Blink features no game page gets. On-device speech recognition asks the browser for
  * `media.mojom.OnDeviceSpeechRecognition`, a binder only Chrome registers: Electron treats the
  * request as a bad Mojo message and kills the whole renderer (reason 123). An agent's diagnostic
- * probe did it six times on 2026-09-23 — `SpeechRecognition.available()` or `install()` with
+ * probe can do it — `SpeechRecognition.available()` or `install()` with
  * `processLocally: true`, or `start()` on a recognizer with `processLocally` and a `lang`, is
  * enough. With these off, those members do not exist in any frame of the view, iframes and blob:
  * documents included, which a page-world stub cannot reach; plain `start()` still ends in a

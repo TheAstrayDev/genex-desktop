@@ -1,6 +1,6 @@
 /**
  * The studio reads `__studio.state()` as a bounded structure, never as a cut string
- * (AUDIT-STATE-STUB, Midnight Asphalt 2026-10-05): an 82 KB state came back as
+ * (AUDIT-STATE-STUB): an 82 KB state came back as
  * `{__truncated, length, head}` and every probe of every facet read the stub. A state over the
  * budget now loses its largest lists to typed stubs and keeps every scalar; a state under it is
  * returned byte for byte as before. The bounder runs in the page from its own source, so these

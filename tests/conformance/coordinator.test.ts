@@ -203,7 +203,7 @@ describe("addressed run inbox", () => {
         id: "4",
         data: { type: "custom", event_type: "run_steering", payload: { runId: "r", text: "Keep walking peaceful" } },
       },
-      // The director's own steer to a worker is not the user speaking (a director once asked the user to repeat it).
+      // The director's own steer to a worker is not the user speaking.
       {
         id: "4b",
         data: {

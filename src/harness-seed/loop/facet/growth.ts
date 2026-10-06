@@ -1,9 +1,8 @@
 /**
- * A way in for growth. The NFS-inspired ∞ Loop run (2026-10-06) lost to a plain session: across all
- * thirteen of its judged rounds the liveness critic scored the world's extent 2 — "present but thin"
- * — and proposed a distant skyline and side streets fading into fog, and none of it became a move.
- * Only a principle at 0 or 1 was actionable, and once the lead had written a ladder, its rungs owned
- * the move: they chose 24 of the run's 25. Three ways in, all pure:
+ * A way in for growth. A critic that scores a principle 2 — "present but thin" — round after round
+ * proposes the same growth (a distant skyline, side streets fading into fog), and without a way in
+ * none of it becomes a move: only a 0 or a 1 is actionable, and a lead's ladder owns every move
+ * while it lasts. Three ways in, all pure:
  *
  * - a principle the critic keeps short of convincing, with a fix inside the ask, for
  *   `STUCK_PRINCIPLE_CARDS` cards running is stuck: it becomes actionable by its kind (a grow gap,

@@ -163,8 +163,8 @@ async function mergeIntegration(loop: FacetLoop, round: FacetRound, head: string
 
 /**
  * A clean merge that brought edits to this part's own files — the lead's integration fixes — tells
- * the builder they are the lead's to keep: the NFS run's owners read such a change as an accident
- * and undid it. Best-effort: a git that refuses says nothing.
+ * the builder they are the lead's to keep, so an owner never undoes them as an accident.
+ * Best-effort: a git that refuses says nothing.
  */
 async function noteLeadChanges(
   loop: FacetLoop,
@@ -204,7 +204,7 @@ function resolvedFields(resolved: AnyRecord | null | undefined): AnyRecord {
 /** Re-baseline: the incumbent just changed under this facet, so its evidence and board are looked at again once. */
 export async function rebaselineIncumbent(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
   const { legacy, previewLock, worktree } = loop;
-  // ── re-baseline (director, 2026-09-07): the incumbent just changed under this facet ──
+  // ── re-baseline: the incumbent just changed under this facet ──
   // Other facets' work is in the worktree now; the accepted evidence and board predate it.
   // Judged against stale evidence, a regression they caused would be this facet's loss and
   // a fix they landed would be this facet's flip. Look at the merged incumbent once.

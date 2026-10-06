@@ -110,7 +110,7 @@ export interface GatherOptions {
   requiredDemos?: string[];
   /**
    * The demos the build this one is compared with registers: under the cap, a demo this build
-   * added runs before the ones the other already showed (the NFS run's `contact` never did).
+   * added runs before the ones the other already showed.
    */
   knownDemos?: string[] | null;
   /** Race the throttle-only bot after the demos (`raceThrottleBot`): a board carries `throttle-bot-loses`, or a ship look. */
@@ -188,9 +188,8 @@ const PLAY_WAIT_MAX_MS = 12 * SECOND_MS;
 /** How much of what `__studio.begin()` answered when it refused a warning quotes. */
 const BEGIN_REASON_CHARS = 160;
 /**
- * The demos a look runs beyond the ones checks name, unless its caller says otherwise. It was three:
- * the NFS run's racer registered ten, and the `contact` demo its rivals worker built to show its
- * move was never photographed while four rounds were judged without it.
+ * The demos a look runs beyond the ones checks name, unless its caller says otherwise: enough that
+ * a demo a builder registers to show its move is photographed and judged.
  */
 const DEMOS_PER_LOOK = 12;
 /**
@@ -203,7 +202,7 @@ const CORNER_TURN_RAD_PER_S = 0.35;
 const DEGREES_PER_RADIAN = 180 / Math.PI;
 /**
  * The throttle-only bot's race (`raceThrottleBot`): stepped this long at a time, for at most this
- * much racing — the Genex build's bot won in 3:46.6. The time keeps it affordable: about a minute
+ * much racing, enough for a race of several laps. The time keeps it affordable: about a minute
  * of a page's own stepping at most, and only when a board carries the check or a ship look asks.
  */
 const CHALLENGE_STEP_MS = 5 * SECOND_MS;
@@ -258,9 +257,8 @@ const NO_FRAME = /^no camera produced a frame/;
  *    catch-all for a dead preview, and it must cost its iteration rather than be retried three
  *    times against the same corpse.
  *  - `load`: what the director's patient pass looks again for — a load that raced the window (no
- *    __studio yet, a capture before the first frame) is not a broken build. Eight health passes in
- *    one night failed this way while the judge, forty seconds later, found every one of those
- *    builds fine. A pass that took no frame at all has never been one of these.
+ *    __studio yet, a capture before the first frame) is not a broken build: the judge finds such a
+ *    build fine seconds later. A pass that took no frame at all has never been one of these.
  */
 /** What one problem can mean (`EVIDENCE_FAILURES`). */
 const ProblemMeaning = {
@@ -914,7 +912,7 @@ async function readReadiness(look: Look): Promise<void> {
 /** (1) load, (2) ready and (3) status: read on a settled page, not on one still loading. */
 async function loadPage(look: Look): Promise<LookEnd> {
   const { ctx, entry, handle, iterationId, labelPrefix, root, run, scaffold, setup } = look;
-  // The state to look at: a worker's own (director, 2026-09-07 — one map per worker on a big game), else the run's.
+  // The state to look at: a worker's own (one map per worker on a big game), else the run's.
   look.requestedSetup = setup === undefined ? run.setup : setup;
   const h = handle ? { handle } : {};
   look.h = h;
@@ -973,7 +971,7 @@ async function sizeWindow(look: Look): Promise<void> {
 /** (4) setup, the player-eye cameras the game has, and the readings the page phases fill. */
 async function reachRequestedState(look: Look): Promise<LookEnd> {
   const { ctx, eyes, h, prefix, requestedSetup, run, status, warnings } = look;
-  // ── (4) setup: the requested state (computer use, 2026-09-07) — the scout's setup script,
+  // ── (4) setup: the requested state — the scout's setup script,
   // replayed before anyone looks: the gesture, then start, then the map picker opened, the map
   // chosen, and a probe that says it landed. A build judged on the boot screen while the brief
   // was about another map cost a whole run. Replayed AFTER the readiness poll, because the scout
@@ -1108,7 +1106,7 @@ function playReach(flow: { playing: boolean; phase: string | null }, via: PlayVi
 /**
  * (6a) play. A game with a title, menu or countdown reports `state().flow`, and the drive must
  * start in play: otherwise every throttle lands in the countdown `seed()` just restarted and the
- * judges rate a standing car (NFS-1, Midnight Apex). Read off the opening sample, so a game that
+ * judges rate a standing car. Read off the opening sample, so a game that
  * reports no flow, or is in play already, is driven call for call as before. Stepped, never slept;
  * a game that does not get there is a warning, never a voided challenger.
  */
@@ -1228,9 +1226,9 @@ function driveScriptOf(look: Look): unknown {
  * photographed after thirty seconds of coasting is a parked car. Both sides of every comparison
  * get the same inputs.
  *
- * The cruise steers by the game's own racing line when it has one (`config.steer`): the NFS run's
- * drive held the throttle and steered nothing, and every drive ended with the car against a wall.
- * A racer's drive also watches its heading for a corner to photograph (`watchCorner`).
+ * The cruise steers by the game's own racing line when it has one (`config.steer`): a held
+ * throttle that nothing steers ends the drive with the car against a wall. A racer's drive also
+ * watches its heading for a corner to photograph (`watchCorner`).
  */
 async function driveGame(look: Look): Promise<void> {
   const { ctx, h, run } = look;
@@ -1327,7 +1325,7 @@ const headingChange = (from: number, to: number): number => Math.atan2(Math.sin(
 /**
  * After drive step `step`: read the heading, and when it is turning like a corner (and the controls'
  * own swerve is behind), photograph the turn-in once — what the corner warnings, the braking and
- * the line look like, which the frame wherever the drive ended almost never shows (NFS run).
+ * the line look like, which the frame wherever the drive ended almost never shows.
  */
 async function watchCorner(look: Look, step: number): Promise<void> {
   const watch: CornerWatch | null = look.cornerWatch;
@@ -1798,7 +1796,7 @@ const demoBudget = (maxDemos: number): number => (Number.isFinite(maxDemos) ? Ma
  * the cap applies only to the unreferenced remainder, and in it a demo the compared build does not
  * register (`known`) comes first — a builder registers a demo to show its move. A cap that silently
  * dropped check-named demos made the harness report "ADS never engages" for a feature it never
- * looked at, and one that dropped the newest made the NFS run judge `contact` without its frame.
+ * looked at, and one that drops the newest judges a builder's move without its frame.
  */
 function demosToRun(
   registered: string[],
@@ -1926,7 +1924,7 @@ function raceOf(state: unknown): AnyRecord | null {
 
 /**
  * A bot that holds the throttle, lets the game's racing line steer when it has one, and never
- * brakes, from the game's first screen through its race (NFS run: it won both games). Stepped in
+ * brakes, from the game's first screen through its race: a race it wins is no challenge. Stepped in
  * `CHALLENGE_STEP_MS` until the game says the race is finished or `CHALLENGE_MAX_MS` of racing
  * have passed; the state it ends on is what `throttle-bot-loses` reads.
  */

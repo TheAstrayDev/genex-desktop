@@ -1,11 +1,10 @@
 /**
  * A round whose model provider is lost — its sign-in gone, one of its limits, an outage that
- * outlasted the ladder. The NFS run (6 Oct 2026) counted such a round "broken" (a strike towards
- * the circuit breaker, its work rolled back) and auto-tied another whose judge had lost the
- * account. A lost provider is no verdict on the round: it is recorded as an outage, nothing is
- * judged or struck, and it waits — until the provider is back (it is then built or verified
- * again), until the run stops it (a paused run's close; its work is kept on the round's
- * `…-stopped` ref), or until the facet's own time is over.
+ * outlasted the ladder. A lost provider is no verdict on the round — neither a broken build (a
+ * strike towards the circuit breaker, its work rolled back) nor an auto-tie: it is recorded as an
+ * outage, nothing is judged or struck, and it waits — until the provider is back (it is then built
+ * or verified again), until the run stops it (a paused run's close; its work is kept on the
+ * round's `…-stopped` ref), or until the facet's own time is over.
  */
 import { EngineFailure, isTransientProviderError, outageDelays } from "../outage.ts";
 import { isProviderLoss, lossWords, noteProviderLoss } from "../provider-loss.ts";

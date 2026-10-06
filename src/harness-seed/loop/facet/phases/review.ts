@@ -218,7 +218,7 @@ async function enforceFindings(loop: FacetLoop, round: FacetRound, again: Review
 
 /**
  * A model finding its reviewer flagged as a check made to pass without the work. The flag, not
- * the wording: a word match on "game" read every finding about a game as gaming (P11-F9).
+ * the wording: a word match on "game" read every finding about a game as gaming.
  */
 function isGamingFinding(v: AnyRecord): boolean {
   return v.source === MODEL_FINDING && v.gaming === true;

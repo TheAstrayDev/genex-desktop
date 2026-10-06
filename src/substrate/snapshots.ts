@@ -374,7 +374,7 @@ export class SnapshotEngine {
    * A playable fork of a game workspace at a snapshot — pairs with an event-log fork.
    *
    * `versionNested` is the user's answer to "may the studio version the repositories inside my
-   * game folder" (decision 1, 2026-09-08): with it, the fork's copy of a nested repository is
+   * game folder": with it, the fork's copy of a nested repository is
    * committed here, so a worker's edits inside it are real work the studio can keep, roll back
    * and merge. Without it the copy is what it always was — files to read and run, versioned by
    * nothing.
@@ -393,8 +393,7 @@ export class SnapshotEngine {
     await this.#linkModules(dir, targetDir, "");
     // A nested git repository inside the game (the user's own project dropped into the folder)
     // is a bare pointer in the studio's history and an empty directory in a worktree. Copy its
-    // working tree in (without its .git) so agents see and run the game — a director once spent
-    // its first quarter hour discovering this.
+    // working tree in (without its .git) so agents see and run the game.
     const nested = await this.nestedRepositories(workspace, resolved);
     for (const rel of nested) {
       const source = path.join(dir, rel);
@@ -432,8 +431,7 @@ export class SnapshotEngine {
   /**
    * Replace the pointers to the game's own repositories with the files themselves — in this fork
    * only. A gitlink is committed by nothing: a worker's edits under `wreckage/` never reached an
-   * "accepted" commit, survived a lost iteration's `reset --hard`, or landed (flautout-remix,
-   * 2026-09-07). The live folder keeps its pointer until the user agrees to the same conversion
+   * "accepted" commit, survived a lost iteration's `reset --hard`, or landed. The live folder keeps its pointer until the user agrees to the same conversion
    * at landing (`studio-core.landBuild`).
    *
    * The commit is deterministic — same parent, same files, same identity, same date as the commit

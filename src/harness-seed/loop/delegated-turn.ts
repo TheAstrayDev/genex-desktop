@@ -581,7 +581,7 @@ async function recordDelegateRequest(ctx: HarnessCtx, options: DelegatedOptions,
 }
 
 /**
- * Hands and eyes for every build (computer use, 2026-09-07): the capture tool and the computer
+ * Hands and eyes for every build: the capture tool and the computer
  * tool over a pooled window of this folder — a run's single builder and a chat build alike,
  * Loop or not.
  */

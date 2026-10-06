@@ -9,7 +9,7 @@ import type { Night } from "./night.ts";
 const SOFT_REVIEW_MS = 30 * MINUTE_MS;
 /**
  * How much working time may pass before a goal build's lead is nudged again to verify the outcomes
- * still unverified: one ∞ build's lead was told "0/4 outcomes verified" once and never playtested.
+ * still unverified: a lead told once tends never to playtest them.
  */
 const VERIFY_NUDGE_EVERY_MS = 60 * MINUTE_MS;
 

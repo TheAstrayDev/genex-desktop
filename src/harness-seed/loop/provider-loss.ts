@@ -1,11 +1,9 @@
 /**
  * Lost providers: a provider whose sign-in is gone, or one of whose limits holds, for one run.
  *
- * The NFS run (6 Oct 2026) lost its account 3 h 05 min in ("Your organization has disabled Claude
- * subscription access…"). The lead's failed turn wrapped up and landed an unchecked build, a
- * worker's round was counted broken, and thirteen more judge calls went to the dead account. A
- * provider that is gone is no verdict on anybody's work: the run pauses, rounds wait, and nothing
- * asks it again until the run starts again (or a limit resets).
+ * A provider that is gone is no verdict on anybody's work: the run pauses instead of landing an
+ * unchecked build, rounds wait instead of being counted broken, and nothing asks it again until
+ * the run starts again (or a limit resets).
  *
  * A module of its own, not outage.ts: a workspace may keep an agent-edited older outage.ts, and a
  * name imported from it that it never exported would keep the harness from linking.

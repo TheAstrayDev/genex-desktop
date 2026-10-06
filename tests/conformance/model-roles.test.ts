@@ -175,7 +175,7 @@ describe("model roles", () => {
 });
 
 /**
- * Two subscriptions in one night (cross-provider roles, 2026-09-10): the composer may send the
+ * Two subscriptions in one run: the composer may send the
  * workers and/or the judges to the other signed-in engine. The record says so in `engines`,
  * the stamped run in `builderEngine`/`judgeEngine`, and every site that starts a job asks
  * `roleEngine`/`modelOn` so a model id never reaches an engine that does not know it. A night

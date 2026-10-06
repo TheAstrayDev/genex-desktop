@@ -42,8 +42,8 @@ itself and keeps the memory file its brief names current.)
    not build. A new system, mechanic or mode SCOPE does not name (police, nitro, a garage,
    multiplayer) is `added:true` and listed in `added=` — a card asking the user, optional until they
    say yes. A reviewer's or a player's idea beyond the ask reaches the user the same way, never a
-   rung. A street race once grew police, traffic and a pursuit meter nobody asked for, one
-   reviewer's move at a time; another never grew the skyline its critic asked for every round.
+   rung, so a street race never grows police, traffic and a pursuit meter nobody asked for, one
+   reviewer's move at a time.
 6. Say what kind of game this is in the same `plan` call: `kind=` one of first-person, third-person,
    top-down, side-2d, racing, flight, static-board, free-camera. The harness drives that kind's own
    controls before every judgement, puts only the checks that kind can pass on every board, and
@@ -59,8 +59,8 @@ itself and keeps the memory file its brief names current.)
   introduced are not. When it refuses a fork point, fix what it names — yourself in the integration
   worktree and commit, or a `mode=single` worker on that build — then integrate it.
 - **A game from scratch.** When the project is empty and the run has room for a team, the studio
-  builds nothing first (THE FOUNDATION IS YOURS): lay the foundation in about twelve minutes, as
-  Midnight Apex did — `plan` with `contract=` and `vision=`, then crude playable stubs for every
+  builds nothing first (THE FOUNDATION IS YOURS): lay the foundation in about twelve minutes —
+  `plan` with `contract=` and `vision=`, then crude playable stubs for every
   module with its cameras, demos and probes registered, committed and looked at — and hand the real
   content to its owners. A short run or a pool of one gets the studio's starting scene instead, a
   crude skeleton of the scope (your brief names its commit): fill it; do not rebuild it. If the
@@ -112,7 +112,6 @@ itself and keeps the memory file its brief names current.)
   it, and loop workers wait for both: the world's scale, what the player sees past the nearest
   building (a skyline, water, hills, the sky), two or three set-pieces, and the headroom it could
   grow into — committed as `docs/VISION.md`, read by every worker and judge as where the game grows.
-  One run froze an 8-block loop of façades in its contract, and its world never grew again.
 - In a game the user brought, `owns` is not optional the moment a second worker runs: name a path, a
   folder or a **quoted** glob (`owns: "src/ui/*.tsx"` — an unquoted `*` is expanded by the shell) in
   the structure that game already has.
@@ -143,8 +142,8 @@ itself and keeps the memory file its brief names current.)
 - The move is yours. `move` is the ONE structural change the worker builds first, `milestones` the
   ordered rungs after it — one per accepted build, each a sentence saying what the game IS
   afterwards. Give them and the harness hands the worker your ladder and never puts a move of its
-  own ahead of your rungs; leave them out and its planner names one every round, which once spent
-  five workers on puddles, a wreck-cam and a tow truck nobody had asked for.
+  own ahead of your rungs; leave them out and its planner names one every round, which can spend
+  your workers on things nobody asked for.
 - In the build stage every rung transforms the area: a layer of depth, a different model, a
   reworked feel — what a player notices in the first minute, inside SCOPE. "The rivals race as a
   pack: lines, blocking, a draft" is a rung; "the car has a chrome trim" is not, nor a parameter,
@@ -154,9 +153,8 @@ itself and keeps the memory file its brief names current.)
   with `{"open":true}` (the harness adds it when you do not). When the worker reaches it, the
   reviewers' best step inside SCOPE fills it — a principle the critic has kept at 2 for three
   rounds, the taste judge's big move, the critic's biggest — and it is mandatory like yours; with
-  none it is passed over. A run's ladders once chose 24 of its 25 moves, and the skyline its critic
-  asked for every round never came. Add the next big step with `worker_steer move=` before a ladder
-  runs out; past it the worker builds its reviewer's big move as guidance (the digest shows it).
+  none it is passed over. Add the next big step with `worker_steer move=` before a ladder runs out;
+  past it the worker builds its reviewer's big move as guidance (the digest shows it).
 - Measure what moves over a demo with `delta("…")`, never one frame's snapshot: a one-frame probe of
   moving AI fails on whichever frame catches a dead ball, and the worker then tunes the game to the
   probe instead of building.

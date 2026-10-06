@@ -783,12 +783,12 @@ async function wakePrompt(night: Night, wake: WakeState, woken: Wake, clock: Wak
   const director = night.journal.director;
   const card = JSON.stringify(told.card);
   const includeCard = director.lastWakeCard !== card;
-  // Held to its budget (P08-F7): the oldest news gives way first, and the user's words never do.
+  // Held to its budget: the oldest news gives way first, and the user's words never do.
   const render = (lines: readonly string[]) => wakeDigest({ ...told, happened: lines, userSays: [] }, includeCard);
   const facts = { ...told, happened: fitHappened(told.happened, render, WAKE_TOKEN_BUDGET) };
   const prompt = wakeDigest(facts, includeCard);
   director.lastWakeCard = card;
-  // A fresh session opened for this message has never seen the card the digest leaves out (P08-V1).
+  // A fresh session opened for this message has never seen the card the digest leaves out.
   wake.cardLeftOut = includeCard ? "" : cardText(facts);
   const estimatedTokens = estimateTokens(wakeDigest({ ...facts, userSays: [] }, includeCard));
   director.wakePayload = {
@@ -1028,7 +1028,7 @@ async function askSession(night: Night, kit: TurnKit, turn: TurnAsk): Promise<Pa
 
 /**
  * The lead's session asked, with a provider outage waited out on the run's outage ladder within
- * the turn's deadline (P08-F1): an overloaded gateway on one wake used to end the whole night —
+ * the turn's deadline: an overloaded gateway on one wake used to end the whole night —
  * workers stopped, head landed, night reported done. What the ladder cannot outlast still fails.
  */
 function patientSession(night: Night, kit: TurnKit, turn: TurnAsk): Promise<Partial<DelegateResult>> {

@@ -11,8 +11,7 @@ The failure this addresses: with Autopilot enabled — the switch the user now r
 **Loop** (the redesigned composer groups it under Mode), while the harness keeps the word (`start_autopilot`, `AutopilotCommission`,
 `autopilot_<runId>`) — every follow-up re-entered the intake interview with `start_autopilot`
 available. The existing run and a new run could then share a thread, cancellation flag, live
-project, and graph. The 2026-09-05 village log contains two `run_started` records after a
-request to wait for the remaining workers.
+project, and graph: a request to wait for the remaining workers could start a second run.
 
 ## Ownership
 
@@ -139,7 +138,7 @@ mid-round keeps its work: the round is committed to its own ref,
 `git branch` and `git tag` lists stay the user's), its worktree is left standing, and it is
 neither judged nor rolled back; the reason names the director, never the user.
 
-"Run the project" after a run (director follow-up, 2026-09-07): `show_build` puts a build in the
+"Run the project" after a run: `show_build` puts a build in the
 user's window — `live` (the game folder), `integration` (the run's merged head, from
 `run_finished.integrationHead` or the journal, loaded from a worktree of its own) or a commit —
 for a running, finished or paused run alike; `land_build` merges the integration head (or a
@@ -532,7 +531,7 @@ new build" was removed.
 
 The composer shows a sent message at once and passes its bubble id as `clientId`; main hands it
 to the queue as `messageId` (message-queue capability, or before the harness has reported its
-capabilities: waiting for them at launch once left a first message's bubble beside its row), so
+capabilities: waiting for them at launch would leave a first message's bubble beside its row), so
 the durable row replaces the bubble exactly (`renderer/chat/pending-sends.ts`). A send never reads the whole log unless it may go to
 plan review, and `listAllEvents` returns only ids at or below one taken when the pass starts, so
 the renderer's single cursor cannot skip a row committed to a thread it already read.

@@ -845,8 +845,7 @@ describe("claude code delegated engine", () => {
     assert.equal(call.effort, "high");
     const settings = call.settings as { permissions: { deny: string[]; allow?: string[] } };
     // Flipped (permissions port): Claude Code reads a rule's "/abs" relative to the working
-    // directory; only "//abs" is the filesystem root. The single-slash rules this once sent
-    // guarded nothing real.
+    // directory; only "//abs" is the filesystem root. Single-slash rules guard nothing real.
     assert.deepEqual(
       settings.permissions.deny,
       [
@@ -888,7 +887,7 @@ describe("claude code delegated engine", () => {
     assert.ok(!deny.some((rule) => rule.includes("stills")));
   });
 
-  it("P02-F6. a judge that answers nothing is a failure, and the model asked for stands in for one the CLI did not name", async () => {
+  it("a judge that answers nothing is a failure, and the model asked for stands in for one the CLI did not name", async () => {
     const silent = [
       { type: "system", subtype: "init", tools: [] },
       { type: "result", subtype: "success", is_error: false, result: "", num_turns: 1, total_cost_usd: 0, usage: {} },
@@ -964,7 +963,7 @@ describe("claude code delegated engine", () => {
     // Options.skills is a context filter, not a sandbox: a bundled skill's frontmatter is
     // prompt weight that can only make two verdicts that should be the same differ.
     assert.deepEqual(call.skills, [], "the judge loads no skills at all");
-    // P02-F3: no user, project or local settings reach a judge (their hooks, permissions or
+    // No user, project or local settings reach a judge (their hooks, permissions or
     // memory would make two verdicts that should be the same differ).
     assert.deepEqual(call.settingSources, [], "the judge reads no settings files");
     const banned = call.disallowedTools as string[];
@@ -1572,7 +1571,7 @@ describe("engine registry & fallback policy", () => {
     assert.deepEqual(await registry.fallbackFor("claude-code", { kind: "auth" }), []);
   });
 
-  it("an outage falls back only to an engine that can do the job: tools need a direct engine (P01-F1)", async () => {
+  it("an outage falls back only to an engine that can do the job: tools need a direct engine", async () => {
     const registry = new EngineRegistry();
     registry.register(engine("ollama", "direct", "ready"));
     registry.register(engine("claude-code", "delegated", "ready"));
@@ -1716,7 +1715,7 @@ describe("a connector's tool on claude code (PR4)", () => {
   });
 });
 
-describe("a failed studio tool on claude code (P06-F7)", () => {
+describe("a failed studio tool on claude code", () => {
   it("answers the model with isError, not as a plain result", async () => {
     const script = scriptedClaude([{ tool: "boom" }, { tool: "refused" }, { tool: "fine" }]);
     const engine = await engineWithLogin(script.queryFn);
@@ -1850,7 +1849,7 @@ describe("Claude CLI model discovery", () => {
   });
 });
 
-describe("choosing a fallback when an engine's status hangs (P01-F8)", () => {
+describe("choosing a fallback when an engine's status hangs", () => {
   it("does not wait on a status that never answers: probes are bounded and side by side", async () => {
     const registry = new EngineRegistry({ statusProbeMs: 50 });
     const engine = (id: string, kind: "direct" | "delegated", status: () => Promise<unknown>) =>
@@ -1987,11 +1986,10 @@ describe("Compact now on claude code", () => {
 });
 
 /**
- * The NFS run (6 Oct 2026): 3 h 05 min in, the provider answered every call with "Your organization
- * has disabled Claude subscription access…". The CLI reported it as a `success`-subtype result
- * flagged `is_error`, the text matched none of the sign-in words, and the run read a lost account as
- * an ordinary failed turn: it closed, landed an unchecked build and sent thirteen more judge calls to
- * the dead account. A revoked or disabled access is a sign-in failure the user has to fix.
+ * A provider that answers "Your organization has disabled Claude subscription access…" reports it
+ * as a `success`-subtype result flagged `is_error`, in words that match none of the sign-in words.
+ * Read as an ordinary failed turn, a lost account would close the run and land an unchecked build.
+ * A revoked or disabled access is a sign-in failure the user has to fix.
  */
 describe("an account whose access was taken away (provider lost)", () => {
   /** The words the CLI said, exactly. */

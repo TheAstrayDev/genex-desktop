@@ -593,8 +593,8 @@ function askedOnRecord(out: AnyRecord): { question: string | null; answer: boole
 /**
  * Which of the four things this pass actually established, in the order the user cares about: a
  * preference over another build, then a first build with nothing to compare, then whether it ran
- * at all. Saying "the judge passed it" for any of the others is the lie the first night's landing
- * told — so a pass that only looked decides nothing (`kept: null`).
+ * at all. Saying "the judge passed it" for any of the others would be a lie — so a pass that only
+ * looked decides nothing (`kept: null`).
  */
 function judgeRule(evidence: Evidence, verdict: AnyRecord | undefined): VerdictRule {
   if (!evidence.ok) return VerdictRule.DoesNotStart;
@@ -669,7 +669,7 @@ async function judgeOnWindow(night: Night, ask: JudgeAsk, handle: string | null)
     scaffold: state.baseHeads.has(head),
     inheritedConsole: consoleInheritedBy(target.worker),
     // The art director looks at a real screen's size; the window is 960×600 again once released.
-    // Its whole-game look also races the throttle-only bot, whose place it is told (NFS run).
+    // Its whole-game look also races the throttle-only bot, so it is told how hard the race is.
     ...(ask.ship ? { viewport: SHIP_VIEW, challenge: true } : {}),
   });
   const onIntegration = target.root === integrationWorktree;
@@ -825,8 +825,8 @@ const playWords = (pass: boolean | null | undefined) => {
  * The playtester is a session of its own, and the studio allows one session per folder: the
  * director's own session lives in the integration worktree — or, for a lead that is its chat's
  * own session, in the game folder — so a playtest of the folder it sits in gets a worktree of its
- * own at the same commit (a night once had every playtest of the integrated build refused for
- * this), and so does one of integration, which a merge may move under it. Answers the folder to
+ * own at the same commit (otherwise every playtest of the integrated build is refused), and so
+ * does one of integration, which a merge may move under it. Answers the folder to
  * play in, or the refusal.
  */
 async function playFolder(
@@ -1035,9 +1035,9 @@ export async function wait(night: Night, args: AnyRecord) {
   const lastUnread = unread.at(-1);
   if (lastUnread) night.waitSeq = Math.max(night.waitSeq, lastUnread.seq);
   // What a waiting director needs is what changed: the news, one line per worker (the monitor's
-  // included), where integration stands and what the user has said. It used to be answered with
-  // the whole status blob — every board, the window pool, the screen strip — twenty-three times
-  // in one night, and every turn carried it again. `run_status` is one call away for the rest.
+  // included), where integration stands and what the user has said — never the whole status
+  // blob (every board, the window pool, the screen strip), which every turn would carry again.
+  // `run_status` is one call away for the rest.
   const now = Date.now();
   return JSON.stringify({
     waitedSeconds: Math.round(seconds - Math.max(0, until - now) / SECOND_MS),
@@ -1273,7 +1273,7 @@ type Tool = (night: Night, args: AnyRecord) => ToolAnswer | Promise<ToolAnswer>;
 /**
  * The night's plan and its worker starts, one at a time. A lead that calls them in parallel (a
  * Codex lead does) had a start read the plan another call was still writing, and two starts claim
- * the same id or window (P09-F2). Each waits for the one before; a failure does not block the next.
+ * the same id or window. Each waits for the one before; a failure does not block the next.
  */
 const PLAN_CHANGES = new WeakMap<Night, Promise<unknown>>();
 

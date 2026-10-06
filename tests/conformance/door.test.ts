@@ -173,7 +173,7 @@ describe("the door: what the app opens on launch", () => {
   };
 
   it("opens home even when there are games, and the last chat is remembered", async () => {
-    // Intentionally flipped (2026-10-01): a launch used to reopen the remembered chat with its game
+    // Intentionally flipped: a launch used to reopen the remembered chat with its game
     // on the stage. Home is where every launch starts; the remembered chat is one click or ⌘1 away.
     const launched = await launch(
       [studio, game("old", "2026-09-01T10:00:00Z", "pond-life"), game("fresh", "2026-09-04T10:00:00Z", "rift")],
@@ -185,7 +185,7 @@ describe("the door: what the app opens on launch", () => {
   });
 
   it("an empty library opens home too: no Create game, nothing minted", async () => {
-    // Intentionally flipped (2026-10-01): an empty library used to open Create game over Studio.
+    // Intentionally flipped: an empty library used to open Create game over Studio.
     assertHome(await launch([studio], []));
   });
 
@@ -212,7 +212,7 @@ describe("the door: the composer's own instruction", () => {
   });
 
   it("asks home what to make, and only an active build overrides the context", () => {
-    // Intentionally flipped (2026-10-01): the words were "Describe a game…".
+    // Intentionally flipped: the words were "Describe a game…".
     assert.equal(HOME_PLACEHOLDER, "What do you want to make?");
     const firstLaunch = chatPlaceholder({ revisingPlan: false, studio: false, draft: true });
     assert.equal(firstLaunch, HOME_PLACEHOLDER);

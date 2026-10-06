@@ -1,5 +1,5 @@
 /**
- * Two subscriptions in one night (cross-provider roles, 2026-09-10) — through the real core and
+ * Two subscriptions in one run — through the real core and
  * the real harness child. A director on Claude Code hires workers on Codex and asks Codex to
  * judge: every delegation and every judge call must reach the engine the roles named, with a
  * model that engine knows and a brief in that engine's own tool voice. And when the workers'

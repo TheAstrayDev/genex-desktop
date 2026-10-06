@@ -363,7 +363,7 @@ export async function gitlinks(
  * git repository of its own; the studio versions it inside every fork when the user allowed that
  * (substrate/snapshots.ts `worktreeAt`), and this is the check that it happened. A path the
  * commit still holds as a pointer is a path whose every edit is invisible to the merge, the
- * landing and the user — the silent loss of 2026-09-07, said out loud. A plain `git status`
+ * landing and the user — a silent loss, said out loud. A plain `git status`
  * cannot see it: git does not walk into a gitlink path, which is why the loss was silent.
  *
  * `exec` runs git in the worktree being asked about; `nested` are the paths the game's history

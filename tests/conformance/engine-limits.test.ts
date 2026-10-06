@@ -1,5 +1,5 @@
 /**
- * Limits as the run must see them (director follow-up, 2026-09-07): the CLI names a session
+ * Limits as the run must see them: the CLI names a session
  * limit only in result text — "You've hit your session limit · resets 9:50pm" — and a run once
  * ended as a plain "error" because that text was never read. The engine classifies the text
  * and reads the reset time; the harness decides between waiting, pausing and landing.

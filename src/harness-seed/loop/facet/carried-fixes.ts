@@ -1,8 +1,7 @@
 /**
- * What an undone round had fixed (the NFS run, 2026-10-06). car-feel's round 5 fixed the player's
- * tyre spray — two of the judge's defect questions flipped — and was rolled back whole; the next
- * brief filed it under "do not repeat what lost", and the lead had to tell the builder to redo the
- * work. A judged round that is rolled back with flips leaves them here, with the ref its code is
+ * What an undone round had fixed. A round rolled back whole loses the defects it fixed with it,
+ * and a brief that files it under "do not repeat what lost" tells the builder to drop that work
+ * too. A judged round that is rolled back with flips leaves them here, with the ref its code is
  * kept on, and every next brief says to carry them over until the accepted build passes them.
  *
  * A new module on purpose: a workspace that kept an older settle.ts or brief.ts still loads.

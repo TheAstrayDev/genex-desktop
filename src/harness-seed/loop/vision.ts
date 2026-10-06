@@ -1,9 +1,8 @@
 /**
  * The run's vision: what the whole world is meant to grow into, kept apart from the module contract.
- * The NFS night froze its world inside the contract in its first 25 minutes — an 8-block loop of
- * façades, its scale, corners and cut list — and the track file never changed again while the critic
- * asked for a skyline, water and a vista every round. Midnight Apex froze interfaces and ranges, wrote
- * the ambition ("a skyline far away") into its brief, and let its world builder design the world.
+ * A world laid out inside the contract (its loop, scale and corners) is frozen with it and never
+ * grows, however often the critic asks for a skyline; the contract freezes interfaces and ranges,
+ * and the vision holds the ambition ("a skyline far away") the world's builder designs toward.
  *
  * The lead gives it with `plan vision=` (four sections: the world's scale, what the player sees past
  * the nearest building, two or three set-pieces, the headroom it could grow into); the harness holds it

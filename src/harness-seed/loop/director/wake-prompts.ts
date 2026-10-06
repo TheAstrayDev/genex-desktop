@@ -298,8 +298,8 @@ function workerLine(w: DigestWorker, pastMark = false): string {
 }
 
 /**
- * The room for more workers. The golden-goal night ran three of the six its owner allowed, then
- * two, then one, and nothing it read ever said a window stood idle.
+ * The room for more workers: without it a lead runs fewer workers than the owner allowed, and
+ * nothing it reads says a window stands idle.
  */
 function roomLine(room: WorkerRoom | null | undefined, pastMark = false): string {
   if (!room) return "";

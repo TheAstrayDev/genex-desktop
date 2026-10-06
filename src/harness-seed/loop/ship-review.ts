@@ -6,8 +6,8 @@
  * registered, the player's eyes and each demo's end, then the motion strip and the reference, and
  * answers ship or not with each defect typed to the plan part that owns it (`part`, kept only when
  * it is one of the parts it was given — membership, never words) and how much it matters. It also
- * names what already works and must stay (`doNotRegress`, the Midnight Apex review's "do not
- * regress" list), which every builder and its taste judge are then held to.
+ * names what already works and must stay (`doNotRegress`), which every builder and its taste
+ * judge are then held to.
  *
  * It asks through the same judge plumbing as every other judge (judge.ts `askJudgeFor`: retries,
  * the fallback engine, the evaluation pin, the judge's record), with the workspace's own rubric

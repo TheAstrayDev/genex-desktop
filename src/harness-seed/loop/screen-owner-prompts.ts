@@ -1,8 +1,8 @@
 /**
  * What a builder is told about the screen's one owner (loop/screen-owner.ts). The rule already had
- * teeth — a non-owner's call into the contract HUD is a code-review finding — but nothing a builder
- * read said the screen had an owner, so the Midnight Apex race part drew its pursuit meter beside
- * the HUD part's readouts and learnt the rule only from the review. The brief and the opening prompt
+ * teeth — a non-owner's call into the contract HUD is a code-review finding — but a builder that
+ * reads nothing about the owner draws its own readouts beside the HUD part's and learns the rule
+ * only from the review. The brief and the opening prompt
  * say it now, from the spec's typed fields and never from its words; a run where no part owns the
  * screen renders nothing here. A new module, so a kept older sibling can never shadow these names.
  */

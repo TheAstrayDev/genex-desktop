@@ -1,10 +1,10 @@
 /**
  * What a check is allowed to measure — decided from its parsed expression, never from its words.
  *
- * A check rewards whatever makes it pass. `hud-rich: len(hud.items) >= 60` (Midnight Apex,
- * 2026-10-05) rewarded drawing the HUD out of three thousand rectangles: the count of what the
- * build draws went up, the game a player saw did not get better, and the 82 KB state() it left
- * behind blinded every other probe. How much the build draws is an implementation detail: it may
+ * A check rewards whatever makes it pass. `hud-rich: len(hud.items) >= 60` rewards drawing the HUD
+ * out of thousands of rectangles: the count goes up, the game a player sees does not get better,
+ * and the oversized state() it leaves behind blinds every other probe. How much the build draws
+ * is an implementation detail: it may
  * be bounded from above (a draw-call or triangle budget) or asked to exist (`> 0`, `>= 1`), never
  * asked to be large. The lint runs where checks are validated — never where they are evaluated —
  * so a board stored before a seed upgrade still scores the way it did.

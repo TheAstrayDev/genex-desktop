@@ -1,8 +1,8 @@
 /**
- * The module contract, integration in waves, and lost registrations (D7, after the Midnight Apex
- * report): parallel loop workers rewrote each other's modules around a shared state object nobody
- * had written down, the director integrated them one at a time with a health pass each, and a
- * worker deleted cameras three other workers' checks looked through without anything noticing.
+ * The module contract, integration in waves, and lost registrations: without them parallel loop
+ * workers rewrite each other's modules around a shared state object nobody wrote down, the
+ * director integrates them one at a time with a health pass each, and a worker can delete cameras
+ * other workers' checks look through without anything noticing.
  *
  * The plan carries a contract the harness holds to its shape and commits as docs/MODULE-CONTRACT.md;
  * a loop worker under a plan of several looping parts starts only from a commit that holds it, with

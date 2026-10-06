@@ -90,12 +90,12 @@ describe("the HUD fact line", () => {
 });
 
 /**
- * The NFS run (2026-10-06): the corner-warning move lost twice because no judged frame showed a
- * corner, the judges blamed the handling for a car the scripted drive had held against a wall, and
- * nobody was told that a bot holding only the throttle wins the race.
+ * The judges are told where the corner frame is (or that none shows a corner), whether the game's
+ * racing line steered the drive (a car held against a wall is the drive's doing, not the
+ * handling's), and how a bot holding only the throttle placed in the race.
  */
-describe("the drive's facts: a corner, the steering, the throttle-only bot (NFS run)", () => {
-  it("NFS-F2c. names the corner frame, or says no frame shows a corner", () => {
+describe("the drive's facts: a corner, the steering, the throttle-only bot", () => {
+  it("names the corner frame, or says no frame shows a corner", () => {
     assert.deepEqual(facts.cornerFactLines({ seen: true, atMs: 12_480, turnDegPerSecond: 36 }), [
       "CORNER: drive:corner is the drive's turn-in, 12.5 s into the drive (heading turning 36°/s) — judge what a player sees in a corner (warnings, braking, the line) on it",
     ]);
@@ -108,7 +108,7 @@ describe("the drive's facts: a corner, the steering, the throttle-only bot (NFS 
     for (const silent of [undefined, null, {}, "corner"]) assert.deepEqual(facts.cornerFactLines(silent), []);
   });
 
-  it("NFS-F3b. says whether the racing line steered the drive, so a car on a wall is read as the drive's", () => {
+  it("says whether the racing line steered the drive, so a car on a wall is read as the drive's", () => {
     assert.deepEqual(facts.driveFactLines({ steered: true }), [
       "DRIVE: the throttle was held through the drive and the game's own racing line (config.steer) steered it",
     ]);
@@ -118,7 +118,7 @@ describe("the drive's facts: a corner, the steering, the throttle-only bot (NFS 
     assert.deepEqual(facts.driveFactLines(undefined), []);
   });
 
-  it("NFS-F4c. says how a bot that only holds the throttle placed", () => {
+  it("says how a bot that only holds the throttle placed", () => {
     assert.deepEqual(
       facts.challengeFactLines({ ran: true, finished: true, position: 1, simulatedMs: 226_600, steered: true }),
       [
@@ -142,7 +142,7 @@ describe("the drive's facts: a corner, the steering, the throttle-only bot (NFS 
     }
   });
 
-  it("NFS-F2d. the blind judge reads the corner line and sees the corner frame beside the facet's cameras", async () => {
+  it("the blind judge reads the corner line and sees the corner frame beside the facet's cameras", async () => {
     const recorder = ctxRecorder({
       handlers: { "engine.complete": () => ({ message: { content: '{"pick":"A"}' } }) },
     });

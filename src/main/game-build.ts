@@ -1,7 +1,7 @@
 /**
  * Building a game that builds itself — outside the user's folder, and only when something changed.
  *
- * Three things were wrong with running `npm run build` in place on every look (2026-09-07):
+ * Three things were wrong with running `npm run build` in place on every look:
  * the user's own `dist/` was overwritten by the studio on every Reload, checkpoint and health
  * check; the build ran again for a tree nobody had touched; and when it failed the stage went
  * black with the reason reaching only the game console.

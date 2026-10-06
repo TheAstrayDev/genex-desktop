@@ -59,7 +59,7 @@ const GameShapeKind = { OwnScript: "own-script", StudioTemplate: "studio-templat
 async function readPriorNight(ctx: HarnessCtx, threadId: string, run: Run, resume: boolean, keepsMemory: boolean) {
   // A journal that is not there reads as null; one the host cannot read throws, and the night
   // stops on it. Read as "no journal", it restarted the night with a full budget, a fresh plan
-  // and none of its heads (P09-F4).
+  // and none of its heads.
   const priorJournal = resume
     ? await ctx.call(HostMethod.ArtifactRead, { threadId, artifactId: `autopilot_${run.runId}` })
     : null;
@@ -495,8 +495,8 @@ async function startingCommits(ctx: HarnessCtx, run: Run, priorJournal: AnyRecor
 /**
  * The integration worktree, forked from where the night stands. Worktrees are detached: removing
  * one leaves its commits unreferenced. A ref in the game's repo keeps the night's integration
- * reachable whatever happens to the worktree (a run once lost 122 files of merged work to
- * teardown because nothing pointed at the head).
+ * reachable whatever happens to the worktree: with nothing pointing at the head, teardown would
+ * lose the merged work.
  */
 async function openIntegration(night: Night, forkCommit: string | null): Promise<string> {
   const { ctx, protectHead, run } = night;

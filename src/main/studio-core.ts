@@ -1551,7 +1551,7 @@ export class StudioCore {
 
   /**
    * Open a folder as a game, with what the user consented to in the Open Game sheet: which game
-   * inside it (`subdir` — the nested game is offered as *the* game, decision 1), and whether the
+   * inside it (`subdir` — the nested game is offered as *the* game), and whether the
    * studio may write a starter game there. Adoption is the first moment anything is written.
    */
   async adoptProject(dir: string, options: AdoptOptions = {}): Promise<GameProject> {

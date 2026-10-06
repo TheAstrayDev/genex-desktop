@@ -226,7 +226,7 @@ export type PreviewInputAction =
  * anyone looks: the scout writes it (a key that opens the map picker, the click on the map,
  * a demo that does the same), the harness applies it before judges, captures and the computer
  * tool's first frame. `verify` is a probe over `__studio.state()` that says the state landed —
- * the 2026-09-06 run judged and built the wrong map for two hours because nothing checked.
+ * without it a run can build and judge the wrong map for hours because nothing checked.
  */
 export interface PreviewSetup {
   /**

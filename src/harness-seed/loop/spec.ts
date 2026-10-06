@@ -691,8 +691,8 @@ export function normalizeMilestones(list: unknown): Milestone[] {
 
 /**
  * The demo one check depends on: a `demo` check's own name, a probe's `demo` scope, or the demo
- * whose end frame (`demo:<name>`) a picture check looks at — a vision check on `demo:rival-battle`
- * whose demo the cap dropped could never be asked (NFS run, 2026-10-06).
+ * whose end frame (`demo:<name>`) a picture check looks at, so the demo cap never drops the demo a
+ * vision check on `demo:rival-battle` needs.
  */
 export function demoNameOf(
   check: { kind?: string; name?: unknown; demo?: unknown; camera?: unknown } | null | undefined,
@@ -1001,9 +1001,8 @@ export const HARNESS_CHECKS: Record<string, AnyRecord & { expr?: string; note: s
     needs: ["flow.playing"],
     note: "harness-owned: after begin the game is in play (state().flow.playing) — the front-end hands the player the controls",
   },
-  // The NFS run (2026-10-06): a bot that only holds the throttle won the race in both games — the
-  // Genex build in 3:46.6, the hand-built one in 1:49.98. The evidence pass races that bot when the
-  // board carries this check (evidence.ts `raceThrottleBot`: the throttle held, the game's racing
+  // A race a bot that only holds the throttle can win is no challenge. The evidence pass races that
+  // bot when the board carries this check (evidence.ts `raceThrottleBot`: the throttle held, the game's racing
   // line steering, never a brake) and the probe reads the state the race left. A game that reports
   // no `race.position` is not asked (`needs`); a race the pass did not run is unmeasured.
   "throttle-bot-loses": {
@@ -1058,8 +1057,7 @@ function inputProbe(raw: unknown, fallbackId: string): { expr: string; note: str
   // `needs` is read off the expression the check actually carries, never inherited: a kind that
   // moves on x and y must not be asked for the template's x and z, and a check whose needs name
   // a path its own delta() does not can never report the early state missing (checks.ts
-  // needsNotReported) — which is how "this game has no player yet" once read as "the controls
-  // work". Only a check whose harness body declares needs gets them.
+  // needsNotReported), or "this game has no player yet" would read as "the controls work". Only a check whose harness body declares needs gets them.
   const needs = body.needs ? deltaPathsIn(expr) : [];
   return { expr, note, ...(needs.length ? { needs } : {}) };
 }
@@ -1140,7 +1138,7 @@ function kindFamily(kind: unknown): string | null {
 }
 
 /**
- * The requested state, on every board (computer use, 2026-09-07): a harness-owned probe that says the scout's
+ * The requested state, on every board: a harness-owned probe that says the scout's
  * setup landed — the map, mode or scene the brief is about is what the cameras are looking
  * at. A build judged on the wrong map used to pass every pixel check; now it fails this one.
  */
@@ -1287,7 +1285,7 @@ export async function loadCatalogue(workspace: string): Promise<Catalogue> {
 
 /**
  * Write the catalogue whole — a temporary file renamed over the old one, so a crash mid-write
- * leaves the last good catalogue — and never over one that could not be read (P15-F10).
+ * leaves the last good catalogue — and never over one that could not be read.
  */
 export async function saveCatalogue(
   workspace: string,

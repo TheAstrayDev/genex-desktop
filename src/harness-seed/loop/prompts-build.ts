@@ -24,7 +24,7 @@ export function contractWiringAsk(shape: { main?: string } | null | undefined): 
 /**
  * The base builder's brief. The classic pipeline knows its facets by name here; a director's
  * night does not — it plans as it goes — so a plan with no facets asks for the same starting
- * point in the same words, minus the roll call (director, 2026-09-08).
+ * point in the same words, minus the roll call.
  */
 /** What the base builder is told about the plan: its facets and the shared base they fork from. */
 export interface BasePlan {
@@ -78,8 +78,8 @@ export function baseBrief({
 
 /**
  * A director's run from scratch: a crude playable skeleton of what the user asked for, and no roll
- * call. It reads the user's scope: the NFS run's starting scene had the goal and a mood only, built a
- * straight sprint where the ask raced laps, and its lead threw it away six minutes later.
+ * call. It reads the user's scope, so the skeleton has the shape the user asked for (a circuit,
+ * not a straight sprint, for a race of laps).
  */
 function startingSceneBrief(run: BriefRun, projectLabel: string, setup: AnyRecord | null): string {
   return [

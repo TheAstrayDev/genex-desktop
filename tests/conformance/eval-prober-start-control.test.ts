@@ -437,7 +437,7 @@ test("dispatchLookDeltasInPage: pointermove + mousemove with explicit movementX 
 });
 
 /**
- * THE MEASURED CASE, 2026-09-05 (muse village, `sunfall-hamlet`). The title
+ * THE MEASURED CASE (a village game, `sunfall-hamlet`). The title
  * screen's "Walk in" button is real and visible. The pause card is marked
  * `hidden`, but the game's own `.screen { display:flex; opacity:0 }` rule
  * defeats the attribute, so the card is laid out over the title, invisible,

@@ -836,7 +836,7 @@ export class PreviewService {
     }
   }
 
-  // ── the computer: one pooled window per session (computer use, 2026-09-07) ──────────────────────────────
+  // ── the computer: one pooled window per session ──────────────────────────────
 
   /**
    * One preview port for a whole delegation: the facet's idle observation lease when the
@@ -964,9 +964,8 @@ export class PreviewService {
 
   /**
    * Load a build into a port the way the judges do: through the served entry, so a game with
-   * its own build (Vite, TypeScript) is built first. The builders' capture used to skip this
-   * step and load `index.html` raw — on skate-prod every worker saw `src/main.ts` served as
-   * text and spent the night blind.
+   * its own build (Vite, TypeScript) is built first. Loaded raw from `index.html`, such a game
+   * serves `src/main.ts` as text and every worker works blind.
    *
    * Then it waits for a FACT instead of the flat 1.5 s it used to sleep: one budget, resolved
    * from `studio.json`'s `bootMs`, given both to the page (so the shim's own bound and this
@@ -1399,7 +1398,7 @@ export class PreviewService {
       throw new Error(MESSAGE.uncommittedEdits(dirty.length));
     }
     // The conversion happens only with the consent the Open Game sheet recorded — the one place
-    // the studio touches somebody else's version history (decision 1, 2026-09-08).
+    // the studio touches somebody else's version history.
     const versioned = await versionNestedForLanding(projectDir, resolved, {
       consent: await this.#core.games.nestedConsent(projectDir),
     });
@@ -1439,7 +1438,7 @@ export class PreviewService {
   }
 
   /**
-   * Install the game's packages, in the user's own folder. Decision 3 (2026-09-08): this is the
+   * Install the game's packages, in the user's own folder. This is the
    * only thing the studio ever opens the network for, it happens because the user pressed a
    * button, and it opens exactly one domain for exactly this command.
    */

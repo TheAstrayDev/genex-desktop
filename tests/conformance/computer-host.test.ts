@@ -1,8 +1,8 @@
 /**
- * The computer tool's host (computer use, 2026-09-07) through the real core over the fake preview: a builder's
+ * The computer tool's host through the real core over the fake preview: a builder's
  * delegation carries `computer` beside `capture`; both load the workspace through the served
- * entry (a game with its own build is built first — the skate-prod night lost every worker
- * frame to `src/main.ts` served as text); the window stays loaded between actions; every
+ * entry (a game with its own build is built first, or every worker frame shows `src/main.ts`
+ * served as text); the window stays loaded between actions; every
  * action updates the coalesced agent screen; the playtester gets the same tool.
  */
 import assert from "node:assert/strict";
@@ -611,7 +611,7 @@ describe("the computer tool's host", () => {
     assert.equal(({} as Record<string, unknown>).polluted, undefined);
   });
 
-  // Flipped (2026-09-28): with every pooled window leased, the director's session used to fall
+  // Flipped: with every pooled window leased, the director's session used to fall
   // back to the live view — the person's own window, for the whole night — and say so on the
   // run's thread. Live is the person's alone now: the session gets a window past the pool's
   // ceiling for its own length, and there is no borrow to announce.

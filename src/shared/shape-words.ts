@@ -44,7 +44,7 @@ export function openedWords(title: string, shape: ProjectShape): string {
 /**
  * An engine export is a compiled artifact: there is no source for a builder to edit and no
  * contract for a judge to read, so a night on it would spend hours photographing a page nobody
- * can change (the Godot/Unity case, 2026-09-07). Play and screenshots still work, and the
+ * can change (a Godot or Unity export). Play and screenshots still work, and the
  * harness refuses the night in its own words (`loop/main.ts` `nightRefusal`).
  */
 export const ENGINE_EXPORT_REFUSAL =
@@ -67,10 +67,9 @@ export interface OpenChoice {
 
 /**
  * Keeping a folder whose game is a repository of its own is a decision with a consequence, so
- * the row that does it says the consequence and pressing it *is* the consent (decision 1,
- * 2026-09-08). Git records such a folder as a pointer, not as files: until the studio may add
+ * the row that does it says the consequence and pressing it *is* the consent. Git records such a folder as a pointer, not as files: until the studio may add
  * those files to the folder's history, a night can read and run the game but nothing it changes
- * inside it can ever be made live — which is exactly how a night's work was lost (2026-09-07).
+ * inside it can ever be made live, and the run's work is lost.
  * The game's own history is not deleted; it is renamed and kept beside it.
  */
 export function nestedWords(nested: string[]): string[] {
@@ -106,7 +105,7 @@ export interface OpenOption {
 
 /**
  * The sheet's rows for a picked folder, the one it would open first: every game found in it or
- * one level under it (decision 1, 2026-09-08 — the nested game is offered as *the* game), then
+ * one level under it (the nested game is offered as *the* game), then
  * the folder itself, which is either a new game or the parent kept exactly as it is.
  */
 export function openOptions(inspection: FolderInspection): OpenOption[] {

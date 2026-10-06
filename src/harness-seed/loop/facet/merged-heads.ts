@@ -1,9 +1,8 @@
 /**
- * The integration commits a worker's worktree holds, and what they changed in its own files (the
- * NFS run, 2026-10-06). The lead committed an HDR fix in city-world's post.js and told car-feel to
- * merge it; integration then moved on, so the head car-feel had merged was none of the review's
- * candidates. Its review diffed against an older merge, read the fix as car-feel's own edit, and the
- * fix turn reverted it — two conflicts and two merge workers later the guard was back.
+ * The integration commits a worker's worktree holds, and what they changed in its own files. A
+ * worker told to merge a lead's fix may merge a head that integration has since moved past; a
+ * review that diffs against an older merge reads the lead's fix as the worker's own edit and
+ * reverts it.
  *
  * A new module on purpose: a workspace that kept an older review.ts or gate.ts still loads, because
  * only updated callers import from here.

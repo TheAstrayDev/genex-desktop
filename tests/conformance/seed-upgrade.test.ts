@@ -325,7 +325,7 @@ it("the files the build generates into the seed ship like any other: added, repl
   assert.match(await readWs(edited), /the agent's line/);
 });
 
-describe("seed upgrade: a manifest that forgot a file (director follow-up, 2026-09-07)", () => {
+describe("seed upgrade: a manifest that forgot a file", () => {
   it("keeps entries for paths the current seed does not ship, so an older build's boot cannot orphan a newer file", async () => {
     const r = await rig();
     await applySeed({ seedDir: r.seed, workspaceDir: r.ws, manifestFile: r.manifest });
@@ -1758,8 +1758,7 @@ describe("seed upgrade across goal-directed generation", () => {
 });
 
 /**
- * The judges' evidence after the NFS run (the corner frame, the racing line, the throttle-only bot)
- * added names: the frames a pass takes itself and the bot's probe scope come from modules of their
+ * The judges' evidence (the corner frame, the racing line, the throttle-only bot) added names: the frames a pass takes itself and the bot's probe scope come from modules of their
  * own (loop/pass-frames.ts, loop/throttle-bot.ts), and the new words of kinds.ts and
  * judge-facts.ts are read by namespace, so a current part beside one older copy still links.
  * kinds.ts is not in the vintage: its tables are read as the harness loads, which a stand-in made

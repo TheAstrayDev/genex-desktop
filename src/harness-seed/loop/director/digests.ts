@@ -93,8 +93,8 @@ function moveDigest(move: RoundMove | null | undefined): AnyRecord | null {
 
 /**
  * What the round's reviewers propose for the part next: the taste judge's big move and the
- * liveness critic's biggest fix, one line each, or none. The golden-goal night's lead never heard
- * either and steered its workers one defect at a time.
+ * liveness critic's biggest fix, one line each, or none: a lead that never hears them steers its
+ * workers one defect at a time.
  */
 function roundIdeas(record: RoundRecord): string[] {
   const ideas: string[] = [];
@@ -355,10 +355,9 @@ export function workerDigest(w: Worker, now = Date.now()): AnyRecord {
 }
 
 /**
- * One worker in a line, for `wait`. A wait used to answer with the whole status blob — every
- * worker's board, the window pool, the screen strip — twenty-three times in one night, and the
- * director's turns ran at a quarter of a million tokens each. What a waiting director needs is
- * what changed; `run_status` is one call away for the rest.
+ * One worker in a line, for `wait`. The whole status blob — every worker's board, the window
+ * pool, the screen strip — on every wait would swell the director's turns to hundreds of
+ * thousands of tokens. What a waiting director needs is what changed; `run_status` is one call away for the rest.
  */
 export function waitDigest(w: Worker, now = Date.now()): AnyRecord {
   const board = [...w.iterations].reverse().find((i: AnyRecord) => i.scoreboard)?.scoreboard ?? null;

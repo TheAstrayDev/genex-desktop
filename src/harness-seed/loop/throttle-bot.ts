@@ -1,7 +1,6 @@
 /**
- * The throttle-only bot (the NFS run, 2026-10-06): a bot that held only the throttle won the race
- * in both games — the Genex build in 3:46.6, the hand-built one in 1:49.98 — so neither race was a
- * challenge. The evidence pass races it when a board asks (evidence.ts `raceThrottleBot`), and the
+ * The throttle-only bot: a race that a bot holding only the throttle can win is no challenge. The
+ * evidence pass races it when a board asks (evidence.ts `raceThrottleBot`), and the
  * harness check `throttle-bot-loses` (spec.ts HARNESS_CHECKS) reads the state its race left.
  *
  * A module of its own: a seed upgrade keeps a spec.ts the agent edited, and a name added there would

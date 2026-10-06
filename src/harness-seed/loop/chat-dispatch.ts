@@ -389,7 +389,7 @@ async function answerMessage(
     return;
   }
   // How the loop ended it stays on the turn's own record: a throttled or round-capped turn is not
-  // an answer (P07-F3).
+  // an answer.
   const stopped = outcome?.stopped;
   await studio.host.call(HostMethod.TurnEnd, {
     turnId,

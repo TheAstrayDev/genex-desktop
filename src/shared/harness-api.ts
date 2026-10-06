@@ -188,9 +188,9 @@ export interface HarnessDelegateParams {
   images?: DelegateImage[];
   /** Edit-time ownership the engine enforces before a Write lands. */
   ownership?: DelegateOwnership;
-  /** The computer (computer use, 2026-09-07): `false` withholds the builder's hands; default on with a capture grant. */
+  /** The computer: `false` withholds the builder's hands; default on with a capture grant. */
   computer?: boolean;
-  /** The director (director, 2026-09-07): the run's orchestrating session, with the harness's run tools forwarded. */
+  /** The director: the run's orchestrating session, with the harness's run tools forwarded. */
   director?: DelegateDirectorGrant & { tools?: LiveToolSpec[] };
   candidateId?: string;
 }

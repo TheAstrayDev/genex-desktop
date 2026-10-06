@@ -1,6 +1,6 @@
 import { gitFile } from "../helpers/git.ts";
 /**
- * The director (director, 2026-09-07) — the run as one agent's decisions. The tools it is given, the brief
+ * The director — the run as one agent's decisions. The tools it is given, the brief
  * it opens with, the contract a worker is started on, and one night through the real core and
  * the real harness child: a scripted director session starts a worker, waits for it, looks at
  * its build, integrates it, judges the integrated build, shows it to the user, and finishes —
@@ -210,7 +210,7 @@ describe("the director's tools and brief", () => {
       brief,
       /cwd is the run's integration worktree \(\/scratch\/autopilot\/run_d\/integration\).*commit abcdef1234/,
     );
-    // Flipped (golden-goal night, 2026-10-02): "5 of 6 worker windows free" counted the lead's own
+    // Flipped: "5 of 6 worker windows free" counted the lead's own
     // two windows as workers'. The line says how many workers may run at once.
     assert.match(
       brief,
@@ -248,9 +248,9 @@ describe("the director's tools and brief", () => {
     assert.doesNotMatch(codex, /mcp__studio__/, "a Codex director is never shown a name it cannot call");
     assert.match(brief, /THE PLAYBOOK:\n# playbook\nlook first/);
     assert.match(brief, /RULES THAT NEVER MOVE:/);
-    // Flipped (golden-goal night, 2026-10-02): one worker per area a player can name, the UI too.
-    // Flipped again (Midnight Apex, 2026-10-05): per area the ask names — "an area a player can
-    // name" grew a police pursuit out of a street race — and the pool is a ceiling, never a quota.
+    // Flipped: one worker per area a player can name, the UI too.
+    // Flipped again: per area the ask names — "an area a player can name" grows a police pursuit
+    // out of a street race — and the pool is a ceiling, never a quota.
     assert.match(brief, /delegate with plan and worker_start: a worker per area the ask names, the UI and HUD too/);
     assert.match(brief, /CAPACITY: .*A ceiling, not a quota: start the fewest workers that cover independent files/);
     assert.doesNotMatch(brief, /time lost/, "an idle window is not a loss: a system nobody asked for is");
@@ -370,7 +370,7 @@ describe("the director's tools and brief", () => {
    * A game that arrived as its own git repository (M2.5). With the user's consent the studio
    * versions that folder inside every fork, so "nothing inside is versioned … no edit inside it
    * is ever committed" — what the brief said in both worlds — was false in exactly the world it
-   * mattered in, and sent one night hand-porting 85k lines the fork already tracked. The lead can
+   * mattered in, and sent the lead hand-porting code the fork already tracked. The lead can
    * always ask its own worktree, so the brief sends it there instead of guessing for it.
    */
   it("sends the lead to its own worktree about a repository inside the game, and never claims nothing there is versioned", async () => {
@@ -686,7 +686,7 @@ describe("a worker's contract: done, compiled and dry-run", () => {
   });
 
   it("refuses a floor on how much the build draws, and lets a screen part's board be judged by eye", () => {
-    // Midnight Apex: `hud-rich: len(hud.items) >= 60` rewarded a HUD drawn from 3,000 rectangles.
+    // `hud-rich: len(hud.items) >= 60` rewards a HUD drawn from thousands of rectangles.
     const compiled = compileWorkerSpec(
       {
         id: "hud",
@@ -741,7 +741,7 @@ describe("a worker's contract: done, compiled and dry-run", () => {
     for (const inPlay of ["reaches-play", "hud-coverage", "keys-move-player"])
       assert.ok(checkNamed(car.spec, inPlay), `${inPlay} is on a normal worker's board`);
 
-    // A harness check the ledger once saw unmeasured is not the director's to re-point or drop.
+    // A harness check the ledger saw unmeasured is not the director's to re-point or drop.
     const rarely = compileWorkerSpec({ id: "car", brief: "a car", kind: "racing" } as never, null, {
       rarelyMeasurable: [
         { id: "reaches-play", rounds: 4 },
@@ -798,8 +798,8 @@ describe("a worker's contract: done, compiled and dry-run", () => {
       ),
     );
     assert.equal(compiled.moveOwner, "director", "the harness never invents a move over a ladder the director wrote");
-    // Flipped (the NFS-inspired run, 2026-10-06): the ladder ends with one open rung after the
-    // director's, which the reviewers' best step inside the ask fills when it is reached.
+    // Flipped: the ladder ends with one open rung after the director's, which the reviewers' best
+    // step inside the ask fills when it is reached.
     assert.deepEqual(
       compiled.milestones.map((m) => m.what),
       ["mud builds up on the panels", "clods fly off the wheels", OPEN_RUNG_WHAT],
@@ -828,7 +828,7 @@ describe("a worker's contract: done, compiled and dry-run", () => {
   });
 
   /**
-   * The finish stage (Midnight Apex, 2026-10-06): a worker that finishes what exists, where polish
+   * The finish stage: a worker that finishes what exists, where polish
    * is the work and wins on the blind pick. The director sets it on worker_start and flips it on
    * worker_steer; it rides on the spec like `moveOwner`, so the loop fixes it at the top of each
    * round, and the run log records a steer.
@@ -867,8 +867,8 @@ describe("a worker's contract: done, compiled and dry-run", () => {
   });
 
   /**
-   * One owner of the screen (Midnight Apex, 2026-10-05): the race part drew its own pursuit meter
-   * beside the HUD part's. The part reviewed as a screen owns it; a second one is refused by name.
+   * One owner of the screen, so no part draws readouts of its own beside the HUD part's. The part
+   * reviewed as a screen owns it; a second one is refused by name.
    */
   it("makes the part reviewed as a screen the screen's one owner, and refuses a second while it runs", async () => {
     const { startRefusal } = await import("../../src/harness-seed/loop/director/workers.ts");
@@ -1107,9 +1107,8 @@ describe("the night's plan, before anyone builds", () => {
   });
 
   /**
-   * Midnight Apex (2026-10-05): the plan had no place to say what it left out or what it built
-   * beyond the ask, so a pursuit part the lead invented was frozen as required acceptance and
-   * the user never saw a question about it.
+   * The plan says what it leaves out and what it builds beyond the ask, so a part the lead invents
+   * is never frozen as required acceptance without the user being asked about it.
    */
   it("names what the plan cuts and what it added beyond the ask: cuts join the scope, each addition is one card for the user, and never scope without their own words", async () => {
     const { setPlan } = await import("../../src/harness-seed/loop/director/workers.ts");
@@ -2620,7 +2619,7 @@ describe("a director's night through the real core and harness", () => {
     assert.match(log.stdout, /integrate plaza/);
     await assert.rejects(stat(results.started.worktree), "the worker's worktree is removed");
     await assert.rejects(stat(worktree), "the integration worktree is removed");
-    // Flipped (2026-09-28): the user's window used to be loaded by the show and by the landing,
+    // Flipped: the user's window used to be loaded by the show and by the landing,
     // under them. Live now keeps what they opened; the show offered the integrated build and the
     // landing the changed game folder, each on Live's Reload.
     assert.equal(rig.preview.loads.length, liveLoadsBefore, "nothing the night did loaded the user's Live");
@@ -2655,7 +2654,7 @@ describe("a director's night through the real core and harness", () => {
    * A game with a repository of its own inside it, which the studio was not allowed to version.
    * The merged build runs — it always did — and carries none of the work done inside that folder,
    * and `git status` cannot see the difference, because git does not walk into a gitlink. That is
-   * the silent loss of 2026-09-07: a night's work reported as integrated and made live, and gone.
+   * a silent loss: a run's work reported as integrated and made live, and gone.
    * The health pass asks the commit instead, and says so in words the user reads.
    */
   it("fails the health pass on a merge that carries nothing from a repository inside the game", async () => {
@@ -2756,7 +2755,7 @@ describe("a director's night through the real core and harness", () => {
   });
 
   /**
-   * The same folder, with the consent the Open Game sheet records (decision 1, 2026-09-08): the
+   * The same folder, with the consent the Open Game sheet records: the
    * fork versions that repository, so an edit inside it is committed, merged and healthy like any
    * other. What the night still may not do is add it to the *user's* history — that renames their
    * own `.git` aside, and belongs to their own button (`landBuild`), not to a merge at 4 a.m.
@@ -2940,9 +2939,8 @@ describe("a director's night through the real core and harness", () => {
     assert.equal(results.status1.integration.lastJudge?.ok, true, JSON.stringify(results.status1.integration));
     const head: string = results.status1.integration.head;
 
-    // The close: the limit named honestly, the run paused for Resume — and nothing landed (provider
-    // lost, NFS 2026-10-06: a close on a lost provider cannot have the build checked, and Resume
-    // carries it on from its head).
+    // The close: the limit named honestly, the run paused for Resume — and nothing landed (a close
+    // on a lost provider cannot have the build checked, and Resume carries it on from its head).
     const finished = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
     assert.equal(finished.landed, false, String(finished.stoppedBecause));
     assert.equal((finished.landingResult as { why?: string }).why, "paused");
@@ -3305,9 +3303,8 @@ describe("a director's night through the real core and harness", () => {
   });
 
   /**
-   * A game from scratch on a run with room for a team (the NFS ∞ Loop run): the studio's starting
-   * scene — six minutes, the goal and a mood — was a straight sprint the lead threw away six
-   * minutes later. Midnight Apex laid its contract and crude stubs first; so does a lead now.
+   * A game from scratch on a run with room for a team: the studio builds no starting scene, and
+   * the lead lays its contract and crude stubs first.
    */
   it("a run from scratch with room for a team builds no starting scene: the lead's first brief hands it the foundation", async () => {
     const asEmptyScaffold = (preview: FakePreview): FakePreview => {
@@ -3366,8 +3363,7 @@ describe("a director's night through the real core and harness", () => {
   });
 
   /**
-   * A game the user brought that never loads the studio contract — the flautout-remix case
-   * (2026-09-07). Nothing in it can be photographed, checked or compared: `window.__studio` is
+   * A game the user brought that never loads the studio contract. Nothing in it can be photographed, checked or compared: `window.__studio` is
    * missing, so every evidence pass reports a build that does not run, the fork gate refuses
    * every builder, and `judge against=start` can only say the other build could not be observed.
    * The night's first step now wires the contract in, inside the run's own worktree, and that
@@ -4200,7 +4196,7 @@ describe("a director's night through the real core and harness", () => {
    * there was no round boundary to queue one against. Interrupt-and-resume needs no boundary, so
    * a single session is steered like anything else, and always now.
    */
-  it("P10-F8. a single session interrupted with no steer left to hand it carries on instead of failing", async () => {
+  it("a single session interrupted with no steer left to hand it carries on instead of failing", async () => {
     // Two steers in quick succession: the first interrupt's resume already took both, so the
     // second interrupt cuts a turn that has nothing new to hear. That turn used to end the worker.
     const rig = await startRig(
@@ -4519,7 +4515,7 @@ describe("a director's night through the real core and harness", () => {
    * The user's own evening, in the folder the night was going to land in. Landing merged
    * `--no-ff` into their branch and, when that conflicted, ran `git reset --hard` onto the run's
    * head — the studio throwing away commits nobody asked it to touch, in somebody's own
-   * repository (flautout-remix, 2026-09-07). Now the conflict is an answer: nothing is forced,
+   * repository. Now the conflict is an answer: nothing is forced,
    * the build waits on its ref, and the close says why in words the user reads.
    */
   it("a landing that conflicts with the user's own commits lands nothing and leaves their branch exactly as it was", async () => {
@@ -4901,7 +4897,7 @@ describe("a director's night through the real core and harness", () => {
    * A start nobody could photograph. The run began on a game that draws a black frame (not an
    * empty scaffold, which is allowed to be blank): there is no "before" to compare with. The
    * director used to be told nothing and answered `judge against=start` with "the other build
-   * could not be observed" — thirteen times in one night, once per judge call it wasted.
+   * could not be observed", once per judge call it wasted.
    */
   it("a start nobody could photograph is said once: the brief warns, and judge against=start answers instead of failing", async () => {
     // The game folder itself — the run's "before" — draws nothing at all, in whichever window
@@ -4970,9 +4966,8 @@ describe("a director's night through the real core and harness", () => {
 
   /**
    * The blind build turn. `wait` wakes on notes, and between "worker started" and "iteration 1"
-   * nothing wrote one: one night the director asked nine times over thirty-three minutes, was
-   * told "nothing yet" every time, and found out only afterwards that every worker had been
-   * editing files it did not own. Now the studio looks into each running worker's worktree
+   * nothing wrote one: a director asking for news was told "nothing yet" while every worker was
+   * editing files it did not own, and found out only afterwards. Now the studio looks into each running worker's worktree
    * itself, with the reviewer it already has, and says what changed.
    */
   it("looks into a running worker's worktree: an edit outside its own files wakes the director's wait, once", async () => {
@@ -5523,8 +5518,8 @@ describe("a director's night through the real core and harness", () => {
   });
 
   /**
-   * The pool never lends the user's window (M3.7; flipped 2026-09-28). Here it has none to give at
-   * all, so every pass meets the exhausted pool the first real night met after its fifth worker. A
+   * The pool never lends the user's window (M3.7; flipped). Here it has none to give at all, so
+   * every pass meets an exhausted pool. A
    * judge and a playtest are choices the director can make a minute later: they are told there is
    * no window. The close cannot be skipped — nobody else will ever look at this build — so it used
    * to borrow the user's window, say so on the run's thread and put their game back. It looks
@@ -6106,9 +6101,9 @@ describe("the selected direction-build duration", () => {
 });
 
 /**
- * A plan of several looping parts holds its loop workers to a module contract (D7): on the
- * Midnight Apex build parallel workers rewrote each other's modules around a shared state object
- * nobody had written down. Through the real core and harness, no worker starts here — what is
+ * A plan of several looping parts holds its loop workers to a module contract, so parallel workers
+ * never rewrite each other's modules around a shared state object nobody wrote down. Through the
+ * real core and harness, no worker starts here — what is
  * proved is every refusal, and the contract the plan commits on the integration branch.
  */
 describe("a module contract before loop workers", () => {

@@ -859,7 +859,7 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
     assert.equal(seen.at(-1)!.leadAsks, undefined, "an archived chat asks nobody");
   });
 
-  // Flipped (owner, 2026-09-29): a lead nobody talked to was denied at once, with no card, so a
+  // Flipped: a lead nobody talked to was denied at once, with no card, so a
   // night's lead could not even run `ls`. The chat's mode alone decides now, as for the chat's own
   // session: Manual cards (withdrawn after five minutes), Bypass allows.
   it("asks in the person's mode whether or not they are talking to it", async () => {
@@ -898,7 +898,7 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
       return done();
     };
 
-    // Flipped (owner, 2026-09-29): a Bypass chat's lead ran in Manual and the host allowed every
+    // Flipped: a Bypass chat's lead ran in Manual and the host allowed every
     // question. It runs in Bypass now, as the chat's own session, so a question that still reaches
     // the host is one of Claude Code's checks no mode skips (a dangerous `rm`): a card, as the
     // chat's own session's. A lead started in another mode whose chat moved to Bypass is allowed.
@@ -913,7 +913,7 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
       "moved to Bypass: allowed",
     );
 
-    // Flipped (owner, 2026-09-29; was review M2): the lead's edit in the game folder was refused
+    // Flipped: the lead's edit in the game folder was refused
     // in every mode. What Claude Code asks about it is the person's to answer now, like any call.
     await core.setPermissionMode(threadId, "acceptEdits");
     const edited = await settled(inGame as never, { decision: "allow" });
@@ -999,7 +999,7 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
       );
     }
     await core.setPermissionMode(threadId, "auto");
-    // Flipped (owner, 2026-09-29; was review M2): an edit in the game folder was refused here.
+    // Flipped: an edit in the game folder was refused here.
     const game = { tool: "Edit", input: { file_path: path.join(project.dir, "src", "main.js") } };
     assert.equal(await auto.screen(game), null, "an edit in the game is the classifier's, as any call");
   });
@@ -1064,7 +1064,7 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
     assert.ok(card, "a card in the chat");
     core.answerPermission(card.requestId, { decision: "allow" });
     assert.deepEqual((await done()).answer, { decision: "allow" });
-    // Flipped (owner, 2026-09-29): once its message was handled, its question was denied at once,
+    // Flipped: once its message was handled, its question was denied at once,
     // with no card. The chat's mode decides it now, for as long as the session runs.
     const handled = () => queue(message, "coordinator_message_handled").then(() => {});
     const after = await asking(command, coordinator, { waitForCard: true, first: handled });
@@ -1764,7 +1764,7 @@ type ToolHook = (
 
 /**
  * A night's lead is the chat's main agent: only the chat's permission mode and the rules the person
- * saved limit it, as for the chat's own session. Flipped (owner, 2026-09-29; was review H1): the
+ * saved limit it, as for the chat's own session. Flipped: the
  * host screened each of its calls in a hook and refused everything but a read while nobody talked
  * to it, whatever rules stood. The hook stays, to ask first once the chat leaves the mode the
  * session started in, and leaves every other call to the session's rules.
@@ -1844,7 +1844,7 @@ describe("a lead's calls follow the chat's mode and the rules that stand, whoeve
 
 /**
  * The lead sits in the game folder the person plays, while its builders change the game in their
- * own worktrees and the night lands their work there. Flipped (owner, 2026-09-29; was review M2):
+ * own worktrees and the night lands their work there. Flipped:
  * its own edit tools were refused that folder in every mode. The chat's mode decides them now, as
  * every other call, and the lead's prompt still leaves the game's changes to its builders.
  */

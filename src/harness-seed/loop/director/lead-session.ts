@@ -1,5 +1,5 @@
 /**
- * One session (2026-09-26): a waking night's lead IS its chat's own contractor session.
+ * One session: a waking night's lead IS its chat's own contractor session.
  *
  * Before this, launching a build from a chat handed the night to a second mind: a director session
  * of its own, opened in the run's integration worktree beside the chat's contractor session, which

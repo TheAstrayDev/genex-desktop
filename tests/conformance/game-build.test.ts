@@ -2,7 +2,7 @@
  * The build a game brings with it: found on a PATH a Finder-launched app does not have, run
  * outside the folder the user owns, and only when something actually changed.
  *
- * Every case here comes from one night on somebody's own three.js game (2026-09-07): `npm` was
+ * Every case here is a failure on somebody's own three.js game: `npm` was
  * not on the app's PATH, the studio's build overwrote the user's `dist/`, an unchanged tree was
  * rebuilt on every look, and when the build failed the stage went black with the reason in a
  * console nobody reads.

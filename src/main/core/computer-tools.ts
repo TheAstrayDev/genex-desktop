@@ -1,5 +1,5 @@
 /**
- * The computer (computer use, 2026-09-07): hands and eyes on one pooled window for a whole
+ * The computer: hands and eyes on one pooled window for a whole
  * session. Actions are Anthropic's computer vocabulary plus the studio's own verbs; the input
  * actions become input events on the preview, and the host actions (looking, waiting, the studio
  * verbs) are answered here, each by its own handler. Every action leaves a frame on the agent's screen.
@@ -76,7 +76,7 @@ export interface ComputerTools {
   onLiveTool: NonNullable<DelegateRequest["onLiveTool"]>;
   ensureLoaded: (force?: boolean) => Promise<ComputerLoad>;
   screen: () => AgentScreen;
-  /** The build the window shows; the director's `look` moves it (director, 2026-09-07). */
+  /** The build the window shows; the director's `look` moves it. */
   root: () => string;
   retarget: (root: string) => void;
 }

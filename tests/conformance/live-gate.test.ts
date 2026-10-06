@@ -1,7 +1,6 @@
 /**
- * Live stays still while the person watches it (the user, 2026-09-28: "if I'm sitting in Live the
- * game must not update on its own when code changes; only Reload should be highlighted, with a
- * changed tooltip"). The harness looks through a stand-in window of its own; what it loads there,
+ * Live stays still while the person watches it: the game does not update on its own when code
+ * changes, and only Reload is highlighted, with a changed tooltip. The harness looks through a stand-in window of its own; what it loads there,
  * a checkpoint or a rewind only marks Live behind (`live.behind`), and the person's Reload brings
  * it in. The live evidence: a night's lead showed its integration build in Live and then landed
  * it, and Live changed twice under the person without a click.
@@ -260,7 +259,7 @@ describe("what Live shows, whoever loaded it", () => {
  * with nobody asking, and a session whose window the harness named "live" drove it. A show or land
  * loads Live only for a message the person sent that is still unanswered, and only while Live is
  * out of their sight; otherwise Reload offers it. A session never takes Live, or the stand-in, by
- * name. The owner's session (2026-09-28): asked to change a title, the chat's own session after a
+ * name. The owner's session: asked to change a title, the chat's own session after a
  * night edited the game, showed "live" itself, and Live reloaded under them — a message still
  * waiting for its answer cannot tell "show me" from "change the title".
  */

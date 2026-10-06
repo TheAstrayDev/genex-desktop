@@ -366,7 +366,7 @@ export interface StudioApi {
   buildPreview(
     request: import("./build-preview.ts").BuildPreviewRequest,
   ): Promise<import("./build-preview.ts").BuildPreviewFrame | null>;
-  /** Every window a worker is driving right now, with its last frame (computer use, 2026-09-07). */
+  /** Every window a worker is driving right now, with its last frame. */
   agentScreens(): Promise<import("./agent-screen.ts").AgentScreenFrame[]>;
   readRunStill(file: string, maxPx?: number): Promise<{ mimeType: string; data: string } | null>;
   readReferenceStills(project: string): Promise<{

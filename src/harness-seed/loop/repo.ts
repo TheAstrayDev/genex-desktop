@@ -9,7 +9,7 @@
  * hash and by name, that `git branch`, `git tag` and `git log --oneline` never show. What the
  * builders write down lives under `docs/notes/`, one folder, out of the root.
  *
- * Snapshot commits still land on the user's branch (decision 2, 2026-09-08) — that is Rewind,
+ * Snapshot commits still land on the user's branch — that is Rewind,
  * the optimizer baseline and `landBuild`'s ancestor test, and it moves on its own day.
  */
 

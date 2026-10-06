@@ -281,7 +281,7 @@ async function acquire(x: CoreInternals, p: HarnessParams<typeof HostMethod.Prev
 }
 
 async function capacity(core: StudioCore, x: CoreInternals) {
-  // Memory rides along (director, 2026-09-07): six windows of a big game is not a number the pool
+  // Memory rides along: six windows of a big game is not a number the pool
   // knows; whoever starts workers reads the free memory beside the free slots.
   const memory = await availableMemory();
   try {

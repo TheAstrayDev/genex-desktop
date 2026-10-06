@@ -9,10 +9,10 @@ import { cliName, fixtureCodingCli, wasStopped, writeCliLauncher } from "../help
  * the fix: the bundled binary is found first everywhere, and the sign-in it drives happens in
  * the app, with a Terminal window only for a CLI that cannot be driven from a pipe.
  *
- * The second half of the file is the judge's bill: every verdict is a one-shot CLI session, and
- * one night left 1353 transcript directories (1.3 GB) behind while re-uploading the same rubric
- * each call — because each session ran in a directory of its own. And it was judged by the
- * wrong model, from a preference an older build had saved.
+ * The second half of the file is the judge's bill: every verdict is a one-shot CLI session, and a
+ * session in a directory of its own leaves a transcript directory behind and re-uploads the same
+ * rubric each call. The judge must also be the model the roles name, never a preference an older
+ * build saved.
  */
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
@@ -477,7 +477,7 @@ describe("the app is wired to its own binary", () => {
   });
 });
 
-describe("what one night of judging leaves behind", () => {
+describe("what a run of judging leaves behind", () => {
   /** A `projects/` tree the way Claude Code writes one: a directory per working directory. */
   async function seedHome(): Promise<string> {
     const home = await tmpDir("studio-judge-home-");

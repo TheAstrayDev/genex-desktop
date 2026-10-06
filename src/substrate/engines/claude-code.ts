@@ -290,8 +290,8 @@ const MESSAGE = {
  * What a limit message means for the run: a weekly/monthly cap ends the night (`usage_limit`),
  * a session/5-hour window is waitable (`rate_limit`), anything else is not a limit at all. The
  * CLI reports both only in result TEXT ("You've hit your session limit · resets 9:50pm"), never
- * in a subtype — and a director run once ended as a plain "error" because the SDK's throw was
- * classified before the text was read.
+ * in a subtype, so the text is read before the SDK's throw is classified, or a limit reads as a
+ * plain "error".
  */
 export function limitKind(
   text: string,
@@ -311,9 +311,9 @@ export { limitResetMs } from "./limit-reset.ts";
  *
  * It used to be a fresh `mkdtemp` per verdict, which cost twice. Claude Code's own system prompt
  * names its working directory, so a new directory every time guaranteed a cache miss on the very
- * prefix that never changes — the first night wrote 4.4k of cache each vision call and read back
- * none of it. And the CLI keeps a transcript directory per working directory, so one night left
- * 1353 of them (1.3 GB) under the engine home. One stable, empty directory fixes both: the
+ * prefix that never changes: every vision call wrote cache and read back none of it. And the CLI
+ * keeps a transcript directory per working directory, so a run left thousands of them (GBs) under
+ * the engine home. One stable, empty directory fixes both: the
  * prefix is identical across sessions, and there is one transcript directory to sweep.
  *
  * It stays a *fresh* session — one turn, no resume, no tools, no game folder — because that is
@@ -940,7 +940,7 @@ export class ClaudeCodeEngine implements Engine {
       if (ceiling) clearTimeout(ceiling);
     }
 
-    // A judge that said nothing gave no verdict: a failure, not an empty string for the parser (P02-F6).
+    // A judge that said nothing gave no verdict: a failure, not an empty string for the parser.
     if (!judge.text.trim()) throw new EngineError(EngineFailureKind.Unavailable, this.id, MESSAGE.JudgeEmpty);
     return {
       message: { role: "assistant", content: judge.text },
@@ -1474,9 +1474,9 @@ export class ClaudeCodeEngine implements Engine {
   /**
    * A turn whose last word was the CLI's own API error saying the account cannot be used, as the
    * sign-in failure it is, or null. The CLI reports one as a `success` result flagged `is_error`
-   * (or, by its code alone, as a plain success), and a revoked account once read as an ordinary
-   * failed turn there: the run closed and landed an unchecked build (provider lost, 6 Oct 2026).
-   * A limit in those words stays a limit (`#throwIfLimited`).
+   * (or, by its code alone, as a plain success); read as an ordinary failed turn, a revoked account
+   * would close the run and land an unchecked build. A limit in those words stays a limit
+   * (`#throwIfLimited`).
    */
   #signedOut(ending: ApiErrorEnding): EngineError | null {
     if (!endedOnApiError(ending)) return null;
