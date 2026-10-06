@@ -98,12 +98,27 @@ type AskJudgeFor = (
 /** One frame as an image block for the judge. */
 const imageOf = (base64: string, label: string): MessageImage => ({ mimeType: "image/jpeg", data: base64, label });
 
+/** The build's own shots with pixels, the user's view aside. */
+function ownShots(evidence: AnyRecord): AnyRecord[] {
+  const shots: AnyRecord[] = Array.isArray(evidence.shots) ? evidence.shots : [];
+  return shots.filter((shot) => typeof shot?.base64 === "string" && shot.base64 && shot.camera !== USER_VIEW);
+}
+
 /** The build's own frames: every one with pixels except the user's view. */
 function ownFrames(evidence: AnyRecord): MessageImage[] {
-  const shots: AnyRecord[] = Array.isArray(evidence.shots) ? evidence.shots : [];
-  return shots
-    .filter((shot) => typeof shot?.base64 === "string" && shot.base64 && shot.camera !== USER_VIEW)
-    .map((shot) => imageOf(shot.base64, String(shot.camera ?? "shot")));
+  return ownShots(evidence).map((shot) => imageOf(shot.base64, String(shot.camera ?? "shot")));
+}
+
+/**
+ * The cameras a defect may name: those of the build's own frames the review was shown. A camera
+ * the judge invented, a motion frame or a reference is none a worker's evidence pass can take again.
+ */
+export function shownCameras(evidence: AnyRecord): Set<string> {
+  return new Set(
+    ownShots(evidence)
+      .map((shot) => shot.camera)
+      .filter((camera): camera is string => typeof camera === "string" && camera.length > 0),
+  );
 }
 
 /** The motion strip cut to its first, middle and last frames. */
@@ -181,25 +196,38 @@ function severityOf(value: unknown): DefectSeverity {
   return known.includes(String(value)) ? (value as DefectSeverity) : DefectSeverity.Visible;
 }
 
+/** A defect's camera: kept only when it is one of `cameras` (membership, never its words), when they are given. */
+function cameraOf(value: unknown, cameras: ReadonlySet<string> | null): string | null {
+  const named = typeof value === "string" ? value.trim() : "";
+  if (!named) return null;
+  if (cameras) return cameras.has(named) ? named : null;
+  return clip(named, CAMERA_CHARS);
+}
+
 /** One defect as the review keeps it: its part only when it is one of the plan's ids. */
-function defectOf(raw: unknown, partIds: ReadonlySet<string>): ShipDefect | null {
+function defectOf(raw: unknown, partIds: ReadonlySet<string>, cameras: ReadonlySet<string> | null): ShipDefect | null {
   const record: AnyRecord = typeof raw === "string" ? { what: raw } : ((raw ?? {}) as AnyRecord);
   const what = clip(String(record.what ?? "").trim(), CLIP_REASON);
   if (!what) return null;
   const part = typeof record.part === "string" && partIds.has(record.part) ? record.part : null;
-  const camera =
-    typeof record.camera === "string" && record.camera.trim() ? clip(record.camera.trim(), CAMERA_CHARS) : null;
-  return { what, camera, part, severity: severityOf(record.severity) };
+  return { what, camera: cameraOf(record.camera, cameras), part, severity: severityOf(record.severity) };
 }
 
-/** The review as a judge's JSON reads: ship a real yes or no, or no verdict at all. */
-export function readShipReview(raw: AnyRecord | null | undefined, parts: readonly ShipPart[]): ShipReview {
+/**
+ * The review as a judge's JSON reads: ship a real yes or no, or no verdict at all. `cameras`, when
+ * given, are the only cameras a defect may name (`shownCameras`); any other is dropped.
+ */
+export function readShipReview(
+  raw: AnyRecord | null | undefined,
+  parts: readonly ShipPart[],
+  cameras: ReadonlySet<string> | null = null,
+): ShipReview {
   const reason = clip(String(raw?.reason ?? ""), CLIP_REASON);
   if (!raw || raw.unusable === true || typeof raw.ship !== "boolean")
     return { ship: null, defects: [], strengths: [], reason: reason || "unreadable answer", parse: JudgeParse.Invalid };
   const ids = new Set(parts.map((part) => part.id));
   const defects = (Array.isArray(raw.defects) ? raw.defects : [])
-    .map((defect: unknown) => defectOf(defect, ids))
+    .map((defect: unknown) => defectOf(defect, ids, cameras))
     .filter((defect: ShipDefect | null): defect is ShipDefect => defect !== null)
     .slice(0, MAX_SHIP_DEFECTS);
   const strengths = (Array.isArray(raw.strengths) ? raw.strengths : [])
@@ -231,7 +259,7 @@ export async function shipReview(ctx: HarnessCtx, ask: ShipAsk): Promise<ShipRev
     images.map((image) => image.label ?? ""),
   );
   const answer = await askJudgeFor(ctx, { run, systemPrompt, userContent, images });
-  const review = readShipReview(answer.raw, parts);
+  const review = readShipReview(answer.raw, parts, shownCameras(evidence));
   return {
     ...review,
     judged: { ...answer.judged, parse: review.parse },

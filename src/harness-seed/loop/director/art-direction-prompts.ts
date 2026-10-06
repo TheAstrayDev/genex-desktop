@@ -35,6 +35,15 @@ export const ART_SKIPPED = {
   olderTools: "this workspace keeps an older tools.ts without the art director",
 } as const;
 
+/** Why `judge ship=yes` with another build named is refused: the look is absolute, at its own size. */
+export const SHIP_ALONE =
+  "judge ship=yes looks at one build on its own at 1600x900, so it is never compared with a build seen at another size: leave out against (or say against=none), and compare builds in a judge call of their own.";
+
+/** The night's note when a goal build's finish closes before the art director could look. */
+export function shipGateSkipped(head: string | null): string {
+  return `the art director did not look at ${shortSha(head)} before this finish: the close's own blind judge against the start needs the finish call's time — judge ship=yes before finishing to have its word`;
+}
+
 /** The art director's answer as a review has it. */
 interface ShipWords {
   ship: boolean | null;
@@ -103,8 +112,12 @@ export function artDirectionBlock({
 /** What `finish` adds about the art director's last look at the head it closed on, or nothing. */
 export function shipFinishLine(review: ShipWords | null): string {
   if (!review || review.ship === null) return "";
-  if (review.ship) return " The art director would ship this build.";
-  return ` The art director would not ship this build; ${review.defects.length} defects left — say so, and claim no more.`;
+  const left = review.defects.length;
+  if (review.ship)
+    return left
+      ? ` The art director would ship this build; ${left} defects left.`
+      : " The art director would ship this build.";
+  return ` The art director would not ship this build; ${left} defects left — say so, and claim no more.`;
 }
 
 /** Why a goal build's first finish is turned back: the art director's look found what to finish. */

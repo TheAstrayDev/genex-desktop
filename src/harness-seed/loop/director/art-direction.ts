@@ -23,13 +23,13 @@ import { uniqueCheckId } from "../facet/defects.ts";
 import { DefectSeverity } from "../ship-review.ts";
 import { CheckKind, CheckOrigin, CheckWeight, type Check } from "../spec.ts";
 import { clip, CLIP_QUOTE, CLIP_REASON } from "../text.ts";
-import { MINUTE_MS } from "../time.ts";
+import { MINUTE_MS, SECOND_MS } from "../time.ts";
 import { Against } from "../verdict.ts";
 import * as budgetParts from "./budgets.ts";
 import { goalCommission } from "./commission.ts";
 import * as ruleParts from "./rules.ts";
 import { list } from "./args.ts";
-import { ART_SKIPPED, shipFinishRefusal } from "./art-direction-prompts.ts";
+import { ART_SKIPPED, shipFinishRefusal, shipGateSkipped } from "./art-direction-prompts.ts";
 import { BuildTarget } from "./night.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
@@ -49,12 +49,20 @@ export const SERVES_LEAD = true;
  * which the engine gives up on after ten minutes.
  */
 export const ART_DIRECTION_JUDGE_MS = 4 * MINUTE_MS;
+/** The engine gives up on one tool call after this: a goal build's finish gate and its close share one `finish` call. */
+const FINISH_CALL_MS = 10 * MINUTE_MS;
+/** One look at a build, as a finish call budgets it (a big game's patient look). */
+const LOOK_MS = 2 * MINUTE_MS;
+/** What a finish call keeps beyond the gate and the close's own look and settle, for the answer and a slow host. */
+const FINISH_MARGIN_MS = MINUTE_MS;
+/** How long a close waits for stopped workers when a kept older budgets.ts does not say (budgets.ts `CLOSE_SETTLE_MS`). */
+const CLOSE_SETTLE_FALLBACK_MS = 90 * SECOND_MS;
+/** How many replacements deep a part's running owner is looked for (`replaces`), so a cycle never loops. */
+const MAX_REPLACEMENTS = 8;
 /** Who names a ship defect on a board and on the ledger: never a worker id. */
 const ART_DIRECTOR = "art-director";
 /** The ledger's owner of a defect no part owns: the lead's integration. */
 const LEAD_OWNS = BuildTarget.Integration;
-/** Image labels of frames that are not a camera a worker's evidence pass can take again. */
-const NOT_A_CAMERA = /^(MOTION|REFERENCE)\b|^user:view$|\s\/\s/;
 
 /** The art director's last word on the integration branch: the head it looked at, ship or not, and its defects. */
 export interface LastShip {
@@ -78,6 +86,16 @@ export interface ArtDirection {
   skipped: string | null;
 }
 
+/** How the studio's own look is asked: what else the one look answers, as whose judge, and by when. */
+export interface ArtDirectionAsk {
+  /** More of the judge's arguments for the same look (the close's own question, at the finish gate). */
+  ask?: AnyRecord;
+  /** The look is the close's own judge of the head it makes live (`LastJudge.final`). */
+  final?: boolean;
+  /** How long its judge calls may take from the start of the pass. */
+  judgeMs?: number;
+}
+
 /** The plan's parts as the art director is told them: the only ids a defect may name. */
 export function shipParts(plan: AnyRecord | null | undefined): ShipPart[] {
   const workers: AnyRecord[] = Array.isArray(plan?.workers) ? plan.workers : [];
@@ -90,10 +108,31 @@ export function shipParts(plan: AnyRecord | null | undefined): ShipPart[] {
 const takesShipDefects = (worker: Worker | undefined): worker is Worker & { spec: AnyRecord } =>
   Boolean(worker && isRunning(worker) && worker.mode === WorkerMode.Loop && worker.spec);
 
-/** The frame a ship defect's question is asked on: the camera it named, when a worker can take it again. */
-function checkCamera(camera: string | null): string {
-  return camera && !NOT_A_CAMERA.test(camera) ? camera : DEFAULT_CAMERA;
+/**
+ * The worker that owns `part` now: the running loop worker of that id, or the running one that
+ * replaced it (`worker_start replaces=`, followed through each replacement by its typed field);
+ * else the part's own worker, finished or not, or none.
+ */
+function ownerOf(workers: ReadonlyMap<string, Worker>, part: string | null): Worker | undefined {
+  if (!part) return undefined;
+  const own = workers.get(part);
+  if (takesShipDefects(own)) return own;
+  const replacesPart = (worker: Worker): boolean => {
+    let replaced = worker.replaces;
+    for (let depth = 0; replaced && depth < MAX_REPLACEMENTS; depth++) {
+      if (replaced === part) return true;
+      replaced = workers.get(replaced)?.replaces ?? null;
+    }
+    return false;
+  };
+  return [...workers.values()].find((worker) => takesShipDefects(worker) && replacesPart(worker)) ?? own;
 }
+
+/**
+ * The frame a ship defect's question is asked on: the camera it named (ship-review.ts keeps only
+ * one the review was shown, `shownCameras`), else the default.
+ */
+const checkCamera = (camera: string | null): string => camera ?? DEFAULT_CAMERA;
 
 /** A blocker or a visible defect decides whether the part is done; a nit counts and decides nothing. */
 const weightOf = (defect: ShipDefect): string =>
@@ -130,7 +169,7 @@ export function shipDefectsToChecks(
     const key = part ?? "";
     const known = boards.get(key);
     if (known) return known;
-    const worker = part ? workers.get(part) : undefined;
+    const worker = ownerOf(workers, part);
     const board = { checks: [...(takesShipDefects(worker) ? (worker.spec.checks ?? []) : [])] };
     boards.set(key, board);
     return board;
@@ -184,7 +223,7 @@ export function routeShipDefects(night: Night, review: Pick<ShipReview, "defects
   const { note, state } = night;
   const routes = shipDefectsToChecks(review, state.workers);
   for (const route of routes) {
-    const worker = route.part ? state.workers.get(route.part) : undefined;
+    const worker = ownerOf(state.workers, route.part);
     if (takesShipDefects(worker)) {
       onBoard(night, worker, route);
       continue;
@@ -239,17 +278,19 @@ export function finishMarkAt(night: Night): number | null {
  * The studio's own look at the finish mark: when the integration branch has moved beyond the start
  * and nothing says it does not load, the art director judges it (`judge ship=yes`, through the
  * studio's window when every other is taken, done by `ART_DIRECTION_JUDGE_MS`) and its defects go
- * to their owners. Answers the review, or why there was none.
+ * to their owners. `how` lets the same look answer the close's own question (the finish gate).
+ * Answers the review, or why there was none.
  */
-export async function artDirectionPass(night: Night): Promise<ArtDirection> {
+export async function artDirectionPass(night: Night, how: ArtDirectionAsk = {}): Promise<ArtDirection> {
   const { ctx, note, state } = night;
+  const { ask = {}, final = false, judgeMs = ART_DIRECTION_JUDGE_MS } = how;
   const head = (await night.syncHead().catch(() => null)) ?? state.integrationHead;
   if (ctx.cancelled) return { head, review: null, skipped: ART_SKIPPED.stopped };
   if (!movedBeyondStart(night, head)) return { head, review: null, skipped: ART_SKIPPED.nothingNew };
   if (state.healthByHead.get(head) === false) return { head, review: null, skipped: ART_SKIPPED.doesNotLoad };
-  const ask = { target: BuildTarget.Integration, against: Against.None, ship: "yes" };
+  const judged = { ...ask, target: BuildTarget.Integration, against: Against.None, ship: "yes" };
   await night
-    .judge(ask, { borrow: true, until: Date.now() + ART_DIRECTION_JUDGE_MS })
+    .judge(judged, { borrow: true, final, until: Date.now() + judgeMs })
     .catch((err: unknown) =>
       note(`the art director could not judge ${shortSha(head)}: ${clip((err as Error)?.message ?? err, CLIP_REASON)}`),
     );
@@ -258,17 +299,45 @@ export async function artDirectionPass(night: Night): Promise<ArtDirection> {
 }
 
 /**
+ * How long the finish gate's judge may take from its start: one `finish` call holds the gate's
+ * look and judge, then the close's settle and its own look, inside the engine's ten minutes.
+ */
+function finishGateJudgeMs(): number {
+  const settle = (budgetParts as { CLOSE_SETTLE_MS?: number }).CLOSE_SETTLE_MS ?? CLOSE_SETTLE_FALLBACK_MS;
+  return Math.min(ART_DIRECTION_JUDGE_MS, FINISH_CALL_MS - settle - LOOK_MS - FINISH_MARGIN_MS);
+}
+
+/**
+ * The judge the close still owes the head (tools.ts `closeJudgeAsk`): null when a judge on that
+ * head already holds its word, undefined under a kept older tools.ts that cannot say.
+ */
+function closeJudgeOwed(night: Night): AnyRecord | null | undefined {
+  if (typeof night.closeJudgeAsk !== "function") return undefined;
+  return night.closeJudgeAsk(night.state.integrationHead);
+}
+
+/**
  * A goal build's finish with no review on its head: the art director looks once, and a "no" turns
  * the finish back once, with the defects — never twice, never for the user's own finish, never in
- * the wrap-up (no time to act on it). Answers the refusal, or null to close.
+ * the wrap-up (no time to act on it). The look runs inside the lead's `finish` call, so it is
+ * bounded by `finishGateJudgeMs` and answers the close's own question too, so the close does not
+ * judge the head again; when the close still owes a blind judge against the start, there is no
+ * time for both, and the finish closes without it. Answers the refusal, or null to close.
  */
 export async function shipFinishGate(night: Night, userEnds: boolean): Promise<string | null> {
-  const { ctx, state } = night;
+  const { ctx, note, state } = night;
   const notOurs = userEnds || ctx.cancelled || state.shipFinishRefused === true;
   const noTimeToAct = Date.now() >= night.softDeadline;
   if (notOurs || noTimeToAct) return null;
   if (!shipOwed(night)) return null;
-  const { review } = await artDirectionPass(night);
+  const owed = closeJudgeOwed(night);
+  if (owed === undefined) return null;
+  if (owed && owed.against !== Against.None) {
+    note(shipGateSkipped(state.integrationHead));
+    return null;
+  }
+  const how = owed ? { ask: { question: owed.question }, final: true } : {};
+  const { review } = await artDirectionPass(night, { ...how, judgeMs: finishGateJudgeMs() });
   if (review?.ship !== false) return null;
   state.shipFinishRefused = true;
   await night.saveJournal();

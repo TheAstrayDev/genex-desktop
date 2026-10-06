@@ -306,7 +306,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
         ship: {
           type: "string",
           description:
-            "yes: the art director's absolute look at the whole game at 1600x900: ship or not, defects by part.",
+            "yes: the art director's absolute look at the whole game at 1600x900, alone (no against): ship or not, defects by part.",
         },
       },
     },

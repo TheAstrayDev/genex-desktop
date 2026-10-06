@@ -9,6 +9,8 @@
  * a host that answers what the row needs.
  */
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, it } from "node:test";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
 import { blindCompare } from "../../src/harness-seed/loop/judge.ts";
@@ -22,8 +24,8 @@ import * as toolFunctions from "../../src/harness-seed/loop/director/tools.ts";
 import * as workerFunctions from "../../src/harness-seed/loop/director/workers.ts";
 import * as integrateFunctions from "../../src/harness-seed/loop/director/integrate.ts";
 import * as artDirectionFunctions from "../../src/harness-seed/loop/director/art-direction.ts";
-import { shipDefectsToChecks } from "../../src/harness-seed/loop/director/art-direction.ts";
-import { SHIP_QUESTION } from "../../src/harness-seed/loop/director/art-direction-prompts.ts";
+import { ART_DIRECTION_JUDGE_MS, shipDefectsToChecks } from "../../src/harness-seed/loop/director/art-direction.ts";
+import { SHIP_QUESTION, shipFinishLine } from "../../src/harness-seed/loop/director/art-direction-prompts.ts";
 import { finishMarkMs } from "../../src/harness-seed/loop/director/budgets.ts";
 import { priorWorkersStatus, restoreNight } from "../../src/harness-seed/loop/director/journal.ts";
 import { runWakeLoop, type DirectorTalk, type WakeClock } from "../../src/harness-seed/loop/director/wake.ts";
@@ -76,6 +78,20 @@ const SHIP_NO = {
   ],
   strengths: ["the dusk light"],
   reason: "the HUD is broken at a glance",
+};
+
+/** The seed's own folder, as a workspace laid down from it reads it. */
+const SEED = path.resolve(import.meta.dirname, "../../src/harness-seed");
+
+/** A blind pick over the start the lead already won on HEAD. */
+const LEAD_PICK = {
+  head: HEAD,
+  ok: true,
+  against: "start",
+  pick: "challenger",
+  answer: null,
+  boardAllPass: null,
+  at: T0,
 };
 
 /** What the fake host saw: every call, and each journal as it was written. */
@@ -261,6 +277,20 @@ function fakeNight(
   return { night, seen };
 }
 
+/** Is this judge call the art director's: it is shown the motion strip, which no other judge here is. */
+const isShipCall = (params: Record<string, any>): boolean =>
+  (params.messages?.[0]?.images ?? []).some((image: { label: string }) => image.label.startsWith("MOTION"));
+
+/** A judge that answers the art director with `ship` and any vision question with a sure yes. */
+const shipAndQuestion =
+  (ship: unknown = SHIP_NO) =>
+  (params: Record<string, any>) =>
+    replying(isShipCall(params) ? ship : { answer: "yes", confidence: 0.9, note: "a race at dusk" })();
+
+/** The judge calls the art director made. */
+const shipCalls = (host: FakeHost) =>
+  host.calls.filter((c) => c.method === HostMethod.EngineComplete && isShipCall(c.params));
+
 /** The labels of the images the judge was shown, call by call. */
 const imageLabels = (host: FakeHost): string[][] =>
   host.calls
@@ -366,6 +396,17 @@ describe("the art director's question (loop/ship-review.ts)", () => {
     assert.deepEqual(unusable.defects, []);
     assert.equal(unusable.parse, "invalid");
   });
+
+  it("AD-1b. a workspace laid down from the seed asks the art director with its own judge/ship-review.md", async () => {
+    const recorder = ctxRecorder({ workspace: SEED, handlers: { "engine.complete": replying(SHIP_NO) } });
+    await shipReview(recorder.ctx as never, {
+      run: { runId: "run_ad", goal: "a night race", reference: null } as never,
+      evidence: gameEvidence() as never,
+      parts: PARTS,
+    });
+    const request = recorder.paramsOf("engine.complete")[0] as Record<string, any>;
+    assert.equal(request.systemPrompt, await readFile(path.join(SEED, "judge", "ship-review.md"), "utf8"));
+  });
 });
 
 describe("the lead's judge ship=yes (director/tools.ts)", () => {
@@ -391,8 +432,10 @@ describe("the lead's judge ship=yes (director/tools.ts)", () => {
     const verdict = JSON.parse(Buffer.from(written.params.base64, "base64").toString("utf8"));
     assert.equal(verdict.ship.ship, false);
     assert.equal(verdict.ship.defects.length, 3);
+    const judged = night.report.verdicts.filter((v: Record<string, unknown>) => v.pass === "judge");
+    assert.equal(judged.length, 1, "one look, one judge verdict: the chat says it once");
     assert.ok(
-      night.report.verdicts.some((v: Record<string, unknown>) => JSON.stringify(v).includes(SHIP_QUESTION)),
+      JSON.stringify(judged[0]).includes(SHIP_QUESTION),
       "the ship review is a judge verdict on the record, asked its own question",
     );
 
@@ -453,6 +496,86 @@ describe("the lead's judge ship=yes (director/tools.ts)", () => {
       strongFlips(spec, { [blocker!.check.id]: { kind: "vision", origin: "director" } }, [blocker!.check.id]),
       [blocker!.check.id],
     );
+  });
+
+  it("AD-4b. a part restarted to finish (worker_start replaces=<its id>) gets its ship defects on the new worker's board", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    night.state.workers.set("track", loopWorker("track", { state: "done", endedAt: T0 + HOUR_MS }));
+    night.state.workers.set("track-2", loopWorker("track-2", { replaces: "track", state: "done" }));
+    night.state.workers.set("track-3", loopWorker("track-3", { replaces: "track-2" }));
+    await night.judge({ target: "integration", ship: "yes" });
+    const finisher = night.state.workers.get("track-3");
+    assert.ok(
+      finisher.spec.checks.some((c: Record<string, unknown>) => /road texture/.test(String(c.defect))),
+      "the running worker that replaced the part's last owner takes its defect",
+    );
+    assert.ok(
+      !night.state.ledger.some((d: Record<string, unknown>) => d.owner === "track"),
+      "and it is not left on the ledger",
+    );
+  });
+
+  it("AD-10. judge ship=yes looks at one build alone: with a start picture it makes no blind call and leaves no pick, and ship=yes against a build is refused in one line", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    night.state.startEvidence = gameEvidence();
+    const answer = JSON.parse(await night.judge({ target: "integration", ship: "yes" }));
+    assert.equal(answer.verdict, undefined, "no blind verdict between a 1600×900 look and a 960×600 one");
+    assert.equal(host.calls.filter((c) => c.method === HostMethod.EngineComplete).length, 1, "the ship review alone");
+    assert.equal(night.state.lastJudge?.pick ?? null, null);
+
+    const refused = await night.judge({ target: "integration", against: "start", ship: "yes" });
+    assert.throws(() => JSON.parse(refused), "a refusal is a line, not a judge's answer");
+    assert.match(refused, /against/);
+    assert.equal(host.calls.filter((c) => c.method === HostMethod.EngineComplete).length, 1, "nothing looked at");
+  });
+
+  it("AD-11. the studio's own ship look keeps the lead's blind pick over the start on that head, so the close does not judge again", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    night.state.startEvidence = gameEvidence();
+    night.state.lastJudge = { ...LEAD_PICK };
+    night.journal.director.lastJudge = { ...LEAD_PICK };
+    const { review } = await night.artDirectionPass();
+    assert.equal(review?.ship, false, "the art director looked");
+    assert.equal(night.state.lastJudge.pick, "challenger", "the lead's pick stands");
+    assert.equal(host.journals.at(-1)!.director.lastJudge.pick, "challenger", "and the journal keeps it");
+    const calls = host.calls.filter((c) => c.method === HostMethod.EngineComplete).length;
+    await night.judgeTheLanding(HEAD);
+    assert.equal(host.calls.filter((c) => c.method === HostMethod.EngineComplete).length, calls, "no second judge");
+  });
+
+  it("AD-12. a defect's camera is one the review was shown, or the default: an invented camera never reaches a board", async () => {
+    const invented = {
+      ship: false,
+      defects: [
+        { what: "the speed digits are cut off", camera: "chase camera", part: "hud", severity: "blocker" },
+        { what: "the needle stutters", camera: "MOTION 2", part: "hud", severity: "visible" },
+        { what: "the gauge is unlit", camera: "eye:here", part: "hud", severity: "visible" },
+      ],
+      strengths: [],
+      reason: "",
+    };
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(invented) } });
+    night.state.workers.set("hud", loopWorker("hud"));
+    await night.judge({ target: "integration", ship: "yes" });
+    const hud = night.state.workers.get("hud");
+    assert.deepEqual(
+      hud.spec.checks.map((c: Record<string, unknown>) => c.camera),
+      ["default", "default", "eye:here"],
+    );
+    assert.deepEqual(hud.spec.cameras, ["default"], "no camera the game never registered is added to its spec");
+  });
+
+  it("AD-13. the art director is told the size it looks at only when the window it looked through was sized", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    night.withLease = async (_label: string, fn: (handle: string | null) => Promise<unknown>) => fn(null);
+    await night.judge({ target: "integration", ship: "yes" });
+    const [asked] = shipCalls(host);
+    assert.doesNotMatch(String(asked!.params.messages[0].content), /captured at/);
   });
 });
 
@@ -579,7 +702,7 @@ describe("the ship verdict on the record (director/integrate.ts)", () => {
   it("AD-8. a goal build's finish with no ship review on its head is reviewed once and refused once on a no; the next finish closes and says how many defects are left", async () => {
     const host = fakeHost();
     const { night } = fakeNight(host, {
-      answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) },
+      answers: { [HostMethod.EngineComplete]: shipAndQuestion() },
       budgets: { wallClockMs: 2 * HOUR_MS, completionPolicy: "goal" },
       clock: { started: Date.now(), softDeadline: Date.now() + HOUR_MS, finalDeadline: Date.now() + 2 * HOUR_MS },
     });
@@ -594,7 +717,15 @@ describe("the ship verdict on the record (director/integrate.ts)", () => {
     const second = await night.finish({ summary: "the race is ready" });
     assert.equal(closes.length, 1, "never refused twice");
     assert.match(second, /would not ship this build; 3 defects left/);
-    assert.equal(imageLabels(host).length, 1, "reviewed once");
+    assert.equal(shipCalls(host).length, 1, "reviewed once");
+    // The finish call holds the look and the close: the gate's judging ends by its own bound, and
+    // its one look answered the close's own question, so the close does not judge it again.
+    for (const call of host.calls.filter((c) => c.method === HostMethod.EngineComplete))
+      assert.ok(call.params.timeoutMs <= ART_DIRECTION_JUDGE_MS, `${call.params.timeoutMs} ms`);
+    assert.equal(night.state.lastJudge.final, true);
+    const before = host.calls.length;
+    await night.judgeTheLanding(HEAD);
+    assert.equal(host.calls.length, before, "the close does not judge the head again");
 
     // A user who asks to finish is never turned back, and nothing is looked at for it.
     const quick = fakeHost();
@@ -609,7 +740,42 @@ describe("the ship verdict on the record (director/integrate.ts)", () => {
     assert.equal(imageLabels(quick).length, 0);
   });
 
-  it("AD-9. the journal keeps a finishing worker's stage, so a resumed lead restarts it in the finish stage", async () => {
+  it("AD-8b. a goal build's finish whose close still owes a blind judge against the start is not held for the art director: the finish call has no time for both", async () => {
+    const goalNight = (host: FakeHost) =>
+      fakeNight(host, {
+        answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) },
+        budgets: { wallClockMs: 2 * HOUR_MS, completionPolicy: "goal" },
+        clock: { started: Date.now(), softDeadline: Date.now() + HOUR_MS, finalDeadline: Date.now() + 2 * HOUR_MS },
+      }).night;
+    const host = fakeHost();
+    const night = goalNight(host);
+    night.state.startEvidence = gameEvidence();
+    const closes: unknown[] = [];
+    night.closeTheNight = async (options: unknown) => {
+      closes.push(options);
+      return { ok: true, line: "made live" };
+    };
+    await night.finish({ summary: "the race is ready" });
+    assert.equal(closes.length, 1, "it closes");
+    assert.equal(shipCalls(host).length, 0, "and the art director did not look inside the finish call");
+
+    // With the lead's pick over the start already on the head, the close owes no judge and the art director looks.
+    const picked = fakeHost();
+    const second = goalNight(picked);
+    second.state.startEvidence = gameEvidence();
+    second.state.lastJudge = { ...LEAD_PICK };
+    second.closeTheNight = async () => ({ ok: true, line: "made live" });
+    assert.match(await second.finish({ summary: "the race is ready" }), /would not ship/);
+    assert.equal(second.state.lastJudge.pick, "challenger");
+  });
+
+  it("the finish answer counts the defects left whether or not the art director would ship", () => {
+    const nits = [SHIP_NO.defects[2]!, { ...SHIP_NO.defects[2]!, what: "a seam in the sky" }];
+    assert.match(shipFinishLine({ ship: true, defects: nits as never }), /would ship this build; 2 defects left/);
+    assert.match(shipFinishLine({ ship: true, defects: [] }), /would ship this build\.$/);
+  });
+
+  it("AD-9. worker_status names a finishing worker's stage after a Resume", async () => {
     const host = fakeHost();
     const { night } = fakeNight(host);
     night.state.workers.set(

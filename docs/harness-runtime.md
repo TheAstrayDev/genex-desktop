@@ -545,16 +545,24 @@ one build, every frame the evidence pass took of a registered camera, the player
 demo's end, then the first, middle and last motion frames and the reference (at most 14), captured
 at 1600×900 on that lease only (`SHIP_VIEW`), asked "would you ship this as the user's demo
 today?" with the user's scope beside the goal. Each defect names a plan part (kept only when it is
-one of the plan's ids) and a severity (`blocker`, `visible`, `nit`); an unreadable answer is no
-verdict, never a "no". The lead asks for it with `judge ship=yes`; the studio runs it itself at the
+one of the plan's ids), a camera (kept only when the review was shown it, else the default) and a
+severity (`blocker`, `visible`, `nit`); an unreadable answer is no verdict, never a "no". The lead
+asks for it with `judge ship=yes`, alone (no blind comparison; an `against` other than `none` is
+refused, since the other build was seen at 960×600), and its look never replaces a pick or answer
+already standing on that head (`state.lastJudge`). The studio runs it itself at the
 finish mark (`director/art-direction.ts`): a timed build's last 30% of working time
 (`budgets.ts` `finishMarkMs`, 30 to 120 minutes, none under 90), said once (`WakeCause.FinishMark`,
-journaled); a goal build once, when its lead idles a second time or calls `finish` with no review on
-its head (a "no" turns that finish back once, never twice, and never the user's own finish). The
+journaled; a mark that finds nothing integrated leaves the lead to `judge ship=yes` itself); a goal
+build once, when its lead idles a second time or calls `finish` with no review on its head (a "no"
+turns that finish back once, never twice, and never the user's own finish). That finish gate runs
+inside the `finish` call: its one look also answers the close's own question, so the close does not
+judge again, and when the close still owes a blind judge against the start there is no time for
+both and the finish closes without the art director. The
 lead is woken with the defects by part and the rule from there: no new parts, `worker_steer
 stage=finish` on each owner, integrate, `judge ship=yes` again. Each defect on the integration
-branch becomes a director-origin vision check on its running owner's board (its fix is a strong
-flip), or a ledger line under its finished part or the lead. `state.lastShip` is journaled and
+branch becomes a director-origin vision check on its running owner's board (the part's worker, or
+the running worker that replaced it; its fix is a strong flip), or a ledger line under its finished
+part or the lead. One look is one judge verdict record, asking the ship question. `state.lastShip` is journaled and
 restored on a Resume; `report.shipReview` and the `finish` answer say whether the art director
 would ship the head the close stood on and how many defects are left. It never vetoes a landing.
 When the lead names no cameras, a blind judge shows every view both builds have, cut alike.

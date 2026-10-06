@@ -3,12 +3,10 @@
 ## From a request to a game
 
 Auto edits directly; Loop can delegate workers while the chat leads and reviews. Timed builds
-use their working window. Until-satisfied builds finish on verified required
-outcomes; time is a safety ceiling. Acceptance persists across workers and restarts. External
+use their window; until-satisfied ones finish on verified required
+outcomes, time only a ceiling. Acceptance persists across workers and restarts. External
 blockers pause the run, keeping its checkpoint. User Finish overrides the clock, never the
-final judge. Late in a timed build, and once before a goal build finishes, an art director looks
-at the whole game at full size and hands each defect to the part that owns it; whether it would
-ship the build is reported, never a veto. Maximum concurrent workers defaults to four; saved choices stay. [Harness runtime](../harness-runtime.md#goal-completion-and-worker-approvals)
+final judge; a late art-director review never vetoes. Maximum concurrent workers defaults to four; saved choices stay. [Harness runtime](../harness-runtime.md#goal-completion-and-worker-approvals)
 owns completion and recovery details.
 
 An active run opens Builds once; later tab choices are the user's, except that showing a
@@ -61,6 +59,5 @@ incomplete and delivered outcomes stay distinct.
 - [run-steps](../../src/renderer/run-steps.ts) folds steps; [RunGraph](../../src/renderer/panels/RunGraph.tsx)
   and [RunInspector](../../src/renderer/panels/RunInspector.tsx) draw them.
 - [Conversation coordinator](../conversation-coordinator.md): queue, continuation and Stop.
-- [Harness runtime](../harness-runtime.md): installed game-building agent boundaries.
 - Check [Architecture](../agent/architecture.md) and [Verification](../agent/verification.md)
   before changing a run, preview or recovery contract.

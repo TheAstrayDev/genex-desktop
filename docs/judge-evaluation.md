@@ -26,7 +26,8 @@ comparison. Start with these authored tasks; use the same inputs for every candi
 The art director's ship review (`judge/ship-review.md`, `loop/ship-review.ts`) is the one
 absolute judge: one build and no pair, at 1600×900. Evaluate it on single builds that reviewers
 label ship or not, each decisive defect with the plan part that owns it and its severity; a
-malformed reply must stay no verdict, never a "no".
+malformed reply must stay no verdict, never a "no", and a camera it was not shown is dropped. It is
+never put beside another build's frames.
 
 These are test cases, not human-labelled quality results. Begin without model calls by checking
 capture reproducibility, malformed responses, budget limits and blind-label handling through the

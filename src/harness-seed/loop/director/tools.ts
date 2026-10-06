@@ -36,7 +36,7 @@ import { LEAD_DIRTY, LEAD_LIVE_DIRTY } from "./lead-session-prompts.ts";
 import { BuildTarget, WindowLease } from "./night.ts";
 import { finalJudgeQuestion } from "./close-prompts.ts";
 import { routeShipDefects, shipParts } from "./art-direction.ts";
-import { defectsByPart, SHIP_QUESTION, shipNext } from "./art-direction-prompts.ts";
+import { defectsByPart, SHIP_ALONE, SHIP_QUESTION, shipNext } from "./art-direction-prompts.ts";
 import { SHIP_VIEW, shipReview } from "../ship-review.ts";
 import { JudgeParse } from "../judge-provenance.ts";
 import { plainly } from "./rules.ts";
@@ -535,15 +535,16 @@ const unreadShip = (why: unknown): ShipReview => ({
  * `state.lastShip` for that head, which the journal carries across a Resume.
  */
 async function shipStep(night: Night, pass: JudgePass): Promise<void> {
-  const { ctx, integrationWorktree, recordVerdict, run, state } = night;
-  const { evidence, head, out, target } = pass;
+  const { ctx, integrationWorktree, run, state } = night;
+  const { evidence, handle, head, out, target } = pass;
   if (!pass.ship) return;
   if (!evidence.ok) {
     out.ship = { ship: null, error: "the build could not be looked at, so the art director did not judge it" };
     return;
   }
-  const asking = () =>
-    shipReview(ctx, { run: judgeRun(night, pass), evidence, parts: shipParts(state.plan), view: SHIP_VIEW });
+  // Only a leased window is sized (evidence.ts `sizeWindow`): a look with none was taken at its own size.
+  const view = handle ? SHIP_VIEW : null;
+  const asking = () => shipReview(ctx, { run: judgeRun(night, pass), evidence, parts: shipParts(state.plan), view });
   const patience = { deadline: judgeDeadline(night, pass), delays: outageDelays(run), label: "the art director" };
   const review = await withProviderPatience(ctx, asking, patience).catch(unreadShip);
   const onIntegration = target.root === integrationWorktree;
@@ -560,17 +561,19 @@ async function shipStep(night: Night, pass: JudgePass): Promise<void> {
     next: shipNext(review),
     ...(review.judged ? { judged: review.judged } : {}),
   };
-  await recordVerdict({
-    pass: VerdictPass.Judge,
-    head,
-    worker: target.worker?.id ?? null,
-    ...observedFrom(evidence),
-    question: SHIP_QUESTION,
-    answer: review.ship,
-    judgeCalls: review.ship === null ? 0 : 1,
-    kept: null,
-    rule: VerdictRule.Starts,
-  });
+}
+
+/**
+ * The question and answer a judge's one verdict record carries: the lead's own question when it
+ * asked one, else the art director's (`SHIP_QUESTION`), so one look is one record and one line in
+ * the chat. The judge calls are the blind verdict's and the art director's.
+ */
+function askedOnRecord(out: AnyRecord): { question: string | null; answer: boolean | null; judgeCalls: number } {
+  const shipCalls = typeof out.ship?.ship === "boolean" ? 1 : 0;
+  const judgeCalls = (out.verdict?.pick ? 1 : 0) + shipCalls;
+  if (out.answer?.question) return { question: out.answer.question, answer: out.answer.yes ?? null, judgeCalls };
+  if (out.ship) return { question: SHIP_QUESTION, answer: out.ship.ship ?? null, judgeCalls };
+  return { question: null, answer: null, judgeCalls };
 }
 
 /**
@@ -625,9 +628,7 @@ async function recordJudgement(night: Night, pass: JudgePass, scored: CheckResul
     planned: scored,
     unmeasured: scored.filter((entry) => entry.pass !== true && entry.pass !== false).map((entry) => entry.id),
     pick: out.verdict?.pick ?? null,
-    question: out.answer?.question ?? null,
-    answer: out.answer?.yes ?? null,
-    judgeCalls: out.verdict?.pick ? 1 : 0,
+    ...askedOnRecord(out),
     kept: keptByJudge(rule),
     rule,
   });
@@ -672,7 +673,9 @@ async function judgeOnWindow(night: Night, ask: JudgeAsk, handle: string | null)
     at: Date.now(),
     ...(ask.final ? { final: true } : {}),
   };
-  if (onIntegration) state.lastJudge = judgement;
+  // A look only the art director asked for never replaces a verdict already standing on this head.
+  const keepsJudgement = onIntegration && !(shipOnly(ask) && holdsVerdict(state.lastJudge, head));
+  if (keepsJudgement) state.lastJudge = judgement;
   const pass: JudgePass = { ...ask, handle, evidence, out: judgeOut(night, target.label, evidence), judgement };
   /** The checks this pass scored, one entry each — the verdict record keeps them, not only their tally. */
   const scored = await scoreJudgeChecks(night, pass);
@@ -681,10 +684,8 @@ async function judgeOnWindow(night: Night, ask: JudgeAsk, handle: string | null)
   const againstWorker = await compareJudged(night, pass);
   await shipStep(night, pass);
   pass.out.head = head ?? null;
-  if (onIntegration) {
-    journal.director.lastJudge = judgement;
-    await saveJournal();
-  }
+  if (keepsJudgement) journal.director.lastJudge = judgement;
+  if (onIntegration) await saveJournal();
   await recordJudgement(night, pass, scored, againstWorker);
   note(judgedNote(target.label, evidence, pass.out));
   ctx.setStatus(`run ${run.runId} · director`);
@@ -699,7 +700,11 @@ export async function judge(
   const { resolveRoot, state, withLease } = night;
   const target = resolveRoot(args.target);
   if (target.error !== undefined) return target.error;
-  const againstKey = String(args.against ?? Against.Start).trim() || Against.Start;
+  const ship = yes(args.ship, false);
+  const named = String(args.against ?? "").trim();
+  // The art director's look is absolute and at its own size: never beside a build seen at another.
+  if (ship && named && named !== Against.None) return SHIP_ALONE;
+  const againstKey = named || (ship ? Against.None : Against.Start);
   const cameras = list(args.cameras);
   const checksRaw = parseJson(args.checks);
   if (checksRaw?.__error) return `checks: ${checksRaw.__error}`;
@@ -715,7 +720,7 @@ export async function judge(
     head,
     final,
     until,
-    ship: yes(args.ship, false),
+    ship,
   };
   // The lead's judge is a choice, not an obligation: when every window is a worker's, the director
   // is told so and picks its moment, rather than the studio taking the user's window for it. The
@@ -724,6 +729,17 @@ export async function judge(
     borrow,
   });
   return typeof looked === "string" ? looked : looked.noWindow;
+}
+
+/** Is this pass the art director's look alone: no comparison, question or checks of the lead's. */
+function shipOnly(ask: JudgeAsk): boolean {
+  const checks = Array.isArray(ask.checksRaw) && ask.checksRaw.length > 0;
+  return ask.ship === true && ask.againstKey === Against.None && !ask.question && !checks;
+}
+
+/** Does the judge standing on `head` hold a verdict: a blind pick, or a sure answer. */
+function holdsVerdict(judged: LastJudge | null, head: string | null): boolean {
+  return Boolean(judged && judged.head === head && (judged.pick || typeof judged.answer === "boolean"));
 }
 
 /**
@@ -750,18 +766,30 @@ function finallyJudged(judged: LastJudge | null, head: string | null): boolean {
  * every judge's is (`state.lastJudge`, a judge verdict), for the landing's claim.
  */
 export async function judgeTheLanding(night: Night, head: string | null): Promise<void> {
-  const { ctx, note, run, state } = night;
-  if (ctx.cancelled || finallyJudged(state.lastJudge, head)) return;
-  const comparable = !state.fromScratch && Boolean(state.startEvidence);
-  const ask = comparable
-    ? { target: BuildTarget.Integration, against: Against.Start }
-    : { target: BuildTarget.Integration, against: Against.None, question: finalJudgeQuestion(workingGoal(run)) };
+  const { note } = night;
+  const ask = closeJudgeAsk(night, head);
+  if (!ask) return;
   const options = { borrow: true, final: true, until: Date.now() + FINAL_JUDGE_MS };
   await judge(night, ask, options).catch((err: unknown) =>
     note(
       `the close could not judge ${shortSha(head)}: ${String((err as Error)?.message ?? err).slice(0, CLIP_REASON)}`,
     ),
   );
+}
+
+/**
+ * The judge the close owes `head`, as `judge` arguments: blind against the build the user had when
+ * there is a picture of it, else the goal question on its own — or null when the run is stopping or
+ * a judge on that head already holds the close's word (`finallyJudged`). The art director's finish
+ * gate reads it, so its one look can answer the question and the close need not look again.
+ */
+export function closeJudgeAsk(night: Night, head: string | null): AnyRecord | null {
+  const { ctx, run, state } = night;
+  if (ctx.cancelled || finallyJudged(state.lastJudge, head)) return null;
+  const comparable = !state.fromScratch && Boolean(state.startEvidence);
+  return comparable
+    ? { target: BuildTarget.Integration, against: Against.Start }
+    : { target: BuildTarget.Integration, against: Against.None, question: finalJudgeQuestion(workingGoal(run)) };
 }
 
 // ── playtest ──
