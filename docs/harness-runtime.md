@@ -670,10 +670,12 @@ chat, or of the run through `studio:run.stop`, `StudioCore.stopRun`) or a Finish
 started, once a newer run started in that chat or another run is running (`superseded`), with under
 ten minutes of working time left, for a
 reset more than 12 hours away, or after ten minutes past its time without a ready harness or 1 GB
-of free memory (read only once the resume is due). The wait is a chain of timers of at most
-`AUTO_RESUME_RECHECK_MAX_MS` (5 min), each planned again against the wall clock, because a Node timer
-does not count the time the Mac sleeps. The switch applies to pauses after it is turned on. A user
-Resume cancels the planned one. Activity lists `run_auto_resumed` beside the run (`ActivityIndex`
+of free memory (read only once the resume is due). While a resume waits, main holds the Mac awake
+with its own blocker (`onAutoResumePending`, apart from the run-active `keepAwake`), and a quit or a
+relaunch into an update names the planned time and asks first (`quitQuestion`), since either drops
+it. The wait is a chain of timers of at most `AUTO_RESUME_RECHECK_MAX_MS` (5 min), each planned again
+against the wall clock, because a Node timer does not count the time a closed lid sleeps. The switch
+applies to pauses after it is turned on. A user Resume cancels the planned one. Activity lists `run_auto_resumed` beside the run (`ActivityIndex`
 keeps every record with an item reader). A cold start (the app itself quit or died)
 and a crash loop the watchdog rewound stay the user's click (`recovery.ts` `closeInterruptedRun`).
 

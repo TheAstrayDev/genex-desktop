@@ -378,6 +378,10 @@ function harness(
 ) {
   let now = PAUSED_AT;
   let ready = options.ready ?? true;
+  let enabled = options.enabled ?? true;
+  let eventsFail = false;
+  /** Each change of "a resume is waiting" the service announced, in order (what holds the Mac awake). */
+  const pendingChanges: boolean[] = [];
   const timers = new Map<number, { at: number; ms: number; run: () => void }>();
   const memoryReads: number[] = [];
   const logReads: number[] = [];
@@ -386,7 +390,7 @@ function harness(
   const recorded: Array<{ threadId: string; payload: RunAutoResumedPayload }> = [];
   const resumed: string[] = [];
   const service = new AutoResumeService({
-    enabled: () => options.enabled ?? true,
+    enabled: () => enabled,
     harnessReady: () => ready,
     freeMb: async () => {
       memoryReads.push(now);
@@ -394,6 +398,7 @@ function harness(
     },
     events: async () => {
       logReads.push(now);
+      if (eventsFail) throw new Error("the log could not be read");
       return log;
     },
     record: async (threadId, payload) => {
@@ -412,9 +417,11 @@ function harness(
       return id;
     },
     clearTimer: (handle) => timers.delete(handle as number),
+    onPendingChange: (pending) => pendingChanges.push(pending),
   });
   return {
     service,
+    pendingChanges,
     recorded,
     resumed,
     timers,
@@ -446,6 +453,12 @@ function harness(
     },
     setReady(value: boolean) {
       ready = value;
+    },
+    setEnabled(value: boolean) {
+      enabled = value;
+    },
+    failEvents() {
+      eventsFail = true;
     },
     /** Move the clock to `at` and run every timer due by then, letting each tick settle. */
     async advance(at: number) {
@@ -644,6 +657,113 @@ describe("AutoResumeService: the planner wired to timers and the resume path", (
   });
 });
 
+describe("AutoResumeService: a waiting resume keeps the Mac awake until it is resumed or dropped", () => {
+  /** A limit pause the service has looked at once and now waits on (the reset is half an hour away). */
+  async function waitingOnReset(h: ReturnType<typeof harness>) {
+    h.append(limitPause(PAUSED_AT, rateLimit));
+    await h.advance(PAUSED_AT);
+  }
+
+  it("a limit pause holds from the first look until the resume, once each way", async () => {
+    const h = harness();
+    await waitingOnReset(h);
+    assert.deepEqual(h.pendingChanges, [true], "the wait for the reset is held, not left to idle sleep");
+    assert.equal(h.service.nextResumeAt(), DUE, "the planned time is the reset plus the margin");
+    for (let at = PAUSED_AT; at < DUE; at += AUTO_RESUME_RECHECK_MAX_MS) await h.advance(at);
+    assert.deepEqual(h.pendingChanges, [true], "the bounded steps towards the reset do not flap the hold");
+    await h.advance(DUE);
+    assert.deepEqual(h.resumed, [RUN]);
+    assert.deepEqual(h.pendingChanges, [true, false], "released once the resume is dispatched");
+    assert.equal(h.service.nextResumeAt(), null);
+  });
+
+  const drops: Array<{ name: string; drop: (h: ReturnType<typeof harness>) => void | Promise<void> }> = [
+    { name: "the user's Stop", drop: (h) => h.service.userStopped(THREAD) },
+    { name: "the user's stop of the run", drop: (h) => h.service.userStoppedRun(RUN) },
+    { name: "the user's own Resume", drop: (h) => h.service.cancelRun(RUN) },
+    { name: "the run starting again", drop: (h) => h.append([resumedStart(PAUSED_AT + MINUTE_MS)]) },
+    { name: "the core stopping", drop: (h) => h.service.dispose() },
+    {
+      name: "the switch turned off before the resume is due",
+      drop: async (h) => {
+        h.setEnabled(false);
+        await h.advance(DUE);
+      },
+    },
+    {
+      name: "a look that throws",
+      drop: async (h) => {
+        h.failEvents();
+        await h.advance(DUE);
+      },
+    },
+  ];
+  for (const { name, drop } of drops) {
+    it(`${name} releases the hold`, async () => {
+      const h = harness();
+      await waitingOnReset(h);
+      await drop(h);
+      assert.deepEqual(h.pendingChanges, [true, false]);
+      assert.equal(h.service.nextResumeAt(), null);
+      assert.deepEqual(h.resumed, []);
+    });
+  }
+
+  it("a pause that never resumes on its own (the user's Stop) holds nothing", async () => {
+    const h = harness();
+    h.append(plainPause(PAUSED_AT));
+    await h.advance(DUE);
+    assert.deepEqual(h.pendingChanges, []);
+    assert.equal(h.service.nextResumeAt(), null);
+  });
+
+  it("a crash pause waiting for the loop is held until it resumes", async () => {
+    const h = harness({ ready: false });
+    h.service.noteCrash([RUN]);
+    h.append(plainPause(PAUSED_AT));
+    await h.advance(PAUSED_AT);
+    assert.deepEqual(h.pendingChanges, [true]);
+    h.setReady(true);
+    await h.advance(PAUSED_AT + AUTO_RESUME_RECHECK_MS);
+    assert.deepEqual([h.resumed, h.pendingChanges], [[RUN], [true, false]]);
+  });
+
+  it("a listener that throws does not stop the plan", async () => {
+    let calls = 0;
+    const lines: string[] = [];
+    let now = PAUSED_AT;
+    const timers: Array<{ at: number; run: () => void }> = [];
+    const log = [registered(), ...limitPause(PAUSED_AT, rateLimit)];
+    const service = new AutoResumeService({
+      enabled: () => true,
+      harnessReady: () => true,
+      freeMb: async () => 8_000,
+      events: async () => log,
+      record: async () => {},
+      resume: async () => {
+        calls++;
+      },
+      now: () => now,
+      setTimer: (run, ms) => timers.push({ at: now + ms, run }),
+      clearTimer: () => {},
+      onPendingChange: () => {
+        throw new Error("the blocker refused");
+      },
+      onLog: (line) => lines.push(line),
+    });
+    service.observe(THREAD, log.slice(-1));
+    while (calls === 0 && timers.length > 0) {
+      const next = timers.shift();
+      if (!next) break;
+      now = Math.max(now, next.at);
+      next.run();
+      await service.idle();
+    }
+    assert.equal(calls, 1, "the resume still happens");
+    assert.ok(lines.some((line) => line.includes("the blocker refused")));
+  });
+});
+
 describe("run_auto_resumed where people read it", () => {
   const record = (cause: string) => [
     registered(),
@@ -741,6 +861,38 @@ describe("the core: the switch, its default, and who may write the record", () =
     for (let i = 0; i < SETTLE_TRIES; i++) await sleep(SETTLE_STEP_MS);
     assert.deepEqual(delays, [0], "looked at, and nothing planned");
     await lite.close();
+  });
+
+  it("a resume waiting on a reset is announced to the app, which holds the Mac awake until the core stops", async () => {
+    const pending: boolean[] = [];
+    const lite = await coreLite({
+      autoResume: {
+        now: () => Date.now(),
+        setTimer: (run, ms) => {
+          if (ms === 0) run();
+          return 1;
+        },
+        clearTimer: () => {},
+        freeMb: async () => 8_000,
+      },
+      onAutoResumePending: (value) => pending.push(value),
+    });
+    const threadId = await lite.core.store.createThread({ title: "game" });
+    const append = (batch: unknown[]) => lite.api()["events.append"]!({ threadId, batch } as never);
+    const now = Date.now();
+    await append([
+      {
+        type: EventKind.Custom,
+        event_type: CustomEvent.RunRegistered,
+        payload: { runId: RUN, budgets: { wallClockMs: 4 * HOUR_MS } },
+      },
+    ]);
+    await append(limitPause(now, { ...rateLimit, at: now }).map((e) => e.data));
+    for (let i = 0; i < SETTLE_TRIES && pending.length === 0; i++) await sleep(SETTLE_STEP_MS);
+    assert.deepEqual(pending, [true], "the wait for the reset is held");
+    assert.equal(lite.core.autoResumeAt, now + RESET_MS + LIMIT_RESET_MARGIN_MS, "a quit can name the time");
+    await lite.close();
+    assert.deepEqual(pending, [true, false], "the core stopping releases it");
   });
 
   it("a stop asked through the run controls (not the chat's Stop) holds the run back too", async () => {

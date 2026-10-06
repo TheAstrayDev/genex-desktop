@@ -34,7 +34,8 @@ export const AUTO_RESUME_RECHECK_MS = 30 * SECOND_MS;
 /**
  * The longest single timer a planned resume sets. A Node timer counts only the time the Mac is
  * awake (and App Nap can defer it), so a reset hours away is approached in bounded steps, each
- * planned again against the wall clock: after a sleep the first look resumes.
+ * planned again against the wall clock: after a sleep the first look resumes. The host holds the
+ * Mac awake while a resume waits (`onPendingChange`), so the sleep this covers is a closed lid.
  */
 export const AUTO_RESUME_RECHECK_MAX_MS = 5 * MINUTE_MS;
 
@@ -232,6 +233,12 @@ export interface AutoResumeDeps {
   setTimer?: (run: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
   onLog?: (line: string) => void;
+  /**
+   * A resume started or stopped waiting: true while any paused run waits on its reset, the loop or
+   * memory, false once none does (resumed, cancelled, left for the user, or the core stopping). The
+   * host holds the Mac awake meanwhile; the run's own hold ended when the paused run settled.
+   */
+  onPendingChange?: (pending: boolean) => void;
 }
 
 /** A planned look at one paused run. */
@@ -241,6 +248,8 @@ interface Planned {
   token: number;
   /** The wall-clock time (ms) of the look. */
   dueAt: number;
+  /** A look already decided the run waits (the first look at a pause has not decided yet). */
+  waiting: boolean;
 }
 
 /**
@@ -258,6 +267,8 @@ export class AutoResumeService {
   readonly #stoppedRunAt = new Map<string, number>();
   readonly #ticks = new Set<Promise<void>>();
   #nextToken = 1;
+  /** What `onPendingChange` last said, so a replanned wait does not flap the host's hold. */
+  #pendingSaid = false;
 
   constructor(deps: AutoResumeDeps) {
     this.#deps = deps;
@@ -303,15 +314,20 @@ export class AutoResumeService {
 
   /** Forget a planned resume (the user resumed it, or it started again). */
   cancelRun(runId: string): void {
-    const planned = this.#planned.get(runId);
-    if (!planned) return;
-    this.#planned.delete(runId);
-    this.#clear(planned.handle);
+    this.#drop(runId);
+    this.#sayPending();
   }
 
   /** Every planned resume dropped: the core is stopping. */
   dispose(): void {
-    for (const runId of [...this.#planned.keys()]) this.cancelRun(runId);
+    for (const runId of [...this.#planned.keys()]) this.#drop(runId);
+    this.#sayPending();
+  }
+
+  /** The wall-clock time (ms) of the soonest resume waiting, or null when none waits. */
+  nextResumeAt(): number | null {
+    const waiting = [...this.#planned.values()].filter((planned) => planned.waiting).map((planned) => planned.dueAt);
+    return waiting.length > 0 ? Math.min(...waiting) : null;
   }
 
   /** Settles once every look already running has finished. */
@@ -319,17 +335,37 @@ export class AutoResumeService {
     while (this.#ticks.size > 0) await Promise.all([...this.#ticks]);
   }
 
+  #drop(runId: string): void {
+    const planned = this.#planned.get(runId);
+    if (!planned) return;
+    this.#planned.delete(runId);
+    this.#clear(planned.handle);
+  }
+
+  /** Tell the host when "a resume is waiting" changed; a listener that throws never stops a plan. */
+  #sayPending(): void {
+    const pending = this.nextResumeAt() !== null;
+    if (pending === this.#pendingSaid) return;
+    this.#pendingSaid = pending;
+    try {
+      this.#deps.onPendingChange?.(pending);
+    } catch (err) {
+      this.#deps.onLog?.(`[auto-resume] holding the Mac awake: ${errorMessage(err)}`);
+    }
+  }
+
   #clear(handle: unknown): void {
     if (this.#deps.clearTimer) this.#deps.clearTimer(handle);
     else clearTimeout(handle as ReturnType<typeof setTimeout>);
   }
 
-  /** Look at the run again at wall-clock time `dueAt`. */
-  #plan(threadId: string, runId: string, dueAt: number): void {
-    this.cancelRun(runId);
-    const planned: Planned = { threadId, handle: null, token: this.#nextToken++, dueAt };
+  /** Look at the run again at wall-clock time `dueAt`; `waiting` once a look has decided it waits. */
+  #plan(threadId: string, runId: string, dueAt: number, waiting = false): void {
+    this.#drop(runId);
+    const planned: Planned = { threadId, handle: null, token: this.#nextToken++, dueAt, waiting };
     this.#planned.set(runId, planned);
     this.#arm(runId, planned);
+    this.#sayPending();
   }
 
   /**
@@ -361,6 +397,7 @@ export class AutoResumeService {
   /** Forget this look's plan, unless a newer plan (a later pause of the run) has replaced it. */
   #forget(runId: string, token: number): void {
     if (this.#current(runId, token)) this.#planned.delete(runId);
+    this.#sayPending();
   }
 
   /** The user's latest Stop that applies to this run: of the run itself or of its conversation. */
@@ -397,7 +434,7 @@ export class AutoResumeService {
       const freeMb = due.action === AutoResumeAction.Resume ? await this.#deps.freeMb().catch(() => null) : null;
       if (!this.#current(runId, token)) return;
       const plan = freeMb === null ? due : this.#planAt(events, now, ids, freeMb);
-      if (plan.action === AutoResumeAction.Wait) return this.#plan(threadId, runId, plan.at);
+      if (plan.action === AutoResumeAction.Wait) return this.#plan(threadId, runId, plan.at, true);
       if (plan.action !== AutoResumeAction.Resume) return this.#forget(runId, token);
       await this.#resume({ threadId, runId, token }, events, plan);
     } catch (err) {

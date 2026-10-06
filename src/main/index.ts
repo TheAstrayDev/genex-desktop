@@ -56,6 +56,8 @@ import {
   installProcessHandlers,
   PageRecovery,
   pageRecovery,
+  QuitQuestion,
+  quitQuestion,
   runShutdown,
   shutdownSteps,
   type ShutdownStep,
@@ -195,6 +197,10 @@ const MESSAGE = {
   restartDuringRun: "An unattended run is active. Relaunch to update and end it?",
   restart: "Relaunch",
   keepRunning: "Keep running",
+  quitWithResume: (time: string) => `A paused build will resume on its own at ${time}. Quit and cancel the resume?`,
+  restartWithResume: (time: string) =>
+    `A paused build will resume on its own at ${time}. Relaunch to update and cancel the resume?`,
+  cancel: "Cancel",
   checkForUpdates: "Check for Updates…",
   download: "Download",
   later: "Later",
@@ -366,6 +372,13 @@ const bootGate = createBootGate(
 let windowControls: WindowControlColors | undefined;
 // `keepAwake.held` doubles as the run-active signal for close/quit below.
 const keepAwake = new KeepAwake(powerSaveBlocker);
+/**
+ * Holds the Mac awake while a paused build waits to resume on its own (`core/auto-resume.ts`): the
+ * run's own hold ended when it settled, and an idle-sleeping Mac would resume only at the next wake.
+ * Kept apart from `keepAwake`: a waiting resume has no preview to protect and must not hold back
+ * an account change, so it is never the run-active signal.
+ */
+const resumeAwake = new KeepAwake(powerSaveBlocker);
 /** The user already answered "Quit" to the active-run prompt — the re-entrant quit must not ask twice. */
 let quitConfirmed = false;
 /** The async quit prompt is on screen — a second Cmd+Q must not stack another one over it. */
@@ -586,6 +599,7 @@ async function createCore(userData: string): Promise<StudioCore> {
     appVersion: app.getVersion(),
     markBoot: (step) => performanceRecorder.mark(step),
     onUiEvent: pushUiEvent,
+    onAutoResumePending: (pending) => (pending ? resumeAwake.hold() : resumeAwake.release()),
     onLog: (line, stream) => {
       // stderr carries the harness's own errors and the core's `[core]`/`[host]` lines.
       if (stream === "stderr") studioLog.write("harness", line);
@@ -1216,19 +1230,34 @@ function showUpdateNote(note: { title: string; body: string }, onClick: () => vo
 }
 
 /**
+ * What a quit (or, with `relaunch`, a restart into an update) asks first, or null when it loses
+ * nothing: an active run ends, or a paused build's planned automatic resume is dropped.
+ */
+function quitPrompt(relaunch: boolean): { message: string; keep: string } | null {
+  const resumeAt = core?.autoResumeAt ?? null;
+  const question = quitQuestion({ runActive: keepAwake.held, resumeAt, confirmed: quitConfirmed });
+  if (question === QuitQuestion.RunActive)
+    return { message: relaunch ? MESSAGE.restartDuringRun : MESSAGE.quitDuringRun, keep: MESSAGE.keepRunning };
+  if (question !== QuitQuestion.ResumePending || resumeAt === null) return null;
+  const time = new Date(resumeAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return { message: relaunch ? MESSAGE.restartWithResume(time) : MESSAGE.quitWithResume(time), keep: MESSAGE.cancel };
+}
+
+/**
  * Before a restart into an update: an active run ends only on the person's word, as on a quit.
  * Their yes also lets the window close rather than hide (`watchWindowLifecycle`), which the
  * install waits on. No parent window, like the quit prompt; a Cmd+Q meanwhile is not stacked.
  */
 async function confirmUpdateRestart(): Promise<boolean> {
-  if (!keepAwake.held || quitConfirmed) return true;
+  const prompt = quitPrompt(true);
+  if (!prompt) return true;
   if (quitDialogOpen) return false;
   quitDialogOpen = true;
   try {
     const { response } = await dialog.showMessageBox({
       type: "warning",
-      message: MESSAGE.restartDuringRun,
-      buttons: [MESSAGE.restart, MESSAGE.keepRunning],
+      message: prompt.message,
+      buttons: [MESSAGE.restart, prompt.keep],
       defaultId: 1,
       cancelId: 1,
     });
@@ -1591,15 +1620,17 @@ app.on("before-quit", async (event) => {
   // dialog blocks the main-process event loop, and the harness's calls into main stall for as
   // long as the prompt sits unanswered — pausing the very run the prompt is protecting.
   // No parent window: the window may be hidden, and a sheet on a hidden window is invisible.
-  if (keepAwake.held && !quitConfirmed) {
+  // A paused build waiting to resume on its own is asked about too: the quit drops the resume.
+  const prompt = quitPrompt(false);
+  if (prompt) {
     event.preventDefault();
     if (quitDialogOpen) return;
     quitDialogOpen = true;
     try {
       const { response } = await dialog.showMessageBox({
         type: "warning",
-        message: MESSAGE.quitDuringRun,
-        buttons: [MESSAGE.quit, MESSAGE.keepRunning],
+        message: prompt.message,
+        buttons: [MESSAGE.quit, prompt.keep],
         defaultId: 1,
         cancelId: 1,
       });

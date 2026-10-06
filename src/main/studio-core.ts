@@ -326,6 +326,8 @@ export interface StudioCoreOptions {
   rewindBuildStop?: { timeoutMs?: number; now?: () => number; sleep?: (ms: number) => Promise<unknown> };
   /** The clock, timers and memory reading host auto-resume uses (`core/auto-resume.ts`); a test seam. */
   autoResume?: Partial<Pick<AutoResumeDeps, "now" | "setTimer" | "clearTimer" | "freeMb">>;
+  /** A planned automatic resume started (true) or stopped (false) waiting; main holds the Mac awake meanwhile. */
+  onAutoResumePending?: (pending: boolean) => void;
   onUiEvent?: (event: UiEvent) => void;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
 }
@@ -469,7 +471,13 @@ export class StudioCore {
       },
       resume: (runId) => this.#resumeAutopilot(runId),
       onLog: (line) => this.options.onLog?.(line, "stderr"),
+      onPendingChange: (pending) => this.options.onAutoResumePending?.(pending),
     });
+  }
+
+  /** When the soonest planned automatic resume is due (ms), or null when none waits; a quit names it. */
+  get autoResumeAt(): number | null {
+    return this.#autoResume.nextResumeAt();
   }
 
   /**
@@ -1108,6 +1116,9 @@ export class StudioCore {
 
   async stop(): Promise<void> {
     this.#planReviews?.stop();
+    // A pause appended before `start()` may have planned a resume: it, and the hold on the Mac
+    // awake that it asked for, end with the core either way.
+    this.#autoResume.dispose();
     // `init()` opened the sandbox, so a core that never started still gives it back.
     if (!this.#started) return this.sandbox?.dispose();
     this.#started = false;
@@ -1117,7 +1128,6 @@ export class StudioCore {
     if (this.#x.idleTimer) clearInterval(this.#x.idleTimer);
     this.#x.idleTimer = null;
     if (this.#activityWarmup) clearTimeout(this.#activityWarmup);
-    this.#autoResume.dispose();
     // No orphan contractors: a delegation must not outlive the studio that briefed it. (The
     // first live build's contractor survived an app restart and collided with its successor.)
     for (const delegation of this.#x.activeDelegations.values()) delegation.abort.abort();
