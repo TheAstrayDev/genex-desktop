@@ -10179,4 +10179,110 @@ describe("MAP-5. scope inflated without the user", () => {
     });
     assert.deepEqual(playtestStepWords(null), { note: "", card: null });
   });
+
+  /**
+   * Review SR-4: `surfacedBeyond` rode only a yielded round, never the journal. A director Resume
+   * (the same worker id) or a `worker_start replaces=` of the part started a fresh loop with an empty
+   * list, so the cap reset and the user was asked about the same helicopter again. The part's earlier
+   * cards are read back from the run's log, through the restarts the director recorded.
+   */
+  it("MAP-5h. a restarted part (Resume, or worker_start replaces=) remembers the cards it already put to the user, from the run's log", async () => {
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { BEYOND_CARDS_PER_PART } = await import("../../src/harness-seed/loop/facet/beyond.ts");
+    const { FACET_POLICY } = await import("../../src/harness-seed/loop/facet/policy.ts");
+    const run = { ...(await apexRun()), engine: "fake" } as Run;
+    const custom = (event_type: string, payload: Record<string, unknown>) => ({
+      data: { type: "custom", event_type, payload },
+    });
+    const card = (runId: string, facetId: string, beyond: string) =>
+      custom("autopilot_decision", { runId, facetId, beyond, decision: `${facetId}: ${beyond}` });
+    const log = [
+      custom("director_worker", { runId: run.runId, workerId: "race" }),
+      card(run.runId, "race", "a police helicopter over the course"),
+      custom("director_worker", { runId: run.runId, workerId: "race2", replaces: "race" }),
+      card(run.runId, "race2", "a police pursuit system"),
+      custom("director_worker", { runId: run.runId, workerId: "race3", replaces: "race2" }),
+      custom("director_worker", { runId: run.runId, workerId: "crowd" }),
+      card(run.runId, "crowd", "a stadium announcer"),
+      card("another-run", "crowd", "fireworks"),
+      card("another-run", "crowd", "a blimp"),
+    ];
+    const pursuit = { what: "a police pursuit system", why: "pressure", scope: "adds", check: null };
+    // `planner: false` leaves the planner's clock short, so a round asks only the reviewer.
+    const partLoop = (id: string, { planner = true } = {}) => {
+      const recorder = ctxRecorder({
+        handlers: {
+          "events.list": () => log,
+          "engine.complete": () => ({ message: { content: JSON.stringify(pursuit) } }),
+        },
+      });
+      const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+      const loop = {
+        ctx: recorder.ctx,
+        run,
+        runThreadId: "run-thread",
+        facet: { id, title: id },
+        spec: { id, title: id, checks: [], cameras: [] },
+        board: { lit: { pass: true, weight: "identity" } },
+        moves: [] as Array<Record<string, unknown>>,
+        milestonesDone: new Set<string>(),
+        milestonesSetAside: new Set<string>(),
+        polishStreak: 0,
+        lastLiveness: null,
+        lastBigMove: null as Record<string, unknown> | null,
+        // What every new start of the loop begins with (state.ts freshResumable).
+        surfacedBeyond: [] as string[],
+        defectList: [],
+        policy: FACET_POLICY,
+        legacy: false,
+        hasTime: () => planner,
+        appendRun: async (type: string, payload: Record<string, unknown>) => void events.push({ type, payload }),
+      };
+      const cards = () => events.filter((e) => e.type === "autopilot_decision");
+      return { loop, recorder, cards };
+    };
+
+    // The part restarted twice (race → race2 → race3; race3 has asked nothing itself yet): its two
+    // cards were already put to the user, so a third wording asks nothing.
+    const restarted = partLoop("race3");
+    restarted.loop.lastBigMove = { what: "a helicopter chasing the leader", why: "pressure", scope: "adds" };
+    await chooseRoundMove(restarted.loop as never, { iteration: 2 } as never);
+    assert.equal(BEYOND_CARDS_PER_PART, 2);
+    assert.deepEqual(
+      restarted.cards().map((c) => c.payload.decision),
+      [],
+      "the part's cap counts the cards it put to the user before the restart",
+    );
+    // …and the planner hears what the part already asked, though this loop never asked it.
+    restarted.loop.lastBigMove = null;
+    await chooseRoundMove(restarted.loop as never, { iteration: 3 } as never);
+    const prompt = restarted.recorder.paramsOf("engine.complete").map((params) => {
+      const request = params as { messages: Array<{ content: string }> };
+      return String(request.messages[0]?.content);
+    });
+    assert.match(
+      prompt.at(-1)!,
+      /ALREADY PUT TO THE USER \(outside the ask; never propose these\): a police helicopter over the course \| a police pursuit system/,
+    );
+    assert.equal(restarted.cards().length, 0, "and the planner's pursuit is not asked again");
+
+    // A Resume keeps the worker's id: the same proposal is not put to the user twice.
+    const resumed = partLoop("crowd", { planner: false });
+    resumed.loop.lastBigMove = { what: "a stadium announcer", why: "life", scope: "adds" };
+    await chooseRoundMove(resumed.loop as never, { iteration: 2 } as never);
+    assert.equal(resumed.cards().length, 0, "asked once, across the Resume");
+    // …while another run's cards are not this part's: one more new proposal is still a card, and it
+    // names its part and its proposal in typed fields, so the next restart can read it back.
+    resumed.loop.lastBigMove = { what: "pyrotechnics at the finish", why: "life", scope: "adds" };
+    await chooseRoundMove(resumed.loop as never, { iteration: 3 } as never);
+    assert.equal(resumed.cards().length, 1);
+    assert.equal(resumed.cards()[0]!.payload.facetId, "crowd");
+    assert.equal(resumed.cards()[0]!.payload.beyond, "pyrotechnics at the finish");
+    assert.equal(resumed.cards()[0]!.payload.runId, run.runId);
+    assert.equal(
+      resumed.recorder.paramsOf("events.list").length,
+      1,
+      "the log is read once per start of the loop, not once per card",
+    );
+  });
 });

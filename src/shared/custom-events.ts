@@ -535,7 +535,17 @@ export interface SelfChangePayload {
 
 export interface CustomEventMap {
   asset_delivered: AssetDeliveredPayload;
-  autopilot_decision: RunScope & { decision?: string; plain?: string; text?: string };
+  /**
+   * `facetId` and `beyond`: a card about a step beyond the ask names its part and the proposal, so a
+   * restart of the part reads back what it already asked (seed loop/facet/beyond.ts).
+   */
+  autopilot_decision: RunScope & {
+    decision?: string;
+    plain?: string;
+    text?: string;
+    facetId?: string;
+    beyond?: string;
+  };
   autopilot_paused: RunScope;
   autopilot_plan_review: PlanReviewPayload;
   autopilot_provider_outage: RunScope & { phase?: string; wait?: number; attempt?: number; error?: string };
@@ -584,6 +594,8 @@ export interface CustomEventMap {
     mode?: string;
     state?: string;
     stoppedBecause?: string;
+    /** The worker this one restarts (`worker_start replaces=`): the same part. */
+    replaces?: string;
   };
   facet_build_started: RunScope;
   facet_check_replanned: FacetNoticePayload;

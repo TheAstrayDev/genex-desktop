@@ -19,7 +19,7 @@ import { similarDefect } from "../defects.ts";
 import { recordDecision } from "../record.ts";
 import { movesInStage, stageOf } from "../stage.ts";
 import { isBeyondScope } from "../../scope.ts";
-import { askUserAboutBeyond, BEYOND_MESSAGE } from "../beyond.ts";
+import { askUserAboutBeyond, BEYOND_MESSAGE, recallAskedBeyond } from "../beyond.ts";
 
 /** The planner is asked for a move only with this much of the facet's clock left (or a slice of a short one). */
 const PLANNER_MOVE_MIN_MS = 8 * MINUTE_MS;
@@ -153,8 +153,9 @@ async function askPlannerForMove(loop: FacetLoop, round: FacetRound): Promise<Ro
       moves,
       counts: loop.incumbentEvidence?.state?.counts ?? null,
       cameras: spec.cameras,
-      // What was already put to the user is theirs to answer, never the planner's to propose again.
-      asked: loop.surfacedBeyond ?? [],
+      // What was already put to the user is theirs to answer, never the planner's to propose again —
+      // before this start of the part too (facet/beyond.ts).
+      asked: await recallAskedBeyond(loop),
     });
   } catch (err: any) {
     if (isStopped(err, ctx)) return stoppedByUser(loop);
