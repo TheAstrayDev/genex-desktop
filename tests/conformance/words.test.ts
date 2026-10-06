@@ -312,6 +312,52 @@ describe("how a night reads when it is over", () => {
     assert.match(paused.because, /kept/);
   });
 
+  it("tells the owner what to fix when the provider stopped accepting the account, from the close's typed kind", () => {
+    // The NFS run (6 Oct 2026): "Your organization has disabled Claude subscription access…".
+    const lost = nightWords({
+      rounds: 5,
+      landed: false,
+      paused: true,
+      hasBuild: true,
+      pausedOn: "auth",
+      stoppedBecause:
+        "the engine lost its sign-in before the director called finish (Your organization has disabled Claude subscription access for Claude Code); the run is paused — sign in again (or have the admin turn access back on), then Resume; nothing was landed (the run paused on its provider; nothing is made live that nobody could check)",
+    });
+    assert.equal(lost.headline, "Paused after 5 rounds");
+    assert.match(lost.because, /stopped accepting this account/);
+    assert.match(lost.because, /sign in again/i);
+    assert.match(lost.because, /Resume/);
+    assert.doesNotMatch(lost.because, /director|engine|nobody could check/);
+    const down = nightWords({ rounds: 5, landed: false, paused: true, hasBuild: true, pausedOn: "unavailable" });
+    assert.match(down.because, /model provider stayed down/);
+    for (const words of [lost, down]) assert.doesNotMatch(words.because, /\b(night|morning|overnight|tonight)\b/i);
+    // The close's typed kind reaches the card: the chat's result entry carries it to the card's words.
+    const closed: EventEnvelope = {
+      id: "e1",
+      thread_id: "t",
+      session_id: null,
+      turn_id: null,
+      created_at: "2026-10-06T11:08:17.000Z",
+      data: {
+        type: "custom",
+        event_type: "run_finished",
+        payload: { runId: "run_a", executionStatus: "paused", landed: false, limit: { kind: "auth", message: "x" } },
+      },
+    };
+    const card = toEntries([closed]).find((entry) => entry.kind === "morning");
+    assert.equal(card?.kind === "morning" ? card.pausedOn : null, "auth");
+    const words = morningWords({
+      rounds: 0,
+      kept: 0,
+      undone: 0,
+      landed: false,
+      paused: true,
+      hasBuild: false,
+      pausedOn: "auth",
+    });
+    assert.match(words.because, /stopped accepting this account/);
+  });
+
   it("does not tell the owner a night they stopped simply finished", () => {
     const stopped = nightWords({ rounds: 6, landed: false, hasBuild: true, stoppedBecause: "stopped by the user" });
     assert.equal(stopped.headline, "Stopped after 6 rounds · the build so far is kept");
@@ -662,6 +708,17 @@ describe("what the night says as it goes", () => {
       assert.match(line, /Crash damage/, line);
     }
     assert.match(lines[0]!, /Crash damage · round 3/);
+  });
+
+  it("says a round waits for a lost provider, and why, without quoting the exception or counting it", () => {
+    const line = outageWords({ facetTitle: "Sky", phase: "verify", lost: "auth" });
+    assert.match(line, /^Sky: the model provider stopped accepting the account — the round waits for it/);
+    assert.match(line, /nothing is counted against the build/);
+    assert.doesNotMatch(line, /busy|min before|organization/);
+    assert.match(outageWords({ facetTitle: "Sky", phase: "build", lost: "rate_limit" }), /session limit/);
+    const status = statusWords("run run_fixture123456 · Sky — waiting for its model provider (lost sign-in)");
+    assert.equal(status.line, "Sky · waiting for the model provider (lost sign-in)");
+    assert.equal(status.short, "Sky · waiting");
   });
 
   it("says the provider is busy without quoting the exception", () => {

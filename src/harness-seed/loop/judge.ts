@@ -35,7 +35,8 @@ import { hudFactLines } from "./judge-facts.ts";
 import { hudBudgetFor } from "./hud-budget.ts";
 import { LIGHT_EFFORT } from "./config.ts";
 import { HostMethod } from "./host-methods.ts";
-import { EngineFailure, noteProviderLoss, providerLossFor, providerLostError } from "./outage.ts";
+import { EngineFailure } from "./outage.ts";
+import { noteProviderLoss, providerLossFor, providerLostError } from "./provider-loss.ts";
 import { MINUTE_MS, SECOND_MS, sleep } from "./time.ts";
 import { workingGoal } from "./goal-prompts.ts";
 import { judgeScopeLines, LIVENESS_SCOPE_RULE, PROPOSAL_SCOPE_RULE } from "./scope-prompts.ts";
@@ -381,9 +382,10 @@ export async function askJudgeFor(ctx: HarnessCtx, ask: JudgeAsk): Promise<Judge
     try {
       response = await ctx.call(HostMethod.EngineComplete, judgeRequest(ctx, ask, using, sha));
     } catch (err) {
-      // A sign-in gone or a limit opens the engine's circuit for the whole run (outage.ts).
-      noteProviderLoss(run.runId, using.engine, err);
-      await recoverOrThrow(ctx, run, using, err, attempt);
+      // A sign-in gone or a limit opens the engine's circuit for the whole run (outage.ts), and
+      // the failure then names the engine, so whoever waits for it knows which one.
+      const loss = noteProviderLoss(run.runId, using.engine, err);
+      await recoverOrThrow(ctx, run, using, loss ? providerLostError(loss) : err, attempt);
       continue;
     }
     const content = String(response.message?.content ?? "");

@@ -86,6 +86,7 @@ export interface FacetOptions {
   baseConsole: unknown[];
   policy: FacetPolicy;
   onLoopState: ((state: AnyRecord) => void) | null;
+  onProviderLost: ((lost: AnyRecord) => void) | null;
 }
 
 /** What `runFacetLoop` works out once from its options: the facet, its places, its engine, its clock. */
@@ -438,6 +439,8 @@ function optionDefaults(): Omit<FacetOptions, "runThreadId" | "facetThreadId" | 
     policy: FACET_POLICY,
     /** Called with a LoopState at three points of every round — the director's window in. */
     onLoopState: null,
+    /** Called when a round starts waiting for a lost provider (facet/provider.ts) — the director's wake. */
+    onProviderLost: null,
   };
 }
 

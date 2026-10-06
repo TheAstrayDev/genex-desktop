@@ -15,6 +15,7 @@ import { diffAgainstIncumbent, scoreEvidence } from "../scoring.ts";
 import { noisyRegressions, remeasurable } from "../round-judgement.ts";
 import { OutagePhase, recordDecision, roundFields } from "../record.ts";
 import { tasteVerdict } from "./taste.ts";
+import { lostProviderOf, waitForProvider } from "../provider.ts";
 import { registryRefusal } from "../../registry.ts";
 import { FacetStage, isZeroDiff, roundStage } from "../stage.ts";
 
@@ -61,20 +62,30 @@ function brokenVerdict(round: FacetRound): void {
   round.verdictSource = VerdictSource.Broken;
 }
 
-/** A prose-only plan (the v1 rule): the blind A/B facet judge picks, and a judge that cannot answer ties. */
+/**
+ * A prose-only plan (the v1 rule): the blind A/B facet judge picks, and a judge that cannot answer
+ * ties — unless its provider is lost: then the round waits for it (`waitForJudge`).
+ */
 async function legacyVerdict(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
   const { ctx, facet, run } = loop;
-  try {
-    round.verdict = await facetCompare(ctx, {
-      run,
-      facet,
-      challenger: round.evidence,
-      incumbentEvidence: loop.incumbentEvidence,
-      iterationId: round.iterationId,
-    });
-  } catch (err: any) {
-    if (isStopped(err, ctx)) return stoppedByUser(loop);
-    round.verdict = autoTie(loop, `facet judge unavailable — auto-tie: ${err?.message ?? err}`);
+  for (;;) {
+    try {
+      round.verdict = await facetCompare(ctx, {
+        run,
+        facet,
+        challenger: round.evidence,
+        incumbentEvidence: loop.incumbentEvidence,
+        iterationId: round.iterationId,
+      });
+      break;
+    } catch (err: any) {
+      if (isStopped(err, ctx)) return stoppedByUser(loop);
+      const waited = await waitForJudge(loop, round, err);
+      if (waited?.again) continue;
+      if (waited) return waited.flow;
+      round.verdict = autoTie(loop, `facet judge unavailable — auto-tie: ${err?.message ?? err}`);
+      break;
+    }
   }
   round.verdictSource = VerdictSource.Legacy;
 }
@@ -84,13 +95,28 @@ function autoTie(loop: FacetLoop, reason: string): AnyRecord {
   return { pick: Side.Incumbent, satisfied: false, biggest_gap: loop.biggestGap, reason, defects: [] };
 }
 
+/** What waiting for a judge's lost provider came to: verify again, or the round's end. */
+type JudgeWait = { again: true } | { again: false; flow: RoundFlow };
+
+/**
+ * A judge (or a follow-up, or a playtester) whose provider is lost — its sign-in, a limit, an
+ * outage past the ladder — is no verdict: the round waits for it (facet/provider.ts) and is
+ * verified again once it is back (the NFS run auto-tied a round on a disabled account). Null for
+ * any other failure, which keeps its own policy.
+ */
+async function waitForJudge(loop: FacetLoop, round: FacetRound, err: unknown): Promise<JudgeWait | null> {
+  const lost = lostProviderOf(loop, err, loop.engineId);
+  if (!lost) return null;
+  const flow = await waitForProvider(loop, round, lost, OutagePhase.Verify);
+  return flow ? { again: false, flow } : { again: true };
+}
+
 /**
  * The scoreboard verdict, retried while the judge is overloaded. A judge that answered 529 is
  * waited for, not auto-tied: an auto-tie rolls a good build back and retains it on a branch
- * nobody merges.
+ * nobody merges. A judge whose provider is lost is waited for too (`waitForJudge`).
  */
 async function scoreboardVerdict(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
-  const { ctx } = loop;
   let verifyOutages = 0;
   for (;;) {
     try {
@@ -98,12 +124,30 @@ async function scoreboardVerdict(loop: FacetLoop, round: FacetRound): Promise<Ro
       await decideOnBoard(loop, round);
       return;
     } catch (err: any) {
-      if (isStopped(err, ctx)) return stoppedByUser(loop);
-      if (!(await waitOutOutage(loop, round, err, verifyOutages))) return outageTie(loop, round, err);
-      verifyOutages += 1;
-      if (ctx.cancelled) return outageTie(loop, round, err);
+      const next = await afterFailedVerification(loop, round, err, verifyOutages);
+      if (!next.again) return next.flow;
+      if (next.outage) verifyOutages += 1;
     }
   }
+}
+
+/**
+ * A verification that threw: a stop ends the round, an overloaded judge is waited out on the
+ * ladder, a lost provider is waited for, and anything else is an auto-tie on the record.
+ */
+async function afterFailedVerification(
+  loop: FacetLoop,
+  round: FacetRound,
+  err: AnyRecord,
+  outages: number,
+): Promise<JudgeWait & { outage?: boolean }> {
+  const { ctx } = loop;
+  if (isStopped(err, ctx)) return { again: false, flow: stoppedByUser(loop) };
+  if (await waitOutOutage(loop, round, err, outages)) {
+    if (ctx.cancelled) return { again: false, flow: outageTie(loop, round, err) };
+    return { again: true, outage: true };
+  }
+  return (await waitForJudge(loop, round, err)) ?? { again: false, flow: outageTie(loop, round, err) };
 }
 
 /** Verification that could not finish: an auto-tie, on the record as an outage. */

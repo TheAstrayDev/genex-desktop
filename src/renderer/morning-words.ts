@@ -18,6 +18,8 @@ export interface MorningNight {
   landed: boolean | null;
   /** the night stopped where Resume can pick it up: a plan limit, a quit, a crash */
   paused: boolean;
+  /** the provider failure that paused it (the close's `limit.kind`), when one did */
+  pausedOn?: string | null;
   /** there is a merged build to play or make live — the same fact the buttons are gated on */
   hasBuild: boolean;
   stoppedBecause?: string | null;
@@ -66,6 +68,7 @@ export function morningWords(night: MorningNight): MorningWords {
     landed: night.landed,
     stoppedBecause: night.stoppedBecause ?? null,
     paused: night.paused,
+    pausedOn: night.pausedOn ?? null,
     hasBuild: night.hasBuild,
     // A landed night's close says how it landed and whether anything checked it — the one detail
     // the user cannot see for themselves. The sentence itself is words.ts's, so the card, the run

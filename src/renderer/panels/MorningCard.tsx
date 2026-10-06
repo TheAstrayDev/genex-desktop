@@ -57,6 +57,8 @@ export interface MorningCardProps {
   landed: boolean | null;
   /** the night is paused: Resume is the card's own primary action, not a grey line under it */
   paused?: boolean;
+  /** the provider failure that paused it (the close's `limit.kind`), when one did */
+  pausedOn?: string | null;
   stoppedBecause?: string | null;
   /** the night's report to the user, when it wrote one */
   summary: string | null;
@@ -87,6 +89,7 @@ export function MorningCard({
   undone,
   landed,
   paused = false,
+  pausedOn = null,
   stoppedBecause,
   summary,
   landingLine,
@@ -110,6 +113,7 @@ export function MorningCard({
     undone,
     landed,
     paused,
+    pausedOn,
     // The sentence and the buttons read the same fact: a build exists only if there is one to open.
     hasBuild: Boolean(project && commit),
     stoppedBecause: stoppedBecause ?? null,

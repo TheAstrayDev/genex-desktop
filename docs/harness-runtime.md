@@ -570,7 +570,7 @@ Until-satisfied director runs treat the clock as a safety ceiling; explicit dura
 their working window and user Finish override. The lead's `finish` is refused while working time
 remains unless the user asked: Finish, or `user_asked` quoting the user's own words from a message
 delivered into the run (`integrate.ts` `userQuoted`, checked against the run inbox's steers). However a night ends — the lead's `finish`, the
-clock, the user's Finish, an engine limit — the close judges the head it is about to make live
+clock, the user's Finish — the close judges the head it is about to make live
 (`director/tools.ts` `judgeTheLanding`, from `integrate.ts`): blind against the build the user had,
 or, for a new game or one whose start nobody could photograph, a yes-or-no on the goal
 (`close-prompts.ts`). A lead's own blind judge of that head against the start, whichever build it
@@ -662,15 +662,36 @@ local timing history is bounded, survives Resume and records any omitted spans. 
 origins keep within-process wall-clock corrections out of elapsed unions. Concurrent work totals are
 separate from wall-time union; neither is a measured model-speed improvement.
 
+### A lost provider
+
+A provider that stops answering is no verdict on anybody's work (the NFS run, 2026-10-06, had its
+account disabled 3 h 05 min in, wrapped up, and landed an unchecked build). The engines call a
+revoked or disabled access a sign-in failure (`auth`): Claude Code from the CLI's own error code on
+the reply (`authentication_failed`, `oauth_org_not_allowed`, `account_on_hold`, `billing_error`) or
+the access words both engines share (`engines/common.ts` `isAccessLost`), also when the result's
+subtype says success. A lead turn a lost provider ended — a sign-in, a limit it will not wait out,
+an outage the patience ladder could not outlast, a 529 the session returned included — pauses the
+night (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
+or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and no learning pass
+until the run ends. A sign-in, cap or reset-naming limit opens that engine's circuit for the run
+(`loop/outage.ts`): judge, critic and ship-review calls to it fail at once with its kind until the
+run starts again or the limit resets, and a sign-in any engine of the run lost pauses the night at
+the lead's next turn or wake. A worker round the provider failed (`facet/provider.ts`) is recorded
+as `facet_provider_outage` with `lost`, never judged, struck or rolled back: its build or
+verification waits for the provider and runs again, a run's stop keeps it on its `…-stopped` ref,
+and a usage cap still stops the worker with its limit for the lead.
+
 ### Automatic resume
 
-A paused build is the user's to resume, with two exceptions the host takes itself
+A paused build is the user's to resume, with three exceptions the host takes itself
 (`main/core/auto-resume.ts`) while Settings → Harness **Resume builds automatically** is on (the
 default). A director night closed on an engine limit (`run_finished.limit`: `rate_limit` or
 `usage_limit` with `retryAfterMs`, counted from `limit.at` when the close has it) resumes two
 minutes after the limit resets. Both engines read that wait from the limit's own text
 (`engines/limit-reset.ts`: Claude Code's "resets 9:50pm", Codex's "try again in 1 hour 30
-minutes" or "try again at 3:45 PM"); a limit that names no reset is the user's to resume. A run the loop's
+minutes" or "try again at 3:45 PM"); a limit that names no reset is the user's to resume. One a
+provider outage paused (`unavailable`) is tried again 15 minutes after it (`provider-outage`). One
+paused on a lost sign-in (`auth`) is the user's to fix and resume (`access-lost`). A run the loop's
 crash paused (the host saw the harness exit with it open, `onHarnessDied`, and the reborn loop's
 close came after) resumes once the harness is ready. The pure planner `autoResumePlan` reads typed
 fields only, never a close's words. A resume goes through the Resume button's own

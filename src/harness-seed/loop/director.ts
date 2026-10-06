@@ -46,15 +46,8 @@ import path from "node:path";
 import { GIT, gitAt } from "./git.ts";
 import { MIN_DELEGATE_TIMEOUT_MS, PLAN_REVIEW_WAIT_MS } from "./config.ts";
 import { HostMethod } from "./host-methods.ts";
-import {
-  EngineFailure,
-  engineLimitOf,
-  isProviderLoss,
-  noteProviderLoss,
-  pauseDecision,
-  pauseEnding,
-  StopReason,
-} from "./outage.ts";
+import { EngineFailure, engineLimitOf, StopReason } from "./outage.ts";
+import { isProviderLoss, noteProviderLoss, pauseDecision, pauseEnding } from "./provider-loss.ts";
 import { RunEvent } from "./run-events.ts";
 import { isCommit } from "./shell.ts";
 import { isResumeFailure } from "./chat-session.ts";

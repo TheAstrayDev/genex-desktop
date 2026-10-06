@@ -28,16 +28,13 @@ import { HostMethod } from "../host-methods.ts";
 import {
   EngineFailure,
   engineLimitOf,
-  isProviderLoss,
   isTransientProviderError,
-  lostSignIn,
-  noteProviderLoss,
   outageDelays,
-  pauseDecision,
   StopReason,
   withProviderPatience,
   type EngineLimit,
 } from "../outage.ts";
+import { isProviderLoss, lostSignIn, noteProviderLoss, pauseDecision } from "../provider-loss.ts";
 import { CLIP_DETAIL } from "../text.ts";
 import { RunEvent } from "../run-events.ts";
 import { SteerDelivery } from "../steer-delivery.ts";

@@ -629,7 +629,8 @@ export interface CustomEventMap {
     milestoneId?: string | null;
     source?: string;
   };
-  facet_provider_outage: RunScope & { phase?: string; wait?: number; attempt?: number; error?: string };
+  /** `lost`: the provider was lost (an engine failure kind), and the round waits for it rather than retry on a ladder. */
+  facet_provider_outage: RunScope & { phase?: string; wait?: number; attempt?: number; error?: string; lost?: string };
   facet_review_enforced: FacetReviewEnforcedPayload;
   improvement_applied: { file?: string; reason?: string; snapshot_id?: string };
   interview_question: { question?: string; choices?: InterviewChoice[] };

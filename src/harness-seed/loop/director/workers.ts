@@ -20,6 +20,7 @@ import { isGameKind, KIND_NAMES, writeDeclaredGame } from "../kinds.ts";
 import { refusalRecord, roundRecord } from "../ledger.ts";
 import { roleEffort, roleEngine, RoleKey } from "../model-roles.ts";
 import { EngineFailure, isEngineLimit, limitWords, StopReason } from "../outage.ts";
+import { lossWords, noteProviderLoss } from "../provider-loss.ts";
 import { isRunning, setWorkerState, WorkerMode, WorkerState } from "../outcomes.ts";
 import { runRef } from "../repo.ts";
 import { RunEvent } from "../run-events.ts";
@@ -1573,6 +1574,12 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
       worker.loop = loop;
       if (said) note(said, NoteKind.WorkerLoop);
     },
+    // A round that waits for a lost provider wakes the lead; a lost sign-in then pauses the night (wake.ts).
+    onProviderLost: (lost: AnyRecord) =>
+      note(
+        `worker ${worker.id}: its round waits for the model provider (${lost.engine}: ${lossWords(lost.kind)}) — nothing is counted against it`,
+        NoteKind.WorkerLimit,
+      ),
     steering: async () => {
       const own = worker.steering.splice(0, worker.steering.length);
       return own;
@@ -1678,7 +1685,11 @@ function delegateSingle(night: Night, worker: Worker, prompt: string, resume: st
       },
       ownership: singleOwnership(night, worker),
     })
-    .catch((err: any) => failedDelegation(night, err));
+    .catch((err: any) => {
+      // A sign-in or a limit the builders' engine lost holds it for the whole run (outage.ts).
+      noteProviderLoss(run.runId, roleEngine(run, RoleKey.Builder), err);
+      return failedDelegation(night, err);
+    });
 }
 
 /** Whatever a single session made is committed — partial work is worth more than a clean tree. */

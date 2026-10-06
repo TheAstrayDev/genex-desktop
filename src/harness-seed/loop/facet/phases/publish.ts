@@ -2,11 +2,8 @@
 import { isMeasured } from "../../checks.ts";
 import { appliesToBuild } from "../../applies-to-build.ts";
 import { Against, againstWords, observedFrom, roundRule, VerdictPass, verdictRecord } from "../../verdict.ts";
-import { GIT, commitAll, shortSha } from "../../git.ts";
 import { StopCode, stopWith } from "../../outcomes.ts";
-import { EngineFailure } from "../../outage.ts";
 import { RunEvent } from "../../run-events.ts";
-import { MINUTE_MS } from "../../time.ts";
 import { CheckWeight } from "../../spec.ts";
 import type { AnyRecord } from "../../../types/harness.d.ts";
 import type { FacetLoop, FacetRound } from "../state.ts";
@@ -20,8 +17,6 @@ import { Side } from "../../judge.ts";
 const MAX_RECORD_DEFECTS = 24;
 /** Build turns the engine may fail in a row before the facet stops. */
 const ENGINE_FAILURES_TO_STOP = 3;
-/** How long a rate limit is waited out when the engine names no time. */
-const DEFAULT_RATE_LIMIT_WAIT_MS = MINUTE_MS;
 
 /** The round's record, published; what the round cost, measured. */
 export async function publishRound(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
@@ -274,57 +269,18 @@ async function breakCircuit(loop: FacetLoop, round: FacetRound, reason: string):
   return RoundFlow.Stop;
 }
 
-/** The build turn failed in the engine: out of usage stops the facet, three in a row stops it, a rate limit is waited out. */
-async function checkEngineHealth(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
-  const { deadline, result, sleepFor } = loop;
-  const failure = round.buildEngineError;
-  if (failure.kind === EngineFailure.UsageLimit) return stopOutOfUsage(loop, round);
+/**
+ * The build turn failed in the engine, three in a row stops the facet. A lost provider (a sign-in,
+ * a limit, an outage) never reaches here: its round waits for the provider (facet/provider.ts).
+ */
+function checkEngineHealth(loop: FacetLoop, round: FacetRound): RoundFlow {
+  const { result } = loop;
   loop.engineFailures += 1;
-  if (loop.engineFailures >= ENGINE_FAILURES_TO_STOP) {
-    stopWith(
-      result,
-      StopCode.EngineExhausted,
-      `the engine failed ${loop.engineFailures} build turns in a row — last: ${round.buildFailed}`,
-    );
-    return RoundFlow.Stop;
-  }
-  if (failure.kind === EngineFailure.RateLimit) {
-    const waitMs = Math.min(failure.retryAfterMs ?? DEFAULT_RATE_LIMIT_WAIT_MS, deadline - Date.now());
-    await sleepFor(Math.max(0, waitMs));
-  }
-}
-
-/** The builder's engine is out of usage — a cap that outlives the night: stop, and keep the half-built work. */
-async function stopOutOfUsage(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
-  const { engineId, result, worktree } = loop;
-  const failure = round.buildEngineError;
-  stopWith(result, StopCode.UsageLimit, `the engine (${engineId}) is out of usage: ${round.buildFailed}`);
-  // By kind as well as in words: a director on the other subscription reads this as the
-  // workers' limit, not its own (cross-provider roles).
-  result.limit = {
-    kind: EngineFailure.UsageLimit,
-    engine: engineId,
-    message: String(round.buildFailed ?? ""),
-    retryAfterMs: typeof failure.retryAfterMs === "number" ? failure.retryAfterMs : null,
-  };
-  if (worktree) await keepHalfBuilt(loop, round);
+  if (loop.engineFailures < ENGINE_FAILURES_TO_STOP) return;
+  stopWith(
+    result,
+    StopCode.EngineExhausted,
+    `the engine failed ${loop.engineFailures} build turns in a row — last: ${round.buildFailed}`,
+  );
   return RoundFlow.Stop;
-}
-
-/** The half-built round, committed and kept reachable; the stop reason says where. Best-effort. */
-async function keepHalfBuilt(loop: FacetLoop, round: FacetRound): Promise<void> {
-  const { ctx, facet, git, gitOptions, gitWhere, keepReachable, result } = loop;
-  try {
-    await commitAll(
-      ctx,
-      gitWhere,
-      `facet ${facet.id} iteration ${round.iteration}: half-built, engine out of usage — unjudged`,
-      { allowEmpty: true, ...gitOptions },
-    );
-    const held = await git(GIT.head);
-    await keepReachable(held);
-    result.stoppedBecause += ` (work in progress preserved as commit ${shortSha(held)})`;
-  } catch {
-    /* preservation is best-effort */
-  }
 }

@@ -14,6 +14,7 @@ import { RoundFlow, stoppedByUser } from "../flow.ts";
 import { steerPrompt, WIND_DOWN_ASK } from "../prompt.ts";
 import { OutagePhase, roundFields } from "../record.ts";
 import { facetPromptFor } from "./brief.ts";
+import { announceLoss, lostProviderOf, stopOutOfUsage, waitForProvider } from "../provider.ts";
 
 /**
  * How a delegated build turn failed, beside the engine's own failure kinds: the clock cut it
@@ -63,6 +64,8 @@ export async function buildChallenger(loop: FacetLoop, round: FacetRound): Promi
   if (ctx.cancelled) return stoppedByUser(loop);
   const retried = await waitOutProviderOutage(loop, round);
   if (retried) return retried;
+  const held = await holdForProvider(loop, round);
+  if (held) return held;
   if (!round.buildFailed) loop.outageRetries = 0;
 
   // ── stopped on purpose is not a lost round ──
@@ -301,7 +304,41 @@ async function waitOutProviderOutage(loop: FacetLoop, round: FacetRound): Promis
     });
   await sleepFor(wait);
   if (ctx.cancelled) return stoppedByUser(loop);
+  return buildAgain(loop, round, false);
+}
+
+/**
+ * The same iteration again: the half-written attempt rolled back (unless that was done already),
+ * and the round's count given back, so the provider's weather costs the facet no round.
+ */
+async function buildAgain(loop: FacetLoop, round: FacetRound, reset = true): Promise<RoundFlow> {
+  const { ctx, gitOptions, gitWhere, worktree } = loop;
+  if (reset && worktree)
+    await resetClean(ctx, gitWhere, isCommit(loop.incumbentCommit) ? loop.incumbentCommit : null, {
+      ...gitOptions,
+      bestEffort: true,
+    });
   round.iteration -= 1;
   loop.iterationsThisRound -= 1;
   return RoundFlow.Next;
+}
+
+/**
+ * A build turn a lost provider failed — its sign-in, one of its limits, an outage the ladder could
+ * not outlast — is never a broken build (the NFS run struck one, and rolled its work back): it is
+ * recorded as an outage and waits for the provider (facet/provider.ts), then the same iteration is
+ * built again; a stop while it waits keeps the attempt on its `…-stopped` ref. A usage cap stops
+ * the facet at once, as it always has, with the limit for the director. Null for any other failure.
+ */
+async function holdForProvider(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
+  const failure = round.buildEngineError;
+  if (!round.buildFailed || loop.ctx.cancelled || failure?.stopReason === StopReason.Stopped) return null;
+  const err = failure?.kind ? { ...failure, message: round.buildFailed } : round.buildFailed;
+  const lost = lostProviderOf(loop, err, loop.engineId);
+  if (!lost) return null;
+  if (lost.kind === EngineFailure.UsageLimit) {
+    await announceLoss(loop, round, lost, OutagePhase.Build);
+    return stopOutOfUsage(loop, round);
+  }
+  return (await waitForProvider(loop, round, lost, OutagePhase.Build)) ?? buildAgain(loop, round);
 }

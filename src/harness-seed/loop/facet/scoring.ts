@@ -17,6 +17,7 @@ import { FacetRole, NO_LOCK } from "./state.ts";
 import { MAX_WOBBLES } from "./policy.ts";
 import { HostMethod } from "../host-methods.ts";
 import { EngineFailure } from "../outage.ts";
+import { isProviderLoss } from "../provider-loss.ts";
 import { MINUTE_MS } from "../time.ts";
 import { CheckKind, CheckWeight, type Check } from "../spec.ts";
 
@@ -292,7 +293,8 @@ async function playResults(scoring: Scoring, playChecks: Check[]): Promise<Check
     }
     return played?.results ?? [];
   } catch (err: any) {
-    if (err?.kind === EngineFailure.Aborted || ctx.cancelled) throw err;
+    // A stop, or a lost provider the round waits for (facet/provider.ts): neither is "unmeasured".
+    if (err?.kind === EngineFailure.Aborted || ctx.cancelled || isProviderLoss(err?.kind)) throw err;
     return playChecks.map((check) => unmeasured(check, `playtester unavailable: ${err?.message ?? err}`));
   }
 }
