@@ -348,8 +348,12 @@ export class OpenRouterEngine implements Engine {
     return this.#catalog.models();
   }
 
-  /** OpenRouter's model list is public; reading it needs no key and spends nothing. */
+  /**
+   * OpenRouter's model list is public; reading it needs no key and spends nothing. A forced read
+   * (Settings' recheck) also asks about the key again.
+   */
   async refreshModels(force = false): Promise<void> {
+    if (force) this.#forgetStatus();
     await this.#catalog.refresh(this.baseUrl, () => this.#readCatalog(), force);
   }
 

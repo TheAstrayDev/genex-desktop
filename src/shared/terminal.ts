@@ -1,7 +1,11 @@
-/** What a terminal session runs: the game's shell, a Claude Code sign-in, or one command a chat reply offered. */
+/**
+ * What a terminal session runs: the game's shell, a Claude Code or OpenCode sign-in, or one command a
+ * chat reply offered.
+ */
 export const TerminalKind = {
   Shell: "shell",
   ClaudeLogin: "claude-login",
+  OpenCodeLogin: "opencode-login",
   Command: "command",
 } as const;
 export type TerminalKind = (typeof TerminalKind)[keyof typeof TerminalKind];

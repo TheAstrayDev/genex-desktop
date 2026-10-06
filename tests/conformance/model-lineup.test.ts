@@ -89,3 +89,14 @@ test("Settings choices override the rule, and the provider default always shows"
     ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna", "gpt-5.6-terra"],
   );
 });
+
+test("a catalog with no versions to read lists every model, but OpenRouter's hundreds start with its first eight", () => {
+  const listed = Array.from({ length: 20 }, (_, index) => row(`vendor/m${index}`, `M${index}`));
+  assert.equal(latestModels(EngineId.OpenCode, listed).size, 20);
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenRouter, listed)],
+    listed.slice(0, 8).map((model) => model.id),
+  );
+  assert.equal(shownModels(EngineId.OpenRouter, listed, { "vendor/m15": true }).has("vendor/m15"), true);
+  assert.equal(shownModels(EngineId.OpenRouter, listed, { "vendor/m0": false }).has("vendor/m0"), false);
+});

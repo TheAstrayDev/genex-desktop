@@ -329,6 +329,15 @@ export interface StudioApi {
   claudeLoginCode(code: string): Promise<ClaudeLoginState>;
   claudeLoginOpenBrowser(): Promise<unknown>;
   claudeLoginCancel(): Promise<unknown>;
+  /** OpenCode's own sign-in (`opencode auth login`), in the terminal dock. */
+  openCodeSignIn(): Promise<{ started: boolean; missingCli?: boolean }>;
+  /**
+   * Check a pasted OpenRouter API key with OpenRouter and keep it in the OS secret store when it is
+   * accepted. The answer is OpenRouter's status; the key never comes back.
+   */
+  openRouterKeySave(key: string): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /** Forget the saved OpenRouter key. */
+  openRouterKeyClear(): Promise<import("./engine-descriptor.ts").EngineStatus>;
   terminalList(): Promise<import("./terminal.ts").TerminalSession[]>;
   terminalAccessibility(): Promise<boolean>;
   terminalOpen(project: string): Promise<import("./terminal.ts").TerminalSession>;

@@ -118,6 +118,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:claude-login.code": "claudeLoginCode",
   "studio:claude-login.browser": "claudeLoginOpenBrowser",
   "studio:claude-login.cancel": "claudeLoginCancel",
+  "studio:opencode.signin": "openCodeSignIn",
+  "studio:openrouter.key.save": "openRouterKeySave",
+  "studio:openrouter.key.clear": "openRouterKeyClear",
   "studio:terminal.list": "terminalList",
   "studio:terminal.accessibility": "terminalAccessibility",
   "studio:terminal.open": "terminalOpen",
@@ -297,6 +300,9 @@ export interface StudioInvokePayloads {
   "studio:claude-login.code": { code: string };
   "studio:claude-login.browser": undefined;
   "studio:claude-login.cancel": undefined;
+  "studio:opencode.signin": undefined;
+  "studio:openrouter.key.save": { key: string };
+  "studio:openrouter.key.clear": undefined;
   "studio:terminal.list": undefined;
   "studio:terminal.accessibility": undefined;
   "studio:terminal.open": { project: string };

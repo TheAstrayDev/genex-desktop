@@ -279,6 +279,12 @@ function loginFixture(logins: Record<string, Awaited<ReturnType<SubscriptionEngi
     ]),
   );
   const deps: LoginIpcDeps = {
+    openCodeLogin: {
+      start: async () => {
+        started.push("opencode");
+        return { started: true };
+      },
+    },
     claudeLogin: {
       start: async (home: string | null) => {
         started.push(`claude ${home}`);
@@ -344,6 +350,75 @@ describe("both sign-in paths go through the controllers", () => {
       error: "Finish or stop the active work before changing the ChatGPT connection.",
     });
     assert.deepEqual(refused.started, []);
+  });
+
+  it("OpenCode signs in through its own CLI in the terminal, whatever else is running", async () => {
+    const { invoke, started } = loginFixture({}, true);
+    assert.deepEqual(await invoke("studio:opencode.signin"), { ok: true, value: { started: true } });
+    assert.deepEqual(started, ["opencode"]);
+  });
+
+  it("the OpenCode sign-in runs `opencode auth login` in the terminal, and rechecks its models when it ends", async () => {
+    const opened: Array<{ file: string; args: string[]; kind: string; env: NodeJS.ProcessEnv }> = [];
+    let exit: ((code: number) => void) | undefined;
+    let signedIn = 0;
+    const { openCodeLogin } = createLoginControllers({
+      terminals: {
+        open: (launch) => {
+          opened.push(launch);
+          exit = launch.onExit;
+          return { id: "t1", title: launch.title, kind: launch.kind, phase: "running" };
+        },
+        stop: async () => {},
+      },
+      openExternal: async () => {},
+      subscription: () => null,
+      pushUiEvent: () => {},
+      showCodexState: () => {},
+      showClaudeState: () => {},
+      onOpenCodeSignedIn: async () => {
+        signedIn++;
+      },
+      requireCli: async (provider) => ({
+        path: `/bin/${provider}`,
+        env: { PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-not-for-opencode", OPENCODE_CONFIG: "/oc.json" },
+        status: {
+          provider,
+          state: "ready",
+          selection: "automatic",
+          path: `/bin/${provider}`,
+          detail: "",
+          guidanceUrl: "",
+        },
+      }),
+    });
+    assert.deepEqual(await openCodeLogin.start(), { started: true });
+    assert.equal(opened[0]?.file, "/bin/opencode");
+    assert.deepEqual(opened[0]?.args, ["auth", "login"]);
+    assert.equal(opened[0]?.kind, "opencode-login");
+    assert.equal(opened[0]?.env.ANTHROPIC_API_KEY, undefined, "no other vendor's key reaches the sign-in");
+    assert.equal(opened[0]?.env.OPENCODE_CONFIG, "/oc.json");
+    exit?.(0);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(signedIn, 1);
+
+    const missing = createLoginControllers({
+      terminals: {
+        open: () => {
+          throw new Error("no terminal without a CLI");
+        },
+        stop: async () => {},
+      },
+      openExternal: async () => {},
+      subscription: () => null,
+      pushUiEvent: () => {},
+      showCodexState: () => {},
+      showClaudeState: () => {},
+      requireCli: async () => {
+        throw new Error("opencode is not installed");
+      },
+    });
+    assert.deepEqual(await missing.openCodeLogin.start(), { started: false, missingCli: true });
   });
 
   it("an unknown engine is refused", async () => {
@@ -528,6 +603,83 @@ it("model refresh validates provider identities before invoking discovery", asyn
   }
   assert.deepEqual(await invoke("studio:models.refresh", { provider: "codex" }), { ok: true, value: true });
   assert.equal(calls, 1);
+});
+
+it("model refresh and recheck reach OpenCode and OpenRouter, which have no subscription sign-in", async () => {
+  const { EngineRegistry } = await import("../../src/substrate/engines/registry.ts");
+  const refreshed: string[] = [];
+  const engines = new EngineRegistry();
+  for (const id of ["opencode", "openrouter"])
+    engines.register({
+      id,
+      label: id,
+      kind: id === "opencode" ? "delegated" : "direct",
+      models: async () => [],
+      status: async () => ({ code: "ready", detail: "" }),
+      refreshModels: async (force) => {
+        refreshed.push(`${id} ${force}`);
+      },
+    });
+  const events: UiEvent[] = [];
+  const { handle, invoke } = registrar();
+  registerModelsIpc(handle, {
+    core: { engines },
+    subscription: () => null,
+    pushUiEvent: (event) => events.push(event),
+  });
+  assert.deepEqual(await invoke("studio:models.refresh", { provider: "opencode" }), { ok: true, value: true });
+  assert.deepEqual(await invoke("studio:engines.recheck", { engine: "openrouter" }), { ok: true, value: true });
+  assert.deepEqual(refreshed, ["opencode true", "openrouter true"]);
+  assert.deepEqual(events, [{ type: "engines.changed", payload: {} }]);
+});
+
+/** The status code an engine-status answer carries. */
+const statusCode = (value: unknown): unknown => (value as { code?: unknown } | null)?.code;
+
+it("the OpenRouter key is saved and forgotten through the engine, and only its status comes back", async () => {
+  const { EngineRegistry } = await import("../../src/substrate/engines/registry.ts");
+  const { OpenRouterEngine } = await import("../../src/substrate/engines/openrouter.ts");
+  const { memoryKeyStore } = await import("../../src/substrate/provider-keys.ts");
+  const { tmpDir } = await import("../helpers/tmp.ts");
+  const { startFakeOpenRouter, GOOD_KEY } = await import("../helpers/fake-openrouter.ts");
+  const server = await startFakeOpenRouter();
+  try {
+    const keys = memoryKeyStore(null);
+    const engines = new EngineRegistry();
+    engines.register(new OpenRouterEngine({ root: await tmpDir("ipc-openrouter-"), keys, baseUrl: server.baseUrl }));
+    const events: UiEvent[] = [];
+    const { handle, invoke } = registrar();
+    registerModelsIpc(handle, {
+      core: { engines },
+      subscription: () => null,
+      pushUiEvent: (event) => events.push(event),
+    });
+    // Hostile payloads: nothing is kept, and no answer ever carries a key.
+    for (const payload of [
+      undefined,
+      null,
+      {},
+      { key: 7 },
+      { key: "" },
+      { key: `${GOOD_KEY}\nX: 1` },
+      { key: "x".repeat(5000) },
+    ]) {
+      const answer = await invoke("studio:openrouter.key.save", payload);
+      assert.equal(answer.ok && statusCode(answer.value), "needs_login", JSON.stringify(payload)?.slice(0, 40));
+      assert.equal(await keys.read(), null);
+    }
+    const saved = await invoke("studio:openrouter.key.save", { key: GOOD_KEY });
+    assert.equal(saved.ok && statusCode(saved.value), "ready");
+    assert.doesNotMatch(JSON.stringify(saved), /0123456789abcdef/);
+    assert.equal(await keys.read(), GOOD_KEY);
+    const cleared = await invoke("studio:openrouter.key.clear");
+    assert.equal(cleared.ok && statusCode(cleared.value), "needs_login");
+    assert.equal(await keys.read(), null);
+    assert.ok(events.every((event) => event.type === "engines.changed"));
+    assert.equal(events.length, 9);
+  } finally {
+    await server.close();
+  }
 });
 
 it("deleting a model asks the local engine that owns it and announces the change", async () => {

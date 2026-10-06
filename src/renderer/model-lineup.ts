@@ -3,8 +3,10 @@
  * family, from the provider's newest generation. A model's family and version are read from its
  * provider id (Claude's resolved model, Codex's slug), never from its display name, so a new
  * release replaces the one before it without a table to keep. An id that cannot be read stays
- * in the picker: a model named some new way must never vanish. Settings choices
- * (`state/model-picker.ts`) override the rule per model; the provider's default always shows.
+ * in the picker: a model named some new way must never vanish. A catalog of hundreds with no
+ * version scheme (OpenRouter) starts instead with its first few, in the order the provider lists
+ * them. Settings choices (`state/model-picker.ts`) override the rule per model; the provider's
+ * default always shows.
  */
 import { EngineId } from "../shared/providers.ts";
 
@@ -25,6 +27,8 @@ interface Lineage {
 
 /** The id that means "whatever the CLI is set to"; it is no model of its own. */
 const DEFAULT_MODEL = "default";
+/** Catalogs too long to list whole, and how many of their first models the picker lists. */
+const FIRST_FEW: Partial<Record<string, number>> = { [EngineId.OpenRouter]: 8 };
 
 /** `claude-opus-5-5`, `claude-opus-5`, `claude-haiku-4-5-20251001`. */
 const CLAUDE_ID = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/;
@@ -77,6 +81,8 @@ function preferred(kept: Read | undefined, next: Read): Read {
 /** The ids the picker shows by default, in the provider's order. */
 export function latestModels(engine: string, models: readonly LineupModel[]): Set<string> {
   const listed = models.filter((model) => model.id !== DEFAULT_MODEL);
+  const firstFew = FIRST_FEW[engine];
+  if (firstFew !== undefined) return new Set(listed.slice(0, firstFew).map((model) => model.id));
   const read = listed.flatMap((model) => {
     const lineage = lineageOf(engine, model);
     return lineage ? [{ model, lineage }] : [];

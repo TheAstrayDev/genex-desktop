@@ -6,7 +6,7 @@ import { ModelCatalogState } from "../shared/model-catalog.ts";
 import { EngineKind, isEngineReady, needsSignIn } from "../shared/engine-descriptor.ts";
 import { ReasoningEffort } from "../shared/model-preferences.ts";
 import { resolveRoles } from "../shared/model-roles.ts";
-import { EngineId } from "../shared/providers.ts";
+import { EngineId, isMetered } from "../shared/providers.ts";
 import { modelKey, parseModelKey } from "./model-key.ts";
 import { modelBase, modelName, shownModels } from "./model-lineup.ts";
 import type { EngineDescriptor } from "./types.ts";
@@ -35,9 +35,13 @@ const VENDOR_GROUP: Partial<Record<string, string>> = {
   [EngineId.ClaudeCode]: MODEL_PICKER_WORDS.claudeModels,
 };
 
-/** Section header a picker row sits under: who makes the models. */
+/** A model this Mac runs through the studio's own loop: Ollama, Bonsai — never a metered API. */
+const isLocalModelEngine = (engine: EngineDescriptor): boolean =>
+  engine.kind === EngineKind.Direct && !isMetered(engine.id);
+
+/** Section header a picker row sits under: who makes the models, or this Mac. */
 function groupLabel(engine: EngineDescriptor): string {
-  if (engine.kind === EngineKind.Direct) return MODEL_PICKER_WORDS.localModels;
+  if (isLocalModelEngine(engine)) return MODEL_PICKER_WORDS.localModels;
   return VENDOR_GROUP[engine.id] ?? engine.label;
 }
 
@@ -53,8 +57,9 @@ export function toChoices(engines: EngineDescriptor[], picker: PickerChoices = {
 
 function engineChoices(engine: EngineDescriptor, picker: PickerChoices[string] | undefined): ModelChoice[] {
   const ready = isEngineReady(engine);
-  if (engine.kind === EngineKind.Direct) return ready ? engine.models.map((model) => localChoice(engine, model)) : [];
-  const models = subscriptionModelChoices(engine, picker);
+  if (isLocalModelEngine(engine)) return ready ? engine.models.map((model) => localChoice(engine, model)) : [];
+  const models =
+    engine.kind === EngineKind.Direct ? apiModelChoices(engine, picker) : subscriptionModelChoices(engine, picker);
   if (models.length > 0) return models;
   return [subscriptionRow(engine, ready)];
 }
@@ -91,6 +96,15 @@ function subscriptionModelChoices(engine: EngineDescriptor, picker: PickerChoice
   const listed = concrete.some((model) => model.providerDefault) ? concrete : [defaultRow(engine), ...concrete];
   const shown = shownModels(engine.id, concrete, picker);
   return listed.map((model) => subscriptionChoice(engine, model, model.id === DEFAULT_MODEL || shown.has(model.id)));
+}
+
+/**
+ * A metered API's models (OpenRouter): every one a choice, listed as Settings says, and no default
+ * row — an API picks no model on the person's behalf.
+ */
+function apiModelChoices(engine: EngineDescriptor, picker: PickerChoices[string] | undefined): ModelChoice[] {
+  const shown = shownModels(engine.id, engine.models, picker);
+  return engine.models.map((model) => subscriptionChoice(engine, model, shown.has(model.id)));
 }
 
 /** The provider-default row: the catalog's own, else one made for it. */

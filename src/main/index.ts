@@ -434,11 +434,15 @@ app.on("accessibility-support-changed", (_event, enabled) => {
 let liveThreadStatus: ThreadStatusMap = {};
 /** An eval-lane launch's view of the core's UI events (it digests the game its chat seeds); null otherwise. */
 let evalLaneUiTap: ((event: UiEvent) => void) | null = null;
-const { codexLogin, claudeLogin } = createLoginControllers({
+const { codexLogin, claudeLogin, openCodeLogin } = createLoginControllers({
   terminals,
   openExternal: (url) => shell.openExternal(url),
   subscription,
   pushUiEvent,
+  onOpenCodeSignedIn: async () => {
+    if (core?.engines.has(EngineId.OpenCode)) await core.engines.get(EngineId.OpenCode).refreshModels?.(true);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenCode } });
+  },
   showCodexState: (state) => {
     preview?.setOccluded(state.visible);
     const page = livePage();
@@ -1066,6 +1070,7 @@ function registerIpc(studio: StudioCore): void {
   registerLoginIpc(handle, {
     claudeLogin,
     codexLogin,
+    openCodeLogin,
     subscription,
     pushUiEvent,
     busy: () => keepAwake.held || (core?.budget.userInFlight ?? 0) > 0,

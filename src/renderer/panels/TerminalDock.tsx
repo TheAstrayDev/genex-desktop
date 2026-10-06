@@ -48,6 +48,7 @@ function sessionStatus(current: TerminalSession): string {
 /** The dock's name for its one session: a sign-in, a command a reply offered, or the terminal. */
 function dockLabel(current: TerminalSession | undefined): string {
   if (current?.kind === TerminalKind.ClaudeLogin) return "Claude Code sign-in";
+  if (current?.kind === TerminalKind.OpenCodeLogin) return "OpenCode sign-in";
   return current?.kind === TerminalKind.Command ? "Command" : "Terminal";
 }
 

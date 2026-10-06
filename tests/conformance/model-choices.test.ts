@@ -318,3 +318,57 @@ test("a saved model the CLI now lists under another id of the same model still r
   assert.equal(resolveChoice(cold, "claude-code::claude-opus-4-1")?.disabled, true);
   assert.equal(resolveChoice(warm, "codex::claude-fable-5-1")?.disabled, true);
 });
+
+test("metered engines sit in groups of their own, never among local models, and OpenRouter has no default row", () => {
+  const ids = Array.from({ length: 30 }, (_, index) => `vendor/model-${index}`);
+  const metered: EngineDescriptor[] = [
+    {
+      id: "openrouter",
+      label: "OpenRouter",
+      kind: "direct",
+      status: { code: "ready", detail: "Fixture ready" },
+      supportsSessions: true,
+      defaultModel: null,
+      models: ids.map((id) => model(id)),
+    },
+    {
+      id: "opencode",
+      label: "OpenCode",
+      kind: "delegated",
+      status: { code: "ready", detail: "Fixture ready" },
+      supportsSessions: true,
+      defaultModel: null,
+      models: [model("opencode/big-pickle", "Big Pickle"), model("anthropic/claude-x", "Claude X")],
+    },
+  ];
+  const choices = toChoices(metered);
+  const openRouter = choices.filter((choice) => choice.key.startsWith("openrouter::"));
+  assert.ok(openRouter.every((choice) => choice.group === "OpenRouter"));
+  assert.equal(openRouter.length, ids.length, "every model stays a choice, so a saved pick resolves");
+  assert.ok(!openRouter.some((choice) => choice.key === "openrouter::default"), "OpenRouter picks no model for anyone");
+  assert.equal(
+    openRouter.filter((choice) => !choice.hidden).length,
+    8,
+    "only the first few are listed until Settings says more",
+  );
+  assert.equal(resolveChoice(choices, "openrouter::vendor/model-29")?.hidden, true);
+  assert.equal(
+    toChoices(metered, { openrouter: { "vendor/model-29": true } }).find((c) => c.key === "openrouter::vendor/model-29")
+      ?.hidden,
+    undefined,
+  );
+  const openCode = choices.filter((choice) => choice.key.startsWith("opencode::"));
+  assert.ok(openCode.every((choice) => choice.group === "OpenCode"));
+  assert.ok(
+    openCode.some((choice) => choice.key === "opencode::default"),
+    "OpenCode runs its own default model",
+  );
+  assert.ok(openCode.every((choice) => !choice.hidden));
+
+  const signedOut = toChoices([{ ...metered[0]!, status: { code: "needs_login", detail: "no key" }, models: [] }]);
+  assert.deepEqual(
+    signedOut.map((choice) => [choice.key, choice.group, choice.disabled]),
+    [["openrouter::", "OpenRouter", false]],
+    "one row to set it up, not a model list",
+  );
+});
