@@ -19,6 +19,7 @@ import { CheckOrigin, CheckWeight } from "../../src/harness-seed/loop/spec.ts";
 import { strongFlips } from "../../src/harness-seed/loop/facet/rules.ts";
 import { FacetStage, finishDone } from "../../src/harness-seed/loop/facet/stage.ts";
 import { summarizeScoreboard } from "../../src/harness-seed/loop/checks.ts";
+import { hudBudgetFor } from "../../src/harness-seed/loop/hud-budget.ts";
 import { DefectSeverity, SHIP_REVIEW_IMAGES, SHIP_VIEW, shipReview } from "../../src/harness-seed/loop/ship-review.ts";
 import * as nightFunctions from "../../src/harness-seed/loop/director/night.ts";
 import * as toolFunctions from "../../src/harness-seed/loop/director/tools.ts";
@@ -407,6 +408,23 @@ describe("the art director's question (loop/ship-review.ts)", () => {
     });
     const request = recorder.paramsOf("engine.complete")[0] as Record<string, any>;
     assert.equal(request.systemPrompt, await readFile(path.join(SEED, "judge", "ship-review.md"), "utf8"));
+  });
+
+  it("AD-1c. the art director reads the HUD's coverage against the kind's budget, as the taste judges do", async () => {
+    const recorder = ctxRecorder({ handlers: { "engine.complete": replying(SHIP_NO) } });
+    const evidence = { ...gameEvidence(), state: { hud: { coverage: 0.25, count: 9, overlaps: [] } } };
+    await shipReview(recorder.ctx as never, {
+      run: { runId: "run_ad", goal: "a night race", reference: null, game: { kind: "racing" } } as never,
+      evidence: evidence as never,
+      parts: PARTS,
+    });
+    const asked = String((recorder.paramsOf("engine.complete")[0] as Record<string, any>).messages[0].content);
+    const budget = hudBudgetFor({ kind: "racing" });
+    assert.ok(budget !== null, "a racer has a HUD budget");
+    assert.ok(
+      asked.includes(`covers 25% of the frame (budget ${Math.round(budget * 100)}%)`),
+      asked.split("\n").find((line) => line.startsWith("HUD:")) ?? asked,
+    );
   });
 });
 

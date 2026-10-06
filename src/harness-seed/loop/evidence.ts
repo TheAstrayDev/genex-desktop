@@ -1135,6 +1135,17 @@ function cruiseOf(game: AnyRecord | null | undefined): string[] {
 }
 
 /**
+ * The controls the drive presses. A kept front-end (`setup.begin === false`) is driven only by a
+ * script the game declared itself: the kind's exercise would start a title that takes any key on
+ * its throttle, and judge the worker building that title on its countdown instead.
+ */
+function driveScriptOf(look: Look): unknown {
+  const game = look.run?.game;
+  if (look.play?.via !== PlayVia.Kept) return kinds.playScriptFor(game);
+  return kinds.normalizeGameTraits(game).playScript ?? [];
+}
+
+/**
  * (6b) drive: the game's OWN controls every iteration so feel/play are judged on play, not idle
  * time — and so a board game is clicked rather than walked. A racer or a craft then holds its
  * throttle through the rest of the drive (`cruise`), released before the cameras: a racer
@@ -1143,7 +1154,7 @@ function cruiseOf(game: AnyRecord | null | undefined): string[] {
  */
 async function driveGame(look: Look): Promise<void> {
   const { ctx, h, run } = look;
-  await applyPlayScript(ctx, kinds.playScriptFor(run?.game), { clock: "step", runId: run.runId, ...h });
+  await applyPlayScript(ctx, driveScriptOf(look), { clock: "step", runId: run.runId, ...h });
   // A menu is never held on the throttle: the front-end's own worker, or a game that never got into play.
   const onMenu = Boolean(look.play && !look.play.reached);
   const cruise = onMenu ? [] : cruiseOf(run?.game);

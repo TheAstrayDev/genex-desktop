@@ -21,7 +21,7 @@ import type { Check, CheckKind, CheckLike, CheckOrigin, CheckWeight } from "./sp
 import { HostMethod } from "./host-methods.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON, clipMarked } from "./text.ts";
 import { isRecord } from "./json.ts";
-import { notThisBuildsQuestion } from "./harness-needs.ts";
+import { appliesToBuild } from "./applies-to-build.ts";
 import type { ElidedKind, StateShape } from "./state-shape.ts";
 import type { AnyRecord, HarnessCtx } from "../types/harness.d.ts";
 import type { PreviewPixelStats } from "../types/host-api.d.ts";
@@ -1460,7 +1460,7 @@ function settleMeasured(
  * one night proved it: a part whose nine planned checks all passed read "1 of 10" because the
  * judge had grown a question about a number no camera can see. The screen says "Passed 3 ·
  * Failed 2 · Couldn't measure 4 · 3 judge notes" off these fields. A harness-owned check that
- * does not apply to this build (loop/harness-needs.ts) is in none of those counts; identity
+ * does not apply to this build (loop/applies-to-build.ts) is in none of those counts; identity
  * still reads the whole board, so it never turns an unanswerable board into a satisfied one.
  */
 export function summarizeScoreboard(
@@ -1468,10 +1468,7 @@ export function summarizeScoreboard(
   spec: { checks?: readonly Check[] } | null | undefined,
 ) {
   const all = Object.values(board ?? {});
-  const specChecks = new Map((spec?.checks ?? []).map((c) => [c?.id, c]));
-  const applies = (e: CheckResult): boolean =>
-    isMeasured(e) || e.unavailable !== true || !notThisBuildsQuestion(specChecks.get(e.id), e.missing);
-  const entries = all.filter(applies);
+  const entries = all.filter((e) => appliesToBuild(e, spec));
   const identity = all.filter((e) => e.weight === Weight.Identity);
   const measuredPass = (e: CheckResult): boolean => e.pass === true;
   // The board entry carries `origin` only where the loop seeded it; the spec is the authority.
@@ -1496,7 +1493,8 @@ export function summarizeScoreboard(
     plannedUnmeasured: planned.filter((e) => !isMeasured(e)).length,
     grownTotal: grown.length,
     grownPassing: grown.filter(measuredPass).length,
-    identityTotal: identity.length,
+    // Counted like every other total, from this build's questions; identityAllPass reads them all.
+    identityTotal: entries.filter((e) => e.weight === Weight.Identity).length,
     identityPassing: identity.filter(measuredPass).length,
     identityAllPass: identityAllPass(identity, identityCounted, entries, spec),
     failing: entries

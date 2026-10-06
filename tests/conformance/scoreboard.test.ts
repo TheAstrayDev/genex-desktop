@@ -65,6 +65,7 @@ import {
 } from "../../src/harness-seed/loop/library.ts";
 import { mechanicalReview, parseDiff } from "../../src/harness-seed/loop/review.ts";
 import { CheckLintCode, lintCheck } from "../../src/harness-seed/loop/check-lint.ts";
+import { appliesToBuild } from "../../src/harness-seed/loop/applies-to-build.ts";
 import { mineValidationTasks } from "../../src/harness-seed/loop/skillopt.ts";
 import type { Check } from "../../src/harness-seed/loop/spec.ts";
 import { askVisionBoard, cameraSubset, normalizeLiveness, selectShots } from "../../src/harness-seed/loop/judge.ts";
@@ -575,6 +576,15 @@ describe("facet specs", () => {
       [{ kind: "probe", expr: "min(__render.drawCalls, 5000) > 400" }, "__render.drawCalls"],
       [{ kind: "probe", expr: "min(len(hud.items), 64) <= 64" }, null],
       [{ kind: "probe", expr: "max(len(hud.items), player.speed) >= 60" }, null],
+      // The HUD summary's per-kind counts are draw quantities too: a segmented gauge asked for as
+      // forty bars is the three-thousand-rectangle HUD again.
+      [{ kind: "probe", expr: "hud.kinds.bar >= 40" }, "hud.kinds.bar"],
+      [{ kind: "probe", expr: "state.hud.kinds.arc > 6" }, "hud.kinds.arc"],
+      [{ kind: "probe", expr: "len(hud.kinds) >= 5" }, "hud.kinds"],
+      [{ kind: "probe", expr: "early.hud.kinds.text == 12" }, "hud.kinds.text"],
+      [{ kind: "probe", expr: "hud.kinds.bar > 0" }, null],
+      [{ kind: "probe", expr: "hud.kinds.text <= 8" }, null],
+      [{ kind: "probe", expr: "hud.kindsOfMine >= 40" }, null],
     ];
     for (const [check, quantity] of table) {
       const finding = lintCheck(check);
@@ -785,6 +795,40 @@ describe("the board a game actually carries", () => {
       },
     };
     assert.equal(mineValidationTasks([event] as never, 10).length, 1);
+  });
+
+  it("one predicate says which board entries are this build's questions, and the summary counts exactly those", () => {
+    const state = { player: { x: 0, y: 0, z: 0 }, hud: { items: ["speed"] } };
+    const driven = { player: { x: 3, y: 0, z: 0 }, hud: { items: ["speed"] } };
+    const director = { id: "lap-time", kind: "probe", expr: "race.lap > 0", needs: ["race.lap"] };
+    const validated = validateFacetSpec(
+      withHarnessChecks(normalizeFacetSpec({ id: "car", intent: "a car that drives", checks: [director] }), {
+        ownsMain: true,
+        game: { kind: "racing" } as never,
+      }),
+      { state },
+    );
+    const probes = validated.spec.checks.filter((c: { kind: string }) => c.kind === "probe");
+    const board = toScoreboard(probes.map((c: Check) => evaluateProbeCheck(c, { state: driven, stateEarly: state })));
+    const applying = Object.values(board)
+      .filter((e) => appliesToBuild(e, validated.spec))
+      .map((e) => e.id);
+    for (const harness of ["reaches-play", "hud-coverage", "hud-overlap"]) {
+      assert.ok(board[harness], `${harness} is on the board`);
+      assert.ok(!applying.includes(harness), `${harness} is not this build's question`);
+    }
+    // The director's own contract applies even unmeasured, and so does everything measured.
+    assert.ok(applying.includes("lap-time"));
+    assert.ok(applying.includes("keys-move-player"));
+    const summary = summarizeScoreboard(board, validated.spec);
+    assert.equal(summary.total, applying.length);
+    // reaches-play is an identity check: it is in no identity count either, and blocks nothing.
+    const identity = applying.filter((id) => board[id]?.weight === "identity");
+    assert.equal(summary.identityTotal, identity.length);
+    assert.equal(summary.identityPassing, summary.identityTotal);
+    // Without a spec nothing is a harness check, so nothing is dropped; a missing entry applies to nothing.
+    assert.equal(Object.values(board).filter((e) => appliesToBuild(e, null)).length, Object.keys(board).length);
+    assert.equal(appliesToBuild(null, validated.spec), false);
   });
 
   it("offers the planner what a sibling family learned, and tells it the truth about its own board", () => {

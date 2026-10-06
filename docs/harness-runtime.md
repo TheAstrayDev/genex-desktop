@@ -19,7 +19,8 @@ OFF until the planner, the director or `studio.json`'s nested `game` block decla
 nobody described carries no harness input check at all; a declared kind supplies its traits and an
 explicit boolean beside it wins. The harness drives that kind's play script before every
 judgement (racing and flight then hold W/ArrowUp through the rest of the drive, `cruise`, released
-before the cameras; a declared script holds nothing), and `gameLine(run.game)` is the first line of
+before the cameras; a declared script holds nothing; a front-end kept for its owner, `begin:false`,
+gets only a declared script), and `gameLine(run.game)` is the first line of
 every judge call. A game with a title and no `__studio.begin()` may declare `start.keys`. Two critics, not one:
 `place` for a world a player walks through and `screen` for a board, a puzzle or a builder.
 
@@ -354,7 +355,7 @@ proposal is never a move: it becomes a decision card (`loop/facet/beyond.ts`, at
 joins the cut list; `added=` and a part marked `added:true` are cards too. One part owns the screen
 (`critic=screen`; `worker_start` refuses a second running one): while it runs, another template part
 that draws through the contract HUD is a `screen-owner` finding (`loop/screen-owner.ts`). A check
-asking that how much the build draws (HUD items, draw calls, triangles, vertices) be large is
+asking that how much the build draws (HUD items, per-kind `hud.kinds` counts, draw calls, triangles, vertices) be large is
 refused where checks are validated (`loop/check-lint.ts`, `draw-count-floor`); a ceiling or an
 existence test passes, and a board stored before the lint scores as it did.
 

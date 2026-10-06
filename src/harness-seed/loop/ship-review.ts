@@ -14,6 +14,7 @@
  */
 import * as judgeParts from "./judge.ts";
 import { hudFactLines } from "./judge-facts.ts";
+import { hudBudgetFor } from "./hud-budget.ts";
 import { JudgeParse } from "./judge-provenance.ts";
 import { workingGoal } from "./goal-prompts.ts";
 import { scopeLines } from "./scope-prompts.ts";
@@ -154,8 +155,8 @@ export function shipImages(run: Run, evidence: AnyRecord, max = SHIP_REVIEW_IMAG
   return [...own, ...motion, ...referenceFrames(run).slice(0, room)];
 }
 
-/** The build's own readings, labeled as its output. */
-function evidenceLines(evidence: AnyRecord): string[] {
+/** The build's own readings, labeled as its output; the HUD read against the kind's budget. */
+function evidenceLines(evidence: AnyRecord, hudBudget: number | null): string[] {
   const lines: string[] = [];
   if (evidence.warnings?.length)
     lines.push(`evidence warnings: ${clip(evidence.warnings.join("; "), WARNING_CHARS)} — ${BUILD_OUTPUT}`);
@@ -165,7 +166,7 @@ function evidenceLines(evidence: AnyRecord): string[] {
     );
   if (evidence.play && evidence.play.reached === false)
     lines.push(`the scripted drive did not reach play (it stayed in "${evidence.play.phase ?? "unknown"}")`);
-  lines.push(...hudFactLines(evidence.state?.hud));
+  lines.push(...hudFactLines(evidence.state?.hud, hudBudget));
   if (evidence.consoleErrors?.length)
     lines.push(`console errors: ${evidence.consoleErrors.slice(0, ERROR_LINES).join(" | ")} — ${BUILD_OUTPUT}`);
   return lines;
@@ -182,7 +183,7 @@ function shipContent(ask: ShipAsk, labels: readonly string[]): string {
     run.reference?.notes ? `BAR NOTES: ${run.reference.notes}` : "",
     partsLine(parts),
     framesLine(labels, view),
-    ...evidenceLines(evidence),
+    ...evidenceLines(evidence, hudBudgetFor(run.game)),
     SHIP_ASK,
     SHIP_REPLY,
   ]

@@ -1,5 +1,6 @@
 /** The round on the record, and whether the facet goes on. */
 import { isMeasured } from "../../checks.ts";
+import { appliesToBuild } from "../../applies-to-build.ts";
 import { Against, againstWords, observedFrom, roundRule, VerdictPass, verdictRecord } from "../../verdict.ts";
 import { GIT, commitAll, shortSha } from "../../git.ts";
 import { StopCode, stopWith } from "../../outcomes.ts";
@@ -29,7 +30,9 @@ export async function publishRound(loop: FacetLoop, round: FacetRound): Promise<
   result.board = loop.board;
 
   round.failingNow = Object.values(loop.board).filter((e) => e.pass === false);
-  round.unmeasuredNow = (Object.values(round.attemptBoard) as AnyRecord[]).filter((e) => !isMeasured(e));
+  // Only this build's questions: a harness check it cannot answer is in no count, so in no list.
+  round.applyingNow = (Object.values(round.attemptBoard) as AnyRecord[]).filter((e) => appliesToBuild(e, spec));
+  round.unmeasuredNow = round.applyingNow.filter((e: AnyRecord) => !isMeasured(e));
   // A check the judge grew tonight is not one the part was planned against. The verdict record
   // counts the two apart, so a card can stop reading a judge's own new question as a win.
   round.grownIds = grownCheckIds(spec, round.retiredGrown);
@@ -118,7 +121,8 @@ function scoreboardRecord(round: FacetRound): AnyRecord {
     // and a check that has told nobody anything for three rounds stops being written
     // again (`rarelyMeasurable`). Without them that warning could never fire.
     unmeasuredChecks: (summary.unmeasuredChecks ?? []).map((c: AnyRecord) => c.id),
-    results: (Object.values(round.attemptBoard) as AnyRecord[]).map(({ id, kind, weight, pass, reason, gamed }) => ({
+    // The same entries the counts above are made of, so the record agrees with itself.
+    results: (round.applyingNow as AnyRecord[]).map(({ id, kind, weight, pass, reason, gamed }) => ({
       id,
       kind,
       weight,

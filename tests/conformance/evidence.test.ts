@@ -2037,6 +2037,27 @@ describe("after the review: a kill mid-pass, the studio's own console line, and 
     assert.ok(heldThrough(raced.calls, ["w", "ArrowUp"]), "in play, the racer still cruises");
   });
 
+  it("drives no kind's controls into a kept front-end, only a script the game declared itself", async () => {
+    // A title that starts on any key would be started by the racing exercise's own throttle, and
+    // its owner judged on a countdown instead of the title it is building.
+    const kept = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
+    const evidence = await gather(kept.ctx, { run: { ...run, game: { kind: "racing" } }, setup: { begin: false } });
+    const inputs = sequence(kept.calls).filter((word) => word.startsWith("input:"));
+    assert.deepEqual(inputs, [], "the front-end's owner is judged on its menu, untouched");
+    assert.equal(evidence.play?.via, "kept");
+    // The clock still runs through the drive, so the title is seen moving.
+    assert.ok(kept.calls.some((c) => c.payload.method === "step" && c.payload.arg !== 240));
+    const playScript = [{ type: "tap", keys: ["Enter"] }];
+    const declared = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
+    await gather(declared.ctx, { run: { ...run, game: { kind: "racing", playScript } }, setup: { begin: false } });
+    const taps = sequence(declared.calls).filter((word) => word.startsWith("input:"));
+    assert.ok(
+      taps.some((word) => word.includes('"Enter"')),
+      `the game's own script still drives it: ${taps.join(" ")}`,
+    );
+    assert.ok(!taps.some((word) => word.includes('"w"')), taps.join(" "));
+  });
+
   it("quotes what begin() answered when it would not take the game into play", async () => {
     const game = frontEnd();
     const refusing = (method: string) =>

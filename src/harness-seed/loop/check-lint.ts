@@ -33,6 +33,12 @@ export const STUDIO_DRAW_QUANTITIES = [
   "vertices",
 ] as const;
 
+/**
+ * The template HUD summary's count per item kind (`hud.kinds`, `hud.kinds.bar`): how much of one
+ * kind the build draws, so `hud.kinds.bar >= 40` is the three-thousand-rectangle HUD again.
+ */
+const HUD_KINDS = "hud.kinds";
+
 /** The most a bound may ask of a draw quantity and still only ask that the thing exists. */
 const EXISTENCE_FLOOR = 1;
 
@@ -116,7 +122,15 @@ const NEGATED: Readonly<Record<string, string>> = {
  */
 const bare = (path: string): string => path.replace(SCOPE_PREFIXES, "").replace(LENGTH_SUFFIX, "");
 
-const isDrawQuantity = (path: string): boolean => (STUDIO_DRAW_QUANTITIES as readonly string[]).includes(bare(path));
+const isDrawQuantity = (path: string): boolean => {
+  const quantity = bare(path);
+  return (STUDIO_DRAW_QUANTITIES as readonly string[]).includes(quantity) || isHudKindCount(quantity);
+};
+
+/** Whether a bare path is the HUD's per-kind counts or one of them. */
+const isHudKindCount = (quantity: string): boolean =>
+  quantity === HUD_KINDS ||
+  (quantity.startsWith(`${HUD_KINDS}.`) && !quantity.slice(HUD_KINDS.length + 1).includes("."));
 
 /** The draw quantity a `min`/`max` of it and numbers reads — `max(len(hud.items), 0)` — or null. */
 function clampedQuantity(args: readonly ExprNode[]): string | null {
