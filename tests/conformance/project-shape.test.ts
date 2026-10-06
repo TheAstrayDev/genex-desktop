@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -1723,5 +1723,114 @@ describe("the contract upgrade", () => {
       upgraded: false,
       materialsAdded: false,
     });
+  });
+
+  /**
+   * The HUD module rides along, but only where nobody touched it: a copy that is byte for byte one
+   * the studio shipped gets the template's (arcs, panels, a bounded summary), the old one kept
+   * beside it; a copy anyone edited, and a game the user brought, keep theirs.
+   */
+  const firstHud = () => readFile(path.join(repo, "tests", "fixtures", "hud-generation-1.js.txt"), "utf8");
+  const templateHud = () => readFile(path.join(repo, "src", "game-template", "src", "hud.js"), "utf8");
+  const exists = (file: string) =>
+    stat(file).then(
+      () => true,
+      () => false,
+    );
+
+  it("brings a shipped first HUD up to date and keeps the old one beside it", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    await api["game.scaffold"]!({ name: "dials", title: "Dials" } as never);
+    const src = path.join(rig.core.layout.gamesRoot, "dials", "src");
+    const hud = path.join(src, "hud.js");
+
+    // A fresh scaffold already holds the template's HUD: nothing moves.
+    await api["game.upgradeContract"]!({ project: "dials" } as never);
+    assert.equal(await readFile(hud, "utf8"), await templateHud());
+    assert.equal(await exists(path.join(src, "hud.v1.js")), false);
+
+    // The game a run really opens: scaffolded with the first HUD, untouched since.
+    await writeFile(hud, await firstHud());
+    assert.deepEqual(
+      await api["game.upgradeContract"]!({ project: "dials" } as never),
+      { upgraded: false, materialsAdded: false },
+      "the studio.js upgrade's answer is unchanged — its contract was already current",
+    );
+    assert.equal(await readFile(hud, "utf8"), await templateHud(), "the HUD is the template's");
+    assert.equal(await readFile(path.join(src, "hud.v1.js"), "utf8"), await firstHud(), "the old one is kept");
+
+    // A first HUD somebody edited is theirs.
+    const edited = `${await firstHud()}// the main owner's own gauge helper\n`;
+    await writeFile(hud, edited);
+    await rm(path.join(src, "hud.v1.js"));
+    await api["game.upgradeContract"]!({ project: "dials" } as never);
+    assert.equal(await readFile(hud, "utf8"), edited);
+    assert.equal(await exists(path.join(src, "hud.v1.js")), false);
+  });
+
+  it("never rewrites the HUD of a game the user brought", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const dir = path.join(await tmpDir("studio-own-hud-"), "skate");
+    await viteFolder(dir);
+    const project = await rig.core.adoptProject(dir);
+    assert.equal(project.built, true);
+    await writeFile(path.join(dir, "src", "hud.js"), await firstHud());
+    await (rig.core.api() as Record<string, (p: never) => Promise<unknown>>)["game.upgradeContract"]!({
+      project: project.name,
+    } as never);
+    assert.equal(await readFile(path.join(dir, "src", "hud.js"), "utf8"), await firstHud());
+    assert.equal(await exists(path.join(dir, "src", "hud.v1.js")), false);
+  });
+
+  it("writes no HUD through a link, wherever the link points", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    const outside = await tmpDir("studio-hud-outside-");
+    const cases: Array<{ name: string; plant(src: string): Promise<void>; untouched: string[] }> = [
+      {
+        name: "hud.js is a link to a shipped copy outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "linked-hud.js"), await firstHud());
+          await rm(path.join(src, "hud.js"));
+          await symlink(path.join(outside, "linked-hud.js"), path.join(src, "hud.js"));
+        },
+        untouched: ["linked-hud.js"],
+      },
+      {
+        name: "the backup's name is a link planted outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "precious.txt"), "precious");
+          await writeFile(path.join(src, "hud.js"), await firstHud());
+          await symlink(path.join(outside, "precious.txt"), path.join(src, "hud.v1.js"));
+        },
+        untouched: ["precious.txt"],
+      },
+      {
+        name: "src is a link to a folder outside the game",
+        plant: async (src) => {
+          const elsewhere = path.join(outside, "elsewhere-src");
+          await cp(src, elsewhere, { recursive: true });
+          await writeFile(path.join(elsewhere, "hud.js"), await firstHud());
+          await rm(src, { recursive: true });
+          await symlink(elsewhere, src);
+        },
+        untouched: ["elsewhere-src/hud.js"],
+      },
+    ];
+    for (const [index, hostile] of cases.entries()) {
+      const name = `linked${index}`;
+      await api["game.scaffold"]!({ name, title: name } as never);
+      await hostile.plant(path.join(rig.core.layout.gamesRoot, name, "src"));
+      const before = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      await api["game.upgradeContract"]!({ project: name } as never).catch(() => null);
+      const after = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      assert.deepEqual(after, before, `${hostile.name}: nothing outside the game changed`);
+      assert.equal(await exists(path.join(outside, "elsewhere-src", "hud.v1.js")), false, hostile.name);
+    }
+    assert.equal(await readFile(path.join(outside, "linked-hud.js"), "utf8"), await firstHud());
   });
 });

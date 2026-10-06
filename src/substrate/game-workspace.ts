@@ -68,7 +68,13 @@ export type {
   ProjectShape,
 } from "../shared/game-project.ts";
 export { type ContractReach, networkLoads, unreachableLoads } from "./game-page.ts";
-export { type GameValidation, NO_CONTRACT_PROBLEM, studioContractGeneration } from "./game-validation.ts";
+export {
+  type GameValidation,
+  hudContractGeneration,
+  NO_CONTRACT_PROBLEM,
+  shippedHudGeneration,
+  studioContractGeneration,
+} from "./game-validation.ts";
 export {
   NESTED_BACKUP,
   nestedForLanding,

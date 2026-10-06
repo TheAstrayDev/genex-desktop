@@ -3,6 +3,7 @@
  * a browser as written, and does it load (or can the studio attach) the contract the judge reads.
  * Read-only: nothing here writes into the game folder.
  */
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ContractWord, type ProjectShape } from "../shared/game-project.ts";
@@ -86,6 +87,40 @@ export function studioContractGeneration(source: string | null): number {
   if (/\bcreateHudFacade\s*[(=]/.test(source) || /\bborrowedCamera\b/.test(source)) return 4;
   if (!/\binspect\s*[(:]/.test(source)) return 1;
   return /\bhud\s*:\s*hud\.api/.test(source) ? 3 : 2;
+}
+
+/**
+ * Every `src/hud.js` the studio shipped before the current generation, by the SHA-256 of its text
+ * with LF line endings, and the generation it is. When the template's `HUD_GENERATION` moves on,
+ * the outgoing file's digest joins this table, or games scaffolded with it keep it for good.
+ */
+const SHIPPED_HUD_DIGESTS: Readonly<Record<string, number>> = {
+  // Generation 1 (text, bar, crosshair): as Milestone 4 shipped it, after the Biome format, and
+  // after the readability pass (the copy in Genex 0.1.0).
+  "09dcdfa1b7a45142c081ef972a0388857ac2e4df49432a7f17cbf88e1b5996c5": 1,
+  b08796505b9628fb9fc4a0c1bfa6eb422dfa23cb801f6ea99cf88f2efddd21ad: 1,
+  dbde5256b725fa00c10f81463de1975164c92413765ac76eb789d033e4be0b98: 1,
+};
+
+/**
+ * Which HUD a copy of `src/hud.js` is: 0 no file at all, 1 a copy that predates `HUD_GENERATION`
+ * (text, bar and crosshair only), otherwise the generation it declares.
+ */
+export function hudContractGeneration(source: string | null): number {
+  if (source === null) return 0;
+  const declared = /\bexport\s+const\s+HUD_GENERATION\s*=\s*(\d+)/.exec(source);
+  return declared ? Number(declared[1]) : 1;
+}
+
+/**
+ * The generation of a `src/hud.js` that is byte for byte a copy the studio shipped (line endings
+ * aside, so a CRLF checkout still counts), or null for a copy anyone edited — the only copies an
+ * upgrade may replace, because `src/hud.js` is the main owner's to change.
+ */
+export function shippedHudGeneration(source: string | null): number | null {
+  if (source === null) return null;
+  const digest = createHash("sha256").update(source.replace(/\r\n/g, "\n")).digest("hex");
+  return SHIPPED_HUD_DIGESTS[digest] ?? null;
 }
 
 /**

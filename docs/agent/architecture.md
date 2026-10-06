@@ -721,9 +721,8 @@ every planned write (`plannedWrites`), and only its button calls
 `studio:project.adopt` with the row's own `OpenChoice`. A nested game is adopted as the project;
 keeping the parent passes `template: false`. Adoption never writes the template's entry or pages
 beside a real entry; an own game gets `CLAUDE.md`/`NOTES.md` from `game-template/*.own.md`.
-The contract upgrade reads a vintage:
-`studioContractGeneration` grades `src/studio.js` (0–4) and `game.upgradeContract` replaces an
-older copy, keeping it as `src/studio.v<generation>.js`.
+`game.upgradeContract` replaces an older `src/studio.js` (`studioContractGeneration`) and an
+unedited shipped `src/hud.js` (`shippedHudGeneration`), keeping each as `<name>.v<generation>.js`.
 
 **Builds.** `preview.load`/`preview.reload` build through `GameBuilds`
 ([`src/main/game-build.ts`](../../src/main/game-build.ts)) and serve the output. A build never runs in

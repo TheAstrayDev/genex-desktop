@@ -1021,7 +1021,7 @@ function briefRules(
     `## Rules that do not change`,
     `- Tag every object you create: \`obj.userData.tag = "<tag>"\` — untagged objects are invisible to scene checks and do not count.`,
     screen
-      ? `- ONE SCREEN: all UI goes through \`__studio.hud\` (text/bar/crosshair/flash, drawn into the canvas). No DOM elements, no second HUD quad, no camera-parented panels — the harness-owned checks no-dom-ui and single-hud fail the build otherwise.`
+      ? `- ONE SCREEN: all UI goes through \`__studio.hud\`, drawn into the canvas: text, bars, arcs and gauges, vector paths, images, rounded panels and bundled fonts, anchored to the frame in frame fractions (their lengths in frame heights, so a curve stays round and sharp — never build one out of rectangles). Keep the middle of the view for the game: the harness measures how much of the frame the HUD covers and which items run into each other. No DOM elements, no second HUD quad or canvas, no camera-parented panels — the harness-owned checks no-dom-ui and single-hud fail the build otherwise.`
       : `- THE GAME'S OWN SCREEN: this game has its own UI and input handling — keep them as they are; do not add __studio.hud overlays or a second input path.`,
     template
       ? `- ONE INPUT PATH: read keys from ctx.keys (Mouse1/Mouse2 included), mouse look from ctx.look, wheel from ctx.wheel — never add your own pointer-lock or mousemove listeners; studio.js owns them and feeds the same ctx a human's mouse does.`

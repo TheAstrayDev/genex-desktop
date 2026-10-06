@@ -735,9 +735,13 @@ export function installStudio(config) {
 
     /**
      * The HUD: text(id, str, {x,y,size,color,align}), bar(id, fraction, {x,y,w,h,color}),
-     * crosshair({size,gap,thickness,color,visible,spread}), flash(color, alpha), remove(id),
-     * clear(), get(id), items(). Coordinates are fractions of the frame (0–1, y from the top).
-     * Drawn into the canvas as one quad tagged `hud` — the only UI a game may have.
+     * arc(id, {x,y,r,start,end,fraction,width,color,back,cap}), panel(id, {x,y,w,h,radius,fill,
+     * stroke,width}), path(id, d, {x,y,w,h,viewBox,fill,stroke,width}), image(id, src, {x,y,w,h}),
+     * font(family, url), crosshair({size,gap,thickness,color,visible,spread}), flash(color,
+     * alpha), remove(id), clear(), get(id), items(). x/y are fractions of the frame (y from the
+     * top), measured inward from `anchor` (nine points, default "top-left"); the lengths of arc,
+     * panel, path and image are fractions of the frame's height. Drawn into the canvas as one
+     * quad tagged `hud` — the only UI a game may have.
      */
     hud: hud.api,
 
@@ -1011,30 +1015,52 @@ function elementName(el) {
 /** An element drawn inside an SVG: the SVG itself is named instead. */
 const insideSvg = (el) => el.closest("svg") !== null && el.tagName !== "SVG";
 
-/** One element as `domUi()` names it, or null when it is not visible UI the canvas capture would miss. */
-function describeUi(el) {
-  if (DOM_SKIPPED.has(el.tagName) || insideSvg(el)) return null;
-  if (el.id === "fatal" && !el.textContent.trim()) return null;
+/** The element's style and box when it is on screen, or null when it is hidden or has no box. */
+function shownBox(el) {
   const style = getComputedStyle(el);
   const hidden = style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0;
   if (hidden) return null;
   const rect = el.getBoundingClientRect();
   const boxless = rect.width <= 0 || rect.height <= 0 || el.getClientRects().length === 0;
-  if (boxless) return null;
+  return boxless ? null : { style, rect };
+}
+
+/** One element as `domUi()` names it, or null when it is not visible UI the canvas capture would miss. */
+function describeUi(el) {
+  if (DOM_SKIPPED.has(el.tagName) || insideSvg(el)) return null;
+  if (el.id === "fatal" && !el.textContent.trim()) return null;
+  const shown = shownBox(el);
+  if (!shown) return null;
   const ownText = ownTextOf(el);
-  if (!ownText && !DOM_VISUAL.has(el.tagName) && !paintsItself(style)) return null;
+  if (!ownText && !DOM_VISUAL.has(el.tagName) && !paintsItself(shown.style)) return null;
   const name = elementName(el);
   return ownText ? `${name} "${ownText.slice(0, 40)}"` : name;
 }
 
 /**
- * Visible DOM elements outside the canvas — the UI the judge's canvas capture never sees.
- * Each entry names the element and its text so the failing check is actionable.
+ * A visible canvas that is not the game's and lies over it: a second HUD painted beside the
+ * contract's, which no camera frame photographs (every capture reads the game's canvas alone).
+ * A canvas that does not touch the game — a minimap panel beside it — is not named.
  */
-function domUi() {
+function describeSecondCanvas(el, game) {
+  if (!game || el === game || typeof game.getBoundingClientRect !== "function") return null;
+  const shown = shownBox(el);
+  if (!shown) return null;
+  const own = game.getBoundingClientRect();
+  const { rect } = shown;
+  const over = rect.left < own.right && rect.right > own.left && rect.top < own.bottom && rect.bottom > own.top;
+  return over ? `${elementName(el)} (second canvas over the game)` : null;
+}
+
+/**
+ * Visible DOM elements outside the canvas — the UI the judge's canvas capture never sees — and
+ * any second canvas laid over `game`, the renderer's own. Each entry names the element and its
+ * text so the failing check is actionable.
+ */
+function domUi(game = null) {
   const out = [];
   for (const el of document.body ? document.body.querySelectorAll("*") : []) {
-    const entry = describeUi(el);
+    const entry = el.tagName === "CANVAS" ? describeSecondCanvas(el, game) : describeUi(el);
     if (!entry) continue;
     out.push(entry);
     if (out.length >= DOM_UI_LIMIT) break;
@@ -1099,10 +1125,27 @@ function localInspect(source) {
     count: (tag) => objects(tag).length,
     bbox,
     bboxOf,
-    domUi,
+    domUi: () => domUi(source.renderer?.domElement ?? null),
     hud: source.hud,
     renderTargets: source.renderTargets,
     audio: source.audio,
+  };
+}
+
+/** How many HUD item ids `state().hud` lists before the module has loaded; `count` says how many there are. */
+const HUD_SUMMARY_ITEMS = 64;
+
+/**
+ * What `state().hud` says before `./hud.js` has loaded: the ids drawn so far (the first few, and
+ * how many), and nothing measured — coverage is null, never a made-up 0.
+ */
+function unloadedHudSummary(ids, pending) {
+  return {
+    items: [...ids].slice(0, HUD_SUMMARY_ITEMS),
+    count: ids.size,
+    coverage: null,
+    crosshair: pending.crosshair,
+    flash: Number(pending.flashAlpha.toFixed(3)),
   };
 }
 
@@ -1146,6 +1189,13 @@ function createHudFacade(renderer, canvas, enabled) {
     queued.push([name, args]);
     return undefined;
   };
+  /** A call that draws an item under an id: the id is remembered for the summary, the call made or queued. */
+  const drawsItem =
+    (name) =>
+    (id, ...args) => {
+      ids.add(String(id));
+      return call(name, [id, ...args]);
+    };
 
   const api = {
     text: (id, text, opts = {}) => {
@@ -1156,6 +1206,11 @@ function createHudFacade(renderer, canvas, enabled) {
       ids.add(String(id));
       return call("bar", [id, fraction, opts]);
     },
+    arc: drawsItem("arc"),
+    panel: drawsItem("panel"),
+    path: drawsItem("path"),
+    image: drawsItem("image"),
+    font: (family, url) => call("font", [family, url]),
     crosshair: (opts = {}) => {
       ids.add("crosshair");
       pending.crosshair = opts.visible !== false;
@@ -1206,8 +1261,7 @@ function createHudFacade(renderer, canvas, enabled) {
       return real ? real.compose() : undefined;
     },
     summary() {
-      if (real) return real.summary();
-      return { items: [...ids], crosshair: pending.crosshair, flash: Number(pending.flashAlpha.toFixed(3)) };
+      return real ? real.summary() : unloadedHudSummary(ids, pending);
     },
   };
 }

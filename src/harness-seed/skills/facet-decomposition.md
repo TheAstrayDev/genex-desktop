@@ -60,7 +60,9 @@ Rules that never change:
   is a declaration too — it takes that check off every board. The harness adds its own checks
   only for what is declared: `no-dom-ui` + `single-hud` when there is a HUD, `look-turns-camera`
   when the mouse looks, `keys-move-player` when keys move. Do not re-declare those ids. All UI goes through `__studio.hud`
-  (drawn into the canvas); all input comes from `ctx.keys` / `ctx.look` / `ctx.wheel`. A name or
+  (drawn into the canvas: text, bars, arcs, paths, images, panels and fonts, anchored in frame
+  fractions; the middle of the view stays the game's, and the harness measures the HUD's coverage
+  and overlap); all input comes from `ctx.keys` / `ctx.look` / `ctx.wheel`. A name or
   marker over something in the world belongs to the scene, attached to that object — give it to the
   part that owns the object, not to the HUD.
 - A demo may return data for its checks: name the fields in the check note (e.g. the `ads` demo

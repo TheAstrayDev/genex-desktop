@@ -78,19 +78,81 @@ export interface UpdateContext {
   pointer: { x: number; y: number; locked: boolean };
 }
 
-/** Where a HUD item is drawn: fractions of the frame, y from the top. */
+/** One of the nine points of the frame a HUD item hangs from; `x`/`y` then move it inward. */
+export type HudAnchor =
+  | "top-left"
+  | "top"
+  | "top-right"
+  | "left"
+  | "center"
+  | "right"
+  | "bottom-left"
+  | "bottom"
+  | "bottom-right";
+
+/** Where a HUD item is drawn: fractions of the frame, y from the top, measured from `anchor` (default top-left). */
 export interface HudPlacement {
   x?: number;
   y?: number;
   size?: number;
   color?: string;
   align?: "left" | "center" | "right";
+  anchor?: HudAnchor;
+}
+
+/** A shape's box: placed like any item, its `w` and `h` in fractions of the frame's HEIGHT (so it keeps its shape). */
+export interface HudBox {
+  x?: number;
+  y?: number;
+  anchor?: HudAnchor;
+  w?: number;
+  h?: number;
+}
+
+/** A gauge or ring: radius and stroke in frame heights, angles in radians (default a 270° sweep open at the bottom). */
+export interface HudArc {
+  x?: number;
+  y?: number;
+  anchor?: HudAnchor;
+  r?: number;
+  start?: number;
+  end?: number;
+  /** How much of the sweep is filled, 0–1. */
+  fraction?: number;
+  width?: number;
+  color?: string;
+  /** The unfilled track's colour; no track without it. */
+  back?: string;
+  cap?: "round" | "butt" | "square";
+}
+
+/** A rounded rectangle behind a group of readouts. `fill: null` draws only the outline. */
+export interface HudPanel extends HudBox {
+  radius?: number;
+  fill?: string | null;
+  stroke?: string;
+  width?: number;
+}
+
+/** An SVG path (`d`), drawn through its `viewBox` (default `0 0 100 100`) into its box. */
+export interface HudPath extends HudBox {
+  viewBox?: string | [number, number, number, number];
+  fill?: string | null;
+  stroke?: string;
+  width?: number;
 }
 
 /** The only UI a template game may have: one quad tagged `hud`, drawn into the canvas. */
 export interface StudioHud {
   text(id: string, text: string, opts?: HudPlacement): void;
-  bar(id: string, fraction: number, opts?: HudPlacement & { w?: number; h?: number }): void;
+  bar(id: string, fraction: number, opts?: HudPlacement & { w?: number; h?: number; back?: string }): void;
+  arc(id: string, opts?: HudArc): void;
+  panel(id: string, opts?: HudPanel): void;
+  path(id: string, d: string, opts?: HudPath): void;
+  /** An image from `assets/` or a data URL; reported as pending until it has decoded. */
+  image(id: string, src: string, opts?: HudBox): void;
+  /** Register a bundled font file; text that names `family` uses it once it has loaded. */
+  font(family: string, url: string): void;
   crosshair(opts?: {
     size?: number;
     gap?: number;
@@ -107,9 +169,19 @@ export interface StudioHud {
   enable(on?: boolean): void;
 }
 
-/** What the HUD is showing, as `state()` reports it. */
+/** What the HUD is showing, as `state()` reports it: bounded however many items a game draws. */
 export interface HudSummary {
+  /** The first 64 item ids; `count` is how many there are. */
   items: string[];
+  count?: number;
+  /** Items per kind (`text`, `bar`, `arc`, `panel`, `path`, `image`, `crosshair`). */
+  kinds?: Record<string, number>;
+  /** The share of the frame the items cover, 0–1; null until the HUD module has loaded. */
+  coverage?: number | null;
+  /** Pairs of item ids that run into each other (a panel holding an item is not one), at most 8. */
+  overlaps?: Array<[string, string]>;
+  /** Images still decoding and fonts still loading. */
+  pending?: number;
   crosshair: boolean;
   flash: number;
 }

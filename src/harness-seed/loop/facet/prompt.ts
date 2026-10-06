@@ -533,7 +533,7 @@ function oneScreenLine({ spec: facet }: PromptInput): string {
   const enforced = harnessOnBoard.length
     ? ` The harness-owned check${one ? "" : "s"} ${harnessOnBoard.join(", ")} enforce${one ? "s" : ""} this.`
     : "";
-  return `- ONE SCREEN, ONE INPUT PATH: all UI through __studio.hud (drawn into the canvas; no DOM, no second HUD); all input from ctx.keys / ctx.look / ctx.wheel (studio.js owns pointer lock and the mouse).${enforced} A label that belongs to something in the world — a player's name, a marker over a target — is a sprite or mesh in the scene, attached to that object and tagged with it (never hud), so it moves and hides with it; __studio.hud holds only what stays on the screen.`;
+  return `- ONE SCREEN, ONE INPUT PATH: all UI through __studio.hud (drawn into the canvas: text, bars, arcs and gauges, paths, images, panels and fonts, anchored in frame fractions; keep the middle of the view for the game — the harness measures the HUD's coverage and overlap; no DOM, no second HUD); all input from ctx.keys / ctx.look / ctx.wheel (studio.js owns pointer lock and the mouse).${enforced} A label that belongs to something in the world — a player's name, a marker over a target — is a sprite or mesh in the scene, attached to that object and tagged with it (never hud), so it moves and hides with it; __studio.hud holds only what stays on the screen.`;
 }
 
 /** The last build's news: its failure, the legacy gap, or the board. */

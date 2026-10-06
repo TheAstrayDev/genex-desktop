@@ -2,8 +2,14 @@
 import { workspaceContentStamp, workspaceContentStamps } from "../../substrate/workspace-content.ts";
 import path from "node:path";
 import { readFile, realpath, writeFile } from "node:fs/promises";
-import { ensureDir, realpathNearest, writeFileNoFollow } from "../../substrate/fsx.ts";
-import { isImageFile, studioContractGeneration, type GameProject } from "../../substrate/game-workspace.ts";
+import { ensureDir, readRegularFile, realpathNearest, writeFileNoFollow } from "../../substrate/fsx.ts";
+import {
+  hudContractGeneration,
+  isImageFile,
+  shippedHudGeneration,
+  studioContractGeneration,
+  type GameProject,
+} from "../../substrate/game-workspace.ts";
 import { ThreadKind } from "../../shared/event-log.ts";
 import type { AttachReport } from "../../shared/game-project.ts";
 import {
@@ -22,6 +28,8 @@ import { isBelow, throughClaudeFolder, throughGitFolder } from "../../substrate/
 /** The largest image `game.read` hands back. */
 const MAX_IMAGE_READ_MB = 8;
 const MAX_IMAGE_READ_BYTES = MAX_IMAGE_READ_MB * 1024 * 1024;
+/** The largest `src/hud.js` an upgrade reads to recognise; a shipped copy is a few kilobytes. */
+const MAX_HUD_READ_BYTES = 512 * 1024;
 
 /** What the harness reads when a game call is refused. */
 const MESSAGE = {
@@ -241,8 +249,10 @@ async function upgradeContract(core: StudioCore, project: string): Promise<Harne
   // so every game scaffolded before M4 answered "current" and kept its old contract while
   // the director and autopilot called this believing it brought the game up to date.
   const generation = studioContractGeneration(current);
+  const own = await isOwnShape(core, project);
   const materialsAdded = await addCompanionFiles(core, dir);
-  await addContractPage(core, project, dir);
+  await addContractPage(own, dir, core.games.templateDir);
+  if (!own) await upgradeShippedHud(core, project, dir);
   const template = await readText(path.join(core.games.templateDir, "src", "studio.js"));
   if (template === null) return { upgraded: false, reason: "no template studio.js" };
   // Only a copy older than the shipped one is replaced, so a game that already holds the
@@ -274,18 +284,58 @@ async function addCompanionFiles(core: StudioCore, dir: string): Promise<boolean
   return added;
 }
 
+/** Whether the game is one the user brought (its own shape), whose files the studio keeps as they are. */
+async function isOwnShape(core: StudioCore, project: string): Promise<boolean> {
+  const games = await core.games.list().catch(() => [] as GameProject[]);
+  return games.find((g) => g.name === project)?.built === true;
+}
+
 /**
  * The contract page describes the studio's own empty project — "no build step, no package
  * manager, no network". A game the user brought is none of those things, and adoption
  * deliberately keeps that page out of their folder; a run must not put it back.
  */
-async function addContractPage(core: StudioCore, project: string, dir: string): Promise<void> {
-  const games = await core.games.list().catch(() => [] as GameProject[]);
-  const own = games.find((g) => g.name === project)?.built === true;
+async function addContractPage(own: boolean, dir: string, templateDir: string): Promise<void> {
   const docsTarget = path.join(dir, "docs", "CONTRACT.md");
   if (own || (await readText(docsTarget))) return;
-  const contract = await readText(path.join(core.games.templateDir, "docs", "CONTRACT.md"));
+  const contract = await readText(path.join(templateDir, "docs", "CONTRACT.md"));
   if (contract === null) return;
   await ensureDir(path.dirname(docsTarget));
   await writeFile(docsTarget, contract);
+}
+
+/** A file inside the game folder, by where it really lands: no link on the way leads out of it. */
+async function landsInside(dir: string, file: string): Promise<boolean> {
+  const root = await realpath(dir).catch(() => null);
+  const landing = await realpathNearest(file).catch(() => null);
+  return root !== null && landing !== null && isBelow(root, landing);
+}
+
+/**
+ * The template's HUD for a game whose `src/hud.js` is an older copy the studio shipped, byte for
+ * byte; the old copy is kept beside it as `src/hud.v<generation>.js`. A copy anyone edited is the
+ * main owner's work and stays, as does everything reached through a link. True when the HUD was
+ * replaced.
+ */
+async function upgradeShippedHud(core: StudioCore, project: string, dir: string): Promise<boolean> {
+  const target = path.join(dir, "src", "hud.js");
+  if (!(await landsInside(dir, target))) return false;
+  const current = await readRegularFile(target, MAX_HUD_READ_BYTES)
+    .then((bytes) => bytes.toString("utf8"))
+    .catch(() => null);
+  const shipped = shippedHudGeneration(current);
+  if (current === null || shipped === null) return false;
+  const template = await readText(path.join(core.games.templateDir, "src", "hud.js"));
+  if (template === null || shipped >= hudContractGeneration(template)) return false;
+  const backup = path.join(dir, "src", `hud.v${shipped}.js`);
+  if (!(await landsInside(dir, backup))) return false;
+  try {
+    // The backup first: when it cannot be written, the game's HUD is not touched either.
+    await writeFileNoFollow(backup, current);
+    await writeFileNoFollow(target, template);
+  } catch {
+    return false;
+  }
+  core.emit(UiEvent.GameChanged, { project, file: "src/hud.js" });
+  return true;
 }

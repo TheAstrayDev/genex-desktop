@@ -30,6 +30,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { bestStyleDistance, nearestReference, styleDistance } from "./style.ts";
 import { gameLine } from "./kinds.ts";
+import { hudFactLines } from "./judge-facts.ts";
 import { LIGHT_EFFORT } from "./config.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EngineFailure } from "./outage.ts";
@@ -846,6 +847,7 @@ function describeEvidence(candidate: Candidate): string {
       );
     }
   }
+  lines.push(...hudFactLines(candidate.state?.hud));
   if (candidate.skippedDemos?.length)
     lines.push(`demos declared but not run this pass (unmeasured, not failing): ${candidate.skippedDemos.join(", ")}`);
   if (candidate.motion?.length)
