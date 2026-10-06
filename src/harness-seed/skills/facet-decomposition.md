@@ -24,21 +24,24 @@ Rules that never change:
   defect, so a plan does not have to ask for them. `craft` is the exception: name up to 3 recipe
   ids there (from the craft menu below) when this facet EXISTS to get one of them right, and the
   harness puts that recipe's check on its board at normal weight. Naming none is a valid plan.
-- Liveness is a ladder, not a pack. What makes a place feel real — the whole extent existing,
-  things where they are used, movement, somewhere to go next — is climbed through `milestones`,
-  not bought by adding four checks. The loop's critic scores the principles every iteration
-  (a place: extent, scales, purpose, life, next-step, wear, light, material; a screen: readable,
-  state, affordance, feedback, depth, composition, palette, finish) and turns the worst grow gap
-  into the next move by itself. Write the ladder so the grow principles are climbed in order.
+- Liveness is a ladder, not a pack, and it is scoped to the ask. What makes a place feel real —
+  the whole extent existing, things where they are used, movement, somewhere to go next — is
+  climbed through `milestones` by making what the ask names rich (the roadside a race passes, the
+  cars on its grid), never by adding systems it does not name or four more checks. The loop's
+  critic scores the principles every iteration (a place: extent, scales, purpose, life, next-step,
+  wear, light, material; a screen: readable, state, affordance, feedback, depth, composition,
+  palette, finish) and turns the worst grow gap into the next move by itself; a fix that needs
+  something the ask does not name is a question for the user, never a move. Write the ladder so
+  the grow principles are climbed in order.
 - Assets: when the ask says BLENDER is available, any facet that owns creatures, characters,
   vehicles, weapons or buildings names the assets to model in its intent and takes shape checks
   a modelled object can pass (`objects('dog').some(o => o.userData?.asset)` is the cheapest);
   facets owning different objects model in parallel. Fences, crates and walls stay primitives.
 - `weight:"identity"` marks the checks the facet exists for (2–4 of them). `hard:true` marks a
   check known to need a technique spike (planar mirror, volumetric fog, first-person effects).
-- `milestones` is the facet's ladder: 3–5 ORDERED structural steps, each one iteration's work,
-  each changing what the game IS (its extent, a system, a mechanic, where the player goes next,
-  what the screen tells them) — never how it looks. Once the identity checks hold, the loop
+- `milestones` is the facet's ladder: 3–5 ORDERED structural steps inside the ask, each one
+  iteration's work, each changing what the game IS (its extent, a mechanic, where the player goes
+  next, what the screen tells them) — never how it looks. Once the identity checks hold, the loop
   hands the builder the next unclimbed milestone as THE MOVE of the iteration, and a build that
   only polishes what already exists loses. The ladder must reach the whole intent: "three
   houses and a well" → "the whole hamlet: 6–7 houses, lanes, fences, gardens, outbuildings" →
@@ -63,9 +66,11 @@ Rules that never change:
   `keys-move-player` when keys move, `reaches-play` with either. Do not re-declare those ids. All UI goes through `__studio.hud`
   (drawn into the canvas: text, bars, arcs, paths, images, panels and fonts, anchored in frame
   fractions; the middle of the view stays the game's, and the harness measures the HUD's coverage
-  and overlap); all input comes from `ctx.keys` / `ctx.look` / `ctx.wheel`. A name or
-  marker over something in the world belongs to the scene, attached to that object — give it to the
-  part that owns the object, not to the HUD.
+  and overlap); all input comes from `ctx.keys` / `ctx.look` / `ctx.wheel`. ONE facet owns the
+  screen — the HUD, the title, the start on a key, the countdown and the results — and every other
+  facet publishes its values in `__studio.state()` for it, never drawing them. A name or marker
+  over something in the world belongs to the scene, attached to that object — give it to the part
+  that owns the object, not to the HUD.
 - A demo may return data for its checks: name the fields in the check note (e.g. the `ads` demo
   returns `{ sightNdc: {x, y}, crosshairVisible }`).
 - `base` lists the shared files every facet forks from (palette, world constants, probe schema,
@@ -100,7 +105,10 @@ facet the mood board screams about deserves the largest share.
 ## What makes a good check
 
 A check is a number or a boolean the harness can compute, phrased so that a failing check tells
-the builder what to change. "Roof pitch 38–45°" is a scene check over the roof mesh normals;
+the builder what to change, about what a player gets: the race reaches its results, the speed
+reads at a glance, the frame rate holds, the console stays clean. How much the build draws (HUD
+items, draw calls, triangles) is bounded only from above — the harness refuses a floor — and a
+vision check asks what a player can see or read, never the technique that draws it. "Roof pitch 38–45°" is a scene check over the roof mesh normals;
 "no more than 2% of pixels above 0.9" is a pixel check on the camera that shows the sky; "the
 player moved" is a probe check on delta('player.x'). Write the number down once, in the check —
 never only in the prose.
@@ -108,7 +116,10 @@ never only in the prose.
 ## File ownership
 
 Facets that all edit `src/main.js` conflict at merge time by construction. Give every facet its
-own module under `src/` (`city.js`, `lighting.js`, `movement.js`) in `owns`; the `mainOwner`
+own module under `src/` (`city.js`, `lighting.js`, `movement.js`) in `owns`, and name in `base`
+what each module exports for the others and the conventions they share (axes, signs, units): that
+is their contract, and no facet edits another's module — what it needs goes through the API. When
+the game carries `docs/ARCHITECTURE.md`, it is that contract already. The `mainOwner`
 facet is the only one that may restructure `src/main.js` and `src/studio.js`. Non-owner facets
 touch main.js only to add their single import + init line inside the marked FACET WIRING block,
 and write their notes to `NOTES.<facet-id>.md`, never the shared `NOTES.md`.

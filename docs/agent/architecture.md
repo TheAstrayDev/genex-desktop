@@ -273,7 +273,7 @@ behind Studio and Plugins and reports zero native bounds when hidden, projectles
 by a drawer or dialog; its ResizeObserver keeps reporting geometry. Settings is one modal
 (`SettingsDialog`, routed by `settings-navigation.ts` to Games, Appearance, Model Providers, Local
 Models, Harness and Permissions). Harness
-writes `buildersMax` (1–12, default 8); main derives the preview-pool ceiling as builders + 2. An
+writes `buildersMax` (1–12, default 4); main derives the preview-pool ceiling as builders + 2. An
 empty, never-welcomed profile first shows the welcome (`onboarding/`), which fades into home.
 Launches open home (`Room.Home`). Its first message runs `launchGame` (`state/launch.ts`):
 `studio:game.name` names the game (`main/core/game-naming.ts`), `createGame` makes it, its chat
@@ -284,13 +284,10 @@ the [feature map](feature-map.md). A file a chat names links once main confirms 
 
 **Composer.** What the composer's controls show is specified in the
 [prompt composer design](design.md#prompt-composer). Each chat keeps its own Loop
-(`storageKeyFor.threadLoop`, [`loop-setting.ts`](../../src/renderer/loop-setting.ts)); a game chat
-is pinned on open from the last pick (`studio.composer.loop`, `studio.autopilotHours`), which every
-pick updates. While a build runs or is paused, Mode shows its recorded limit
-read-only (`runLoopSetting` over `recordedRunLoop`): ∞ is `budgets.untilSatisfied`, its 24 h
-`wallClockMs` only the ceiling. After a finished build, Mode edits the chat's Loop again
-(`loopCommissions`); a command's result carries it only before the first build
-(`reportCommissions`). The permissions pill (`ComposerPermissionMenu`) sets a Claude chat's mode. A
+(`storageKeyFor.threadLoop`, [`loop-setting.ts`](../../src/renderer/loop-setting.ts)), pinned on open
+from the last pick (`studio.composer.loop`, `studio.autopilotHours`); Mode around a build is in the
+[feature map](feature-map.md) (∞ is `budgets.untilSatisfied`, its 24 h `wallClockMs` a ceiling). The
+permissions pill (`ComposerPermissionMenu`) sets a Claude chat's mode. A
 saved `fast` preference is dropped. One composer effort (`ComposerEffort`,
 `effortScale`/`unifiedEffort` over the orchestrator's levels) is mapped per role by `nearestEffort`
 into `roles.efforts`, which `roleEffort` routes to each runtime job. A game chat keeps its own
@@ -302,8 +299,7 @@ fresh chats (roles stay per engine, preferences per model); `ComposerSendOptions
 to acknowledge, then the oldest queued message runs; Escape never cancels a build
 (`composerEscapeIntent`). Wrapping up (`finish_run`, `studio:run.finish`) is not cancel. A fresh game
 inherits `studio.model.last`; the Studio thread keeps `studio.studioChat.model` and its own keys,
-seeded once and never written back. Studio chat's `ModelMenu` has no `onRoles`: it opens the
-model list directly, beside `ComposerEffort`.
+seeded once and never written back. Studio chat's `ModelMenu` has no `onRoles`.
 
 **Run summaries.** Preload shares watchers; main caches histories/folds by heads and evidence metadata.
 Preview identity patches avoid refolds. Activity incrementally retains summaries and auxiliary records.
@@ -354,10 +350,8 @@ takes Live or the stand-in by a harness-named handle: it gets an overflow lease,
 `OVERFLOW_WINDOWS_MAX` past the pool's ceiling, and waits for a window beyond that. The morning card (`MorningCard.tsx` over `morning-words.ts`) is specified in
 the [feature map](feature-map.md).
 
-**Covers.** `GameAvatar` paints through `ui/cover-animation.ts`: one WebGL context, one program
-per family (orb shaders are the lazy `shared/cover-orbs.ts` chunk), and a still per sphere in
-IndexedDB (`ui/cover-stills.ts`) so resting rows compile nothing; clocks are keyed by game and
-cover; only the last hovered cover animates (at most 24 fps). Asset cards render thumbnails through a serialized decoder queue
+**Covers.** `GameAvatar` paints every cover with one WebGL context (`ui/cover-animation.ts`,
+`ui/cover-stills.ts`; [feature map](feature-map.md)). Asset cards render thumbnails through a serialized decoder queue
 and dispose their WebGL contexts.
 
 **Appearance.** [`src/renderer/appearance/`](../../src/renderer/appearance/) owns the versioned
@@ -534,7 +528,8 @@ resets the silence clock) and a host call in flight; page and record calls end a
 
 **A harness child dying mid-night** is repaired without an app restart (`onUnexpectedExit`,
 [feature map](feature-map.md)): StudioCore aborts every delegation, `run.settled` per open run
-frees the idle watch, and the reborn loop closes each night as paused (`openRuns`). A run a quit or
+frees the idle watch, and the reborn loop closes each night as paused (`openRuns`) for `core/auto-resume.ts`
+([automatic resume](../harness-runtime.md#automatic-resume)). A run a quit or
 crash interrupted is repaired at boot as paused, keyed on its journal artifact; its synthetic
 `run_finished` claims a build only when the head moved off the base, and Resume goes on from that
 journal ([the full journal](#the-night-director-workers-and-judging)). The Mac is held awake from
@@ -590,7 +585,7 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
   (the user's words verbatim, what happened, where the run stands). The user, finish and a
   worker steer wake at once, worker news after 5 s; timers cover the plan window, wrap-up, the
   workers' limit and a 20-minute heartbeat; at most 30 wakes an hour. An idle night asks once,
-  then wraps up; each wake appends `director_continued`.
+  then wraps up (a goal build after the art director's look); each wake appends `director_continued`.
 - The full journal (`loop/director/journal.ts`): each save writes the night's record on
   `journal.director` (clock with `workedMs`, plan, ledger, health, workers' limit, recent log,
   workers, wake state). A Resume gets the working time left (`nightClock`, paused time excluded), a
@@ -621,6 +616,15 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
   `lastAccepted`.
 - `spec.stage = "finish"` (`facet/stage.ts`, per round, `stage=`): polish list
   (`judge/taste-finish.md`) is the work, no move or streak; a preferred, unbroken build ends it.
+- `run.scope` (`loop/scope.ts`) is the user's words; `scopeLines` sits beside every goal, and
+  a proposal typed `scope: "adds"` is a decision card (`facet/beyond.ts`), never a move.
+  `critic=screen` marks the screen's one owner (`loop/screen-owner.ts`).
+- Two or more looping parts need `plan contract=` (`director/contract-gate.ts`), committed as
+  `docs/ARCHITECTURE.md` before loop workers fork; `integrate worker=a,b` is a wave (one health
+  pass, `state.waveHead`); `loop/registry.ts` refuses lost registrations.
+- The finish mark (`budgets.ts` `finishMarkMs`) or `judge ship=yes` runs the art director
+  (`director/art-direction.ts`, `loop/ship-review.ts`): defects go to their parts' owners; it never
+  vetoes ([harness runtime](../harness-runtime.md)).
 - `worker_start` may override `FACET_POLICY`; `loopDigest` puts each worker's phase, streaks and
   checks in the digests.
 - The session ends before the hard deadline (`wrapReserveMs`); the two closes are one function
@@ -769,12 +773,10 @@ per-game network opt-in yet.
 The session grants pointer lock (plus fullscreen on screen) and denies every other permission,
 microphone and camera included. The view turns off `GAME_DISABLED_BLINK_FEATURES`
 (`OnDeviceWebSpeechAvailable`, `InstallOnDeviceSpeechRecognition`): on-device speech recognition
-(`SpeechRecognition.available()`/`install()` with `processLocally`, or `start()` with it and a
-`lang`) asks for a Mojo binder only Chrome registers, and Electron kills the whole renderer for the
-bad message (reason 123). With both off those members exist in no frame; a plain `start()` ends in
+asks for a Mojo binder only Chrome registers, and Electron kills the renderer for the bad message
+(reason 123). With both off those members exist in no frame; a plain `start()` ends in
 `not-allowed` and speech synthesis is untouched. The guard is engine-level: a page-world stub misses
-about:blank, srcdoc and blob: documents, and `--disable-speech-api` removes synthesis while the
-unprefixed API still crashes. `page-shim.test.ts` only proves the list is applied; the
+about:blank, srcdoc and blob: documents. `page-shim.test.ts` only proves the list is applied; the
 [speech selftest](verification.md#acceptance-evidence) proves it holds. Any other renderer death
 sets `status().crashed` and pushes one `render process gone: <reason>` console line, source `studio:window-gone` (a cross-site
 frame's death reports nothing); nothing reloads the page, a death during `load()` rejects it, and

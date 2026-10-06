@@ -2,12 +2,14 @@
 
 ## From a request to a game
 
-Auto edits directly; Loop can delegate workers while the chat leads and reviews. Timed builds
-use their window; until-satisfied ones finish on verified required
-outcomes, time only a ceiling. Acceptance persists across workers and restarts. External
-blockers pause the run, keeping its checkpoint. User Finish overrides the clock, never the
-final judge; a late art-director review never vetoes. Maximum concurrent workers defaults to four; saved choices stay. [Harness runtime](../harness-runtime.md#goal-completion-and-worker-approvals)
-owns completion and recovery details.
+Auto edits directly; Loop can delegate workers (four by default) while the chat leads.
+Parts grow boldly within the ask; from the finish mark an art director reviews the whole game and
+its defects go back to their parts for polish: a verdict, never a veto.
+Timed builds use their window; until-satisfied ones finish on verified required outcomes, time
+only a ceiling. Acceptance persists across workers and restarts. External blockers pause the
+run at its checkpoint. User Finish overrides the clock, never the final judge.
+[Harness runtime](../harness-runtime.md#goal-completion-and-worker-approvals) owns completion and
+recovery details.
 
 An active run opens Builds once; later tab choices are the user's, except that showing a
 build from the chat opens Live. Without a plan or run, a stored Builds
@@ -43,7 +45,7 @@ and Studio report missing checks, coverage limits, counts and revisions.
 
 ## Continuation and interruption
 
-After a chat-led night, its session takes follow-ups: game edits, resuming a paused run
+After a chat-led build, its session takes follow-ups: game edits, resuming a paused run
 with its time left, starting over only when asked. With Loop on, a small change is made directly;
 more work reopens the build until checked. One the chat cannot continue, like Ollama's, is answered
 as with Loop off, noting it once. **Stop** interrupts work immediately, preserving finished

@@ -22,12 +22,18 @@ comparison. Start with these authored tasks; use the same inputs for every candi
 | No change | Identical builds with shuffled A/B placement | Equal bytes/settings; a genuine tie is a valid outcome |
 | Missing evidence | An absent camera, malformed judge response or unavailable WebGPU measurement | Missing/invalid evidence remains distinguishable from a measured pass |
 | Scope | The requested change versus an unrelated attractive addition | Frozen task brief and evidence of the requested behavior |
+| Finish | The same build polished versus with an unfinished new system added | Finish-stage taste rubric; the polished build wins and a regression still loses |
 
 The art director's ship review (`judge/ship-review.md`, `loop/ship-review.ts`) is the one
 absolute judge: one build and no pair, at 1600×900. Evaluate it on single builds that reviewers
 label ship or not, each decisive defect with the plan part that owns it and its severity; a
 malformed reply must stay no verdict, never a "no", and a camera it was not shown is dropped. It is
 never put beside another build's frames.
+
+A finish-stage round's taste judge reads `judge/taste-finish.md` after its usual rubric
+(`taste-veto.md`): polish is the work, the build a player would rather ship wins, and it lists up
+to eight polish items. Evaluate it on finish pairs only, and confirm that build-stage pairs, judged
+without it, keep their verdicts.
 
 These are test cases, not human-labelled quality results. Begin without model calls by checking
 capture reproducibility, malformed responses, budget limits and blind-label handling through the

@@ -5,9 +5,9 @@ You are building a game inside Genex as a contractor. This project starts empty:
 player, ground, HUD or loop to preserve. Build the scene and mechanics from the brief, choose that
 game's controls and viewpoints, replace `phase: "empty"`. Five rules; tables in `docs/CONTRACT.md`.
 
-1. **In a build, read `.studio/BRIEF.md` first when it exists.** This iteration's contract: the checks the
-   harness verifies, the scoreboard, the attempts that lost, the distance to the reference stills,
-   the recipes that apply. Work identity checks first.
+1. **In a build, read `.studio/BRIEF.md` first when it exists.** This iteration's contract: the checks,
+   the scoreboard, the attempts that lost, the reference distance, the recipes. Work identity checks
+   first. `docs/ARCHITECTURE.md`, when present, names each module's owner and API: never edit another's.
 2. **Keep `window.__studio` working.** `installStudio({ scene, renderer, camera, player, … })`
    from `src/studio.js` — never remove a method. A build the harness cannot inspect is a loss.
 3. **One screen, one input path.** All UI is `__studio.hud` in the canvas: text, bars, arcs, paths, images, panels,

@@ -339,6 +339,29 @@ merge, that loses a camera, demo or probe another facet's checks use is a regres
 (`loop/registry.ts`). Only cameras the page registers count, never the harness's own `default`
 view; a merge compares state paths only with a health pass under the same setup.
 
+What a run builds. Its scope (`loop/scope.ts`, `run.scope`) is the user's own words from the
+chat's log since the last run, stamped at launch with what is in scope and what is cut; a Resume or
+a reopen reads it back, and a run without one behaves as before. Every agent that reads the goal
+reads `scopeLines(run)` beside it (`loop/scope-prompts.ts`: judges add `SCOPE_RULE`, the lead's
+rules `DIRECTOR_SCOPE_RULE`), and every proposal — a taste judge's or player's `bigMove`, the
+planner's move, a liveness fix (`adds`) — carries a typed `scope`, `deepens` or `adds`. An `adds`
+proposal is never a move: it becomes a decision card (`loop/facet/beyond.ts`, at most
+`BEYOND_CARDS_PER_PART` per part), and only a user steer answering one widens the scope. `plan cut=`
+joins the cut list; `added=` and a part marked `added:true` are cards too. One part owns the screen
+(`critic=screen`; `worker_start` refuses a second running one): while it runs, another template part
+that draws through the contract HUD is a `screen-owner` finding (`loop/screen-owner.ts`). A check
+asking that how much the build draws (HUD items, draw calls, triangles, vertices) be large is
+refused where checks are validated (`loop/check-lint.ts`, `draw-count-floor`); a ceiling or an
+existence test passes, and a board stored before the lint scores as it did.
+
+Two stages. A worker's `spec.stage` is `build` (the default) or `finish` (`loop/facet/stage.ts`;
+`worker_start stage=`, never on a single session, or `worker_steer stage=` from its next round;
+and `worker_steer move=` puts a finisher back to building). A finish round has no move, ladder or
+polish streak: its brief works the taste judge's polish list (up to eight; `judge/taste-finish.md`
+is appended to the taste rubric) and the defect ledger, it wins on the blind pick, a regression
+still rolls it back, and the worker ends once a preferred, unbroken build holds every identity
+check. The art director's finish mark (below) is when the lead turns owners to it.
+
 Manual SkillOpt resolves the most recent run's model through `modelOn`, as the post-run path does.
 A cross-provider run stores its builder model alongside its orchestrator engine, so those two raw
 fields must not be passed together to a completion call. Skill gates compare instruction texts against saved task descriptions; they do not execute

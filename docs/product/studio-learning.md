@@ -7,7 +7,7 @@ state using a bounded view of settings, games, recent activity and proposals. It
 commission a game or grant authority to mutate the harness. It points to waiting suggestions,
 never its own. **How it works**, beside its title, explains the loop.
 
-Its composer offers text, images, its own model and effort, and Send/Stop; no game roles, Loop
+Its composer offers text, images, model, effort and Send/Stop; no game roles, Loop
 or tools. Its first message points games to their own chats; example questions follow. Its own records
 appear in Activity, not here.
 
@@ -29,15 +29,14 @@ Off, Harness learns nothing new: no review after a run, suggestions, game lesson
 statistics or automatic apply. What it learned stays in use and can be undone; waiting
 suggestions can still be applied or discarded. Runs are still recorded.
 
-The installed game-building harness can learn from run evidence and propose reusable changes
-to its instructions. Proposed changes, applied changes, checked changes and game-quality
-results are distinct. Builders' lessons arrive as one suggestion. A learning count does not
-certify a better game. A game chat shows one
+Harness learns from run evidence and proposes reusable instruction changes; proposed, applied,
+checked and game-quality results are distinct. Builders' lessons arrive as one suggestion. A
+learning count does not certify a better game. A game chat shows one
 plain line about what Harness learned from that build, with **Review in Harness**.
 
-Each proposal carries a plain title and summary written for someone who never reads the
-instruction files; older ones name what they change. Suggestions are
-included by a check mark and applied or discarded together; the file, the proposer's notes and
+Each proposal carries a plain title and summary for someone who never reads
+instruction files; older ones name what they change. Checked suggestions
+are applied or discarded together; the file, the proposer's notes and
 the diff (wrapped, with context) stay behind **See the exact edit**, or show directly when the row
 has nothing else. Missing plain words are asked for once more. Applied changes say who let them land and keep
 their diff and **Undo this change**, which takes back that change alone; later changes and what
