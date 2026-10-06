@@ -37,6 +37,7 @@ import { parseModuleContract, singlePart } from "./module-contract.ts";
 import { MAX_LEDGER, MAX_PLAN_WORKERS, PLAN_HOLD_SLICE_MS, SILENT_ROUND_MIN } from "./budgets.ts";
 import { SECOND_MS } from "../time.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
+import { isOpenRung, withOpenRung } from "../facet/growth.ts";
 import { scopeItems } from "../scope.ts";
 import { SCREEN_CRITIC } from "../screen-owner.ts";
 import { NoteKind } from "./wake-schedule.ts";
@@ -684,8 +685,11 @@ export function compileWorkerSpec(
   base: AnyRecord | null = null,
   { rarelyMeasurable: rarely = [] }: { rarelyMeasurable?: Array<{ id: string; rounds: number }> } = {},
 ) {
+  // The lead's own `{"open":true}` says where it leaves the ladder open; the harness puts the one
+  // open rung at the end below, whatever the lead wrote.
+  const rungs = milestones.filter((rung) => !isOpenRung(rung));
   let spec = normalizeFacetSpec(
-    { id, title: title || id, intent: brief, owns, identity, cameras, checks, done, milestones, budgetShare: 0 },
+    { id, title: title || id, intent: brief, owns, identity, cameras, checks, done, milestones: rungs, budgetShare: 0 },
     index,
   );
   spec = withDeclaredGame(spec, { kind, traits, ownsMain, screen, keepsFrontEnd: setup?.begin === false });
@@ -703,10 +707,15 @@ export function compileWorkerSpec(
   spec.setup = setup;
   withCritic(spec, critic);
   // Who owns the move (M3.3). A director that wrote a ladder owns it: the harness hands the
-  // worker the next unclimbed rung and never invents one of its own — the planner's "the ONE
-  // structural move" and the liveness critic's grow gaps are exactly what once overruled a
-  // brief every iteration. With no ladder the harness names the move as it always did.
-  if (spec.milestones?.length) spec.moveOwner = MoveOwner.Director;
+  // worker the next unclimbed rung and never puts a move of its own ahead of one — the planner's
+  // "the ONE structural move" and the liveness critic's grow gaps once overruled a brief every
+  // iteration. The ladder ends with an open rung (facet/growth.ts): the reviewers' best step inside
+  // the ask fills it when it is reached, so growth the lead did not foresee still has a way in.
+  // With no ladder the harness names the move as it always did.
+  if (spec.milestones?.length) {
+    spec.milestones = withOpenRung(spec.milestones);
+    spec.moveOwner = MoveOwner.Director;
+  }
   // The finish stage rides on the spec beside moveOwner: the loop fixes it at the top of each
   // round, a steer flips it from the next one, and the run log records a steer. A build worker's
   // spec carries no stage at all.

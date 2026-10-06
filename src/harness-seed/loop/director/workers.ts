@@ -26,6 +26,7 @@ import { RunEvent } from "../run-events.ts";
 import { normalizeScoutSetup } from "../scout.ts";
 import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
 import { FINISH_SINGLE_REFUSAL, FINISH_START_MOVES } from "../facet/stage-prompts.ts";
+import { isOpenRung } from "../facet/growth.ts";
 import { isCommit } from "../shell.ts";
 import { addToScope, restoreScope, runScope, type RunScope } from "../scope.ts";
 import { linkScreenOwner, runningScreenOwner, SCREEN_CRITIC } from "../screen-owner.ts";
@@ -792,9 +793,12 @@ const isDoneEntry = (entry: AnyRecord | null): boolean =>
   Boolean(entry?.check) &&
   typeof entry?.check === "object";
 
-/** A rung of the ladder: one structural step, in a sentence. */
-const isRung = (entry: AnyRecord | null): boolean =>
+/** A rung the lead wrote: one structural step, in a sentence. */
+const isWrittenRung = (entry: AnyRecord | null): boolean =>
   Boolean(entry) && typeof entry === "object" && String(entry?.what ?? "").trim() !== "";
+
+/** A rung of the ladder: a written step, or the open rung (`{"open":true}`) the reviewers' step fills. */
+const isRung = (entry: AnyRecord | null): boolean => isWrittenRung(entry) || isOpenRung(entry);
 
 /** `done`, read and held to its shape: 2–4 {what, check}. */
 function doneArg(value: unknown): { value: any[] | null; error?: undefined } | { error: string } {
@@ -821,7 +825,7 @@ function ladderArg(args: AnyRecord): { value: AnyRecord[]; error?: undefined } |
     };
   if (ladder.some((entry) => !isRung(entry)))
     return {
-      error: `milestones: every rung is {"what":"one structural step — what the game IS after it","check":{…}} and "check" is optional`,
+      error: `milestones: every rung is {"what":"one structural step — what the game IS after it","check":{…}} and "check" is optional; the last may be {"open":true}`,
     };
   return { value: ladder };
 }

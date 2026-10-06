@@ -10286,3 +10286,207 @@ describe("MAP-5. scope inflated without the user", () => {
     );
   });
 });
+
+/**
+ * The NFS-inspired ∞ Loop run (run_muwe8k92lv4t, 2026-10-06) lost to a plain session. Across all of
+ * its judged rounds the liveness critic scored the world's extent 2 — "present but thin" — and
+ * proposed a distant skyline and side streets fading into fog; none of it became a move. Only a 0 or
+ * a 1 was actionable, and once the lead had written a ladder its rungs owned the move: 24 of 25.
+ */
+describe("growth had no way in (the NFS-inspired run, 2026-10-06)", () => {
+  const rulesUrl = "../../src/harness-seed/loop/facet/rules.ts";
+  const SKYLINE = "a distant skyline and side streets fading into fog past the last block";
+  const LAMPS = "sodium lamps pool warm light on the wet road between the neon";
+  /** A critic card as the run's city part got it: extent 2 with a fix inside the ask, light 2, the rest convincing. */
+  const card = (extent: number, extra: Record<string, unknown> = {}): Record<string, any> => ({
+    extent: { score: extent, reason: "the street ends in black past the second block", fix: SKYLINE, adds: false },
+    scales: { score: 3, reason: "towers, cars and litter at once", fix: "" },
+    purpose: { score: 3, reason: "shopfronts face the road", fix: "" },
+    life: { score: 3, reason: "rain and traffic move", fix: "" },
+    "next-step": { score: 3, reason: "the road leads on", fix: "" },
+    wear: { score: 3, reason: "puddles and grime", fix: "" },
+    light: { score: 2, reason: "flat street light", fix: LAMPS, adds: false },
+    material: { score: 3, reason: "wet asphalt reads", fix: "" },
+    biggest: "light",
+    summary: "a street, not a city",
+    ...extra,
+  });
+  const run = { runId: "nfs", project: "nfs", goal: "a neon street race", budgets: { wallClockMs: 1000 } } as Run;
+  /** The part's loop as the critic and the move read it, with every event it writes. */
+  const partLoop = async (reply: () => unknown, spec: Record<string, unknown> = { id: "city", checks: [] }) => {
+    const { FACET_POLICY } = await import("../../src/harness-seed/loop/facet/policy.ts");
+    const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    let answer = reply;
+    const recorder = ctxRecorder({
+      handlers: { "engine.complete": () => ({ message: { content: JSON.stringify(answer()) } }) },
+    });
+    const loop = {
+      ctx: recorder.ctx,
+      run,
+      facet: { id: "city", title: "The city" },
+      spec: { cameras: [], ...spec } as Record<string, any>,
+      board: { lit: { pass: true, weight: "identity" } },
+      moves: [] as Array<Record<string, unknown>>,
+      milestonesDone: new Set<string>(),
+      milestonesSetAside: new Set<string>(),
+      polishStreak: 0,
+      lastLiveness: null as Record<string, any> | null,
+      lastBigMove: null as Record<string, unknown> | null,
+      surfacedBeyond: [] as string[],
+      defectList: [],
+      policy: FACET_POLICY,
+      legacy: false,
+      critic: "place",
+      hasTime: () => true,
+      currentMove: null as Record<string, any> | null,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void events.push({ type, payload }),
+    };
+    return { loop, events, answerWith: (next: () => unknown) => void (answer = next) };
+  };
+  /** One judged round's critic card, on the build that won it. */
+  const judged = (iteration: number) => ({
+    won: true,
+    iteration,
+    iterationId: `i${iteration}`,
+    evidence: { shots: [{ camera: "default" }] },
+  });
+
+  it("GROW-1. extent stood at 2 card after card and never became a move: three cards of the same 2 make its fix the move, and a polish 2 joins the ledger, not the move", async () => {
+    const { critiqueLiveness } = await import("../../src/harness-seed/loop/facet/phases/learn.ts");
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { chooseMove, MoveSource } = await import(rulesUrl);
+    const part = await partLoop(() => card(2));
+    const choose = () => chooseMove({ spec: part.loop.spec, lastLiveness: part.loop.lastLiveness });
+    for (const iteration of [1, 2]) await critiqueLiveness(part.loop as never, judged(iteration) as never);
+    assert.equal(choose().source, MoveSource.Planner, "two cards at 2 are still 'almost there'");
+    await critiqueLiveness(part.loop as never, judged(3) as never);
+    const third = choose();
+    assert.equal(
+      third.source,
+      MoveSource.Critic,
+      `the third card at 2 makes extent the move: ${JSON.stringify(third)}`,
+    );
+    assert.equal(third.gap?.key, "extent");
+    assert.equal(third.gap?.fix, SKYLINE);
+    const polish = (part.loop.lastLiveness?.polish ?? []).map((p: { key: string }) => p.key);
+    assert.deepEqual(polish, ["light"], "a polish principle stuck at 2 joins the ledger by its kind");
+    // The builder's brief says why: the critic's own words, and how long it has stood.
+    await chooseRoundMove(part.loop as never, { iteration: 4 } as never);
+    assert.equal(part.loop.currentMove?.what, SKYLINE);
+    assert.equal(part.loop.currentMove?.source, MoveSource.Critic);
+    assert.match(String(part.loop.currentMove?.why), /extent scored 2\/3 for 3 critic cards running/);
+    // A convincing card ends the streak: extent at 3 is nobody's move any more.
+    part.answerWith(() => card(3));
+    await critiqueLiveness(part.loop as never, judged(5) as never);
+    assert.deepEqual(
+      (part.loop.lastLiveness?.grow ?? []).map((p: { key: string }) => p.key),
+      [],
+      "a 3 ends the streak",
+    );
+  });
+
+  it("GROW-2. the critic's biggest reaches the move: its own pick, a grow principle inside the ask, is a candidate at 2", async () => {
+    const { normalizeLiveness } = await import("../../src/harness-seed/loop/judge.ts");
+    const { chooseMove, MoveSource } = await import(rulesUrl);
+    const spec = { id: "city", checks: [], milestones: [] };
+    const named = chooseMove({ spec, lastLiveness: normalizeLiveness(card(2, { biggest: "extent" })) });
+    assert.equal(named.source, MoveSource.Critic, `the critic's biggest is a move candidate: ${JSON.stringify(named)}`);
+    assert.equal(named.gap?.key, "extent");
+    // A biggest that is polish, or beyond the ask, is not a move: the ledger and the user own those.
+    assert.equal(chooseMove({ spec, lastLiveness: normalizeLiveness(card(2)) }).source, MoveSource.Planner);
+    const beyond = card(2, { biggest: "extent" });
+    beyond.extent = { ...beyond.extent, adds: true };
+    assert.equal(chooseMove({ spec, lastLiveness: normalizeLiveness(beyond) }).source, MoveSource.Planner);
+    // A 0 or 1 is still a grow gap, behind the critic's own pick.
+    const scales = normalizeLiveness(
+      card(2, { biggest: "extent", scales: { score: 1, reason: "no small things", fix: "litter and cones" } }),
+    );
+    assert.equal(chooseMove({ spec, lastLiveness: scales }).gap?.key, "extent");
+    assert.equal(chooseMove({ spec, lastLiveness: scales, moves: [{ what: SKYLINE }] }).gap?.key, "scales");
+  });
+
+  it("GROW-3. the lead's ladder ends with an open rung: after the lead's rungs it takes the reviewer's step, mandatory, and keeps it however the judge rewords it", async () => {
+    const { compileWorkerSpec } = await import("../../src/harness-seed/loop/director/rules.ts");
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { normalizeLiveness } = await import("../../src/harness-seed/loop/judge.ts");
+    const { chooseMove, MoveSource } = await import(rulesUrl);
+    const lead = [{ what: "the wet asphalt becomes the hero" }, { what: "a bloom and atmosphere post chain" }];
+    const compile = (milestones: unknown[]) =>
+      compileWorkerSpec({ id: "city", brief: "the city", milestones } as never, null).spec as Record<string, any>;
+    const spec = compile(lead);
+    const ladder = spec.milestones as Array<Record<string, unknown>>;
+    assert.equal(ladder.length, 3, `the harness appends one open rung: ${JSON.stringify(ladder)}`);
+    assert.deepEqual(
+      ladder.slice(0, 2).map((m) => m.what),
+      lead.map((m) => m.what),
+      "after the lead's rungs",
+    );
+    assert.equal(ladder[2]!.open, true);
+    const leftOpen = compile([...lead, { open: true }]).milestones as Array<Record<string, unknown>>;
+    assert.equal(leftOpen.filter((m) => m.open === true).length, 1, "a lead that leaves it open gets one");
+    assert.equal(leftOpen.at(-1)!.open, true, "at the end");
+
+    const part = await partLoop(() => card(3), spec);
+    for (const rung of ladder.slice(0, 2)) part.loop.milestonesDone.add(String(rung.id));
+    const skyline = {
+      what: "a skyline of lit towers past the street, side streets into fog",
+      why: "a city",
+      scope: "deepens",
+    };
+    part.loop.lastBigMove = skyline;
+    await chooseRoundMove(part.loop as never, { iteration: 4 } as never);
+    assert.equal(part.loop.currentMove?.milestoneId, ladder[2]!.id, "the open rung is this round's move");
+    assert.equal(part.loop.currentMove?.what, skyline.what);
+    assert.equal(part.loop.currentMove?.source, MoveSource.Milestone);
+    assert.equal(part.loop.currentMove?.mandatory, true, "the lead's rung, delegated: mandatory like the rest");
+    assert.match(String(part.loop.currentMove?.why), /open rung/);
+    const kept = (part.loop.spec.milestones as Array<Record<string, unknown>>).at(-1)!;
+    assert.equal(kept.what, skyline.what, "the ladder keeps the step it was filled with");
+    assert.equal(kept.filledBy, MoveSource.Reviewer);
+    const filledCards = () => part.events.filter((e) => e.type === "autopilot_decision");
+    assert.equal(filledCards().length, 1);
+    assert.match(String(filledCards()[0]!.payload.decision), /open rung/);
+    // The judge words its proposal differently next round: the rung is the step it was filled with.
+    part.loop.lastBigMove = { what: "a rain-cloud deck lit from below", why: "depth", scope: "deepens" };
+    await chooseRoundMove(part.loop as never, { iteration: 5 } as never);
+    assert.equal(part.loop.currentMove?.what, skyline.what);
+    assert.equal(filledCards().length, 1, "filled once");
+
+    // Three cards of the same complaint outrank one round's proposal at the open rung.
+    // The card as the loop carries it after three cards at 2 (GROW-1): extent stuck in `grow`.
+    const parsed = normalizeLiveness(card(2));
+    const stuck = { ...parsed, grow: [{ ...parsed.principles[0]!, stuck: 3 }] };
+    const done = ladder.slice(0, 2).map((m) => String(m.id));
+    const fresh = compile(lead);
+    const filled = chooseMove({ spec: fresh, milestonesDone: done, lastBigMove: skyline, lastLiveness: stuck });
+    assert.equal(filled.milestone?.what, SKYLINE);
+    assert.equal(filled.milestone?.filledBy, MoveSource.Critic);
+    // With nothing to fill it, the open rung is passed over: the climbed ladder reads as before.
+    assert.deepEqual(chooseMove({ spec: fresh, milestonesDone: done }), { source: MoveSource.None, mandatory: false });
+  });
+
+  it("GROW-4. a step beyond the ask is still never a move: not the open rung's, not a stuck principle's", async () => {
+    const { critiqueLiveness } = await import("../../src/harness-seed/loop/facet/phases/learn.ts");
+    const { compileWorkerSpec } = await import("../../src/harness-seed/loop/director/rules.ts");
+    const { chooseMove, MoveSource } = await import(rulesUrl);
+    const pursuit = card(3, {
+      life: { score: 2, reason: "nobody chases you", fix: "a police pursuit with a helicopter", adds: true },
+      biggest: "life",
+    });
+    const part = await partLoop(() => pursuit);
+    for (const iteration of [1, 2, 3, 4]) await critiqueLiveness(part.loop as never, judged(iteration) as never);
+    assert.deepEqual(part.loop.lastLiveness?.grow, [], "a fix beyond the ask never counts toward a streak");
+    const { spec } = compileWorkerSpec(
+      { id: "city", brief: "the city", milestones: [{ what: "the wet asphalt becomes the hero" }] } as never,
+      null,
+    );
+    const done = [String((spec.milestones as Array<{ id: string }>)[0]!.id)];
+    const helicopter = { what: "a police helicopter over the course", why: "pressure", scope: "adds" };
+    const lastLiveness = part.loop.lastLiveness;
+    const choice = chooseMove({ spec, milestonesDone: done, lastBigMove: helicopter, lastLiveness });
+    assert.equal(choice.source, MoveSource.None, `the open rung is passed over: ${JSON.stringify(choice)}`);
+    assert.equal(choice.beyond?.what, helicopter.what, "the helicopter goes to the user as a card");
+    const unowned = chooseMove({ spec: { id: "city", checks: [] }, lastBigMove: helicopter, lastLiveness });
+    assert.equal(unowned.source, MoveSource.Planner);
+  });
+});

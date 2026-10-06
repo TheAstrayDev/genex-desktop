@@ -67,6 +67,7 @@ import {
 import { contractWiringAsk } from "../../src/harness-seed/loop/autopilot.ts";
 import { unversionedNested } from "../../src/harness-seed/loop/gauntlet.ts";
 import { judgeableFirst } from "../../src/harness-seed/loop/main.ts";
+import { OPEN_RUNG_WHAT } from "../../src/harness-seed/loop/facet/growth.ts";
 import {
   FACET_POLICY,
   FACET_POLICY_RANGE,
@@ -786,9 +787,11 @@ describe("a worker's contract: done, compiled and dry-run", () => {
       ),
     );
     assert.equal(compiled.moveOwner, "director", "the harness never invents a move over a ladder the director wrote");
+    // Flipped (the NFS-inspired run, 2026-10-06): the ladder ends with one open rung after the
+    // director's, which the reviewers' best step inside the ask fills when it is reached.
     assert.deepEqual(
       compiled.milestones.map((m) => m.what),
-      ["mud builds up on the panels", "clods fly off the wheels"],
+      ["mud builds up on the panels", "clods fly off the wheels", OPEN_RUNG_WHAT],
     );
     assert.equal(compiled.milestones[0]!.check!.origin, "milestone");
     assert.equal(compiled.milestones[0]!.check!.milestone, compiled.milestones[0]!.id);
@@ -804,7 +807,8 @@ describe("a worker's contract: done, compiled and dry-run", () => {
         base as never,
       ),
     );
-    assert.equal(unreadable.milestones.length, 1);
+    // Flipped with the open rung: the director's one rung, then the open one.
+    assert.equal(unreadable.milestones.length, 2);
     assert.match(String(unreadable.milestones[0]!.check!.note), /does not report state\.clods\.count yet/);
     // No ladder: the spec says so, and the loop falls back to the planner as it always did.
     const none = ladderOf(compileWorkerSpec({ id: "dirt", brief: "x" } as never, base as never));

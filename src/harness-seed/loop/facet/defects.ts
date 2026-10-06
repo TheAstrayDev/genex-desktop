@@ -4,6 +4,7 @@ import type { AnyRecord } from "../../types/harness.d.ts";
 import { FACET_POLICY } from "./policy.ts";
 import { CLIP_REASON, sharesStem } from "../text.ts";
 import type { FacetPolicy } from "./policy.ts";
+import { isUnfilledOpenRung } from "./growth.ts";
 
 /** How much of a defect's words its check id is slugged from. */
 const DEFECT_SLUG_CHARS = 40;
@@ -258,6 +259,11 @@ function fileStem(file: unknown): string | undefined {
     ?.replace(/\.[^.]+$/, "");
 }
 
+/** Each rung's words, but an open rung nobody has filled: it says the same on every ladder, so its words are no part's own. */
+function ladderWords(spec: AnyRecord | null | undefined): unknown[] {
+  return (spec?.milestones ?? []).filter((m: AnyRecord) => !isUnfilledOpenRung(m)).map((m: AnyRecord) => m?.what);
+}
+
 /** The words a facet is known by: its id, title, identity, owned file names, cameras, intent, ladder and plan-written checks. */
 function facetVocabulary(spec: AnyRecord | null | undefined): Set<string> {
   const texts: unknown[] = [spec?.id, spec?.title, ...(spec?.identity ?? [])];
@@ -266,8 +272,7 @@ function facetVocabulary(spec: AnyRecord | null | undefined): Set<string> {
   // The plan's own words: "chickens peck… the dog trots a loop" is how a dog defect finds the
   // life facet — the village run grew the dog on ground-and-atmosphere, whose vocabulary was
   // file names and camera names only.
-  texts.push(spec?.intent);
-  for (const m of spec?.milestones ?? []) texts.push(m?.what);
+  texts.push(spec?.intent, ...ladderWords(spec));
   for (const check of spec?.checks ?? []) {
     if (check.origin === CheckOrigin.Harness || check.origin === CheckOrigin.Judge) continue;
     for (const m of String(check.js ?? "").matchAll(/\(['"]([a-z0-9-_]+)['"]\)/g)) texts.push(m[1]);

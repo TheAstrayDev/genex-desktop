@@ -349,7 +349,9 @@ chat's log since the last run, stamped at launch with what is in scope and what 
 a reopen reads it back, and a run without one behaves as before. Every agent that reads the goal
 reads `scopeLines(run)` beside it (`loop/scope-prompts.ts`: judges add `SCOPE_RULE`, the lead's
 rules `DIRECTOR_SCOPE_RULE`), and every proposal — a taste judge's or player's `bigMove`, the
-planner's move, a liveness fix (`adds`) — carries a typed `scope`, `deepens` or `adds`. An `adds`
+planner's move, a liveness fix (`adds`) — carries a typed `scope`, `deepens` or `adds`: a vista,
+skyline, water, landmark or set-piece serving the mood the user asked for deepens, and only a new
+system, mechanic or mode adds (the lead's rule cuts systems and deepens the world). An `adds`
 proposal is never a move: it becomes a decision card (`loop/facet/beyond.ts`, at most
 `BEYOND_CARDS_PER_PART` per part), and only a user steer answering one widens the scope. `plan cut=`
 joins the cut list; `added=` and a part marked `added:true` are cards too. One part owns the screen
@@ -361,6 +363,17 @@ asking that how much the build draws (HUD items, per-kind counts such as `hud.ki
 calls, triangles, vertices) be large is
 refused where checks are validated (`loop/check-lint.ts`, `draw-count-floor`); a ceiling or an
 existence test passes, and a board stored before the lint scores as it did.
+
+Where a round's move comes from (`loop/facet/rules.ts` `chooseMove`). A director's ladder goes
+first, steered rungs ahead, and ends with one open rung (`loop/facet/growth.ts`: `worker_start`
+and `worker_steer move=` append it; a lead's `{"open":true}` only marks it). When reached it is
+filled with the reviewers' best step inside the ask — a liveness principle short of 3 with an
+in-scope fix for `STUCK_PRINCIPLE_CARDS` (3) critic cards running, else the taste judge's
+`bigMove`, else the critic's `biggest` (a grow principle below 3), else its other grow gaps —
+written onto the ladder with a decision card, and mandatory like the lead's rungs; with none it
+is passed over. A stuck principle also joins its card's `grow` or `polish` list by kind. Past the
+ladder the reviewer's `bigMove` is guidance; with no director ladder the same candidates, then the
+planner, name the move.
 
 Two stages. A worker's `spec.stage` is `build` (the default) or `finish` (`loop/facet/stage.ts`;
 `worker_start stage=`, never on a single session, or `worker_steer stage=` from its next round;
