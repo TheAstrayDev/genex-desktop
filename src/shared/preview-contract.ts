@@ -108,11 +108,52 @@ export interface PixelDiff {
   compared: number;
 }
 
+/**
+ * Why a game window's renderer went away (Electron's `render-process-gone`), as one typed code.
+ * `killed` and `oom` are the machine's doing (the OS reclaimed memory), not the build's; the
+ * harness keeps a copy in `loop/preview-gone.ts`. Wire values: never rename one.
+ */
+export const PreviewGone = {
+  Killed: "killed",
+  Oom: "oom",
+  Crashed: "crashed",
+  LaunchFailed: "launch-failed",
+  Abnormal: "abnormal-exit",
+  Integrity: "integrity-failure",
+} as const;
+export type PreviewGone = (typeof PreviewGone)[keyof typeof PreviewGone];
+
+/**
+ * Electron's reasons, each read as a {@link PreviewGone}. An eviction to free memory is the
+ * machine's pressure like an out-of-memory kill; a renderer that exits on its own while its page
+ * is up has still gone abnormally.
+ */
+const RENDER_GONE_REASONS: ReadonlyMap<string, PreviewGone> = new Map([
+  ["killed", PreviewGone.Killed],
+  ["oom", PreviewGone.Oom],
+  ["memory-eviction", PreviewGone.Oom],
+  ["crashed", PreviewGone.Crashed],
+  ["launch-failed", PreviewGone.LaunchFailed],
+  ["abnormal-exit", PreviewGone.Abnormal],
+  ["clean-exit", PreviewGone.Abnormal],
+  ["integrity-failure", PreviewGone.Integrity],
+]);
+
+/** Read Electron's `render-process-gone` reason; one a later Electron adds is a plain crash, never the machine's. */
+export function previewGone(reason: string): PreviewGone {
+  return RENDER_GONE_REASONS.get(reason) ?? PreviewGone.Crashed;
+}
+
 /** What `PreviewPort.status()` and the `preview.status` RPC answer. */
 export interface PreviewPortStatus {
   project: string | null;
   url: string | null;
   crashed: boolean;
+  /**
+   * Why the renderer went away while `crashed`; null while it runs. Absent from a port that does
+   * not say (a fake, an older port), which reads as no reason given.
+   */
+  gone?: PreviewGone | null;
   unresponsive: boolean;
   loadError: string | null;
   consoleErrors: number | null;

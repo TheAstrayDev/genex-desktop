@@ -86,6 +86,7 @@ const API_KEYS = [
   "preview.state",
   "preview.statsOf",
   "preview.status",
+  "preview.viewport",
   "run.artifact",
   "run.exec",
   "snapshot.create",

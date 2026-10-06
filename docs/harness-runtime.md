@@ -265,6 +265,9 @@ says why. Frames that ran and drew nothing are a verdict on a base with content 
 on an empty scaffold — the same exemption the blank-pixel rule already had, settled by inspection
 (`EMPTY_SCENE_PROBE`) rather than by the game's own word. One classifier answers for every caller: `none`, `observation`, `race` or `build` — an
 observation failure is not a build defect, and "evidence pass failed" is not a race.
+`preview.status` says why a dead window's renderer went (`gone`, a `loop/preview-gone.ts` code beside
+`crashed`; `killed` and `oom` are the machine's), and `preview.viewport` puts one leased window at
+another size (clamped to 1920×1200) until its release, never Live, the stand-in or a computer session's window.
 
 What a probe reads. The studio bounds `__studio.state()` by structure, never by cutting its text
 (`main/preview-page-scripts.ts` `boundStudioState`): a state whose JSON fits 48,000 characters

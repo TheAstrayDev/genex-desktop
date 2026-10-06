@@ -817,6 +817,13 @@ function createFacetPreview(studio: StudioCore, index: number, released: () => v
     if (!facetWin.isDestroyed()) facetWin.destroy();
     released();
   };
+  // One lease at another size for a look (`preview.viewport`); null puts it back at the facet size.
+  port.setViewSize = (size) => {
+    if (facetWin.isDestroyed()) return;
+    const { width, height } = size ?? FACET_WINDOW;
+    facetWin.setContentSize(width, height);
+    port.setBounds({ x: 0, y: 0, width, height });
+  };
   return port;
 }
 

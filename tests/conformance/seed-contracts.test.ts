@@ -17,6 +17,7 @@ import * as seedQueue from "../../src/harness-seed/loop/message-queue.ts";
 import * as seedRoles from "../../src/harness-seed/loop/model-roles.ts";
 import * as seedOutage from "../../src/harness-seed/loop/outage.ts";
 import * as seedOutcomes from "../../src/harness-seed/loop/outcomes.ts";
+import { PreviewGone as seedPreviewGone } from "../../src/harness-seed/loop/preview-gone.ts";
 import * as seedJudgeProvenance from "../../src/harness-seed/loop/judge-provenance.ts";
 import * as seedRunEvents from "../../src/harness-seed/loop/run-events.ts";
 import * as seedSkills from "../../src/harness-seed/loop/skills.ts";
@@ -42,6 +43,7 @@ import * as duration from "../../src/shared/duration.ts";
 import { DelegationRefusal, EngineFailureKind, StopReason } from "../../src/shared/engine-requests.ts";
 import * as queue from "../../src/shared/message-queue.ts";
 import * as roles from "../../src/shared/model-roles.ts";
+import { PreviewGone } from "../../src/shared/preview-contract.ts";
 import { EngineId } from "../../src/shared/providers.ts";
 import {
   CompletionPolicy,
@@ -405,6 +407,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("reads a delegated build's stop reasons the same way", () => {
     assert.deepEqual(seedOutage.StopReason, StopReason);
+  });
+
+  it("reads why a game window's renderer went away as the host reports it", () => {
+    assert.deepEqual(seedPreviewGone, PreviewGone);
   });
 
   it("reads why the host refused a delegation the same way", () => {

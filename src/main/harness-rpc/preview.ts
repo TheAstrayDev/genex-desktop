@@ -135,6 +135,8 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
       await x.previewPool?.release(p.handle);
       return true;
     },
+    // One leased window at another size for a look (the art director's), for that lease only.
+    [HostMethod.PreviewViewport]: async (p) => x.previews.viewport(p),
     // Pixel stats of an encoded still — the same numbers a capture yields.
     [HostMethod.PreviewStatsOf]: async (p) => {
       const preview = x.previews.preview(p?.handle);

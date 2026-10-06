@@ -1293,11 +1293,19 @@ export interface PreviewConsoleEntry {
 }
 // ↑ src/shared/preview-contract.ts
 
+export type PreviewGone = 'killed' | 'oom' | 'crashed' | 'launch-failed' | 'abnormal-exit' | 'integrity-failure';
+// ↑ src/shared/preview-contract.ts
+
 /** What `PreviewPort.status()` and the `preview.status` RPC answer. */
 export interface PreviewPortStatus {
   project: string | null;
   url: string | null;
   crashed: boolean;
+  /**
+   * Why the renderer went away while `crashed`; null while it runs. Absent from a port that does
+   * not say (a fake, an older port), which reads as no reason given.
+   */
+  gone?: PreviewGone | null;
   unresponsive: boolean;
   loadError: string | null;
   consoleErrors: number | null;
@@ -1660,6 +1668,15 @@ export interface HarnessHostApi {
   "preview.observe": { params: { handle?: string }; result: BuildObservation };
   "preview.acquire": { params: { label?: string; purpose?: "optimization" }; result: { handle: string } };
   "preview.release": { params: { handle: string }; result: boolean };
+  /**
+   * One leased window at another size (the art director's 1600×900 look), for that lease only:
+   * clamped to 320–1920 × 240–1200 and back at the facet size when the lease is released. Never
+   * Live, the stand-in or a window a computer session plays in, so its view never changes size.
+   */
+  "preview.viewport": {
+    params: { handle: string; width: number; height: number };
+    result: { handle: string; width: number; height: number };
+  };
   /** Pixel stats of an encoded still — the same numbers a capture yields. */
   "preview.statsOf": {
     params: { base64?: string; path?: string; handle?: string };

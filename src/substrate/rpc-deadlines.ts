@@ -118,6 +118,7 @@ export const RPC_CLASSES = {
   "preview.observe": RpcClass.PageLoad,
   "preview.acquire": RpcClass.PageLoad,
   "preview.release": RpcClass.Page,
+  "preview.viewport": RpcClass.Page,
   "preview.statsOf": RpcClass.Page,
   "preview.pair": RpcClass.Page,
   "preview.screens": RpcClass.Page,

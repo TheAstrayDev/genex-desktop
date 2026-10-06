@@ -1,5 +1,5 @@
 import { previewVisibility } from "./preview-visibility.ts";
-import { CaptureSurface } from "../shared/preview-contract.ts";
+import { CaptureSurface, type PreviewGone, previewGone } from "../shared/preview-contract.ts";
 import { PreviewProfiler, type ProfileRequest } from "../substrate/preview-profiler.ts";
 /**
  * Game preview.
@@ -99,6 +99,8 @@ export interface PreviewStatus {
   project: string | null;
   url: string | null;
   crashed: boolean;
+  /** Why the renderer went away while `crashed`; null while it runs. */
+  gone: PreviewGone | null;
   unresponsive: boolean;
   loadError: string | null;
   consoleErrors: number | null;
@@ -199,6 +201,8 @@ export class GamePreview {
   /** A load or reload this port started and has not seen finish: the page on screen is not the one asked for. */
   #navigating = false;
   #crashed = false;
+  /** Why the renderer went away, from Electron's own reason; cleared with `#crashed`. */
+  #gone: PreviewGone | null = null;
   #unresponsive = false;
   #loadError: string | null = null;
   #captureRecoveries = 0;
@@ -343,6 +347,7 @@ export class GamePreview {
     });
     wc.on("render-process-gone", (_event, details) => {
       this.#crashed = true;
+      this.#gone = previewGone(details.reason);
       this.#push({ at: Date.now(), level: "error", message: MESSAGE.renderGone(details.reason) });
     });
     wc.on("unresponsive", () => {
@@ -365,6 +370,7 @@ export class GamePreview {
       this.#syncAnimationVisibility();
       this.#loadError = null;
       this.#crashed = false;
+      this.#gone = null;
       void wc.executeJavaScript('console.debug("__studio_console_channel_probe__")').catch(() => {
         this.#consoleAvailable = false;
       });
@@ -649,6 +655,7 @@ export class GamePreview {
     this.#pinnedRoot = { project, dir: servedDir, real: await realpath(servedDir).catch(() => null) };
     this.#loadError = null;
     this.#crashed = false;
+    this.#gone = null;
     this.#console = [];
     this.#blockedNoted.clear();
     this.#consoleAvailable = false;
@@ -1320,6 +1327,7 @@ export class GamePreview {
       project: this.#project,
       url: this.#view?.webContents.getURL() ?? null,
       crashed: this.#crashed,
+      gone: this.#gone,
       unresponsive: this.#unresponsive,
       loadError: this.#loadError,
       consoleErrors: this.#consoleAvailable ? this.#console.filter((entry) => entry.level === "error").length : null,
@@ -1355,6 +1363,12 @@ export class GamePreview {
    * (PreviewPort.dispose). The visible view never sets one — the pool refuses to dispose "live".
    */
   dispose?: () => Promise<void> | void;
+
+  /**
+   * Pooled headless ports get their resize injected the same way (PreviewPort.setViewSize): the
+   * hosting window and this view at one size, or null for the size the window opened at.
+   */
+  setViewSize?: (size: { width: number; height: number } | null) => void;
 
   get sessionRef(): Session | null {
     return this.#session;
