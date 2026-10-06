@@ -494,7 +494,7 @@ export async function setPlan(night: Night, args: AnyRecord) {
   await saveJournal();
   for (const item of additions) await night.decision(MESSAGE_ADDED.text(item), MESSAGE_ADDED.plain(item));
   if (first) await openPlanReview(night);
-  // A plan of several looping parts with a module contract: committed as docs/ARCHITECTURE.md.
+  // A plan of several looping parts with a module contract: committed as docs/MODULE-CONTRACT.md.
   const contracted = await contractOnPlan(night);
   const answer = await planAnswer(night, plan, { first, acceptanceKept, args });
   return contracted ? `${answer} ${contracted}` : answer;

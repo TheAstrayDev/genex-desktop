@@ -2,8 +2,9 @@
  * The module contract on the integration branch, and the gate that holds loop workers to it (D7).
  *
  * When a plan of two or more looping parts carries a contract, the harness renders it into
- * docs/ARCHITECTURE.md and commits that one file on the integration branch (`contractOnPlan`). A
- * loop worker under such a plan then starts only from a commit that holds the contract, only when
+ * docs/MODULE-CONTRACT.md (a file of its own, never the game's docs/ARCHITECTURE.md) and commits
+ * that one file on the integration branch (`contractOnPlan`). A loop worker under such a plan then
+ * starts only from a commit that holds the contract, only when
  * the modules the contract gives it exist there (stubs, written by the lead or a single worker),
  * and only with a seam that leaves the other parts' modules alone; with no seam named it owns its
  * contract modules (`contractAtFork`). A single session, a conflict worker and a plan with one
@@ -46,7 +47,7 @@ import type { Night } from "./night.ts";
 /** "No contract" refusals a lead gets before the harness writes one from the plan's seams. */
 export const CONTRACT_REFUSALS_BEFORE_DERIVED = 2;
 /** The commit message of the contract's commit. */
-const CONTRACT_COMMIT_MESSAGE = "studio: module contract (docs/ARCHITECTURE.md)";
+const CONTRACT_COMMIT_MESSAGE = `studio: module contract (${ARCHITECTURE_FILE})`;
 /** Why the contract's commit failed when git said nothing. */
 const COMMIT_FAILED = "the commit failed with no message from git";
 
@@ -90,7 +91,7 @@ async function linkAt(file: string): Promise<{ exists: boolean; link: boolean; f
 }
 
 /**
- * Write docs/ARCHITECTURE.md into the worktree, and nowhere else: a `docs` folder or a contract
+ * Write the contract file (`ARCHITECTURE_FILE`) into the worktree, and nowhere else: a `docs` folder or a contract
  * file that is a symbolic link, or a `docs` that resolves outside the worktree, writes nothing.
  * Answers why it did not write, or null.
  */
@@ -211,7 +212,7 @@ function nightContract(night: Night, commit: string, spec: ModuleContract, paren
 }
 
 /**
- * Render the contract into docs/ARCHITECTURE.md and commit it on the integration branch: the new
+ * Render the contract into its file (`ARCHITECTURE_FILE`) and commit it on the integration branch: the new
  * head is protected, journalled and on the record, and the night holds its loop workers to it.
  * Answers the commit, or why there is none.
  */

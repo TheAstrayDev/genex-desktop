@@ -4,7 +4,7 @@
  * had written down, the director integrated them one at a time with a health pass each, and a
  * worker deleted cameras three other workers' checks looked through without anything noticing.
  *
- * The plan carries a contract the harness holds to its shape and commits as docs/ARCHITECTURE.md;
+ * The plan carries a contract the harness holds to its shape and commits as docs/MODULE-CONTRACT.md;
  * a loop worker under a plan of several looping parts starts only from a commit that holds it, with
  * its modules stubbed and a seam that leaves the other parts' modules alone. `integrate` takes a
  * wave of workers with one health pass, and running workers take the integration branch once per
@@ -153,7 +153,7 @@ describe("the plan's module contract, held to its shape", () => {
   });
 });
 
-describe("docs/ARCHITECTURE.md and a worker's pointer to it", () => {
+describe("the contract file and a worker's pointer to it", () => {
   const contract = parseModuleContract(CONTRACT, ["car", "city"]).contract!;
 
   it("renders every module with its owner, API, state and registrations, and the shared files", () => {
@@ -176,7 +176,7 @@ describe("docs/ARCHITECTURE.md and a worker's pointer to it", () => {
       contract,
       contract.modules.filter((m) => m.owner === "city"),
     );
-    assert.match(pointer, /docs\/ARCHITECTURE\.md/);
+    assert.match(pointer, /docs\/MODULE-CONTRACT\.md/);
     assert.match(pointer, /src\/city\.js \(api: export function buildCity\(scene\)\)/);
     assert.match(pointer, /Conventions: steer \+1 = right; metres/);
     assert.ok(!pointer.includes("stepCar"), "another part's API stays in the file");
@@ -436,7 +436,7 @@ async function workerBranch(repo: string, from: string, name: string, files: Rec
 describe("the contract on the integration branch, and the gate a loop worker passes", () => {
   const plan = () => compilePlan(planArgs()).plan!;
 
-  it("commits docs/ARCHITECTURE.md on the plan and names the stubs still to write", async () => {
+  it("commits the contract file on the plan and names the stubs still to write", async () => {
     const { repo, head } = await integrationRepo();
     const { night, events } = stubNight(repo, head, plan());
     const said = await contractOnPlan(night as never);
@@ -486,6 +486,32 @@ describe("the contract on the integration branch, and the gate a loop worker pas
       notes.join("\n"),
     );
     assert.notEqual(head, night.state.integrationHead);
+  });
+
+  it("keeps the game's own docs/ARCHITECTURE.md byte for byte, and still commits the contract", async () => {
+    const own = "docs/ARCHITECTURE.md";
+    const handWritten = "# My game's own architecture notes\nhand written\n";
+    const paths = [
+      { name: "the lead's contract on the plan", plan: () => plan(), gate: contractOnPlan },
+      {
+        name: "the contract the harness derives after two refusals",
+        plan: () => compilePlan(planArgs(null)).plan!,
+        gate: async (night: never) => {
+          for (let i = 0; i <= CONTRACT_REFUSALS_BEFORE_DERIVED; i++)
+            await contractBeforeFork(night, { id: "car" }, WorkerMode.Loop);
+        },
+      },
+    ];
+    for (const { name, plan: planOf, gate } of paths) {
+      const { repo } = await integrationRepo();
+      const base = await commitFiles(repo, { [own]: handWritten, "src/car.js": "export {};\n" }, "the user's docs");
+      const { night } = stubNight(repo, base, planOf());
+      await gate(night as never);
+      assert.ok(night.state.contract?.commit, `${name}: the contract is committed, so workers are not stalled`);
+      assert.equal(await readFile(path.join(repo, own), "utf8"), handWritten, `${name}: the working file`);
+      assert.equal(await fixtureGit(repo, ["show", `HEAD:${own}`]), handWritten.trimEnd(), `${name}: the head`);
+      assert.match(await readFile(path.join(repo, ARCHITECTURE_FILE), "utf8"), /### src\/car\.js — owned by `car`/);
+    }
   });
 
   it("never holds a single session, a conflict worker or a plan of one looping part", async () => {

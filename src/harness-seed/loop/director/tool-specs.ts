@@ -111,7 +111,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
         contract: {
           type: "string",
           description:
-            'Module contract, required before loop workers when 2+ parts loop: JSON {"conventions":[…],"modules":[{"path","owner":"<part id>","api":[…]}],"shared":[{"path","owner"}]}. Committed as docs/ARCHITECTURE.md; a bad one is answered with the grammar.',
+            'Module contract, required before loop workers when 2+ parts loop: JSON {"conventions":[…],"modules":[{"path","owner":"<part id>","api":[…]}],"shared":[{"path","owner"}]}. Committed as docs/MODULE-CONTRACT.md; a bad one is answered with the grammar.',
         },
         play_script: {
           type: "string",

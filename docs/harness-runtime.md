@@ -328,7 +328,7 @@ head. `facet_review_enforced` lists `reverted`, `kept`, `quarantined` and `resto
 A plan whose parts loop two or more (a part marked `"mode":"single"` does not count) needs a
 module contract before its loop workers start: `plan contract=` names each module's file, owner
 part, API, and the shared files one part owns (`director/module-contract.ts`). The harness commits it as
-`docs/ARCHITECTURE.md` on the integration branch; a loop worker starts only from a commit that holds
+`docs/MODULE-CONTRACT.md` on the integration branch (its own file: a game's `docs/ARCHITECTURE.md` is never touched); a loop worker starts only from a commit that holds
 it, with its own modules there (stubs written by the lead or a single worker), and a seam that leaves
 other parts' modules alone. With no seam named it owns its contract modules (`director/contract-gate.ts`).
 After two refusals for a missing contract the harness writes one from the plan's seams. The

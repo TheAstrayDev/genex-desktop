@@ -6006,7 +6006,7 @@ describe("a module contract before loop workers", () => {
     assert.match(results.badPath, /^plan: contract path \.\.\/x\.js is not one file relative to the game/);
     assert.match(
       results.planned,
-      /The module contract is committed on integration as docs\/ARCHITECTURE\.md \([0-9a-f]{10}\).*Stubs still to write before their loop workers start: src\/plaza\.js, src\/sky\.js/,
+      /The module contract is committed on integration as docs\/MODULE-CONTRACT\.md \([0-9a-f]{10}\).*Stubs still to write before their loop workers start: src\/plaza\.js, src\/sky\.js/,
     );
     assert.match(
       results.noStubs,
@@ -6018,7 +6018,10 @@ describe("a module contract before loop workers", () => {
       [],
       "nobody started",
     );
-    const architecture = await git(project.dir, ["show", `refs/studio/runs/${runId}/integration:docs/ARCHITECTURE.md`]);
+    const architecture = await git(project.dir, [
+      "show",
+      `refs/studio/runs/${runId}/integration:docs/MODULE-CONTRACT.md`,
+    ]);
     assert.match(architecture, /### src\/plaza\.js — owned by `plaza` \(plaza\)/);
     assert.match(architecture, /- the plaza is 40 metres across/);
   });

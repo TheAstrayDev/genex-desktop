@@ -1,7 +1,7 @@
 /**
  * The module contract's words (module-contract.ts holds its data): the grammar the lead writes it
- * in, what a refused contract or a refused worker is told, the docs/ARCHITECTURE.md the harness
- * renders from it, and the short pointer a worker's brief carries. The tool schema only points
+ * in, what a refused contract or a refused worker is told, the contract file the harness renders
+ * from it, and the short pointer a worker's brief carries. The tool schema only points
  * here: every session pays for `DIRECTOR_TOOLS` on every turn, and the grammar is read only by a
  * lead whose contract, or whose loop worker, was refused.
  */
@@ -9,8 +9,11 @@ import { shortSha } from "../git.ts";
 import { ContractRefusal } from "./module-contract.ts";
 import type { ContractModule, ContractProblem, ModuleContract } from "./module-contract.ts";
 
-/** Where the harness writes the contract, relative to the game. */
-export const ARCHITECTURE_FILE = "docs/ARCHITECTURE.md";
+/**
+ * Where the harness writes the contract, relative to the game: a name of the harness's own, so a
+ * game's hand-written docs/ARCHITECTURE.md is never overwritten (and never replaced when it lands).
+ */
+export const ARCHITECTURE_FILE = "docs/MODULE-CONTRACT.md";
 
 /** How the contract is written: the plan's `contract` argument. */
 export const CONTRACT_GRAMMAR =
@@ -67,7 +70,7 @@ export function contractCommittedWords(
   return `${at} Stubs still to write before their loop workers start: ${missing.join(", ")} — ${hands}.`;
 }
 
-/** One module as ARCHITECTURE.md lists it. */
+/** One module as the contract file lists it. */
 function moduleLines(module: ContractModule, title: string): string[] {
   const lines = [`### ${module.path} — owned by \`${module.owner}\` (${title})`, ""];
   for (const api of module.api) lines.push(`- api: \`${api}\``);
@@ -82,12 +85,12 @@ function moduleLines(module: ContractModule, title: string): string[] {
 }
 
 /**
- * docs/ARCHITECTURE.md, rendered from the contract: pure, the same contract renders the same bytes.
+ * The contract file (`ARCHITECTURE_FILE`), rendered from the contract: pure, the same contract renders the same bytes.
  * `titles` maps a part id to its plan title.
  */
 export function renderArchitecture(contract: ModuleContract, titles: Readonly<Record<string, string>> = {}): string {
   const lines = [
-    "# Architecture",
+    "# Module contract",
     "",
     contract.derived
       ? "The studio wrote this module contract from the build plan's seams. Change it by re-planning, never by editing another part's module."
