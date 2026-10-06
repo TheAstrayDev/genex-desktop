@@ -40,7 +40,9 @@ import {
   missingAt,
   writeArchitecture,
 } from "../../src/harness-seed/loop/director/contract-gate.ts";
-import { integrate } from "../../src/harness-seed/loop/director/integrate.ts";
+import { closeTheNight, integrate } from "../../src/harness-seed/loop/director/integrate.ts";
+import { shipOwed } from "../../src/harness-seed/loop/director/art-direction.ts";
+import { CompletionPolicy } from "../../src/harness-seed/loop/completion-policy.ts";
 import { CONFLICT_MERGE } from "../../src/harness-seed/loop/director/conflict-worker.ts";
 import {
   dependentsOf,
@@ -49,7 +51,7 @@ import {
   registryRefusal,
 } from "../../src/harness-seed/loop/registry.ts";
 import { verifyChallenger } from "../../src/harness-seed/loop/facet/phases/verify.ts";
-import { VerdictSource } from "../../src/harness-seed/loop/verdict.ts";
+import { NotLandedReason, VerdictSource } from "../../src/harness-seed/loop/verdict.ts";
 import { WorkerMode } from "../../src/harness-seed/loop/outcomes.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { fixtureGit } from "../helpers/snapshot-fixtures.ts";
@@ -392,6 +394,7 @@ function stubNight(repo: string, head: string, plan: Record<string, any> | null)
       evidenceByHead: new Map(),
       healthByHead: new Map(),
       consoleByHead: new Map(),
+      baseHeads: new Set(),
       facetSpecs: [],
       ledger: [],
     },
@@ -883,6 +886,128 @@ describe("a game the user brought, under a contract (review)", () => {
     assert.notEqual(typeof asked, "string", String(asked));
     const single = await startRefusal(night as never, "stubs", { mode: "single" });
     assert.match(String(single), /needs a seam/, "a single session has no contract seam");
+  });
+});
+
+/**
+ * A contract committed on the run's starting point (review): on a game from scratch the base
+ * stage may accept an empty world, and the contract's commit on top of it became the fork point
+ * every loop worker had to take. The fork gate looked at that commit as a game, not a start, and
+ * refused every worker over the blank world the base stage had accepted; and a branch whose only
+ * change was docs/ARCHITECTURE.md counted as the night's work at the close.
+ */
+describe("a contract written on the run's starting point (review)", () => {
+  const SEEN = { ok: true, state: { world: { groups: [] } }, shots: [{ camera: "default" }], problems: [] };
+  /** A night standing on an empty starting point the base stage accepted: a base head, healthy, its look kept. */
+  async function onEmptyStart(plan: Record<string, any>) {
+    const { repo, head } = await integrationRepo();
+    const stub = stubNight(repo, head, plan);
+    const { state } = stub.night;
+    state.baseHeads.add(head);
+    state.healthByHead.set(head, true);
+    state.consoleByHead.set(head, ["a warning the start already logs"]);
+    stub.night.rememberEvidence(head, SEEN);
+    return { ...stub, repo, head };
+  }
+  /** What the fork gate and the close read of a commit: where it stands. */
+  const standing = (state: Record<string, any>, commit: string) => ({
+    base: state.baseHeads.has(commit),
+    healthy: state.healthByHead.get(commit),
+    console: state.consoleByHead.get(commit),
+    evidence: state.evidenceByHead.get(commit),
+  });
+
+  it("the lead's contract on an empty start stands where the start stood: a starting point, healthy, its look kept", async () => {
+    const { night, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
+    await contractOnPlan(night as never);
+    const commit = night.state.contract.commit;
+    assert.notEqual(commit, head, "the contract is its own commit");
+    assert.equal(night.state.integrationHead, commit, "and the fork point of every loop worker");
+    assert.deepEqual(standing(night.state, commit), standing(night.state, head));
+  });
+
+  it("so does the contract the harness derives, and one the lead gives again on top of it", async () => {
+    const { night, head } = await onEmptyStart(compilePlan(planArgs(null)).plan!);
+    const start = () => contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop);
+    for (let i = 0; i < CONTRACT_REFUSALS_BEFORE_DERIVED; i++) assert.ok(await start());
+    assert.equal(await start(), null);
+    const derived = night.state.contract.commit;
+    assert.notEqual(derived, head);
+    assert.deepEqual(standing(night.state, derived), standing(night.state, head));
+    night.state.plan = compilePlan(planArgs()).plan!;
+    await contractOnPlan(night as never);
+    const given = night.state.contract.commit;
+    assert.notEqual(given, derived);
+    assert.deepEqual(standing(night.state, given), standing(night.state, head));
+  });
+
+  it("a contract on a head the night built is no starting point: only what is known of its parent carries over", async () => {
+    const { night, repo } = await onEmptyStart(compilePlan(planArgs()).plan!);
+    const built = await commitFiles(repo, { "src/car.js": "export {};\n" }, "a worker's merge");
+    night.state.integrationHead = built;
+    night.state.healthByHead.set(built, false);
+    await contractOnPlan(night as never);
+    const commit = night.state.contract.commit;
+    assert.equal(night.state.baseHeads.has(commit), false);
+    assert.equal(night.state.healthByHead.get(commit), false, "a docs file does not make a broken build load");
+    assert.equal(night.state.evidenceByHead.has(commit), false, "nobody looked at its parent");
+  });
+
+  it("the close lands nothing and the art director owes no look when the branch holds only the contract", async () => {
+    const cases = [
+      { name: "from scratch, on the base stage's commit", scratch: true },
+      { name: "on the game the user brought", scratch: false },
+    ];
+    for (const { name, scratch } of cases) {
+      const { night, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
+      if (!scratch) {
+        night.state.baseHeads.delete(head);
+        night.baseCommit = head;
+      }
+      await contractOnPlan(night as never);
+      const looked = night.state.healthByHead.size;
+      Object.assign(night, {
+        run: { ...night.run, budgets: { completionPolicy: CompletionPolicy.Goal } },
+        report: {},
+        syncHead: async () => night.state.integrationHead,
+        runningWorkers: () => [],
+        settleWorkers: async () => {},
+        stopWorker: async () => {},
+        closeRun: async () => {},
+      });
+      assert.equal(shipOwed(night as never), false, name);
+      const landed = await closeTheNight(night as never, { land: true, settleMs: 0 });
+      assert.equal(landed.why, NotLandedReason.NothingNew, `${name}: ${JSON.stringify(landed)}`);
+      assert.equal(night.state.healthByHead.size, looked, `${name}: the close did not look`);
+    }
+  });
+
+  it("a Resume keeps a contract written on the start a starting point", async () => {
+    const { night, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
+    await contractOnPlan(night as never);
+    const now = Date.UTC(2026, 9, 6, 2, 0, 0);
+    const run = { runId: "run_j", project: "apex", goal: "a city", reference: { name: "City" } };
+    /** A night with only what the journal's record and restore read, standing on the start. */
+    const nightWith = (state: Record<string, unknown>, over: Record<string, unknown> = {}) => ({
+      run,
+      started: now,
+      softDeadline: now,
+      finalDeadline: now,
+      state: { judges: 0, plays: 0, ledger: [], workers: new Map(), log: [], planReviewUntil: 0, ...state },
+      journal: { director: {} as Record<string, any> },
+      ...over,
+    });
+    const first = nightWith({ baseHeads: new Set([head]), contract: night.state.contract });
+    recordNight(first as never, now);
+    const saved = structuredClone(first.journal.director);
+    // `startingHeads` gives a resumed night its scaffold and base commit, never the contract's.
+    const back = nightWith(
+      { baseHeads: new Set([head]) },
+      { resume: true, priorJournal: { director: saved } },
+    ) as Record<string, any>;
+    restoreNight(back as never, now);
+    assert.equal(back.state.contract.commit, night.state.contract.commit);
+    assert.ok(back.state.baseHeads.has(night.state.contract.commit), "the fork gate looks at it as the start it is");
   });
 });
 

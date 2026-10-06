@@ -345,7 +345,16 @@ const commitOf = (value: unknown): string | null =>
 function restoreIntegration(state: NightState, saved: AnyRecord): void {
   const contract = saved.contract as AnyRecord | undefined;
   const commit = commitOf(contract?.commit);
-  if (commit && Array.isArray(contract?.spec?.modules)) state.contract = { commit, spec: restoredSpec(contract.spec) };
+  if (commit && Array.isArray(contract?.spec?.modules)) {
+    state.contract = { commit, spec: restoredSpec(contract.spec) };
+    // Written on the run's start, it is still the start (contract-gate.ts): `startingHeads` gives
+    // a resumed night its scaffold and base commit, and the contract's commit only from here.
+    if (contract.onStart === true) state.contract.onStart = true;
+    if (contract.baseHead === true) {
+      state.contract.baseHead = true;
+      state.baseHeads?.add(commit);
+    }
+  }
   // A finished build reopened forks from the game folder as it is now (reopen.ts): the finished
   // night's wave head is an ancestor its workers would follow, missing the lead's new commits.
   const waveHead = saved.reopened ? null : commitOf(saved.waveHead);

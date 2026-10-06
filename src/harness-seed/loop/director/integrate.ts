@@ -46,6 +46,7 @@ import { list, slug, yes } from "./args.ts";
 import { CLOSE_SETTLE_MS, timedWorkRemaining } from "./budgets.ts";
 import { workerDigest } from "./digests.ts";
 import { resolveByWorker, unresolvedOf } from "./conflict-worker.ts";
+import { contractAloneOnStart } from "./contract-gate.ts";
 import { setAsideStrays } from "./lead-session.ts";
 import { LEAD_DIRTY, LEAD_FIX_NEXT, LEAD_SET_ASIDE } from "./lead-session-prompts.ts";
 import type { SetAside } from "./lead-session.ts";
@@ -692,9 +693,10 @@ async function landWhatRuns(night: Night): Promise<AnyRecord> {
   // The starting point alone is not a night's work: a run that only got its base built has
   // nothing beyond the starting point, and says so instead of landing an empty world. The
   // comparison is with the run's ORIGINAL base: a resumed session forks from last night's
-  // head, and measuring against that hid every merge the first session had made.
-  const moved = Boolean(last && last !== baseCommit && !state.baseHeads.has(last));
-  if (!moved) return notLanded(NOTHING_BEYOND_THE_START, NotLandedReason.NothingNew);
+  // head, and measuring against that hid every merge the first session had made. The module
+  // contract written on the start alone is a document, not a build (contract-gate.ts).
+  const atStart = !last || last === baseCommit || state.baseHeads.has(last) || contractAloneOnStart(night, last);
+  if (atStart) return notLanded(NOTHING_BEYOND_THE_START, NotLandedReason.NothingNew);
   // A director's own uncommitted edits become a commit before anybody looks, so the build the
   // close looks at and judges is the very commit it lands.
   const uncommitted = await commitFinalEdits(night);

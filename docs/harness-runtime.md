@@ -331,7 +331,9 @@ part, API, and the shared files one part owns (`director/module-contract.ts`). T
 `docs/ARCHITECTURE.md` on the integration branch; a loop worker starts only from a commit that holds
 it, with its own modules there (stubs written by the lead or a single worker), and a seam that leaves
 other parts' modules alone. With no seam named it owns its contract modules (`director/contract-gate.ts`).
-After two refusals for a missing contract the harness writes one from the plan's seams. `integrate
+After two refusals for a missing contract the harness writes one from the plan's seams. The
+contract's commit stands where its parent stood: on the run's starting point it is a starting point
+too (a blank base stage passes the fork gate), and the close lands nothing beyond it. `integrate
 worker=a,b` merges a wave in order with one health pass; a healthy integrate, or `wave=close`, moves
 the head running workers merge, so they take integration once per wave. A merge's health pass runs
 the demos workers' checks name (and at most one more); the close runs every demo. A round, or a

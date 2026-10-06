@@ -29,6 +29,7 @@ import * as budgetParts from "./budgets.ts";
 import { goalCommission } from "./commission.ts";
 import * as ruleParts from "./rules.ts";
 import { list } from "./args.ts";
+import { contractAloneOnStart } from "./contract-gate.ts";
 import { ART_SKIPPED, shipFinishRefusal, shipGateSkipped } from "./art-direction-prompts.ts";
 import { BuildTarget } from "./night.ts";
 import { NoteKind } from "./wake-schedule.ts";
@@ -241,7 +242,9 @@ export function routeShipDefects(night: Night, review: Pick<ShipReview, "defects
 /** Has the integration branch anything beyond the run's starting point at `head`? */
 function movedBeyondStart(night: Night, head: string | null): head is string {
   const { baseCommit, state } = night;
-  return Boolean(head && head !== baseCommit && !state.baseHeads.has(head));
+  if (!head || head === baseCommit || state.baseHeads.has(head)) return false;
+  // The module contract written on the start alone is a document, not a build (contract-gate.ts).
+  return !contractAloneOnStart(night, head);
 }
 
 /** The art director's word on `head`, when its last look was at that head. */

@@ -6022,4 +6022,79 @@ describe("a module contract before loop workers", () => {
     assert.match(architecture, /### src\/plaza\.js — owned by `plaza` \(plaza\)/);
     assert.match(architecture, /- the plaza is 40 metres across/);
   });
+
+  /**
+   * A game from scratch under a contract (review): the base stage accepted an empty world, the
+   * plan's contract was committed on top of it, and every loop worker had to fork from that
+   * commit — which the fork gate looked at as a game, not a start, and refused as "does not run".
+   */
+  it("MC2. a loop worker forks from the contract written on an empty starting point, and the close lands nothing", async () => {
+    /** The empty scaffold as a window sees it: nothing drawn, and an inspection that proves it. */
+    const asEmptyScaffold = (preview: FakePreview): FakePreview => {
+      preview.pixelStatsNext = { width: 800, height: 600, sampled: 480_000, meanLuma: 0, litFraction: 0, canvas: true };
+      preview.evaluations.push({ match: "isScene", value: true }, { match: "matrixWorld", value: "[1,0,0,1]" });
+      return preview;
+    };
+    const rig = await startRig(
+      { replies: [] },
+      { previewPoolMax: 2, createHeadlessPreview: async () => asEmptyScaffold(makeFakePreview()) },
+    );
+    rigs.push(rig);
+    asEmptyScaffold(rig.preview);
+    const project = await rig.core.games.scaffold("director-contract-scratch", { title: "Contract from scratch" });
+    const results: Record<string, any> = {};
+    const contract = {
+      modules: [
+        { path: "src/world.js", owner: "plaza", api: ["export const world"] },
+        { path: "src/sky.js", owner: "sky", api: ["export function buildSky(scene)"] },
+      ],
+    };
+    fakeEngine(rig, async (request) => {
+      if (request.director) {
+        const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
+        results.planned = text(await call("plan", { ...planFor("plaza", "sky"), contract: JSON.stringify(contract) }));
+        results.started = json(await call("worker_start", { id: "plaza", brief: "pave the plaza", minutes: "5" }));
+        if (results.started.started) {
+          await call("worker_stop", { id: "plaza", why: "the start is what this proves" });
+          for (let i = 0; i < 30; i++) {
+            const waited = json(await call("wait", { seconds: "5", worker: "plaza" }));
+            if (waited.status.workers[0]?.state !== "running") break;
+          }
+        }
+        results.finished = text(await call("finish", { summary: "a contract on the start", land: "yes" }));
+        return { ok: true, engine: "codex", turns: 4, usage: {}, sessionId: "director-cs", summary: "done" };
+      }
+      if (path.basename(request.cwd) === "integration") {
+        await mkdir(path.join(request.cwd, "src"), { recursive: true });
+        await writeFile(path.join(request.cwd, "src", "world.js"), "export const world = { groups: ['plaza'] };\n");
+        return { ok: true, engine: "codex", turns: 2, usage: {}, sessionId: "base-cs", summary: "empty groups" };
+      }
+      return { ok: true, engine: "codex", turns: 1, usage: {}, sessionId: "worker-cs", summary: "nothing yet" };
+    });
+    const runId = rig.core.newRunId();
+    await rig.core.dispatchRun({
+      runId,
+      goal: "a plaza under a dusk sky",
+      project: project.name,
+      mode: "autopilot",
+      engine: "codex",
+      reference: { name: "plaza", shots: [] },
+      budgets: { wallClockMs: 15 * 60_000 },
+    });
+    const events = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "run_finished").some((e) => e.runId === runId),
+      120_000,
+      "director run_finished on a contract from scratch",
+    );
+    const base = customEvents(events, "autopilot_base").find((e) => e.runId === runId)!;
+    assert.equal(base.empty, true, "the starting point is an empty world");
+    assert.match(results.planned, /The module contract is committed on integration as docs\/ARCHITECTURE\.md/);
+    // Red before the fix: "the build you would fork from does not run … renders effectively black".
+    assert.equal(results.started.started, "plaza", JSON.stringify(results.started));
+    const contractCommit = await git(project.dir, ["rev-parse", `refs/studio/runs/${runId}/integration`]);
+    assert.ok(contractCommit.startsWith(results.started.forkedFrom), "from the contract's commit");
+    const finished = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
+    assert.equal(finished.landed, false, "the start and a document are nothing to land");
+  });
 });

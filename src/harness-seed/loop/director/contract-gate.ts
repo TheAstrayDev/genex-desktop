@@ -61,6 +61,13 @@ const WRITE_REFUSED = {
 export interface NightContract {
   commit: string;
   spec: ModuleContract;
+  /**
+   * Written right on the run's starting point (its original base, a base head, or a contract
+   * written on one): the branch at `commit` holds the start and this document, nothing to land.
+   */
+  onStart?: boolean;
+  /** Written on one of the run's base heads, so it is one too: the fork gate looks at it as a start. */
+  baseHead?: boolean;
 }
 
 /** A gate's answer: the refusal, or what the worker starts with (its contract seam, when it named none). */
@@ -163,6 +170,46 @@ async function commitArchitecture(night: Night, label: string): Promise<string |
   return committed.code === 0 ? null : shortFailure(committed) || COMMIT_FAILED;
 }
 
+/** Is `commit` the run's starting point: its original base, a base head, or a contract written on one? */
+function isStart(night: Night, commit: string | null): boolean {
+  const { state } = night;
+  if (!commit) return false;
+  if (commit === night.baseCommit || state.baseHeads.has(commit)) return true;
+  return state.contract?.commit === commit && state.contract.onStart === true;
+}
+
+/**
+ * Is `head` the run's starting point with only the contract written on it? The close has nothing
+ * to land there and the art director nothing to judge: docs/ARCHITECTURE.md is not the night's work.
+ */
+export function contractAloneOnStart(night: Night, head: string | null | undefined): boolean {
+  const contract = night.state.contract;
+  return Boolean(head && contract?.onStart === true && contract.commit === head);
+}
+
+/**
+ * The contract's commit changes one document, so it stands where the commit it was written on
+ * stood: a starting point stays one (a blank base stage is no broken game), and what the harness
+ * knew of its parent — loads or not, the console it logs, what it reported — holds for it too.
+ */
+function inheritStanding(night: Night, from: string, to: string): void {
+  const { state } = night;
+  if (state.baseHeads.has(from)) state.baseHeads.add(to);
+  const health = state.healthByHead.get(from);
+  if (health !== undefined) state.healthByHead.set(to, health);
+  const logged = state.consoleByHead.get(from);
+  if (logged !== undefined) state.consoleByHead.set(to, logged);
+  const seen = state.evidenceByHead.get(from);
+  if (seen !== undefined) state.evidenceByHead.set(to, seen);
+}
+
+/** The contract the night holds, with where it was written when that was the run's start. */
+function nightContract(night: Night, commit: string, spec: ModuleContract, parent: string | null): NightContract {
+  const onStart = isStart(night, parent);
+  const baseHead = Boolean(parent && night.state.baseHeads.has(parent));
+  return { commit, spec, ...(onStart ? { onStart } : {}), ...(baseHead ? { baseHead } : {}) };
+}
+
 /**
  * Render the contract into docs/ARCHITECTURE.md and commit it on the integration branch: the new
  * head is protected, journalled and on the record, and the night holds its loop workers to it.
@@ -175,6 +222,8 @@ export async function commitContract(
   const { appendRun, ctx, integrationWorktree, journal, note, protectHead, run, saveJournal, state } = night;
   const label = `director:${run.runId}:module-contract`;
   const titles = Object.fromEntries((state.plan?.workers ?? []).map((part: AnyRecord) => [part.id, part.title]));
+  // The commit the contract is written on: what the new head inherits its standing from.
+  const parent = await headOf(ctx, integrationWorktree, { label }).catch(() => null);
   const written = await writeArchitecture(integrationWorktree, renderArchitecture(spec, titles)).catch(
     (error: unknown) => String((error as Error)?.message ?? error),
   );
@@ -184,8 +233,9 @@ export async function commitContract(
     return { error: failed };
   }
   const head = await headOf(ctx, integrationWorktree, { label });
-  state.contract = { commit: head, spec };
+  state.contract = nightContract(night, head, spec, parent);
   state.contractError = null;
+  if (parent && head !== parent) inheritStanding(night, parent, head);
   if (head !== state.integrationHead) {
     state.integrationHead = head;
     journal.director.integrationHead = head;
