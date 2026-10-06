@@ -99,9 +99,11 @@ export function stateCutOf(state: unknown): StateCut | null {
 }
 
 /**
- * The state paths a board's probes read — references, `has`/`delta` paths and `needs` — with the
- * scope's `state.`/`early.` prefixes removed, valid as `preview.state`'s `keep`. A list read only
- * through `len()` is left out: a stub keeps its length, so it can be cut like any other.
+ * The state paths a board's probes read — references, `delta` paths and `needs` — as paths of the
+ * state, valid as `preview.state`'s `keep`. A value read only through `len()`, `.length` or
+ * `has()` is left out: its stub answers those reads, so it can be cut like any other (and so can
+ * the object that holds it). `early.` is always the scope's name; `state.` is the scope's alias
+ * unless the game has a top-level `state` field, so such a path is named both ways.
  */
 export function statePathsNamedByChecks(checks: readonly Check[] | null | undefined): string[] {
   const named: string[] = [];
@@ -115,28 +117,29 @@ export function statePathsNamedByChecks(checks: readonly Check[] | null | undefi
       // an expression that does not parse reads nothing; validateFacetSpec reports it
     }
   }
-  return keepPathsOf([...new Set(named.map(statePathOf).filter((path) => path !== null))]);
+  return keepPathsOf([...new Set(named.flatMap(statePathsOf))]);
 }
 
-/** A probe path as a path of the state itself: `state.` and `early.` are the scope's names. */
-function statePathOf(path: string): string | null {
+/** A probe path as the paths of the state it may stand for. */
+function statePathsOf(path: string): string[] {
   const scopeName = SCOPE_NAMES.find((name) => path === name || path.startsWith(`${name}.`));
   const own = scopeName ? path.slice(scopeName.length + 1) : path;
-  return isKeepPath(own) ? own : null;
+  if (!isKeepPath(own)) return [];
+  return scopeName === "state" ? [own, path] : [own];
 }
 
-/** Every path an expression reads by reference or names to `has`/`delta`, except under `len()`. */
+/** Every path an expression reads by reference or names to `delta`, except what a stub answers. */
 function pathsReadBy(ast: ExprNode): string[] {
   const paths: string[] = [];
   const walk = (node: ExprNode): void => {
-    if (node.type === "ref") paths.push(node.path);
+    if (node.type === "ref" && !node.path.endsWith(".length")) paths.push(node.path);
     if (node.type !== "call") {
       for (const child of childrenOf(node)) walk(child);
       return;
     }
     const [first] = node.args;
     const literal = first?.type === "literal" && typeof first.value === "string";
-    if (literal && (node.name === "has" || node.name === "delta")) paths.push(String(first.value));
+    if (literal && node.name === "delta") paths.push(String(first.value));
     const lengthOnly = node.name === "len" && node.args.length === 1 && first?.type === "ref";
     if (!lengthOnly) node.args.forEach(walk);
   };

@@ -56,6 +56,8 @@ interface StubOptions {
   witness?: ((tick: number) => unknown) | null;
   /** Pixel stats per shot, in screenshot order. */
   stats?: Array<Record<string, unknown> | null>;
+  /** What the n-th `preview.state` answers (1-based); absent is a small state with the frame. */
+  state?: (call: number) => unknown;
   /** What `debugCamera` answers; the default registers every name asked for. */
   debugCamera?: (name: string) => unknown;
   /** What surface the port says it PHOTOGRAPHED; absent is a port that does not say. */
@@ -84,6 +86,7 @@ const READY_NOW = {
 function stubCtx(options: StubOptions) {
   let shotIndex = 0;
   let tick = 0;
+  let stateCalls = 0;
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const ctx = {
     cancelled: false,
@@ -109,7 +112,8 @@ function stubCtx(options: StubOptions) {
         case "preview.status":
           return { loadError: null, crashed: false };
         case "preview.state":
-          return { version: 1, frame: shotIndex };
+          stateCalls++;
+          return options.state ? options.state(stateCalls) : { version: 1, frame: shotIndex };
         case "preview.gesture":
           return { knocked: true, trusted: null };
         case "preview.input":
@@ -266,6 +270,26 @@ describe("gatherEvidence after the stale-frame night", () => {
     assert.equal(order[0], "state", "first state sample precedes any input");
     assert.ok(order.includes("input"));
     assert.equal(order.at(-1), "state", "the late sample comes after the controls");
+  });
+
+  it("a state the studio bounded flows through the pass, and keys-move-player is measured over it", async () => {
+    // AUDIT-STATE-STUB: what the host's bounder hands back — the HUD list a stub, the player whole.
+    const bounded = (call: number) => ({
+      player: { x: call, z: 0, yaw: 0 },
+      hud: { items: { __elided: "array", length: 6000, chars: 168_001 }, crosshair: true },
+      __cut: { chars: 177_640, paths: ["hud.items"] },
+    });
+    const { ctx } = stubCtx({ frames: ["a", "b", "c"], cameras: ["default"], state: bounded });
+    const evidence = (await gather(ctx)) as never as Parameters<typeof evaluateProbeCheck>[1];
+    const keysMove = withHarnessChecks({ id: "f", checks: [] as Check[], cameras: [] }, {
+      ownsMain: true,
+      game: { keyboardMove: true },
+    } as never).checks.find((check: { id: string }) => check.id === "keys-move-player") as Check;
+    const outcome = evaluateProbeCheck(keysMove, evidence);
+    assert.equal(outcome.pass, true, outcome.reason);
+    assert.equal(outcome.stateTooLarge, undefined);
+    const listed = evaluateProbeCheck({ id: "hud", kind: "probe", expr: "len(hud.items) == 6000" }, evidence);
+    assert.equal(listed.pass, true, listed.reason);
   });
 
   it("the final pass can add the user's-eye frame: a compositor capture labelled user:view", async () => {

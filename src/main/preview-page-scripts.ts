@@ -255,6 +255,8 @@ export function boundStudioState(state: unknown, options: StateBoundOptions): un
   const MIN_ELIDE_CHARS = 2 * CUT_COST_CHARS;
   /** The bounder stops after this many cuts; the host's own cap is the last word. */
   const MAX_ELISIONS = 512;
+  /** Lists get at most half the cuts, so the object that holds them can always still be cut. */
+  const MAX_LIST_CUTS = MAX_ELISIONS / 2;
   /** A value's relation to the `keep` paths: none, an ancestor of one, or one (or inside one). */
   const FREE = 0;
   const ON_KEPT_PATH = 1;
@@ -399,10 +401,31 @@ export function boundStudioState(state: unknown, options: StateBoundOptions): un
   // Lists first, largest first: a list is what grows without bound (every HUD id, every bullet).
   const isLooseList = (i: number): boolean =>
     Array.isArray(values[i]) && keepState[i] === FREE && dead[i] === 0 && sizes[i] >= MIN_ELIDE_CHARS;
+  // Whether the lists, largest first, bring the state under the budget within MAX_LIST_CUTS cuts
+  // (or run out first). When they cannot, the weight is spread over many medium lists — every
+  // car's path in a map of thousands — and cutting them one by one would spend every cut and
+  // still not fit: the map that holds them is cut whole instead.
+  const listsFitInCuts = (lists: number[]): boolean => {
+    const planned = new Uint8Array(n);
+    let over = sizes[0] + cutMarkerChars() - maxChars;
+    let count = 0;
+    for (const i of lists) {
+      if (over <= 0) return true;
+      let inside = false;
+      for (let at = parents[i]; at > 0 && !inside; at = parents[at]) inside = planned[at] === 1;
+      if (inside) continue;
+      if (count >= MAX_LIST_CUTS) return false;
+      planned[i] = 1;
+      count++;
+      over -= sizes[i] - CUT_COST_CHARS;
+    }
+    return true;
+  };
   const cutLists = (): void => {
     const lists: number[] = [];
     for (let i = 1; i < n; i++) if (isLooseList(i)) lists.push(i);
     lists.sort(heavierFirst);
+    if (!listsFitInCuts(lists)) return;
     for (const i of lists) {
       if (!overBudget()) return;
       if (dead[i] === 0) elide(i);

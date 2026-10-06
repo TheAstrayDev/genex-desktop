@@ -94,6 +94,20 @@ describe("a state over the budget is bounded by structure", () => {
     assert.deepEqual(out.player, { x: 1, z: 2 });
     assert.deepEqual(out[StateShape.Cut].paths, ["world.tiles"]);
   });
+
+  it("cuts the map of many medium lists whole instead of spending every cut on its lists", () => {
+    const path = Array.from({ length: 120 }, (_, i) => Math.round(i * 13.37 * 100) / 100);
+    for (const count of [600, 1500, 4000]) {
+      const agents = Object.fromEntries(Array.from({ length: count }, (_, i) => [`car${i}`, { lap: i % 3, path }]));
+      const state = { phase: "racing", player: { x: 4.5 }, agents };
+      const out = bound(state);
+      assert.ok(chars(out) <= STATE_MAX_CHARS, `${count} agents bounded to ${chars(out)} chars`);
+      assert.equal(out.phase, "racing");
+      assert.deepEqual(out.player, { x: 4.5 });
+      assert.deepEqual(stubShape(out.agents), stub(ElidedKind.Object, count));
+      assert.deepEqual(out[StateShape.Cut].paths, ["agents"], "no list cut is spent inside the map it then cuts");
+    }
+  });
 });
 
 describe("keep: the paths a board reads survive the cut", () => {

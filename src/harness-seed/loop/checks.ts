@@ -21,7 +21,7 @@ import type { Check, CheckKind, CheckLike, CheckOrigin, CheckWeight } from "./sp
 import { HostMethod } from "./host-methods.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON, clipMarked } from "./text.ts";
 import { isRecord } from "./json.ts";
-import type { StateShape } from "./state-shape.ts";
+import type { ElidedKind, StateShape } from "./state-shape.ts";
 import type { AnyRecord, HarnessCtx } from "../types/harness.d.ts";
 import type { PreviewPixelStats } from "../types/host-api.d.ts";
 
@@ -152,6 +152,8 @@ const Shape = {
   Elided: "__elided",
   Cut: "__cut",
 } as const satisfies Record<string, StateShape>;
+/** What a stub stands in for: only an object's stub does not keep the value's own `.length`. */
+const Elided = { Object: "object" } as const satisfies Record<string, ElidedKind>;
 
 // ── expression language ────────────────────────────────────────────────────────────────────
 
@@ -564,7 +566,7 @@ function lengthOf(v: unknown): number | undefined {
 }
 
 /** The stub the studio left where it cut a value out of an over-budget state. */
-function isElided(v: unknown): v is { length: number; chars?: number } {
+function isElided(v: unknown): v is { [Shape.Elided]: string; length: number; chars?: number } {
   return isRecord(v) && !Array.isArray(v) && typeof v[Shape.Elided] === "string" && typeof v.length === "number";
 }
 
@@ -576,60 +578,115 @@ function truncatedLength(state: unknown): number | null {
 
 /**
  * Where a path reads INTO a value the studio cut: the stub's path, or null. A path that ends at
- * the stub (or at its `length`) reads it as the value it stands for — present, with its length.
+ * the stub reads it as the value it stands for only when `whole` says every reading agrees
+ * (`len()`, `has()`, truthiness, `!= null`); so does an array's or a string's `.length`, which
+ * the stub keeps. Anything else — `title == "x"`, an object's `.length` — is a cut read.
  */
-function cutAlong(scope: unknown, path: string): string | null {
+function cutAlong(scope: unknown, path: string, whole = true): string | null {
   const parts = path.split(".");
   let current: unknown = scope;
   for (let i = 0; i < parts.length; i++) {
     if (!isRecord(current)) return null;
     if (isElided(current)) {
-      const readsLength = i === parts.length - 1 && parts[i] === "length";
-      return readsLength ? null : parts.slice(0, i).join(".");
+      const keptLength = i === parts.length - 1 && parts[i] === "length" && current[Shape.Elided] !== Elided.Object;
+      return keptLength ? null : parts.slice(0, i).join(".");
     }
     current = current[parts[i] as string];
   }
-  return null;
+  return isElided(current) && !whole ? path : null;
 }
 
-/** Every path a probe reads: its references, the paths `has`/`delta` name, and its `needs`. */
-function probePathsOf(check: CheckLike): { paths: string[]; early: boolean } {
-  const needs = Array.isArray(check?.needs) ? check.needs.map(String) : [];
+/** A path a probe reads, and whether reading the value whole means the same on its stub. */
+interface PathRead {
+  path: string;
+  whole: boolean;
+}
+
+/**
+ * Every path a probe reads: its references, the paths `has`/`delta` name, its `needs`, and —
+ * because `delta()` reads both sides — each delta path in the early state too.
+ */
+function probePathsOf(check: CheckLike, state: unknown): { reads: PathRead[]; early: boolean } {
+  const needs = (Array.isArray(check?.needs) ? check.needs.map(String) : []).map((path) => ({ path, whole: true }));
   let ast: ExprNode;
   try {
     ast = parseExpr(check.expr ?? "");
   } catch {
-    return { paths: needs, early: false };
+    return { reads: needs, early: false };
   }
-  const refs = refPaths(ast);
+  const refs = refReads(ast);
   const deltas = deltaPathsNamed(ast);
-  const early = deltas.length > 0 || refs.some((path) => path.startsWith("early."));
-  return { paths: [...new Set([...refs, ...pathsNamedAsStrings(ast), ...needs])], early };
+  const early = deltas.length > 0 || refs.some((read) => read.path.startsWith("early."));
+  // probeScope's `delta()` alias: `state.` names the state itself unless it has a field of that name.
+  const aliased = !(isRecord(state) && "state" in state);
+  const before = deltas.map((path) => ({
+    path: `early.${aliased ? path.replace(/^state\./, "") : path}`,
+    whole: true,
+  }));
+  const named = pathsNamedAsStrings(ast).map((path) => ({ path, whole: true }));
+  return { reads: [...refs, ...named, ...needs, ...before], early };
 }
 
-/** Every reference in an expression tree. */
-function refPaths(ast: ExprNode): string[] {
-  const paths: string[] = [];
-  const walk = (node: AnyRecord | null | undefined): void => {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "ref" && typeof node.path === "string") paths.push(node.path);
-    for (const child of Object.values(node)) {
-      if (Array.isArray(child)) child.forEach(walk);
-      else if (child && typeof child === "object") walk(child);
-    }
+/**
+ * Every reference in an expression tree, and whether it is read in a way a stub answers like
+ * the value it stands for: alone as a truth value, under `!`/`&&`/`||`, compared to `null`, or
+ * as `len()`'s one argument.
+ */
+function refReads(ast: ExprNode): PathRead[] {
+  const reads: PathRead[] = [];
+  const walk = (node: ExprNode, whole: boolean): void => {
+    if (node.type === "ref") reads.push({ path: node.path, whole });
+    for (const [child, childWhole] of readsBelow(node)) walk(child, childWhole);
   };
-  walk(ast);
-  return paths;
+  walk(ast, true);
+  return reads;
+}
+
+/** A node's sub-expressions, each with whether it is read only as a truth value or a length. */
+function readsBelow(node: ExprNode): Array<[ExprNode, boolean]> {
+  const isNull = (side: ExprNode): boolean => side.type === "literal" && side.value === null;
+  switch (node.type) {
+    case "not":
+      return [[node.operand, true]];
+    case "neg":
+      return [[node.operand, false]];
+    case "and":
+    case "or":
+      return [
+        [node.left, true],
+        [node.right, true],
+      ];
+    case "cmp": {
+      const equality = node.op === "==" || node.op === "!=";
+      return [
+        [node.left, equality && isNull(node.right)],
+        [node.right, equality && isNull(node.left)],
+      ];
+    }
+    case "arith":
+      return [
+        [node.left, false],
+        [node.right, false],
+      ];
+    case "in":
+      return [node.left, ...node.items].map((child) => [child, false]);
+    case "call": {
+      const lengthOnly = node.name === "len" && node.args.length === 1;
+      return node.args.map((arg) => [arg, lengthOnly]);
+    }
+    default:
+      return [];
+  }
 }
 
 /**
  * A probe over a state the studio could not read whole is unmeasured with the reason, and never
  * "the build does not report …": that told builders to add to a state that was already too big.
  * An older studio cut the whole text; this one cuts the largest values, so only a probe that reads
- * inside one of them is unmeasured.
+ * inside one of them — in the late state, or in the early one a `delta()` reads — is unmeasured.
  */
 function unreadableState(check: CheckLike, state: unknown, early: unknown): CheckResult | null {
-  const read = probePathsOf(check);
+  const read = probePathsOf(check, state);
   const truncated = truncatedLength(state) ?? (read.early ? truncatedLength(early) : null);
   if (truncated !== null) {
     return unmeasured(
@@ -639,16 +696,25 @@ function unreadableState(check: CheckLike, state: unknown, early: unknown): Chec
     );
   }
   const scope = probeScope(state, early);
-  const inside = read.paths.filter((path) => cutAlong(scope, path) !== null);
+  const cuts = read.reads.map((r) => ({ path: r.path, at: cutAlong(scope, r.path, r.whole) }));
+  const inside = [...new Set(cuts.filter((c) => c.at !== null).map((c) => c.path))];
   if (!inside.length) return null;
-  const stubs = [...new Set(inside.map((path) => cutAlong(scope, path)))];
-  const whole = stateCutChars(state);
-  const size = whole === null ? "an over-budget" : `a ${whole.toLocaleString("en-US")}-char`;
+  const stubs = [...new Set(cuts.flatMap((c) => (c.at === null ? [] : [c.at])))];
+  const fromEarly = (at: string): boolean => at === "early" || at.startsWith("early.");
+  const sizes: string[] = [];
+  if (stubs.some((at) => !fromEarly(at))) sizes.push(cutStateSize(state, "state()"));
+  if (stubs.some(fromEarly)) sizes.push(cutStateSize(early, "early state()"));
   return unmeasured(
     check,
-    `${inside.join(", ")} reads inside ${stubs.join(", ")}, which the studio cut from ${size} state() — measure it with len(), or report less in state()`,
+    `the studio cut ${stubs.join(", ")} from ${sizes.join(" and ")}, so ${inside.join(", ")} cannot be read — measure it with len(), or report less in state()`,
     { stateTooLarge: true, cut: inside },
   );
+}
+
+/** "a 82,303-char state()", or "an over-budget state()" when the state does not say its size. */
+function cutStateSize(state: unknown, name: string): string {
+  const whole = stateCutChars(state);
+  return whole === null ? `an over-budget ${name}` : `a ${whole.toLocaleString("en-US")}-char ${name}`;
 }
 
 /** The full size a bounded state says it had, or null for a state the studio read whole. */

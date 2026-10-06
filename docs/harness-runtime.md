@@ -268,13 +268,15 @@ observation failure is not a build defect, and "evidence pass failed" is not a r
 
 What a probe reads. The studio bounds `__studio.state()` by structure, never by cutting its text
 (`main/preview-page-scripts.ts` `boundStudioState`): a state whose JSON fits 48,000 characters
-arrives byte for byte; past that, the largest lists, then the object holding the bulk, become
-`{__elided, length, chars}` stubs, the root names them under `__cut`, and the `keep` paths a
-`preview.state` caller may send (a board's own come from `loop/state-shape.ts`
-`statePathsNamedByChecks`) are cut last.
-`len()` and `has()` read a stub as the value it stands for. A probe that reads inside a stub, or any
-probe over an older studio's text-cut `{__truncated}` state, is unmeasured with `stateTooLarge`:
-it still blocks "satisfied", and it never says the build does not report the path.
+arrives byte for byte; past that, the largest lists, then the object holding the bulk (cut whole
+when its weight is spread over many medium lists), become `{__elided, length, chars}` stubs, the
+root names them under `__cut`, and any `keep` paths a `preview.state` caller sends are cut last
+(`loop/state-shape.ts` `statePathsNamedByChecks` names a board's; the passes do not send them yet).
+`len()`, `has()`, truthiness, `!= null` and a list's or string's `.length` read a stub as the value
+it stands for. Any other read of a stub or inside one — in the late state, or in the early state a
+`delta()` reads — and any probe over an older studio's text-cut `{__truncated}` state, is
+unmeasured with `stateTooLarge`: it still blocks "satisfied", and it never says the build does not
+report the path.
 
 What a rollback may assume of a game folder. `snapshot.restore` on a game commits a rescue
 snapshot first and may refuse with a typed `code` (`branch-changed`, `history-changed`,

@@ -277,6 +277,37 @@ describe("readiness judge incidents", () => {
       assert.match(into.reason, /177,640/, into.id);
       assert.doesNotMatch(into.reason, /does not report/, into.id);
     }
+    // A stub read whole is the value it stands for only where every reading agrees: len(), has(),
+    // truthiness, `!= null` and an array's or a string's `.length`. Compared as itself it is not.
+    assert.equal(probe("hud-there", "hud.items != null && !(!hud.items)").pass, true);
+    const longTitle = { ...bounded(3), title: { __elided: "string", length: 9000, chars: 9002 } };
+    const world = { ...bounded(3), world: { __elided: "object", length: 900, chars: 30_000 } };
+    for (const [id, expr, state] of [
+      ["title-is", "title == 'Midnight Asphalt'", longTitle],
+      ["world-length", "world.length == 900", world],
+      ["cars-equal", "race.cars == race.cars", bounded(3)],
+    ] as const) {
+      const read = evaluateProbeCheck({ id, kind: "probe", expr } as Check, { state, stateEarly: bounded(0) });
+      assert.equal(read.pass, null, id);
+      assert.equal(read.stateTooLarge, true, id);
+      assert.doesNotMatch(read.reason, /does not report/, id);
+    }
+    // delta() reads both sides: a value cut only from the early state is unmeasured too, with
+    // the early state's own size, whether the probe names it under needs or not.
+    const lateWhole = { race: { cars: { lead: { lap: 3 } } } };
+    const earlyCut = {
+      race: { cars: { __elided: "object", length: 12, chars: 9_000 } },
+      __cut: { chars: 61_200, paths: ["race.cars"] },
+    };
+    for (const needs of [undefined, ["race.cars.lead.lap"]]) {
+      const check = { id: "lead-lapped", kind: "probe", expr: "delta('race.cars.lead.lap') > 0", needs } as Check;
+      const read = evaluateProbeCheck(check, { state: lateWhole, stateEarly: earlyCut });
+      assert.equal(read.pass, null, `needs ${needs}`);
+      assert.equal(read.stateTooLarge, true, `needs ${needs}`);
+      assert.equal(read.unavailable, undefined, `needs ${needs}`);
+      assert.match(read.reason, /61,200/);
+      assert.doesNotMatch(read.reason, /does not report/);
+    }
     // The dry run never calls a cut path unsatisfiable; a path the build truly lacks still is.
     const dry = dryRunChecks(
       [

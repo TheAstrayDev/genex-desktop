@@ -30,14 +30,22 @@ describe("statePathsNamedByChecks", () => {
       "player.x",
       "player.z",
       "race.lap",
-      "flow.playing",
+      "state.race.lap",
       "flow.phase",
       "race.cars.lead",
     ]);
   });
 
-  it("leaves out a list read only through len(): its stub keeps the length", () => {
+  it("names a state. path both ways: the scope's alias, or a game's own top-level state field", () => {
+    assert.deepEqual(statePathsNamedByChecks([probe("mode", "state.mode == 'race'")]), ["mode", "state.mode"]);
+    assert.deepEqual(statePathsNamedByChecks([probe("lap", "early.race.lap < 2")]), ["race.lap"]);
+  });
+
+  it("leaves out a list read only through len(), .length or has(): its stub answers those", () => {
     assert.deepEqual(statePathsNamedByChecks([probe("hud", "len(hud.items) >= 1")]), []);
+    assert.deepEqual(statePathsNamedByChecks([probe("hud", "hud.items.length >= 1")]), []);
+    assert.deepEqual(statePathsNamedByChecks([probe("hud", "has('hud.items')")]), []);
+    assert.deepEqual(statePathsNamedByChecks([probe("hud", "hud.items.length >= 1 && player.x > 0")]), ["player.x"]);
     assert.deepEqual(statePathsNamedByChecks([probe("hud", "len(hud.items) >= 1 && hud.items != null")]), [
       "hud.items",
     ]);
