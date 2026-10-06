@@ -106,6 +106,25 @@ describe("a bounded ask's effort", () => {
   });
 });
 
+describe("a delegated play session meets the game's front-end", () => {
+  const spec = { id: "plaza", title: "Plaza", intent: "a plaza", checks: [{ id: "c1", kind: "play", ask: "Fun?" }] };
+
+  it("asks the studio to keep the title and menu on screen, with the run's setup or without one", async () => {
+    for (const setup of [undefined, { demo: "pick-map", verify: { path: "map", equals: "apex" } }]) {
+      const run = { runId: "r1", project: "p", engine: "codex", model: "m", goal: "g", ...(setup ? { setup } : {}) };
+      const recorder = ctxRecorder({
+        handlers: {
+          "engine.describe": () => [{ id: "codex", kind: "delegated" }],
+          "engine.delegate": () => ({ turns: 1, summary: "{}" }),
+        },
+      });
+      await runPlaytest(recorder.ctx, { run, spec, checks: spec.checks, root: "/r", maxActions: 1 } as never);
+      const asked = recorder.paramsOf("engine.delegate")[0]?.playtest as { setup?: Record<string, unknown> };
+      assert.deepEqual(asked.setup, { ...(setup ?? {}), begin: false }, JSON.stringify(setup));
+    }
+  });
+});
+
 describe("a direct engine's play session", () => {
   const run = { runId: "r1", project: "p", engine: "ollama", model: "m", goal: "g" };
   const spec = {

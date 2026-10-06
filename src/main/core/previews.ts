@@ -49,7 +49,7 @@ import { isEffectivelyBlack } from "../../substrate/pixel-stats.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { setTimeout as sleep } from "node:timers/promises";
-import { ReadyPhase, CaptureSurface } from "../../shared/preview-contract.ts";
+import { ReadyPhase, CaptureSurface, GameClock, GameFront } from "../../shared/preview-contract.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { LiveGate, type LiveOffer } from "./live-gate.ts";
 import type { LiveBehindEvent } from "../../shared/live-behind.ts";
@@ -84,6 +84,9 @@ const CARD_QUALITY = 62;
 /** How long a setup script may let the page settle, and how long it waits when it does not say. */
 const SETUP_SETTLE_MAX_MS = 10_000;
 const SETUP_SETTLE_DEFAULT_MS = 400;
+/** After `__studio.begin()`, how often the window is asked whether the game is in play, and for how long (wall time: it runs). */
+const PLAY_POLL_MS = 200;
+const PLAY_WAIT_MS = 5 * SECOND_MS;
 /** How much of the page's state a setup note quotes. */
 const SETUP_STATE_EXCERPT_CHARS = 240;
 /** The most reference stills one call returns, their long side, and the largest file read. */
@@ -238,6 +241,60 @@ async function setupVerifyNote(port: PreviewPort, setup: PreviewSetup): Promise<
   if (setupReached(setup.verify, state) !== false) return null;
   const value = JSON.stringify(state).slice(0, SETUP_STATE_EXCERPT_CHARS);
   return `REQUESTED STATE NOT REACHED: ${setup.verify.path} is not ${expectedValue(setup.verify)} after the setup script (${setup.note ?? "no note"}); state: ${value}`;
+}
+
+/** A setup's demo and input actions, then the settle it asked for; what went wrong goes on `notes`. */
+async function replaySetup(
+  port: PreviewPort,
+  setup: PreviewSetup,
+  notes: string[],
+  wait: (ms: number) => Promise<unknown>,
+): Promise<void> {
+  const demoNote = await runSetupDemo(port, setup.demo);
+  if (demoNote) notes.push(demoNote);
+  if (Array.isArray(setup.actions) && setup.actions.length) {
+    await port
+      .input(capActions(setup.actions))
+      .catch((err) => notes.push(`setup input failed: ${String(errorMessage(err))}`));
+  }
+  await wait(Math.min(SETUP_SETTLE_MAX_MS, setup.settleMs ?? SETUP_SETTLE_DEFAULT_MS));
+}
+
+/** `state().flow.playing`: true or false for a game that reports a front-end, null for one that does not. */
+function flowPlaying(state: unknown): boolean | null {
+  const flow = state !== null && typeof state === "object" ? (state as { flow?: unknown }).flow : null;
+  const playing = flow !== null && typeof flow === "object" ? (flow as { playing?: unknown }).playing : null;
+  return typeof playing === "boolean" ? playing : null;
+}
+
+/** Whether a setup replays anything a page must settle after: `{ begin: false }` alone replays nothing. */
+function replaysSomething(setup: PreviewSetup): boolean {
+  const acts = Array.isArray(setup.actions) && setup.actions.length > 0;
+  return Boolean(setup.gesture || setup.demo || setup.verify || acts);
+}
+
+/**
+ * Past the game's own title, menu and countdown into play, the way every judge sees it: only for a
+ * game that says it is not in play (`state().flow.playing === false`), never when the setup keeps
+ * the front-end (`begin: false`, the worker that builds it and the playtester). `begin()` leaves the
+ * game paused, so the window is started again. The note when play was not reached, or null.
+ */
+async function beginPlay(
+  port: PreviewPort,
+  setup: PreviewSetup | null | undefined,
+  wait: (ms: number) => Promise<unknown>,
+): Promise<string | null> {
+  if (setup?.begin === false) return null;
+  if (flowPlaying(await port.studioState().catch(() => null)) !== false) return null;
+  const began = (await port.studioCall(GameFront.Begin).catch(() => null)) as { ok?: unknown } | null;
+  if (began?.ok !== true)
+    return "this game shows a title, menu or countdown and has no __studio.begin(), so the frames show its front-end — give config.begin";
+  await port.studioCall(GameClock.Start).catch(() => null);
+  for (let waited = 0; waited < PLAY_WAIT_MS; waited += PLAY_POLL_MS) {
+    if (flowPlaying(await port.studioState().catch(() => null)) === true) return null;
+    await wait(PLAY_POLL_MS);
+  }
+  return `the game did not reach play within ${PLAY_WAIT_MS / SECOND_MS} s of __studio.begin() (state().flow.playing is still false)`;
 }
 
 /** A still resized to `maxPx` on its long side as JPEG, or null when the preview cannot. */
@@ -817,29 +874,30 @@ export class PreviewService {
 
   /**
    * The requested state, reached the way a player reaches it — the run's setup script after
-   * every load, before anyone looks. Returns a note when it did not land, never throws: a
-   * wrong state is something to tell the worker, not a reason to stop looking.
+   * every load, before anyone looks — and then play: a game with a title, menu or countdown is
+   * put past it the way every judge sees it (`beginPlay`), with no setup at all as much as with
+   * one, unless the setup keeps the front-end (`begin: false`). Returns a note when it did not
+   * land, never throws: a wrong state is something to tell the worker, not a reason to stop
+   * looking. `clock.sleep` is the wall clock's wait, injectable for a test.
    */
-  async applySetup(port: PreviewPort, setup: PreviewSetup | null | undefined): Promise<string | null> {
+  async applySetup(
+    port: PreviewPort,
+    setup: PreviewSetup | null | undefined,
+    clock: { sleep?: (ms: number) => Promise<unknown> } = {},
+  ): Promise<string | null> {
+    const wait = clock.sleep ?? ((ms: number) => sleep(ms));
     // The knock comes first, before the clock is even started: a trusted click is what grants
     // user activation, and a title screen waiting for one is not "started" until it has it.
     if (setup?.gesture) {
       const at = setup.gesture === true ? null : setup.gesture;
       await unlockGesture(port, at, at?.keys).catch(() => null);
     }
-    await port.studioCall("start").catch(() => null);
-    if (!setup) return null;
+    await port.studioCall(GameClock.Start).catch(() => null);
     const notes: string[] = [];
-    const demoNote = await runSetupDemo(port, setup.demo);
-    if (demoNote) notes.push(demoNote);
-    if (Array.isArray(setup.actions) && setup.actions.length) {
-      await port
-        .input(capActions(setup.actions))
-        .catch((err) => notes.push(`setup input failed: ${String(errorMessage(err))}`));
-    }
-    const settleMs = Math.min(SETUP_SETTLE_MAX_MS, setup.settleMs ?? SETUP_SETTLE_DEFAULT_MS);
-    await sleep(settleMs);
-    const verifyNote = await setupVerifyNote(port, setup);
+    if (setup && replaysSomething(setup)) await replaySetup(port, setup, notes, wait);
+    const playNote = await beginPlay(port, setup, wait);
+    if (playNote) notes.push(playNote);
+    const verifyNote = setup ? await setupVerifyNote(port, setup) : null;
     if (verifyNote) notes.push(verifyNote);
     return notes.length ? notes.join("; ") : null;
   }

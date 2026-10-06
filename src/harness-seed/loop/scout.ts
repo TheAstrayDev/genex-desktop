@@ -49,6 +49,8 @@ export interface ScoutSetup {
   gesture?: boolean | { x?: number; y?: number; keys?: string[] };
   verify?: { path: string; equals?: unknown; truthy?: boolean };
   note?: string;
+  /** `false` keeps the game's own title, menu or countdown on screen: the worker that builds them is judged on them. */
+  begin?: boolean;
 }
 
 /** What the scout saw and advises, as the run keeps it. */
@@ -203,7 +205,9 @@ export function normalizeScoutSetup(raw: AnyRecord | null | undefined): ScoutSet
   const verify = setupVerify(raw.verify);
   if (verify) setup.verify = verify;
   if (typeof raw.note === "string" && raw.note.trim()) setup.note = clip(raw.note.trim(), CLIP_REASON);
-  const setsSomethingUp = setup.actions || setup.demo || setup.verify || setup.gesture;
+  if (typeof raw.begin === "boolean") setup.begin = raw.begin;
+  // `begin: false` alone is a setup: the front-end's own worker opens on the title, not past it.
+  const setsSomethingUp = setup.actions || setup.demo || setup.verify || setup.gesture || setup.begin === false;
   return setsSomethingUp ? setup : null;
 }
 

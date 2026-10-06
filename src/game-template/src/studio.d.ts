@@ -174,7 +174,27 @@ export interface StudioState {
   camera: string;
   error: string | null;
   player: PlayerPose | null;
+  /** Present only when the game passed `config.flow`: the screen it is on, and whether that is play. */
+  flow?: GameFlow;
   [probe: string]: unknown;
+}
+
+/** The screens a game with a front-end reports through `config.flow()`; only `playing` decides anything. */
+export declare const FlowPhase: Readonly<{
+  Boot: "boot";
+  Menu: "menu";
+  Intro: "intro";
+  Countdown: "countdown";
+  Playing: "playing";
+  Paused: "paused";
+  Results: "results";
+}>;
+export type FlowPhase = (typeof FlowPhase)[keyof typeof FlowPhase];
+
+/** `state().flow`: the phase `config.flow()` named (null when it named none) and whether it is play. */
+export interface GameFlow {
+  phase: FlowPhase | null;
+  playing: boolean;
 }
 
 /**
@@ -200,7 +220,12 @@ export interface StudioConfig {
   cameras?: Record<string, () => void>;
   /** Scripted demonstrations the generic playthrough cannot reach; each ends paused. */
   demos?: Record<string, () => unknown>;
+  /** Put the game on its first screen (a title or menu is welcome) for `seed`. */
   reset?: (seed: number) => void;
+  /** Which screen is up now, as a {@link FlowPhase} word: `state().flow` reports it. */
+  flow?: () => FlowPhase;
+  /** From where `reset` leaves the game straight into play: synchronous, deterministic, no wall clock. */
+  begin?: () => void;
   canvas?: HTMLCanvasElement;
   /** The game's scene graph, renderer and camera — whatever library they come from. */
   scene?: unknown;
@@ -217,7 +242,7 @@ export interface StudioApi {
   version: number;
   /** Reseed, reset — and pause, so judging starts from a known frame. */
   seed?(value: number): number;
-  /** Resume live play. The game runs from the moment `installStudio` returns. */
+  /** Resume the studio's clock — not the game's Start button: the loop runs and draws from load. */
   start?(): boolean;
   pause?(): boolean;
   /** Present when the game passed `update`; otherwise the studio's shim owns the clock verbs. */
@@ -235,6 +260,8 @@ export interface StudioApi {
   hud: StudioHud;
   demos(): string[];
   demo(name: string): { ok: true; demo: string; result: unknown } | { ok: false; available: string[] };
+  /** Past the title, menu and countdown into play via `config.begin`, left paused; `ok: false` without one. */
+  begin(): { ok: true; flow: GameFlow | null } | { ok: false; reason: string };
   /** The critic's hands: key names (`KeyW`, `w`) and mouse deltas in pixels. */
   injectInput(input: {
     down?: string[];

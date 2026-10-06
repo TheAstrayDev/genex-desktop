@@ -2,6 +2,7 @@
 import { gatherEvidence } from "../../evidence.ts";
 import { isMeasured, runDeterministicChecks, toScoreboard } from "../../checks.ts";
 import { demosNamedByChecks } from "../../spec.ts";
+import { statePathsNamedByChecks } from "../../state-shape.ts";
 import { resolveByOwnership } from "../../merge-ownership.ts";
 import { isCommit } from "../../shell.ts";
 import { GIT, isAncestor, mergeNoFf, shortSha } from "../../git.ts";
@@ -200,6 +201,7 @@ async function lookAtMergedIncumbent(loop: FacetLoop, round: FacetRound, worktre
     motion: MOTION_FRAMES,
     audio: true,
     requiredDemos: demosNamedByChecks(spec.checks),
+    keepPaths: statePathsNamedByChecks(spec.checks),
     setup: facetSetup,
   });
   if (!merged.ok) return;

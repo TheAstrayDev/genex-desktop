@@ -230,7 +230,17 @@ export interface PreviewSetup {
   verify?: { path: string; equals?: unknown; truthy?: boolean };
   /** One sentence for the log and the briefs: what this reaches and why. */
   note?: string;
+  /**
+   * After the setup, a game that reports a front-end (`state().flow.playing === false`) is put
+   * into play with `__studio.begin()`, by default. `false` keeps its title, menu or countdown on
+   * screen: the worker that builds them, and the playtester, meet them as a player does.
+   */
+  begin?: boolean;
 }
+
+/** The `__studio` verb that takes a game past its title, menu and countdown into play (`config.begin`). */
+export const GameFront = { Begin: "begin" } as const;
+export type GameFront = (typeof GameFront)[keyof typeof GameFront];
 
 /** Which signal answered: the studio's own page shim, the game's own contract, or nothing. Wire values. */
 export const ReadyVia = {

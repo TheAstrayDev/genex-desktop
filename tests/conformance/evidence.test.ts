@@ -28,16 +28,21 @@ import type { Check } from "../../src/harness-seed/loop/spec.ts";
 import { evaluateProbeCheck, evaluateSceneCheck, sceneCheckExpression } from "../../src/harness-seed/loop/checks.ts";
 import {
   criticFor,
+  cruiseFor,
   gameLine,
   inputProbesFor,
   KIND_NAMES,
   normalizeGameTraits,
   playScriptFor,
   readDeclaredGame,
+  startKeysFor,
   wantsEyeCameras,
   writeDeclaredGame,
 } from "../../src/harness-seed/loop/kinds.ts";
 import { applyPlayScript, CONTROL_EXERCISE } from "../../src/harness-seed/loop/play-script.ts";
+import { applySetup, EvidenceFailure, patientEvidence } from "../../src/harness-seed/loop/evidence.ts";
+import { FlowPhase as HarnessFlowPhase } from "../../src/harness-seed/loop/page-contract.ts";
+import { FlowPhase as TemplateFlowPhase } from "../../src/game-template/src/studio.js";
 
 interface StubOptions {
   /** Base64 payload per screenshot call, in order; repeats simulate a stale compositor frame. */
@@ -68,6 +73,12 @@ interface StubOptions {
   failConsole?: string;
   /** Answers for `preview.evaluate` that are not the step witness. */
   evaluate?: (expression: string) => unknown;
+  /** What `preview.status` answers beyond a healthy page. */
+  status?: Record<string, unknown>;
+  /** A page verb's own answer (`preview.call`); `undefined` falls through to the stub's. */
+  page?: (method: string, arg: unknown) => unknown;
+  /** What the page does with each `preview.input` batch. */
+  input?: (actions: Array<Record<string, unknown>>) => void;
 }
 
 const READY_NOW = {
@@ -110,13 +121,14 @@ function stubCtx(options: StubOptions) {
               ? { compared: 0 }
               : { compared: 1_000, diffFraction: options.diff };
         case "preview.status":
-          return { loadError: null, crashed: false };
+          return { loadError: null, crashed: false, ...(options.status ?? {}) };
         case "preview.state":
           stateCalls++;
           return options.state ? options.state(stateCalls) : { version: 1, frame: shotIndex };
         case "preview.gesture":
           return { knocked: true, trusted: null };
         case "preview.input":
+          options.input?.((payload.actions ?? []) as Array<Record<string, unknown>>);
           return { ok: true, applied: 1, width: 800, height: 600 };
         case "preview.console":
           if (options.failConsole) throw new Error(options.failConsole);
@@ -157,6 +169,8 @@ function stubCtx(options: StubOptions) {
         }
         case "preview.call": {
           const m = payload.method;
+          const own = options.page?.(String(m), payload.arg);
+          if (own !== undefined) return own;
           if (m === "cameras") return options.cameras ?? { ok: false };
           if (m === "demos") return options.demos ?? { ok: false };
           if (m === "demo") return { ok: true, demo: payload.arg, result: { done: true } };
@@ -1556,5 +1570,346 @@ describe("the order a pass touches the page in, and the state it leaves it in", 
     const clean = stubCtx({ frames: ["a", "b", "c"] });
     await gather(clean.ctx);
     assert.equal(clean.calls.at(-1)!.payload.method, "start");
+  });
+});
+
+// ── the game's front-end, the drive held in play, and what the pass now always says ──────────
+
+/**
+ * A racer with a title → countdown → race front-end, the Midnight Apex shape: `seed` puts it back
+ * on its menu, `begin` starts the countdown, each step of the countdown counts it down, and a held
+ * W moves the car only once the race is on.
+ */
+function frontEnd({
+  countdownSteps = 2,
+  begin = true,
+  playingAtBoot = false,
+}: {
+  countdownSteps?: number;
+  begin?: boolean;
+  playingAtBoot?: boolean;
+} = {}) {
+  const first = playingAtBoot ? "playing" : "menu";
+  let phase = first;
+  let countdown = 0;
+  let x = 0;
+  const held = new Set<string>();
+  const startCountdown = () => {
+    phase = "countdown";
+    countdown = countdownSteps;
+  };
+  return {
+    state: () => ({ version: 2, flow: { phase, playing: phase === "playing" }, player: { x, z: 0, yaw: 0 } }),
+    page: (method: string): unknown => {
+      if (method === "seed") {
+        phase = first;
+        countdown = 0;
+        x = 0;
+        held.clear();
+        return 1;
+      }
+      if (method === "begin") {
+        if (!begin) return { ok: false, reason: "this game has no config.begin" };
+        startCountdown();
+        return { ok: true, flow: { phase, playing: false } };
+      }
+      if (method !== "step") return undefined;
+      if (phase === "countdown") {
+        countdown -= 1;
+        if (countdown <= 0) phase = "playing";
+      } else if (phase === "playing" && held.has("w")) x += 1;
+      return { frame: 1 };
+    },
+    input: (actions: Array<Record<string, unknown>>) => {
+      for (const action of actions) {
+        const keys = (action.keys ?? []) as string[];
+        if (action.type === "down") for (const key of keys) held.add(key);
+        if (action.type === "up") for (const key of keys) held.delete(key);
+        if (action.type === "tap" && keys.includes("Enter") && phase === "menu") startCountdown();
+      }
+    },
+  };
+}
+
+/** What the pass asked of the page, one word per call: `call:seed`, `input:down`, `state`. */
+function sequence(calls: Array<{ method: string; payload: Record<string, unknown> }>): string[] {
+  return calls.map((c) => {
+    if (c.method === "preview.call") return `call:${c.payload.method}:${c.payload.arg ?? ""}`;
+    if (c.method === "preview.input") return `input:${JSON.stringify(c.payload.actions)}`;
+    return c.method.replace("preview.", "");
+  });
+}
+
+describe("a game with a front-end: the drive starts in play (NFS-1)", () => {
+  it("speaks the template's phase words", () => {
+    assert.deepEqual({ ...HarnessFlowPhase }, { ...TemplateFlowPhase });
+  });
+
+  it("begins after the seed, waits out the countdown, and samples the early state in play before any control", async () => {
+    const game = frontEnd({ countdownSteps: 2 });
+    const { ctx, calls } = stubCtx({ frames: ["a", "b", "c"], ...game });
+    const evidence = await gather(ctx);
+    assert.equal(evidence.ok, true, evidence.problems.join("; "));
+    const words = sequence(calls);
+    const seed = words.indexOf("call:seed:1");
+    const begin = words.indexOf("call:begin:");
+    const firstInput = words.findIndex((word) => word.startsWith("input:"));
+    assert.ok(seed >= 0 && seed < begin, words.join(" "));
+    assert.ok(begin < firstInput, "the game is begun before any scripted control");
+    assert.deepEqual(evidence.play, { declared: true, reached: true, phase: "playing", via: "begin", ms: 480 });
+    assert.equal((evidence.stateEarly as { flow: { playing: boolean } }).flow.playing, true);
+    assert.ok((evidence.state as { player: { x: number } }).player.x > 0, "the held W moved the car in play");
+    assert.ok(!evidence.warnings.some((w: string) => /outside play/.test(w)), evidence.warnings.join("; "));
+  });
+
+  it("warns, never voids, when the game does not reach play", async () => {
+    const game = frontEnd({ countdownSteps: Number.POSITIVE_INFINITY });
+    const { ctx, calls } = stubCtx({ frames: ["a", "b", "c"], ...game });
+    const evidence = await gather(ctx);
+    assert.equal(evidence.ok, true, "one regression never voids a night");
+    assert.equal(evidence.play?.reached, false);
+    assert.equal(evidence.play?.phase, "countdown");
+    assert.ok(
+      evidence.warnings.some((w: string) => /^the drive began outside play \(flow\.phase "countdown"\)/.test(w)),
+      evidence.warnings.join("; "),
+    );
+    const waits = calls.filter((c) => c.payload.method === "step" && c.payload.arg === 240);
+    assert.equal(waits.length, 50, "twelve simulated seconds, stepped, never slept");
+  });
+
+  it("drives a game already in play at boot exactly like one that declares no flow", async () => {
+    const boot = frontEnd({ playingAtBoot: true });
+    const playing = stubCtx({ frames: ["a", "b", "c"], ...boot });
+    const undeclared = stubCtx({ frames: ["a", "b", "c"] });
+    const inPlay = await gather(playing.ctx);
+    const plain = await gather(undeclared.ctx);
+    assert.deepEqual(sequence(playing.calls), sequence(undeclared.calls), "not one call more or less");
+    assert.equal(inPlay.play?.via, "boot");
+    assert.equal("play" in plain, false, "an undeclared game's evidence has no new key");
+    assert.equal("machineKilled" in plain, false);
+  });
+
+  it("keeps the front-end for the worker that owns it (setup begin:false)", async () => {
+    const game = frontEnd();
+    const { ctx, calls } = stubCtx({ frames: ["a", "b", "c"], ...game });
+    const evidence = await gather(ctx, { setup: { begin: false } });
+    assert.ok(!sequence(calls).includes("call:begin:"), "nobody skips the menu this worker is building");
+    assert.deepEqual(evidence.play, { declared: true, reached: false, phase: "menu", via: "kept", ms: 0 });
+    assert.ok(!evidence.warnings.some((w: string) => /outside play/.test(w)), evidence.warnings.join("; "));
+  });
+
+  it("taps the declared start keys for a game with a flow and no begin()", async () => {
+    const game = frontEnd({ begin: false, countdownSteps: 1 });
+    const { ctx, calls } = stubCtx({ frames: ["a", "b", "c"], ...game });
+    const evidence = await gather(ctx, { run: { ...run, game: { kind: "racing", start: { keys: ["Enter"] } } } });
+    const words = sequence(calls);
+    const tap = words.findIndex((word) => word.startsWith("input:") && word.includes('"Enter"'));
+    const seed = words.indexOf("call:seed:1");
+    const firstDrive = words.findIndex((word) => word.startsWith("input:") && word.includes('"w"'));
+    assert.ok(seed < tap && tap < firstDrive, words.join(" "));
+    assert.equal(evidence.play?.via, "keys");
+    assert.equal(evidence.play?.reached, true);
+  });
+
+  it("hands the live view back on the game's first screen, and a leased window as it stands", async () => {
+    const live = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
+    await gather(live.ctx);
+    assert.deepEqual(sequence(live.calls).slice(-2), ["call:seed:1", "call:start:"]);
+    const leased = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
+    await gather(leased.ctx, { handle: "w1" });
+    const tail = sequence(leased.calls).slice(-2);
+    assert.equal(tail[1], "call:start:");
+    assert.notEqual(tail[0], "call:seed:1", "a pooled window is nobody's stage: no reseed");
+  });
+});
+
+/**
+ * How many drive steps the last `down` of exactly `keys` is held through before its `up`, or null
+ * when no such hold spans a drive step (a script's own short hold of the same keys does not).
+ */
+function heldThrough(calls: Array<{ method: string; payload: Record<string, unknown> }>, keys: string[]) {
+  const same = (c: { payload: Record<string, unknown> }, type: string) => {
+    const action = ((c.payload.actions ?? []) as Array<{ type: string; keys?: string[] }>)[0];
+    return action?.type === type && JSON.stringify(action.keys) === JSON.stringify(keys);
+  };
+  const down = calls.findLastIndex((c) => c.method === "preview.input" && same(c, "down"));
+  if (down < 0) return null;
+  const up = calls.findIndex((c, i) => i > down && c.method === "preview.input" && same(c, "up"));
+  const steps = calls.slice(down, up).filter((c) => c.payload.method === "step" && c.payload.arg === 960).length;
+  if (steps === 0) return null;
+  const firstShot = calls.findIndex((c, i) => i > down && c.method === "preview.screenshot");
+  return { steps, releasedBeforeShots: up >= 0 && (firstShot < 0 || up < firstShot) };
+}
+
+describe("racing and flight hold the throttle through the drive", () => {
+  it("holds W/ArrowUp from the end of the script to the last drive step, and lets go before the cameras", async () => {
+    const { ctx, calls } = stubCtx({ frames: ["a", "b", "c"] });
+    await gather(ctx, { run: { ...run, game: { kind: "racing" } } });
+    const held = heldThrough(calls, ["w", "ArrowUp"]);
+    assert.ok(held && held.steps >= 20, JSON.stringify(held));
+    assert.equal(held!.releasedBeforeShots, true);
+  });
+
+  it("holds nothing for a walker, or for a racer whose plan wrote its own script", async () => {
+    for (const game of [{ kind: "first-person" }, { kind: "racing", playScript: [{ type: "tap", keys: ["x"] }] }]) {
+      const { ctx, calls } = stubCtx({ frames: ["a", "b", "c"] });
+      await gather(ctx, { run: { ...run, game } });
+      assert.equal(heldThrough(calls, ["w", "ArrowUp"]), null, JSON.stringify(game));
+    }
+    assert.deepEqual(cruiseFor({ kind: "racing" }), ["w", "ArrowUp"]);
+    assert.deepEqual(cruiseFor({ kind: "flight" }), ["w", "ArrowUp"]);
+    assert.deepEqual(cruiseFor({ kind: "racing", playScript: [{ type: "tap", keys: ["x"] }] }), []);
+    assert.deepEqual(cruiseFor(undefined), []);
+  });
+
+  it("tells the judge the throttle was held", () => {
+    assert.match(gameLine({ kind: "racing" }), /then holds W\/ArrowUp through the rest of the drive/);
+    assert.doesNotMatch(gameLine({ kind: "first-person" }), /through the rest of the drive/);
+  });
+
+  it("reads declared start keys from the plan or studio.json, and writes them back", async () => {
+    assert.deepEqual(normalizeGameTraits({ start: { keys: "Enter" } }).start, { keys: ["Enter"] });
+    assert.equal("start" in normalizeGameTraits({ start: { keys: [] } }), false);
+    assert.equal("start" in normalizeGameTraits({ start: 5 }), false);
+    assert.deepEqual(startKeysFor({ start: { keys: ["Enter", "space"] } }), ["Enter", "space"]);
+    assert.deepEqual(startKeysFor(undefined), []);
+    const files: Record<string, string> = { "studio.json": JSON.stringify({ name: "apex", game: {} }) };
+    const ctx = {
+      call: async (method: string, payload: { file: string; contents: string }) => {
+        if (method === "game.read") return files[payload.file];
+        files[payload.file] = payload.contents;
+        return {};
+      },
+    };
+    const written = await writeDeclaredGame(ctx as never, "apex", { kind: "racing", start: { keys: ["Enter"] } });
+    assert.equal(written.written, true);
+    assert.deepEqual(JSON.parse(files["studio.json"]!).game.start, { keys: ["Enter"] });
+    assert.deepEqual((await readDeclaredGame(ctx as never, "apex"))!.start, { keys: ["Enter"] });
+    const startOnly = { "studio.json": JSON.stringify({ name: "x", game: { start: { keys: ["Enter"] } } }) };
+    const startCtx = { call: async (_m: string, p: { file: string }) => startOnly[p.file as "studio.json"] };
+    assert.deepEqual((await readDeclaredGame(startCtx as never, "x"))!.start, { keys: ["Enter"] });
+  });
+});
+
+describe("what every pass now records and reads", () => {
+  it("records the cameras the game registers even when the facet names its own", async () => {
+    const { ctx } = stubCtx({ frames: ["a", "b", "c"], cameras: ["default", "close", "bench"] });
+    const named = await gather(ctx, { cameras: ["close"] });
+    assert.deepEqual(named.registeredCameras, ["default", "close", "bench"]);
+    const { ctx: plain } = stubCtx({ frames: ["a", "b", "c"], cameras: ["default", "close", "bench"] });
+    assert.deepEqual((await gather(plain)).registeredCameras, ["default", "close", "bench"]);
+  });
+
+  it("sizes a leased window before it loads, and never the live view", async () => {
+    const leased = stubCtx({ frames: ["a", "b", "c"] });
+    await gather(leased.ctx, { handle: "w1", root: "/work", viewport: { width: 1600, height: 900 } });
+    assert.equal(leased.calls[0]!.method, "preview.viewport");
+    assert.deepEqual(leased.calls[0]!.payload, { handle: "w1", width: 1600, height: 900 });
+    assert.equal(leased.calls[1]!.method, "preview.load");
+    const live = stubCtx({ frames: ["a", "b", "c"] });
+    await gather(live.ctx, { viewport: { width: 1600, height: 900 } });
+    assert.ok(!live.calls.some((c) => c.method === "preview.viewport"));
+  });
+
+  it("asks the studio to keep the paths a board reads, and asks nothing when there are none", async () => {
+    const kept = stubCtx({ frames: ["a", "b", "c"] });
+    await gather(kept.ctx, { keepPaths: ["race.cars"] });
+    const reads = kept.calls.filter((c) => c.method === "preview.state");
+    assert.ok(reads.length >= 2);
+    for (const read of reads) assert.deepEqual(read.payload.keep, ["race.cars"]);
+    const plain = stubCtx({ frames: ["a", "b", "c"] });
+    await gather(plain.ctx, { keepPaths: [] });
+    assert.ok(plain.calls.filter((c) => c.method === "preview.state").every((c) => !("keep" in c.payload)));
+  });
+
+  it("says what the studio cut out of an over-budget state, and that an old cut state reads as nothing", async () => {
+    const bounded = () => ({
+      player: { x: 1, z: 0, yaw: 0 },
+      hud: { items: { __elided: "array", length: 6000, chars: 168_001 } },
+      __cut: { chars: 177_640, paths: ["hud.items"] },
+    });
+    const cut = await gather(stubCtx({ frames: ["a", "b", "c"], state: bounded }).ctx);
+    const said = cut.warnings.find((w: string) => /hud\.items/.test(w));
+    assert.ok(said, cut.warnings.join("; "));
+    assert.match(said!, /177,640/);
+    const head = () => ({ __truncated: true, length: 82_303, head: "{" });
+    const old = await gather(stubCtx({ frames: ["a", "b", "c"], state: head }).ctx);
+    assert.ok(
+      old.warnings.some((w: string) => /82,303/.test(w)),
+      old.warnings.join("; "),
+    );
+    const small = await gather(stubCtx({ frames: ["a", "b", "c"] }).ctx);
+    assert.ok(!small.warnings.some((w: string) => /chars/.test(w)), small.warnings.join("; "));
+  });
+
+  it("calls a requested state unread, not unreached, when the state came back cut to a string", async () => {
+    const { ctx } = stubCtx({ frames: ["a"], state: () => ({ __truncated: true, length: 82_303, head: "{" }) });
+    const outcome = await applySetup(ctx as never, { verify: { path: "maps.activeId", equals: "macba" }, settleMs: 1 });
+    assert.equal(outcome.reached, null);
+    assert.match(outcome.reason, /unreadable/);
+  });
+});
+
+describe("a window the machine killed is an outage, not a broken build", () => {
+  const crashed = "the renderer crashed";
+
+  it("classifies a kill by its typed flag, and a crash of the build's own as the build's", () => {
+    assert.equal(classifyEvidenceFailure([crashed], { machineKilled: true }), EvidenceFailure.Observation);
+    assert.equal(classifyEvidenceFailure([crashed], { machineKilled: false }), EvidenceFailure.Build);
+    assert.equal(classifyEvidenceFailure([crashed]), EvidenceFailure.Build);
+    const blind = [
+      crashed,
+      "could not drive the game: target closed",
+      "no camera produced a frame (asked for: default)",
+    ];
+    assert.equal(classifyEvidenceFailure(blind, { machineKilled: true }), EvidenceFailure.Observation);
+    assert.equal(
+      classifyEvidenceFailure([crashed, "2 console error(s)"], { machineKilled: true }),
+      EvidenceFailure.Build,
+      "an error the build logged is still the build's",
+    );
+  });
+
+  it("reads the kill off the window's status, and only a kill", async () => {
+    const killed = await gather(stubCtx({ frames: ["a", "b", "c"], status: { crashed: true, gone: "killed" } }).ctx);
+    assert.equal(killed.machineKilled, true);
+    const oom = await gather(stubCtx({ frames: ["a", "b", "c"], status: { crashed: true, gone: "oom" } }).ctx);
+    assert.equal(oom.machineKilled, true);
+    const own = await gather(stubCtx({ frames: ["a", "b", "c"], status: { crashed: true, gone: "crashed" } }).ctx);
+    assert.equal("machineKilled" in own, false);
+  });
+
+  it("looks again with patience, and a build the machine always kills still loses after the retries", async () => {
+    const ctx = { cancelled: false, setStatus: () => {} };
+    const dead = { ok: false, problems: [crashed], machineKilled: true, readyAfterMs: null };
+    let looks = 0;
+    const always = await withObservationPatience(ctx, async () => (looks++, dead), { delays: [0, 0], raceDelays: [] });
+    assert.equal(looks, 3, "the first look and both retries");
+    assert.equal(always.ok, false);
+    assert.equal(observationOnlyFailure(always.problems), false, "after the retries it is judged a broken build");
+    let second = 0;
+    const back = await withObservationPatience(
+      ctx,
+      async () => (second++ === 0 ? dead : { ok: true, problems: [], readyAfterMs: 0 }),
+      { delays: [0], raceDelays: [] },
+    );
+    assert.equal(back.ok, true);
+    let patient = 0;
+    const director = await patientEvidence(
+      ctx,
+      async () =>
+        (patient++ === 0 ? dead : { ok: true, problems: [], warnings: [], shots: [], consoleErrors: [] }) as never,
+      { attempts: 3, delayMs: 0 },
+    );
+    assert.equal(director?.ok, true, "the director's patient look looks again too");
+    const sized: Array<{ method: string; payload: unknown }> = [];
+    const calling = {
+      cancelled: false,
+      call: async (method: string, payload: unknown) => sized.push({ method, payload }),
+    };
+    const healthy = async () => ({ ok: true, problems: [], warnings: [], shots: [], consoleErrors: [] }) as never;
+    await patientEvidence(calling as never, healthy, { handle: "w1", viewport: { width: 1600, height: 900 } });
+    await patientEvidence(calling as never, healthy, { viewport: { width: 1600, height: 900 } });
+    assert.deepEqual(sized, [{ method: "preview.viewport", payload: { handle: "w1", width: 1600, height: 900 } }]);
   });
 });

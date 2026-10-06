@@ -1,6 +1,7 @@
 /** Evidence for the round, with patience for a blind camera, and whether the build it saw can be judged at all. */
 import { gatherEvidence, observationOnlyFailure, withObservationPatience } from "../../evidence.ts";
 import { demosNamedByChecks } from "../../spec.ts";
+import { statePathsNamedByChecks } from "../../state-shape.ts";
 import { normalizeReason } from "../../replan.ts";
 import { GIT, commitAll, shortSha } from "../../git.ts";
 import { StopCode, stopWith } from "../../outcomes.ts";
@@ -63,6 +64,8 @@ async function gatherOnce(loop: FacetLoop, round: FacetRound): Promise<AnyRecord
       // Every demo a check names runs; the integration facet — the only judgeable build of
       // the merged game — runs all of them.
       requiredDemos: demosNamedByChecks(spec.checks),
+      // The paths the board reads are cut last when the state is over the studio's budget.
+      keepPaths: statePathsNamedByChecks(spec.checks),
       ...(role === FacetRole.Integration ? { maxDemos: Infinity } : {}),
       setup: facetSetup,
       // An error the incumbent (or the base, before any incumbent) already logs is the

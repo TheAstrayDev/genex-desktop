@@ -565,10 +565,11 @@ clock while approval is pending; Cancel/Stop invalidates it; a waiting plan surv
 Approval dispatches the brief with the legacy `reviewPlan` flag cleared.
 
 **Scout.** Before the plan, a read-only scout (`loop/scout.ts`) plays to the requested state and
-reports a `setup` (actions or a demo plus a `verify` probe), a builder count and what exists.
-`decompose` folds the plan to the scout's ceiling (`clampFacets`). `run.setup` is replayed after
-every load by evidence, capture and the computer tool; typed facets carry the `requested-state`
-check. A completion-only engine has no scout; a failed scout is a decision card.
+reports a `setup` (actions or a demo, a `verify` probe), a builder count and what exists;
+`decompose` folds the plan to that ceiling (`clampFacets`). Evidence, capture and the computer tool
+replay `run.setup` after every load, then begin a game whose `state().flow` is not in play unless
+`begin: false` (the front-end's worker, the playtester); typed facets carry `requested-state`. No
+scout on a completion-only engine; a failed one is a card.
 
 **Director.** On a session-capable engine Autopilot is one session's night (`loop/director.ts`,
 `loop/director/`); `run.classic` and completion-only engines take the programmed pipeline. The
@@ -686,12 +687,12 @@ it is converted in a deterministic commit. `landBuild` applies the same conversi
 (`unversionedNested`), and the night's landing stops with `nested-not-versioned`.
 
 **Game kinds and evidence.** `loop/kinds.ts` is the one table of eight kinds, with their traits
-(off until declared), probe axes, eye cameras, critic (`place` or `screen`) and play script;
+(off until declared), probe axes, eye cameras, critic and play script;
 `gameLine(run.game)` heads every judge call. `run.game` comes from the plan, then the scout, then
-`studio.json`'s nested `game` block; the plan's declaration is written back and committed once a
-night. `gatherEvidence` (clock proof `proveStep`, one classifier `classifyEvidenceFailure`) is
-described in the [harness runtime guide](../harness-runtime.md). `library/checks.json` holds only
-the technical checks; craft checks are `library/recipes` entries retrieved by failing check,
+`studio.json`'s nested `game` block; the plan's declaration is written back once a
+night. `gatherEvidence` (`proveStep`, `reachPlay`, `classifyEvidenceFailure`) is in the
+[harness runtime guide](../harness-runtime.md). `library/checks.json` holds
+technical checks only; craft checks are `library/recipes` entries retrieved by failing check,
 named defect or plan. Own-shape games get own-shape briefs and review rules (`renderBrief`,
 `reviewDiff`) and a seam per worker.
 

@@ -15,10 +15,14 @@
  * exported, so a harness file the in-app agent edited before the move keeps its imports.
  */
 import { applyPlayScript } from "./play-script.ts";
-import { playScriptFor, wantsEyeCameras } from "./kinds.ts";
+// A namespace, not named imports: a seed upgrade may keep an older kinds.ts the agent edited, which
+// has no `cruiseFor` or `startKeysFor`, and a missing named import would stop this file loading.
+import * as kinds from "./kinds.ts";
 import { LOAD_RACE_RETRY_MS, OBSERVATION_RETRY_MS, RACE_RETRY_MS, WINDOW_RETRIES_MS } from "./config.ts";
 import { HostMethod } from "./host-methods.ts";
 import { PageMethod } from "./page-contract.ts";
+import { PreviewGone } from "./preview-gone.ts";
+import { isTruncatedState, stateCutOf } from "./state-shape.ts";
 import { clip } from "./text.ts";
 import { SECOND_MS, sleep } from "./time.ts";
 import { isRecord } from "./json.ts";
@@ -51,8 +55,35 @@ export interface Evidence extends CheckEvidence {
   consoleErrors: string[];
   readyAfterMs?: number | null;
   attempts?: number;
+  /** Whether the drive started in play — only for a game that reports `state().flow`. */
+  play?: PlayReach;
+  /** The OS killed the window (memory pressure), so its problems are the machine's, not the build's. Only when true. */
+  machineKilled?: boolean;
+  /** The cameras the game registers (`__studio.cameras()`), whatever the pass photographed; null when it never said. */
+  registeredCameras?: string[] | null;
   // biome-ignore lint/suspicious/noExplicitAny: every other reading of the pass, read by name where it is used.
   [field: string]: any;
+}
+
+/** How a pass took the game into play (`PlayReach.via`): it already was, `begin()`, start keys, waiting, or not at all. */
+export const PlayVia = {
+  Boot: "boot",
+  Begin: "begin",
+  Keys: "keys",
+  Wait: "wait",
+  /** The setup said `begin: false`: the worker that owns the front-end is judged on it. */
+  Kept: "kept",
+} as const;
+export type PlayVia = (typeof PlayVia)[keyof typeof PlayVia];
+
+/** Whether the drive of a game with a front-end started in play, and how it got there. */
+export interface PlayReach {
+  declared: true;
+  reached: boolean;
+  phase: string | null;
+  via: PlayVia;
+  /** Simulated milliseconds stepped after `begin()` (or the keys) before play. */
+  ms: number;
 }
 
 /** What one evidence pass is asked to look at, and how. */
@@ -74,6 +105,10 @@ export interface GatherOptions {
   scaffold?: boolean;
   setup?: AnyRecord | null;
   inheritedConsole?: string[];
+  /** The state paths the board reads (`statePathsNamedByChecks`): the studio cuts them last. */
+  keepPaths?: string[];
+  /** Look at this size: a leased window is sized before it loads (`preview.viewport`), never the live view. */
+  viewport?: { width: number; height: number } | null;
 }
 
 /** The pass's own state, phase to phase: its arguments, then what each phase found. */
@@ -88,6 +123,7 @@ interface Look extends GatherOptions {
   userView: boolean;
   scaffold: boolean;
   inheritedConsole: string[];
+  keepPaths: string[];
   // biome-ignore lint/suspicious/noExplicitAny: each phase adds the readings the phases after it read.
   [field: string]: any;
 }
@@ -130,6 +166,9 @@ const PROOF_STEP_MS = 320;
 const DRIVE_STEPS = 29;
 const DRIVE_STEP_MS = 960;
 const LAST_DRIVE_STEP = DRIVE_STEPS - 1;
+/** Reaching play: the clock steps this long between reads of `flow.playing`, for at most this long. */
+const PLAY_WAIT_STEP_MS = 240;
+const PLAY_WAIT_MAX_MS = 12 * SECOND_MS;
 /** A pass without a spec photographs at most this many cameras. */
 const MAX_CAMERAS = 6;
 /** The harness's own viewpoints, asked of a game that declares fewer than two. */
@@ -149,6 +188,9 @@ const MAX_GPU_ERRORS = 16;
 /** The sentence this pass pushes when the page carries no contract at all. Exported because the
  * race classifier is built from it: a sentence two files re-type is a sentence that drifts. */
 export const MISSING_CONTRACT = "window.__studio is missing — the build cannot be judged";
+
+/** The sentence a pass pushes when the window's renderer went away, whoever's doing it was. */
+const RENDERER_CRASHED = "the renderer crashed";
 
 /** The sentence a pass with no frame owes its reader; also an observation problem. */
 const NO_FRAME = /^no camera produced a frame/;
@@ -220,15 +262,35 @@ function allMean(problems: readonly unknown[] | null | undefined, kind: ProblemM
  *    when it did. A short retry, because a slow boot is not a defect.
  *  - `build`: everything else, including a missing contract on a page whose boot WAS measured.
  *
+ * `machineKilled` is the window's own typed word (`preview.status` `gone`), never read off a
+ * sentence: when the OS killed the renderer for memory, the crash and what a dead window cannot
+ * answer (no drive, no frame, no contract) are the machine's, and the look is an outage.
  */
 export function classifyEvidenceFailure(
   problems: readonly unknown[] | null | undefined,
-  { readyAfterMs = null }: { readyAfterMs?: number | null } = {},
+  { readyAfterMs = null, machineKilled = false }: { readyAfterMs?: number | null; machineKilled?: boolean } = {},
 ): EvidenceFailure {
   if (!(problems ?? []).length) return EvidenceFailure.None;
   if (allMean(problems, ProblemMeaning.Observation)) return EvidenceFailure.Observation;
+  if (machineKilled && deadWindowOnly(problems)) return EvidenceFailure.Observation;
   if (readyAfterMs === null && allMean(problems, ProblemMeaning.Race)) return EvidenceFailure.Race;
   return EvidenceFailure.Build;
+}
+
+/** Is every problem the crash itself, or something a dead window could not answer (a blind camera, a lost drive or contract)? */
+function deadWindowOnly(problems: readonly unknown[] | null | undefined): boolean {
+  const rest = (problems ?? []).map((problem) => String(problem)).filter((problem) => problem !== RENDERER_CRASHED);
+  const deadWindowMeanings: readonly ProblemMeaning[] = [ProblemMeaning.Observation, ProblemMeaning.Load];
+  return rest.every((problem) =>
+    EVIDENCE_FAILURES.some(
+      (failure) => failure.means.some((means) => deadWindowMeanings.includes(means)) && failure.match.test(problem),
+    ),
+  );
+}
+
+/** Did the OS kill this window (`preview.status` `gone`), rather than the build crash it? */
+function killedByMachine(status: { gone?: unknown } | null | undefined): boolean {
+  return status?.gone === PreviewGone.Killed || status?.gone === PreviewGone.Oom;
 }
 
 /**
@@ -256,7 +318,7 @@ export function loadRaced(problems: readonly unknown[] | null | undefined): bool
  * a minute. `raceDelays: []` turns that off entirely, which is what the classic run passes.
  */
 export async function withObservationPatience<
-  E extends { ok?: boolean; problems: readonly unknown[]; readyAfterMs?: number | null },
+  E extends { ok?: boolean; problems: readonly unknown[]; readyAfterMs?: number | null; machineKilled?: boolean },
 >(
   ctx: { readonly cancelled: boolean; setStatus?: (status: string) => void },
   gatherOnce: () => Promise<E>,
@@ -279,7 +341,10 @@ export async function withObservationPatience<
   };
   for (;;) {
     if (evidence.ok) return evidence;
-    const kind = classifyEvidenceFailure(evidence.problems, { readyAfterMs: evidence.readyAfterMs ?? null });
+    const kind = classifyEvidenceFailure(evidence.problems, {
+      readyAfterMs: evidence.readyAfterMs ?? null,
+      machineKilled: evidence.machineKilled === true,
+    });
     const delay = left[kind]?.shift();
     if (delay === undefined) return evidence;
     if (ctx.cancelled || Date.now() + delay > deadline) return evidence;
@@ -335,6 +400,10 @@ async function verifySetup(
   const { verify } = setup;
   const state = (await ctx.call(HostMethod.PreviewState, { ...h }).catch(() => null)) as AnyRecord | null;
   const value = lookupState(state, verify.path);
+  // An older studio cut an over-budget state to a string: nothing in it can be read, which is not
+  // the same as a state that was read and is wrong.
+  if (isTruncatedState(state))
+    return { reached: null, reason: "the game's state is unreadable: state() came back cut to a string" };
   const usable = state && typeof state === "object" && !state.__missing;
   if (!usable) return { reached: null, reason: "the game's state is unreadable" };
   const note = setup.note ? ` (${setup.note})` : "";
@@ -358,7 +427,7 @@ export async function applySetup(
   h: { handle?: string } = {},
 ): Promise<SetupOutcome> {
   const out: SetupOutcome = { applied: false, reached: null, reason: "", error: null };
-  if (!setup || typeof setup !== "object") return out;
+  if (!setup || typeof setup !== "object" || !replaysSomething(setup)) return out;
   try {
     if (setup.gesture) {
       await knock(ctx, setup.gesture, h);
@@ -380,6 +449,15 @@ export async function applySetup(
     out.error = String(err?.message ?? err);
   }
   return out;
+}
+
+/**
+ * Whether a setup replays anything on the page. `{ begin: false }` alone (the worker that owns the
+ * front-end) only says what the pass must not skip, and is not a script to replay and settle after.
+ */
+function replaysSomething(setup: AnyRecord): boolean {
+  const acts = Array.isArray(setup.actions) && setup.actions.length > 0;
+  return Boolean(setup.gesture || setup.demo || setup.verify?.path || acts);
 }
 
 function lookupState(state: unknown, path: string): unknown {
@@ -630,6 +708,8 @@ export async function gatherEvidence(
     scaffold = false,
     setup = undefined,
     inheritedConsole = [],
+    keepPaths = [],
+    viewport = null,
   }: GatherOptions,
 ): Promise<Evidence> {
   // The pass's own state, phase to phase: its arguments, then what each phase found for the
@@ -653,6 +733,8 @@ export async function gatherEvidence(
     scaffold,
     setup,
     inheritedConsole,
+    keepPaths: Array.isArray(keepPaths) ? keepPaths.map(String) : [],
+    viewport,
   };
   for (const phase of LOOK_OPENING) {
     const done = await phase(look);
@@ -666,12 +748,29 @@ export async function gatherEvidence(
       if (done) return done.value;
     }
   } finally {
-    // However this pass ends, the game is handed back running. A night that crashed here used
-    // to leave the user's own stage frozen on a paused frame until they reloaded it.
-    await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Start, ...look.h }).catch(() => {});
+    await handBack(look);
   }
   // Unreachable: the last phase (reportLook) always answers.
   return undefined as never;
+}
+
+/**
+ * However this pass ends, the game is handed back running. A night that crashed here used to
+ * leave the user's own stage frozen on a paused frame until they reloaded it. The live view (a
+ * pass with no window of its own) is the user's stage: a pass that took the game past its title
+ * puts it back on its first screen before it lets it run, rather than mid-race.
+ */
+async function handBack(look: Look): Promise<void> {
+  const { ctx, h } = look;
+  const movedPastFrontEnd = look.play?.via === PlayVia.Begin || look.play?.via === PlayVia.Keys;
+  if (movedPastFrontEnd && !look.handle)
+    await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Seed, arg: look.seed, ...h }).catch(() => {});
+  await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Start, ...h }).catch(() => {});
+}
+
+/** `preview.state`'s params for this pass: its window, and the paths its board reads, cut last. */
+function stateParams(look: Look): { handle?: string; keep?: string[] } {
+  return look.keepPaths.length ? { ...look.h, keep: look.keepPaths } : { ...look.h };
 }
 
 /**
@@ -755,6 +854,8 @@ async function loadPage(look: Look): Promise<LookEnd> {
   // stop the night; a later iteration warns, so one regression never voids a whole run.
   look.baseStage = scaffold === true && iterationId === "base";
 
+  await sizeWindow(look);
+
   // ── (1) load ──
   if (root || entry)
     await ctx.call(HostMethod.PreviewLoad, {
@@ -771,8 +872,28 @@ async function loadPage(look: Look): Promise<LookEnd> {
   // ── (3) status: read on a settled page, not on one still loading ──
   const status = await ctx.call(HostMethod.PreviewStatus, { ...h });
   look.status = status;
+  // The OS reclaiming memory kills a window whatever it runs: a typed flag the classifier reads,
+  // so a build is not rolled back for the machine's pressure (`classifyEvidenceFailure`).
+  look.machineKilled = killedByMachine(status);
   if (status.loadError) problems.push(status.loadError);
-  if (status.crashed) problems.push("the renderer crashed");
+  if (status.crashed) problems.push(RENDERER_CRASHED);
+}
+
+/**
+ * (0) size: a look asked at another size (the art director's 1600×900) resizes its leased window
+ * before the load, so the page lays itself out at that size; the live view is the user's and is
+ * never resized. A window the host will not size is judged at its own size, with a warning.
+ */
+async function sizeWindow(look: Look): Promise<void> {
+  const { ctx, handle, viewport, warnings } = look;
+  if (!handle || !viewport) return;
+  try {
+    await ctx.call(HostMethod.PreviewViewport, { handle, width: viewport.width, height: viewport.height });
+  } catch (err: any) {
+    warnings.push(
+      `the window could not be sized to ${viewport.width}×${viewport.height} (${err?.message ?? err}) — it was judged at its own size`,
+    );
+  }
 }
 
 /** (4) setup, the player-eye cameras the game has, and the readings the page phases fill. */
@@ -796,7 +917,7 @@ async function reachRequestedState(look: Look): Promise<LookEnd> {
   // `player()` into installStudio. A board game has no eye worth photographing, so it is not
   // asked; a game that declares no kind is looked at exactly as before.
   look.eyeNames = [];
-  const looksThroughEyes = eyes && look.bootedFor && wantsEyeCameras(run?.game);
+  const looksThroughEyes = eyes && look.bootedFor && kinds.wantsEyeCameras(run?.game);
   if (looksThroughEyes) {
     try {
       const declared = await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Eyes, ...h });
@@ -832,6 +953,7 @@ async function reachRequestedState(look: Look): Promise<LookEnd> {
 
   look.state = null;
   look.stateEarly = null;
+  look.play = null;
   look.audioProbe = null;
   look.clockProof = {
     ok: null,
@@ -884,22 +1006,132 @@ async function proveClock(look: Look): Promise<void> {
 }
 
 /**
- * (6) drive. Two samples, ~30 simulated seconds apart: the first run judged on 5 uneventful
- * seconds, where every build's numbers look identical. The judge needs to see what MOVED. The
- * early sample is taken BEFORE the scripted controls, so `delta('player.yaw')` and
+ * (6) the opening sample. Two samples, ~30 simulated seconds apart: the first run judged on 5
+ * uneventful seconds, where every build's numbers look identical. The judge needs to see what
+ * MOVED. The early sample is taken BEFORE the scripted controls, so `delta('player.yaw')` and
  * `delta('player.x')` measure what the controls did — the first v2 run took it after them and
  * every probe delta measured drift. The two proving steps sit before it, so the early sample is
  * the same distance into the simulation for every build.
  */
-async function driveGame(look: Look): Promise<void> {
-  const { ctx, h, motion, motionFrames, run, takeMotionFrame } = look;
+async function sampleOpening(look: Look): Promise<void> {
+  const { ctx, h } = look;
   await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Step, arg: DRIVE_STEP_MS, ...h });
-  look.stateEarly = await ctx.call(HostMethod.PreviewState, { ...h });
-  // Drive the game's OWN controls every iteration so feel/play are judged on play, not idle
-  // time — and so a board game is clicked rather than walked.
-  await applyPlayScript(ctx, playScriptFor(run?.game), { clock: "step", runId: run.runId, ...h });
-  // The motion strip: a few frames spread over the scripted walk, from the player's eye —
-  // feel is judged from motion, not from two JSON snapshots.
+  look.stateEarly = await ctx.call(HostMethod.PreviewState, stateParams(look));
+}
+
+/** `state().flow` as the harness reads it: whether the game is in play, and the phase it names. */
+function flowOf(state: unknown): { playing: boolean; phase: string | null } | null {
+  const flow = isRecord(state) ? state.flow : null;
+  if (!isRecord(flow) || typeof flow.playing !== "boolean") return null;
+  return { playing: flow.playing, phase: typeof flow.phase === "string" ? flow.phase : null };
+}
+
+/** What the pass records of the front-end: always declared, reached only when `flow.playing`. */
+function playReach(flow: { playing: boolean; phase: string | null }, via: PlayVia, ms: number): PlayReach {
+  return { declared: true, reached: flow.playing, phase: flow.phase, via, ms };
+}
+
+/**
+ * (6a) play. A game with a title, menu or countdown reports `state().flow`, and the drive must
+ * start in play: otherwise every throttle lands in the countdown `seed()` just restarted and the
+ * judges rate a standing car (NFS-1, Midnight Apex). Read off the opening sample, so a game that
+ * reports no flow, or is in play already, is driven call for call as before. Stepped, never slept;
+ * a game that does not get there is a warning, never a voided challenger.
+ */
+async function reachPlay(look: Look): Promise<void> {
+  const flow = flowOf(look.stateEarly);
+  if (!flow) return;
+  if (flow.playing) {
+    look.play = playReach(flow, PlayVia.Boot, 0);
+    return;
+  }
+  // The worker that owns the front-end is judged on its menu, not past it.
+  if (look.requestedSetup?.begin === false) {
+    look.play = playReach(flow, PlayVia.Kept, 0);
+    return;
+  }
+  const via = await enterPlay(look);
+  const { state, ms } = await waitForPlay(look);
+  // The early sample is the state the controls start from: in play, after the countdown.
+  look.stateEarly = state;
+  look.play = playReach(flowOf(state) ?? flow, via, ms);
+  if (!look.play.reached) look.warnings.push(outsidePlay(look.play, startKeysOf(look.run?.game)));
+}
+
+/** `__studio.begin()`, or the declared start keys when the page has none; how the pass asked. */
+async function enterPlay(look: Look): Promise<PlayVia> {
+  const { ctx, h, run } = look;
+  const began = await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Begin, ...h }).catch(() => null);
+  if (isRecord(began) && began.ok === true) return PlayVia.Begin;
+  const keys = startKeysOf(run?.game);
+  if (!keys.length) return PlayVia.Wait;
+  await applyPlayScript(ctx, [{ type: "tap", keys }], { clock: "step", runId: run.runId, ...h });
+  return PlayVia.Keys;
+}
+
+/** Step the clock until the game says it is in play, or the wait runs out: the last state, and how long. */
+async function waitForPlay(look: Look): Promise<{ state: unknown; ms: number }> {
+  const { ctx, h } = look;
+  let ms = 0;
+  let state = await ctx.call(HostMethod.PreviewState, stateParams(look));
+  while (flowOf(state)?.playing !== true && ms < PLAY_WAIT_MAX_MS) {
+    await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Step, arg: PLAY_WAIT_STEP_MS, ...h });
+    ms += PLAY_WAIT_STEP_MS;
+    state = await ctx.call(HostMethod.PreviewState, stateParams(look));
+  }
+  return { state, ms };
+}
+
+/** What a judge and the next builder are told when the drive started outside play. */
+function outsidePlay(play: PlayReach, keys: string[]): string {
+  const seconds = PLAY_WAIT_MAX_MS / SECOND_MS;
+  const asked =
+    play.via === PlayVia.Keys
+      ? `the start keys (${keys.join("/")}) did not bring the game to flow.playing within ${seconds} s`
+      : `__studio.begin() did not bring the game to flow.playing within ${seconds} s`;
+  const why =
+    play.via === PlayVia.Wait
+      ? `the game has no __studio.begin() and no declared start keys, and did not reach flow.playing on its own within ${seconds} s`
+      : asked;
+  return `the drive began outside play (flow.phase "${play.phase ?? "unknown"}") — ${why}; the scripted controls landed in the front-end`;
+}
+
+/** The declared start keys, from a kinds.ts that may predate them. */
+function startKeysOf(game: AnyRecord | null | undefined): string[] {
+  return typeof kinds.startKeysFor === "function" ? kinds.startKeysFor(game) : [];
+}
+
+/** The keys this kind cruises on through the drive, from a kinds.ts that may predate them. */
+function cruiseOf(game: AnyRecord | null | undefined): string[] {
+  return typeof kinds.cruiseFor === "function" ? kinds.cruiseFor(game) : [];
+}
+
+/**
+ * (6b) drive: the game's OWN controls every iteration so feel/play are judged on play, not idle
+ * time — and so a board game is clicked rather than walked. A racer or a craft then holds its
+ * throttle through the rest of the drive (`cruise`), released before the cameras: a racer
+ * photographed after thirty seconds of coasting is a parked car. Both sides of every comparison
+ * get the same inputs.
+ */
+async function driveGame(look: Look): Promise<void> {
+  const { ctx, h, run } = look;
+  await applyPlayScript(ctx, kinds.playScriptFor(run?.game), { clock: "step", runId: run.runId, ...h });
+  const cruise = cruiseOf(run?.game);
+  if (cruise.length) await ctx.call(HostMethod.PreviewInput, { actions: [{ type: "down", keys: cruise }], ...h });
+  try {
+    await stepThroughDrive(look);
+  } finally {
+    if (cruise.length)
+      await ctx.call(HostMethod.PreviewInput, { actions: [{ type: "up", keys: cruise }], ...h }).catch(() => {});
+  }
+}
+
+/**
+ * The drive's steps, with the motion strip: a few frames spread over them, from the player's eye
+ * — feel is judged from motion, not from two JSON snapshots.
+ */
+async function stepThroughDrive(look: Look): Promise<void> {
+  const { ctx, h, motion, motionFrames, takeMotionFrame } = look;
   const motionAt = new Set<number>();
   if (motion > 0)
     for (let k = 0; k < motion; k++) motionAt.add(Math.round((k * LAST_DRIVE_STEP) / Math.max(1, motion - 1)));
@@ -915,12 +1147,35 @@ async function driveGame(look: Look): Promise<void> {
   }
 }
 
+/**
+ * What the studio's bound did to the state, said once: a bounded state names what it cut (a
+ * check reading into a stub is unmeasured), and an older studio's string cut left nothing to read.
+ */
+function sayStateCut(look: Look): void {
+  const { state, warnings } = look;
+  const cut = stateCutOf(state);
+  if (cut) {
+    const paths = cut.paths.length ? cut.paths.join(", ") : "its largest values";
+    warnings.push(
+      `__studio.state() is ${cut.chars.toLocaleString("en-US")} chars, over what the studio reads whole, so it cut ${paths} to stubs — a check that reads into them is unmeasured; keep long lists out of state()`,
+    );
+    return;
+  }
+  if (!isTruncatedState(state)) return;
+  const chars = Number(state.length);
+  const size = Number.isFinite(chars) ? `${chars.toLocaleString("en-US")} chars` : "over budget";
+  warnings.push(
+    `__studio.state() is ${size} and came back cut to a string — nothing in it could be read; report less in state()`,
+  );
+}
+
 /** The state the drive left, what it says is wrong with the page, and what the game sounds like. */
 async function readDrivenState(look: Look): Promise<void> {
   const { audio, ctx, h, problems } = look;
-  look.state = await ctx.call(HostMethod.PreviewState, { ...h });
+  look.state = await ctx.call(HostMethod.PreviewState, stateParams(look));
   if (look.state?.__missing) problems.push(MISSING_CONTRACT);
   if (look.state?.error) problems.push(`runtime error: ${look.state.error.message}`);
+  sayStateCut(look);
   if (!audio || look.state?.__missing) return;
   try {
     const probe = (await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Audio, ...h })) as AnyRecord | null;
@@ -930,11 +1185,13 @@ async function readDrivenState(look: Look): Promise<void> {
   }
 }
 
-/** (5) prove the studio owns the clock, then (6) drive the game's own controls. */
+/** (5) prove the studio owns the clock, (6) sample it, reach play, then drive the game's own controls. */
 async function proveAndDrive(look: Look): Promise<LookEnd> {
   if (!look.bootedFor) return;
   try {
     await proveClock(look);
+    await sampleOpening(look);
+    await reachPlay(look);
     await driveGame(look);
     await readDrivenState(look);
   } catch (err: any) {
@@ -1052,6 +1309,17 @@ async function takeShot(
   };
 }
 
+/** The cameras the game registers (`__studio.cameras()`), or null for a game predating cameras(). */
+async function registeredCameraNames(look: Look): Promise<string[] | null> {
+  const { ctx, h } = look;
+  try {
+    const answer = await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Cameras, ...h });
+    return Array.isArray(answer) ? answer.map(String) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Add `name` to the cameras to photograph, once. */
 function addCamera(names: string[], name: string): void {
   if (!names.includes(name)) names.push(name);
@@ -1064,14 +1332,8 @@ function addCamera(names: string[], name: string): void {
  * for close and wide, and an unregistered one of those is skipped silently.
  */
 async function declaredCameraNames(look: Look, cameraNames: string[], floorCameras: Set<string>): Promise<void> {
-  const { ctx, h } = look;
   cameraNames.push(DEFAULT_CAMERA);
-  try {
-    const answer = await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Cameras, ...h });
-    if (Array.isArray(answer)) look.declaredCameras = answer.map(String);
-  } catch {
-    /* a game predating cameras() declares none */
-  }
+  look.declaredCameras = await registeredCameraNames(look);
   const declared: string[] = look.declaredCameras ?? [];
   for (const name of declared)
     if (!cameraNames.includes(name) && cameraNames.length < MAX_CAMERAS) cameraNames.push(name);
@@ -1106,13 +1368,18 @@ async function chooseCameras(look: Look): Promise<void> {
   look.floorCameras = floorCameras;
   const wantEyes = look.eyeNames.filter((name: string) => EYE_CAMERAS.includes(name));
   look.wantEyes = wantEyes;
+  // What the game registers, recorded whichever cameras are photographed: a camera another facet
+  // depends on that a build deleted is a regression, and only this list can show it.
+  look.registeredCameras = null;
   if (!look.bootedFor) cameraNames.push(DEFAULT_CAMERA);
   else if (Array.isArray(cameras) && cameras.length > 0) {
     for (const name of [DEFAULT_CAMERA, ...cameras.map(String)]) addCamera(cameraNames, name);
     for (const name of wantEyes) addCamera(cameraNames, name);
+    look.registeredCameras = await registeredCameraNames(look);
   } else {
     await declaredCameraNames(look, cameraNames, floorCameras);
     for (const name of wantEyes) addCamera(cameraNames, name);
+    look.registeredCameras = look.declaredCameras;
   }
   // The viewpoints the GAME claims to have: the floor's guesses are not among them, so an
   // identical frame from a camera nobody declared is not evidence of dead wiring.
@@ -1318,9 +1585,9 @@ function demosToRun(
  * is answered from this snapshot instead.
  */
 async function demoEndState(look: Look, name: string): Promise<void> {
-  const { ctx, demoStates, h } = look;
+  const { ctx, demoStates } = look;
   try {
-    const after = (await ctx.call(HostMethod.PreviewState, { ...h })) as AnyRecord | null;
+    const after = (await ctx.call(HostMethod.PreviewState, stateParams(look))) as AnyRecord | null;
     if (isRecord(after) && !after.__missing) demoStates[name] = after;
   } catch {
     /* a lost snapshot leaves the probe unmeasured, never failed */
@@ -1568,6 +1835,7 @@ async function reportLook(look: Look): Promise<LookEnd> {
       // What the game declares vs what the cap left out — so a check can tell "not registered"
       // (the builder's defect) from "not run" (nobody looked).
       registeredDemos: look.registeredDemos,
+      registeredCameras: look.registeredCameras ?? null,
       skippedDemos,
       state: look.state,
       stateEarly: look.stateEarly,
@@ -1597,6 +1865,10 @@ async function reportLook(look: Look): Promise<LookEnd> {
       surface: judged?.surface ?? "canvas",
       pageUi: look.pageUi ? { entries: uiEntries, coverage: uiCoverage, primary: uiPrimary } : null,
       canvas: judgedCanvas(judged),
+      // Only when there is something to say, so a game with no front-end, on a window nobody
+      // killed, reports exactly what it always did.
+      ...(look.play ? { play: look.play } : {}),
+      ...(look.machineKilled ? { machineKilled: true } : {}),
     },
   };
 }
@@ -1667,19 +1939,33 @@ async function noWindowFree(ctx: HarnessCtx): Promise<{ noWindow: string }> {
 }
 
 /**
- * A look that is allowed to look again when the load raced the window (`loadRaced`). `look` makes
- * one pass; a pass that throws is a failed pass, never a thrown night. `onRace` hears each race
- * before the next look. The answer carries how many looks it was allowed (`attempts`).
+ * A look that is allowed to look again when the load raced the window (`loadRaced`), or when the
+ * OS killed the window under memory pressure (`machineKilled`). `look` makes one pass; a pass that
+ * throws is a failed pass, never a thrown night. `onRace` hears each race before the next look.
+ * The answer carries how many looks it was allowed (`attempts`). A `viewport` sizes the leased
+ * window (`handle`) once, before the first look; the live view is never sized.
  */
 export async function patientEvidence(
-  ctx: { readonly cancelled?: boolean },
+  ctx: { readonly cancelled?: boolean; call?: HarnessCtx["call"] },
   look: () => Promise<Evidence>,
   {
     attempts = 3,
     delayMs = LOAD_RACE_RETRY_MS,
     onRace = null,
-  }: { attempts?: number; delayMs?: number; onRace?: ((evidence: Evidence) => void) | null } = {},
+    handle = null,
+    viewport = null,
+  }: {
+    attempts?: number;
+    delayMs?: number;
+    onRace?: ((evidence: Evidence) => void) | null;
+    handle?: string | null;
+    viewport?: { width: number; height: number } | null;
+  } = {},
 ): Promise<Evidence | null> {
+  if (handle && viewport && typeof ctx.call === "function")
+    await ctx
+      .call(HostMethod.PreviewViewport, { handle, width: viewport.width, height: viewport.height })
+      .catch(() => null);
   let evidence: Evidence | null = null;
   for (let i = 0; i < attempts; i++) {
     if (i > 0) await sleep(delayMs);
@@ -1693,8 +1979,11 @@ export async function patientEvidence(
       }),
     );
     if (evidence.ok || ctx.cancelled) break;
-    if (!loadRaced(evidence.problems)) break;
-    onRace?.(evidence);
+    const killed =
+      evidence.machineKilled === true &&
+      classifyEvidenceFailure(evidence.problems, { machineKilled: true }) === EvidenceFailure.Observation;
+    if (!loadRaced(evidence.problems) && !killed) break;
+    if (!killed) onRace?.(evidence);
   }
   if (evidence) evidence.attempts = attempts;
   return evidence;

@@ -348,6 +348,19 @@ describe("the scout says what kind of game it just drove", () => {
     assert.deepEqual((normalizeScoutSetup({ gesture: { x: 480, y: 300 } }) as any).gesture, { x: 480, y: 300 });
   });
 
+  it("keeps the front-end for the worker that owns it: begin:false is a setup of its own", () => {
+    assert.deepEqual(normalizeScoutSetup({ begin: false }), { begin: false }, "the title screen worker's whole setup");
+    assert.deepEqual(normalizeScoutSetup({ demo: "pick-map", begin: false }), { demo: "pick-map", begin: false });
+    assert.deepEqual(normalizeScoutSetup({ demo: "pick-map", begin: true }), { demo: "pick-map", begin: true });
+    for (const begin of ["false", 0, null, {}])
+      assert.equal(
+        Object.hasOwn(normalizeScoutSetup({ demo: "pick-map", begin } as never) ?? {}, "begin"),
+        false,
+        JSON.stringify(begin),
+      );
+    assert.equal(normalizeScoutSetup({ begin: "no" } as never), null, "a begin that is not a boolean sets nothing up");
+  });
+
   it("reads to the planner as the kind, and says when the studio must click first", () => {
     const text = renderScoutForPlanner(
       normalizeScoutReport({

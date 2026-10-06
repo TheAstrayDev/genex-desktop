@@ -11,6 +11,7 @@ import { roleEffort, roleEngine, RoleKey, supportsSessions, toolCall } from "./m
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { gatherEvidence } from "./evidence.ts";
+import { statePathsNamedByChecks } from "./state-shape.ts";
 import { runDeterministicChecks } from "./checks.ts";
 import { visionCheck } from "./judge.ts";
 import { type Check, CheckKind, CheckWeight, demosNamedByChecks, type FacetSpec, renderChecks } from "./spec.ts";
@@ -517,6 +518,7 @@ async function spikeEvidence(spike: SpikeRun): Promise<Evidence> {
     maxDemos: 1,
     // The spike exists for this one check: if it names a demo, that demo runs.
     requiredDemos: demosNamedByChecks([check]),
+    keepPaths: statePathsNamedByChecks([check]),
   });
 }
 

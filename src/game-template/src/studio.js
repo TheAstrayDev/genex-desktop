@@ -19,9 +19,12 @@
  * no import map, another version of three, or no three in its graph at all. The HUD is the one
  * part that needs three, and it lives in `./hud.js`, loaded the first time a game draws with it.
  *
- * The game runs from the moment `installStudio` returns — nobody in the pipeline calls
- * `start()`, so a build that waits for it ships a frozen screen. `pause()` is how a judge
- * freezes the simulation to `step()` it deterministically; `seed()` pauses for the same reason.
+ * `start()` and `pause()` are the studio's clock, not the game's Start button: the loop runs and
+ * draws from the moment `installStudio` returns, so a build that waits for `start()` ships a
+ * frozen screen. `pause()` is how a judge freezes the simulation to `step()` it deterministically;
+ * `seed()` pauses for the same reason, and the harness calls `start()` after every look. A title,
+ * menu or countdown is the game's own first screen: `config.flow` says which screen is up and
+ * `config.begin` takes the game straight into play, which is how every judge skips it.
  *
  * Keep this file intact. Extend it (new probes, new cameras) rather than removing anything —
  * every method here is something the harness calls.
@@ -39,6 +42,20 @@ export function makeRng(seed) {
   };
 }
 
+/**
+ * The screens a game with a front-end may report through `config.flow()`. Only `playing` decides
+ * anything (`state().flow.playing`); the rest are words for the judge. Never rename a value.
+ */
+export const FlowPhase = Object.freeze({
+  Boot: "boot",
+  Menu: "menu",
+  Intro: "intro",
+  Countdown: "countdown",
+  Playing: "playing",
+  Paused: "paused",
+  Results: "results",
+});
+
 const EYE_HEIGHT = 1.6;
 const DEG = Math.PI / 180;
 /** Mouse buttons arrive in `ctx.keys` under these names — the same set a harness click produces. */
@@ -55,6 +72,8 @@ const FLASH_DECAY = 0.86;
  *   cameras?: Record<string, () => void>,
  *   demos?: Record<string, () => unknown>,
  *   reset?: (seed: number) => void,
+ *   flow?: () => string,
+ *   begin?: () => void,
  *   canvas?: HTMLCanvasElement,
  *   scene?: unknown,
  *   renderer?: unknown,
@@ -385,6 +404,22 @@ export function installStudio(config) {
     renderAll();
   }
 
+  /** Which screen the game says is up, and whether that is play: `state().flow`. */
+  function flowNow() {
+    let phase = null;
+    try {
+      phase = config.flow();
+    } catch {
+      phase = null;
+    }
+    return { phase: typeof phase === "string" ? phase : null, playing: phase === FlowPhase.Playing };
+  }
+
+  /** `state()`'s `flow` key — only for a game that passed `config.flow`, so every other state is unchanged. */
+  function flowEntry() {
+    return typeof config.flow === "function" ? { flow: flowNow() } : {};
+  }
+
   /** Where the player is now (see `playerPosition`); null when `player()` has no answer or throws. */
   function playerNow() {
     try {
@@ -520,7 +555,10 @@ export function installStudio(config) {
   const api = {
     version: 2,
 
-    /** Reseed, fully reset — and pause. Judging is stepped, never wall-clocked. */
+    /**
+     * Reseed, fully reset — `reset(seed)` puts the game back on its first screen — and pause.
+     * Judging is stepped, never wall-clocked.
+     */
     seed(value) {
       // Seeding is the judge's deterministic entry point; a wall-clock RAF firing between
       // step() calls would make identical seeds diverge. start() resumes live play.
@@ -590,7 +628,25 @@ export function installStudio(config) {
         error: window.__studio_error ?? null,
         player: playerNow(),
         ...(config.probes ? config.probes() : {}),
+        ...flowEntry(),
       };
+    },
+
+    /**
+     * Into play from wherever `reset` left the game (title, menu, intro, countdown): synchronous,
+     * deterministic and paused, like a demo — the judge steps it from here. A game with no
+     * front-end of its own needs no `config.begin`, and is answered that it has none.
+     */
+    begin() {
+      if (typeof config.begin !== "function") return { ok: false, reason: "this game has no config.begin" };
+      running = false;
+      try {
+        config.begin();
+      } catch (error) {
+        return { ok: false, reason: String(error?.message ?? error) };
+      }
+      renderAll();
+      return { ok: true, flow: flowNow() };
     },
 
     /**

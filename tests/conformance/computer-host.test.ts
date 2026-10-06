@@ -11,6 +11,10 @@ import path from "node:path";
 import { after, describe, it } from "node:test";
 import type { DelegateRequest, DelegateResult, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import type { PreviewPort } from "../../src/substrate/preview-port.ts";
+import type { PreviewSetup } from "../../src/shared/preview-contract.ts";
+import { PreviewService } from "../../src/main/core/previews.ts";
+import { unservedPreviews, type CoreInternals } from "../../src/main/core/internals.ts";
+import type { StudioCore } from "../../src/main/studio-core.ts";
 import { READY_PROBE, awaitReady, readySnapshot, type ReadySnapshot } from "../../src/substrate/preview-ready.ts";
 import { customEvents, makeFakePreview, startRig, type Rig } from "../helpers/studio-rig.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -872,5 +876,69 @@ describe("what a load waits for", () => {
       escaped,
       /your build failed to load: the page left game:\/\/stray-boot for http:\/\/localhost:5173, which the studio does not serve/,
     );
+  });
+});
+
+describe("a game with a front-end, as builders and the computer tool first see it", () => {
+  /** A page with a title → race front-end, the calls it was asked, and the waits it cost. */
+  function frontEndPort(options: { flow?: boolean; playing?: boolean; begin?: boolean; reaches?: boolean } = {}) {
+    const { flow = true, begin = true, reaches = true } = options;
+    let playing = options.playing ?? false;
+    const calls: string[] = [];
+    const slept: number[] = [];
+    const port = {
+      async studioState() {
+        return flow ? { version: 2, flow: { phase: playing ? "playing" : "menu", playing } } : { version: 2 };
+      },
+      async studioCall(method: string) {
+        calls.push(method);
+        if (method !== "begin") return { ok: true };
+        if (!begin) return { ok: false, reason: "this page declares no begin()" };
+        if (reaches) playing = true;
+        return { ok: true };
+      },
+      async input() {
+        return { ok: true, applied: 0, width: 960, height: 600 };
+      },
+    } as unknown as PreviewPort;
+    const service = new PreviewService(
+      { emit: () => {} } as unknown as StudioCore,
+      unservedPreviews() as CoreInternals,
+    );
+    const apply = (setup: PreviewSetup | null) =>
+      service.applySetup(port, setup, {
+        sleep: async (ms: number) => {
+          slept.push(ms);
+        },
+      });
+    return { apply, calls, slept };
+  }
+
+  it("begins a game that reports it is not in play, even with no setup at all, and keeps it running", async () => {
+    const page = frontEndPort();
+    assert.equal(await page.apply(null), null);
+    assert.deepEqual(page.calls, ["start", "begin", "start"], "begin() leaves the game paused; the window runs it");
+    assert.deepEqual(page.slept, [], "play came at once: nothing waited");
+  });
+
+  it("never begins for the worker that owns the front-end, a game already in play, or one with no flow", async () => {
+    const cases: Array<[string, ReturnType<typeof frontEndPort>, PreviewSetup | null]> = [
+      ["begin:false", frontEndPort(), { begin: false }],
+      ["in play", frontEndPort({ playing: true }), null],
+      ["no flow", frontEndPort({ flow: false }), null],
+    ];
+    for (const [label, page, setup] of cases) {
+      await page.apply(setup);
+      assert.ok(!page.calls.includes("begin"), `${label}: ${page.calls.join(",")}`);
+      assert.deepEqual(page.slept, [], `${label}: a begin-only setup replays nothing to settle after`);
+    }
+  });
+
+  it("says so when begin() does not reach play, and when the game has no begin() to call", async () => {
+    const stuck = frontEndPort({ reaches: false });
+    assert.match(String(await stuck.apply(null)), /did not reach play/);
+    assert.ok(stuck.slept.length > 0, "the countdown was given its time, on the injected clock");
+    const none = frontEndPort({ begin: false });
+    assert.match(String(await none.apply(null)), /no __studio\.begin\(\)/);
   });
 });

@@ -18,7 +18,9 @@ look and move probes read, the eye cameras it wants, its critic and its play scr
 OFF until the planner, the director or `studio.json`'s nested `game` block declares it, so a game
 nobody described carries no harness input check at all; a declared kind supplies its traits and an
 explicit boolean beside it wins. The harness drives that kind's play script before every
-judgement, and `gameLine(run.game)` is the first line of every judge call. Two critics, not one:
+judgement (racing and flight then hold W/ArrowUp through the rest of the drive, `cruise`, released
+before the cameras; a declared script holds nothing), and `gameLine(run.game)` is the first line of
+every judge call. A game with a title and no `__studio.begin()` may declare `start.keys`. Two critics, not one:
 `place` for a world a player walks through and `screen` for a board, a puzzle or a builder.
 
 Malformed facet ballots hold the current build and report an unmeasured comparison. A
@@ -258,7 +260,12 @@ tool throws rather than resolving. Nothing on the agent side can add, change or 
 
 What the evidence pass proves before it gathers. It waits for the page and records
 `readyAfterMs`; it proves the studio owns the clock (two steps, `steppedFrames` — a base fails
-where an iteration warns); it drives the kind's play script and the run's `setup`; it photographs
+where an iteration warns); it replays the run's `setup` before the seed; a game that reports
+`state().flow` (a title, menu or countdown; template `config.flow`/`config.begin`) is then taken into
+play — `__studio.begin()`, else its start keys, then stepped until `flow.playing` for at most 12
+simulated seconds, a warning when it never gets there, never when `setup.begin === false` keeps the
+front-end for its own worker — and the live view is reseeded to its first screen afterwards; a game
+with no flow is driven call for call as before. It then drives the kind's play script; it photographs
 the game's own cameras, falling back to the view the game renders when it registered none (with a
 warning, never a void), and the page as well when the page has UI; and when `ok` is false it always
 says why. Frames that ran and drew nothing are a verdict on a base with content in it and a warning
@@ -266,17 +273,20 @@ on an empty scaffold — the same exemption the blank-pixel rule already had, se
 (`EMPTY_SCENE_PROBE`) rather than by the game's own word. One classifier answers for every caller: `none`, `observation`, `race` or `build` — an
 observation failure is not a build defect, and "evidence pass failed" is not a race.
 `preview.status` says why a dead window's renderer went (`gone`, a `loop/preview-gone.ts` code beside
-`crashed`; `killed` and `oom` are the machine's), and `preview.viewport` puts one leased window at
+`crashed`; `killed` and `oom` are the machine's: the pass records `machineKilled` and the classifier
+calls such a look an observation outage, retried with patience), and `preview.viewport` puts one leased window at
 another size (clamped to 1920×1200) until its release, never Live, the stand-in or a computer session's window:
 handing the lease to a session puts it back at the facet size, so size it again afterwards
-(`preview.status` `viewSize` is the size it is at now).
+(`preview.status` `viewSize` is the size it is at now); a pass given `viewport` sizes its leased window
+before it loads. Every pass records the cameras the game registers (`registeredCameras`).
 
 What a probe reads. The studio bounds `__studio.state()` by structure, never by cutting its text
 (`main/preview-page-scripts.ts` `boundStudioState`): a state whose JSON fits 48,000 characters
 arrives byte for byte; past that, the largest lists, then the object holding the bulk (cut whole
 when its weight is spread over many medium lists), become `{__elided, length, chars}` stubs, the
 root names them under `__cut`, and any `keep` paths a `preview.state` caller sends are cut last
-(`loop/state-shape.ts` `statePathsNamedByChecks` names a board's; the passes do not send them yet).
+(`loop/state-shape.ts` `statePathsNamedByChecks` names a board's; the facet's look, its rebaseline
+and a spike send them as `gatherEvidence` `keepPaths`, and the pass warns naming what was cut).
 `len()`, `has()`, truthiness, `!= null` and a list's or string's `.length` read a stub as the value
 it stands for. Any other read of a stub or inside one — in the late state, or in the early state a
 `delta()` reads — and any probe over an older studio's text-cut `{__truncated}` state, is

@@ -8819,3 +8819,77 @@ describe("ownership after a merge (Midnight Apex)", () => {
     assert.match(await readFile(path.join(gameDir, "src", "sky.js"), "utf8"), /sky = \d+/);
   });
 });
+
+describe("a racing build judged during its countdown (Midnight Apex, 2026-10-05)", () => {
+  it("NFS-1. a racing build judged during its countdown: the drive waits for flow.playing", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    await apiOf(rig)["game.scaffold"]!({ name: "apex", title: "Apex" });
+    const plan = {
+      ...twoFacetPlan({
+        waterChecks: [
+          { id: "lit", kind: "pixel", camera: "default", expr: "litFraction > 0.5", weight: "identity" },
+          { id: "lap", kind: "probe", expr: "race.lap >= 1", weight: "normal" },
+        ],
+      }),
+      game: { kind: "racing" },
+    };
+    // The game's own front-end, the way the exported game had it: seed() puts it back on its
+    // title, begin() starts a two-step countdown, and only then is the race on. Every input the
+    // harness drives is filed under the phase it landed in.
+    const preview = rig.preview;
+    let phase = "menu";
+    let countdown = 0;
+    const landed: string[] = [];
+    preview.next = { ...preview.next, race: { lap: 1 } };
+    preview.studioMethods.begin = () => {
+      phase = "countdown";
+      countdown = 2;
+      return { ok: true };
+    };
+    const call = preview.studioCall.bind(preview);
+    preview.studioCall = async (method, arg) => {
+      if (method === "seed") phase = "menu";
+      const counting = method === "step" && phase === "countdown";
+      if (counting) countdown -= 1;
+      if (counting && countdown <= 0) phase = "playing";
+      return call(method, arg);
+    };
+    const state = preview.studioState.bind(preview);
+    preview.studioState = async (options) => ({
+      ...((await state(options)) as Record<string, unknown>),
+      flow: { phase, playing: phase === "playing" },
+    });
+    const input = preview.input.bind(preview);
+    preview.input = async (actions) => {
+      for (const action of (actions ?? []) as Array<{ type: string }>) if (action.type === "down") landed.push(phase);
+      return input(actions);
+    };
+    registerFakeEngine(rig, {
+      complete: (text) => (text.includes("ENGINE HINT: maxParallel") ? JSON.stringify(plan) : null),
+      delegate: async (request) => {
+        const facet = /YOUR FACET: Water|facet "Water"/.test(request.prompt) ? "water" : "sky";
+        if (request.playtest) return { summary: JSON.stringify({ answers: {}, report: "played" }) };
+        await mkdir(path.join(request.cwd, "src"), { recursive: true });
+        await writeFile(path.join(request.cwd, "src", `${facet}.js`), `export const ${facet} = ${Date.now()};\n`);
+        return { sessionId: `ses_${facet}` };
+      },
+    });
+    await runAutopilot(rig, "apex", { budgets: { maxIterations: 2 } });
+    assert.ok(
+      preview.calls.some((c) => c.method === "begin"),
+      "every look takes the racer past its title before it drives",
+    );
+    assert.ok(landed.length > 0, "the harness drove the game's controls");
+    assert.deepEqual(
+      [...new Set(landed)],
+      ["playing"],
+      `the throttle never lands in the title or the countdown: ${landed.join(",")}`,
+    );
+    // The board's own probe path is asked to survive the studio's bound on every read.
+    assert.ok(
+      preview.stateOpts.some((options) => options?.keep?.includes("race.lap")),
+      "the state the board reads is kept whole",
+    );
+  });
+});

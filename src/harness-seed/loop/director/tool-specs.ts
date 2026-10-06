@@ -188,7 +188,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
         setup: {
           type: "string",
           description:
-            'JSON state its window and judges open on: {"actions":[{"type":"tap","keys":["i"]},{"type":"click","x":480,"y":300,"px":true}],"verify":{"path":"maps.activeId","equals":"macba"},"note":"…"} or {"demo":"name","verify":{…}}. Default: the run\'s.',
+            'JSON state its window and judges open on: {"actions":[{"type":"tap","keys":["i"]},{"type":"click","x":480,"y":300,"px":true}],"verify":{"path":"maps.activeId","equals":"macba"},"note":"…"} or {"demo":"name","verify":{…}}. Default: the run\'s. {"begin":false}: judged on its title/menu (the front-end\'s owner).',
         },
         kind: {
           type: "string",

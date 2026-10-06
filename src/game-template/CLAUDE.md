@@ -12,9 +12,9 @@ game's controls and viewpoints, replace `phase: "empty"`. Five rules; tables in 
    from `src/studio.js` — never remove a method. A build the harness cannot inspect is a loss.
 3. **One screen, one input path.** UI through `__studio.hud` (in the canvas; no DOM, no second HUD;
    a player's name is a sprite on the player); input from `ctx.keys`/`ctx.look`/`ctx.wheel` in `update()`.
-4. **Tag everything, make it measurable.** `obj.userData.tag = "<tag>"` on every object (a group
-   tag covers its children), a probe in `probes()` per mechanic, a camera that shows it, a demo in
-   `config.demos` when the generic walk cannot reach it. What cannot be measured does not exist.
+4. **Tag everything, make it measurable.** Tag every object (`userData.tag`); a probe reports what a
+   player would notice and `state()` stays small; a demo in `config.demos` reaches what the walk cannot;
+   the game opens on its title or menu and starts on a key; `config.begin`/`config.flow` let judges skip it.
 5. **Deterministic, textured, modelled.** Randomness only from the `rng` in `update()` or a
    generator seeded in `reset(seed)`; time only from `dt`. `references/` is for you to LOOK at.
    Materials come from `src/materials.js` and foliage from `src/foliage.js`. Use procedural geometry,

@@ -670,6 +670,7 @@ const FACADE_DELEGATED = [
   "sceneSummary",
   "demos",
   "demo",
+  "begin",
   "audio",
   "probes",
   "player",
@@ -1505,8 +1506,11 @@ function pageState(win: Foreign, watch: CanvasWatch, clock: ShimClock, lock: Loc
   };
 }
 
-/** The facade's answers for what only the hook or the capture can see, with their fallbacks. */
-function hookedAnswers() {
+/**
+ * The facade's answers for what only the hook or the capture can see, with their fallbacks — what
+ * a page that never heard of the contract answers. Exported so a test can read them.
+ */
+export function hookedAnswers() {
   const page = globalThis as PageGlobal;
   return {
     inspect: () =>
@@ -1528,6 +1532,9 @@ function hookedAnswers() {
     sceneSummary: () => page.__studioHook?.sceneSummary?.() ?? { available: false },
     demos: () => [],
     demo: () => ({ ok: false, available: [] }),
+    // A page with no front-end of its own is already in play: the harness reads `ok: false` as
+    // nothing to skip, never as a missing contract.
+    begin: () => ({ ok: false, reason: "this page declares no begin()" }),
     audio: () => ({ available: false, rms: 0, centroid: 0 }),
     probes: () => ({}),
     player: () => null,

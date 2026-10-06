@@ -46,8 +46,8 @@ helpers throw the same reason) and `capture()` from the page. `player()` needs `
 
 | Call | Meaning |
 | --- | --- |
-| `__studio.seed(n)` | Reseed and reset deterministically — **and pause**, so the judge can step from a known frame. Same seed ⇒ same run. |
-| `__studio.start()` / `pause()` | The game runs from the moment it loads — never wait for `start()`. `pause()` freezes it for deterministic judging; `start()` resumes live play. |
+| `__studio.seed(n)` | Reseed and reset deterministically to the game's first screen — **and pause**, so the judge can step from a known frame. Same seed ⇒ same run. |
+| `__studio.start()` / `pause()` / `begin()` | `start`/`pause` are the studio's clock, not your Start button: the loop runs and draws from load, menu included — never wait for `start()`. A title, menu or countdown is welcome as the first screen that starts on a key: give `config.begin` (from where `reset` leaves the game straight into play; synchronous, deterministic, no wall clock; `begin()` leaves it paused) and `config.flow` (a `FlowPhase` word; `state().flow = {phase, playing}`), and every judge drives from play. |
 | `__studio.step(dtMs)` | Advance by hand, independent of wall clock — used for scripted playthroughs. |
 | `__studio.state()` | JSON snapshot: runtime timing and input state, plus probes for implemented mechanics. No score or entity counters are required for mechanics the game does not have. |
 | `__studio.debugCamera(name)` | Move to a named viewpoint so screenshots are comparable. `eye:spawn`, `eye:here`, `eye:down`, `eye:back` are built in (player-eye cameras the harness owns). |
