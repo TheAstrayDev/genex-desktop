@@ -6,9 +6,10 @@
  * process, including the harness itself, can read these files even after the agent has rewritten
  * all of its own tools.
  *
- * In v1 there is deliberately little to keep here (D8: no API keys). Subscriptions never produce
- * a token we hold: Claude Code and Codex manage their own credentials in their own config homes.
- * This exists so that when a key does arrive, there is an obvious right place to put it.
+ * There is deliberately little to keep here. Subscriptions never produce a token we hold: Claude
+ * Code and Codex manage their own credentials in their own config homes, as OpenCode does. The one
+ * API key the studio keeps is OpenRouter's, pasted in Settings (`provider-keys.ts`), beside the
+ * MCP connectors' secrets.
  */
 import path from "node:path";
 import { readFile, rm, writeFile } from "node:fs/promises";
