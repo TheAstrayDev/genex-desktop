@@ -174,10 +174,15 @@ export interface ResumableState {
   rungMisses: Record<string, number>;
   polishStreak: number;
   /**
-   * The liveness critic's last card: its grow gaps are the next moves once the ladder is
-   * climbed, its polish gaps join the ledger.
+   * The liveness critic's last card: its grow gaps (and its biggest) are move candidates — the
+   * open rung's, or the move with nobody owning the ladder — its polish gaps join the ledger.
    */
   lastLiveness: AnyRecord | null;
+  /**
+   * How many critic cards in a row each principle has stayed short of convincing with a fix inside
+   * the ask (facet/growth.ts): at `STUCK_PRINCIPLE_CARDS` it is stuck, and actionable at a 2.
+   */
+  principleStreaks: Record<string, number>;
   /**
    * The taste judge's newest big move for the facet (`{ what, why }`): the next step once the
    * director's ladder is climbed, and what the director reads about this part.
@@ -299,6 +304,7 @@ export const RESUMABLE_FIELDS = {
   rungMisses: Carry.Record,
   polishStreak: Carry.Value,
   lastLiveness: Carry.Value,
+  principleStreaks: Carry.Record,
   lastBigMove: Carry.Value,
   surfacedBeyond: Carry.List,
   polishList: Carry.Value,
@@ -353,6 +359,7 @@ function freshResumable(facet: AnyRecord, initialDefects: unknown): ResumableSta
     rungMisses: {},
     polishStreak: 0,
     lastLiveness: null,
+    principleStreaks: {},
     lastBigMove: null,
     surfacedBeyond: [],
     polishList: [],

@@ -21,21 +21,27 @@ const WORDS = {
 /** How the items of one line are joined. */
 const ITEM_JOIN = "; ";
 
+/**
+ * What deepens the ask and what adds to it, in the same words for the lead and every judge. The
+ * NFS-inspired run read "work only inside SCOPE" as "never grow the world": its critic proposed a
+ * skyline every round and nobody built one. A place the user's mood calls for is the ask, deeper; a
+ * new system is not.
+ */
+const DEEPENS = "a vista, skyline, water, landmark or set-piece that serves the mood the user asked for deepens SCOPE";
+const ADDS = "a new system, mechanic or mode SCOPE does not name (police, nitro, a garage, multiplayer)";
+
 /** The judges' rule: depth of what is in scope; a proposal needing more says so in its typed field. */
 export const SCOPE_RULE =
   'Judge the depth and quality of what is in SCOPE; a proposal that needs something not in scope is scope:"adds".';
 
-/** The lead's rule: it narrows, the user widens. */
-export const DIRECTOR_SCOPE_RULE =
-  "Decide what to cut, not what to add. Work only inside SCOPE; anything else is a decision card the user can accept.";
+/** The lead's rule: it cuts systems, deepens the world, and the user widens. */
+export const DIRECTOR_SCOPE_RULE = `Cut systems the user did not ask for; deepen the world they did: ${DEEPENS}. Only ${ADDS} is a decision card the user can accept.`;
 
 /** How a proposal says whether it stays inside the ask: the typed field every reader of it decides on. */
-export const PROPOSAL_SCOPE_RULE =
-  'Every proposal you name (bigMove, the move) carries "scope": "deepens" when it deepens what SCOPE names, "adds" when it needs something SCOPE does not name.';
+export const PROPOSAL_SCOPE_RULE = `Every proposal you name (bigMove, the move) carries "scope": "deepens" when it deepens what SCOPE names (${DEEPENS}), "adds" for ${ADDS}.`;
 
 /** The liveness critic's half: a fix that adds is flagged on its principle, and `biggest` stays inside SCOPE. */
-export const LIVENESS_SCOPE_RULE =
-  'A principle whose fix needs something not in SCOPE sets "adds":true beside its score (false otherwise); `biggest` is the deepest change inside SCOPE, and a cut item is never a fix.';
+export const LIVENESS_SCOPE_RULE = `A principle whose fix is ${ADDS} sets "adds":true beside its score; any other fix sets false (${DEEPENS}). \`biggest\` is the deepest change inside SCOPE, and a cut item is never a fix.`;
 
 /** The scope with a judge's rule after it, for every agent that judges or proposes; '' for a run without scope. */
 export function judgeScopeLines(run: ScopeCarrier, rules: readonly string[] = []): string {

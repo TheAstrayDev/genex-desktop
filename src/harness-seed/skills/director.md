@@ -36,11 +36,14 @@ itself and keeps the memory file its brief names current.)
    out to do. If the user asked to review it, your first worker waits for their word and then
    builds the plan as it stands; your brief says how the wait runs. Re-`plan` when the run turns;
    a later plan never reopens the user's window.
-5. Decide what to cut, not what to add. SCOPE in your brief is the user's own words: work inside
-   it. `cut=` names what this run will not build. A part SCOPE does not name is `added:true` and
-   listed in `added=` — a card asking the user, optional until they say yes. A reviewer's or a
-   player's idea beyond the ask reaches the user the same way, never a rung. A street race once grew
-   police, traffic and a pursuit meter nobody asked for, one reviewer's move at a time.
+5. Cut systems the user did not ask for; deepen the world they did. SCOPE in your brief is the
+   user's own words: work inside it, and deepen it — a vista, a skyline, water, a landmark or a
+   set-piece that serves the mood they asked for is the ask, deeper. `cut=` names what this run will
+   not build. A new system, mechanic or mode SCOPE does not name (police, nitro, a garage,
+   multiplayer) is `added:true` and listed in `added=` — a card asking the user, optional until they
+   say yes. A reviewer's or a player's idea beyond the ask reaches the user the same way, never a
+   rung. A street race once grew police, traffic and a pursuit meter nobody asked for, one
+   reviewer's move at a time; another never grew the skyline its critic asked for every round.
 6. Say what kind of game this is in the same `plan` call: `kind=` one of first-person, third-person,
    top-down, side-2d, racing, flight, static-board, free-camera. The harness drives that kind's own
    controls before every judgement, puts only the checks that kind can pass on every board, and
@@ -83,7 +86,8 @@ itself and keeps the memory file its brief names current.)
   not a quota: start the fewest workers that cover independent files, one per area the ask names.
   A deeper worker on a part beats another part; a free window is worth more as a judge's look than
   as a worker on something nobody asked for. For a street race that is the car and its handling,
-  the track and its world, the rivals, and the screen.
+  the track and its world, the rivals, the sound, and the screen: a game about feel ships with
+  sound — engine, tyres, rain, music — never silent.
 - One part owns the screen: start it with `critic=screen` (its reviewer asks whether the screen
   reads, not whether it feels like a place); `worker_start` refuses a second. It draws the HUD,
   the title, the start on a key, the countdown and the results; every other part publishes its
@@ -125,17 +129,21 @@ itself and keeps the memory file its brief names current.)
   how much is drawn. One run's HUD grew to three thousand rectangles to pass `len(hud.items) >= 60`.
 - The move is yours. `move` is the ONE structural change the worker builds first, `milestones` the
   ordered rungs after it — one per accepted build, each a sentence saying what the game IS
-  afterwards. Give them and the harness hands the worker your ladder and never invents a move of
-  its own; leave them out and its planner names one every round, which once spent five workers on
-  puddles, a wreck-cam and a tow truck nobody had asked for.
+  afterwards. Give them and the harness hands the worker your ladder and never puts a move of its
+  own ahead of your rungs; leave them out and its planner names one every round, which once spent
+  five workers on puddles, a wreck-cam and a tow truck nobody had asked for.
 - In the build stage every rung transforms the area: a layer of depth, a different model, a
   reworked feel — what a player notices in the first minute, inside SCOPE. "The rivals race as a
   pack: lines, blocking, a draft" is a rung; "the car has a chrome trim" is not, nor a parameter,
   nor one object's finish. Small fixes are the judge's ledger in the build stage, never your
   ladder; in the finish stage they are the work.
-- Size the ladder to the builder. A strong builder lands a rung a round and often the next one with
-  it. Give four to six rungs, and add the next big step before a ladder runs out; when a ladder is
-  climbed and you add nothing, the worker builds its reviewer's big move (the digest shows it).
+- Write three concrete rungs (the move counts as one) and leave the last one open: end `milestones`
+  with `{"open":true}` (the harness adds it when you do not). When the worker reaches it, the
+  reviewers' best step inside SCOPE fills it — a principle the critic has kept at 2 for three
+  rounds, the taste judge's big move, the critic's biggest — and it is mandatory like yours; with
+  none it is passed over. A run's ladders once chose 24 of its 25 moves, and the skyline its critic
+  asked for every round never came. Add the next big step with `worker_steer move=` before a ladder
+  runs out; past it the worker builds its reviewer's big move as guidance (the digest shows it).
 - Measure what moves over a demo with `delta("…")`, never one frame's snapshot: a one-frame probe of
   moving AI fails on whichever frame catches a dead ball, and the worker then tunes the game to the
   probe instead of building.

@@ -608,15 +608,15 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
   (`makeRouteDefect`); a finished owner's defects go to `defectsNobodyOwns`; never to
   itself.
 - The director owns a worker's ladder when it gives one (`move`, `milestones`,
-  `spec.moveOwner = "director"`); otherwise a named move is guidance until `polishStreakEscalate`
-  polish-only rounds escalate it (`move.escalated`). Steered rungs go first; a rung climbs on its
-  check or the judge's word, `RUNG_MISSES` set it aside (`facet/round-judgement.ts`); then the
-  judge's `bigMove`. `integrate` takes a running worker's
+  `spec.moveOwner`); otherwise a named move is guidance until `polishStreakEscalate`
+  polish-only rounds escalate it (`move.escalated`). Steered rungs first; a rung climbs on its
+  check or the judge's word, `RUNG_MISSES` set it aside (`facet/round-judgement.ts`); reviewers
+  fill the open last rung (`facet/growth.ts`), then `bigMove`. `integrate` takes a running worker's
   `lastAccepted`.
 - `spec.stage = "finish"` (`facet/stage.ts`, per round, `stage=`): polish list
   (`judge/taste-finish.md`) is the work, no move or streak; a preferred, unbroken build ends it.
 - `run.scope` (`loop/scope.ts`) is the user's words; `scopeLines` sits beside every goal, and
-  a proposal typed `scope: "adds"` is a decision card (`facet/beyond.ts`), never a move.
+  an `adds` proposal is a decision card (`facet/beyond.ts`), never a move.
   `critic=screen` marks the screen's one owner (`loop/screen-owner.ts`).
 - Two or more looping parts need `plan contract=` (`director/contract-gate.ts`), committed as
   `docs/MODULE-CONTRACT.md` before loop workers fork; `integrate worker=a,b` is a wave (one health

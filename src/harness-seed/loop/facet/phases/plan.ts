@@ -1,7 +1,7 @@
 /** What the round works on beside its checks: the move, and THE FIX. */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { CheckOrigin, CheckWeight, renderMilestones, type Check } from "../../spec.ts";
+import { CheckOrigin, CheckWeight, renderMilestones, type Check, type Milestone } from "../../spec.ts";
 import { checksFromDefects, craftForNewCheck } from "../../library.ts";
 import { nextMove } from "../../replan.ts";
 import { facetNotes } from "../../repo.ts";
@@ -12,7 +12,8 @@ import type { AnyRecord } from "../../../types/harness.d.ts";
 import type { FacetLoop, FacetRound } from "../state.ts";
 import { isStopped, stoppedByUser } from "../flow.ts";
 import type { RoundFlow } from "../flow.ts";
-import { chooseMove, isNewOwnCamera, MoveSource, movesThisRound } from "../rules.ts";
+import { chooseMove, isNewOwnCamera, MoveSource, movesThisRound, type MoveChoice } from "../rules.ts";
+import { isUnfilledOpenRung } from "../growth.ts";
 import { rungsMetOnBoard } from "../round-judgement.ts";
 import { FIX_STUCK_LOSSES } from "../policy.ts";
 import { similarDefect } from "../defects.ts";
@@ -49,7 +50,7 @@ export async function chooseRoundMove(loop: FacetLoop, round: FacetRound): Promi
   });
   if (choice.beyond) await askUserAboutBeyond(loop, choice.beyond, BEYOND_MESSAGE.reviewer);
   // Each source names its move in its own field (rules.ts `MoveChoice`).
-  if (choice.milestone) takeMilestone(loop, choice.milestone);
+  if (choice.milestone) takeMilestone(loop, await rungToTake(loop, choice.milestone, choice));
   else if (choice.pending) takePendingMove(loop, choice.pending);
   else if (choice.bigMove) takeReviewerMove(loop, round, choice.bigMove);
   else if (choice.gap) takeCriticMove(loop, round, choice.gap);
@@ -73,6 +74,42 @@ async function climbMeasuredRungs(loop: FacetLoop): Promise<void> {
   }
 }
 
+/**
+ * The rung this round builds. An open rung the reviewers' step fills this round is written onto the
+ * ladder — the next round builds the same step however the judge words its proposal then, and the
+ * lead reads it in worker_status — and the feed says who filled it. Any other rung is taken as it is.
+ */
+async function rungToTake(loop: FacetLoop, rung: AnyRecord, choice: MoveChoice): Promise<AnyRecord> {
+  const { facet, spec } = loop;
+  const ladder: Milestone[] = spec.milestones ?? [];
+  const stored = ladder.find((m) => m.id === rung.id && isUnfilledOpenRung(m));
+  if (!stored || !rung.filledBy) return rung;
+  const filled: Milestone = {
+    ...stored,
+    what: String(rung.what),
+    filledBy: String(rung.filledBy),
+    why: `the open rung of the lead's ladder — ${fillWhy(choice)}`,
+  };
+  spec.milestones = ladder.map((m) => (m.id === rung.id ? filled : m));
+  await recordDecision(
+    loop,
+    `${facet.id}: the open rung of its ladder takes ${fillerWords(choice)} — "${clip(filled.what, CLIP_QUOTE)}" — mandatory, like the lead's rungs; steer another with worker_steer move= if it should not be`,
+  );
+  return filled;
+}
+
+/** Who filled an open rung, as the feed says it. */
+function fillerWords(choice: MoveChoice): string {
+  if (choice.bigMove) return "the reviewer's big move";
+  return choice.gap?.key ? `the critic's ${choice.gap.key} fix` : "the critic's step";
+}
+
+/** Why the step that filled an open rung: the reviewer's words, or the critic's principle. */
+function fillWhy(choice: MoveChoice): string {
+  if (choice.bigMove) return reviewerWhy(choice.bigMove);
+  return choice.gap ? criticWhy(choice.gap) : "the reviewers' step for this part";
+}
+
 /** The next rung of the ladder is this round's move. */
 function takeMilestone(loop: FacetLoop, milestone: AnyRecord): void {
   loop.currentMove = {
@@ -80,6 +117,7 @@ function takeMilestone(loop: FacetLoop, milestone: AnyRecord): void {
     milestoneId: milestone.id,
     check: milestone.check ?? null,
     source: MoveSource.Milestone,
+    ...(milestone.why ? { why: milestone.why } : {}),
   };
   seedMoveCheck(loop, milestone.check);
 }
@@ -100,9 +138,20 @@ function takePendingMove(loop: FacetLoop, pending: AnyRecord): void {
   };
 }
 
+/** Why the reviewer's big move: its own words, when it gave them. */
+function reviewerWhy(bigMove: AnyRecord): string {
+  return bigMove.why ? `the reviewer: ${bigMove.why}` : "the reviewer's big move for this part";
+}
+
+/** Why the critic's principle: its score and reason, and how many cards it has stood when it is stuck. */
+function criticWhy(gap: AnyRecord): string {
+  const stood = gap.stuck ? ` for ${gap.stuck} critic cards running` : "";
+  return `${gap.key} scored ${gap.score}/3${stood}: ${gap.reason}`;
+}
+
 /** The taste judge named the one big move it sees for this facet: the worker builds it, as guidance. */
 function takeReviewerMove(loop: FacetLoop, round: FacetRound, bigMove: AnyRecord): void {
-  const why = bigMove.why ? `the reviewer: ${bigMove.why}` : "the reviewer's big move for this part";
+  const why = reviewerWhy(bigMove);
   loop.moves.push({
     iteration: round.iteration,
     what: bigMove.what,
@@ -117,7 +166,7 @@ function takeReviewerMove(loop: FacetLoop, round: FacetRound, bigMove: AnyRecord
 
 /** The critic saw the frames and named what is missing: that beats a planner guess. */
 function takeCriticMove(loop: FacetLoop, round: FacetRound, gap: AnyRecord): void {
-  const why = `${gap.key} scored ${gap.score}/3: ${gap.reason}`;
+  const why = criticWhy(gap);
   loop.moves.push({
     iteration: round.iteration,
     what: gap.fix,

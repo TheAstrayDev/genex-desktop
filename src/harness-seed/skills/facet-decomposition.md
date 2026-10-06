@@ -30,13 +30,19 @@ Rules that never change:
   cars on its grid), never by adding systems it does not name or four more checks. The loop's
   critic scores the principles every iteration (a place: extent, scales, purpose, life, next-step,
   wear, light, material; a screen: readable, state, affordance, feedback, depth, composition,
-  palette, finish) and turns the worst grow gap into the next move by itself; a fix that needs
-  something the ask does not name is a question for the user, never a move. Write the ladder so
-  the grow principles are climbed in order.
+  palette, finish) and turns its biggest grow gap, or a principle it keeps at 2 for three rounds,
+  into the next move by itself; a fix that needs a system the ask does not name is a question for
+  the user, never a move — a skyline or a landmark that serves the asked-for mood is not one.
+  Write the ladder so the grow principles are climbed in order.
 - Assets: when the ask says BLENDER is available, any facet that owns creatures, characters,
   vehicles, weapons or buildings names the assets to model in its intent and takes shape checks
   a modelled object can pass (`objects('dog').some(o => o.userData?.asset)` is the cheapest);
   facets owning different objects model in parallel. Fences, crates and walls stay primitives.
+- Sound is a part by default when the game is about feel (racing, flight, a sport, a shooter): a
+  facet or module of its own (`src/audio.js`). For racing: an engine synthesised from rpm and
+  load, tyres on the surface (squeal, wet hiss), rain and ambience, music. Procedural WebAudio
+  (oscillators, filtered noise) is enough for a demo; it starts on the first key press or in
+  `config.begin`, a key mutes it, and `config.audio` hands its AnalyserNode to the checks.
 - `weight:"identity"` marks the checks the facet exists for (2–4 of them). `hard:true` marks a
   check known to need a technique spike (planar mirror, volumetric fog, first-person effects).
 - `milestones` is the facet's ladder: 3–5 ORDERED structural steps inside the ask, each one
@@ -95,7 +101,7 @@ Rules that never change:
 ## What makes a good split
 
 Split along seams a player can name: terrain and skybox, buildings and props, lighting and
-atmosphere, player movement and feel, the core verb, UI and readability. Good facets touch
+atmosphere, player movement and feel, the core verb, sound, UI and readability. Good facets touch
 mostly disjoint files; the base commit and the integration notes carry whatever contract they
 must share (palette, scale, where the player spawns).
 

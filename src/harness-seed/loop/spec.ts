@@ -119,6 +119,12 @@ export interface Milestone {
   check?: Check;
   /** The director steered it in mid-run (`worker_steer move=`): it goes ahead of the rest of the ladder. */
   steered?: boolean;
+  /** The ladder's open rung (facet/growth.ts): the reviewers' best step inside the ask fills it when it is reached. */
+  open?: boolean;
+  /** Who filled an open rung (facet/rules.ts `MoveSource`): the reviewer or the critic. */
+  filledBy?: string;
+  /** Why a filled open rung is the move, as the builder's brief says it. */
+  why?: string;
 }
 
 /** What "done" means for a facet, one sentence per identity check. */

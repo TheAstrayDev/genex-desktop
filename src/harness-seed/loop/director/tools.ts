@@ -19,6 +19,7 @@ import { RunEvent, SteeringSource } from "../run-events.ts";
 import { CheckKind, CheckWeight, MoveOwner, normalizeFacetSpec, normalizeMilestone } from "../spec.ts";
 import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
 import { playtestStepWords } from "../facet/beyond.ts";
+import { withOpenRung } from "../facet/growth.ts";
 import {
   STEER_BACK_TO_BUILD,
   STEER_EMPTY_REFUSAL,
@@ -1076,7 +1077,8 @@ function workerStatus(night: Night, args: AnyRecord): string {
  * A rung on the running worker's ladder (M3.3). The loop reads `spec.milestones` at the top of
  * every iteration, and a `steered` rung goes ahead of the rest of the ladder, so the next one
  * builds this and not what the harness would have named, nor the rung it was on — and from here
- * on the ladder is the director's. Answers the rung, or why there is none.
+ * on the ladder is the director's, ending with an open rung (facet/growth.ts) when it had none.
+ * Answers the rung, or why there is none.
  */
 function addRung(worker: Worker, moveText: string): { rung: AnyRecord } | { refusal: string } {
   if (!worker.spec)
@@ -1091,7 +1093,7 @@ function addRung(worker: Worker, moveText: string): { rung: AnyRecord } | { refu
     ? `${milestone.id}-${climbed.length + 1}`
     : milestone.id;
   const rung = { ...milestone, id, steered: true };
-  worker.spec.milestones = [...climbed, rung];
+  worker.spec.milestones = withOpenRung([...climbed, rung]);
   worker.spec.moveOwner = MoveOwner.Director;
   return { rung };
 }
