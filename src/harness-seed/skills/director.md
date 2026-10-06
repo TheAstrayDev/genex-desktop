@@ -93,8 +93,9 @@ itself and keeps the memory file its brief names current.)
   budget among them. Every other part is judged from play.
 - Parallel builders own independent files. With two or more looping parts, `plan contract=` comes
   first: each module's file, its owner part, its API and the conventions (axes, signs, units). The
-  harness commits it as `docs/ARCHITECTURE.md`; each module then needs its stub on integration — its
-  API as no-op exports, its cameras, demos and probes registered — before its loop worker starts
+  harness commits it as `docs/MODULE-CONTRACT.md` (a game's own `docs/ARCHITECTURE.md` stays as
+  it is); each module then needs its stub on integration — its API as no-op exports, its cameras,
+  demos and probes registered — before its loop worker starts
   (the plan's answer names the stubs left and who writes them). A loop worker forks only from a
   commit with the contract, owns its contract modules when it names no seam, and is refused a seam
   that reaches another part's module. Refused twice without one, the harness writes the contract

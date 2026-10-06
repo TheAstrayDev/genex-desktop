@@ -10,6 +10,7 @@ import { FINISH_FIX_ASK, FINISH_PROMPT_LINE, finishLossEscalate } from "./stage-
 import { scopeLines } from "../scope-prompts.ts";
 import { heldHudPromptDraws } from "../held-hud-prompts.ts";
 import { appliesToBuild } from "../applies-to-build.ts";
+import { screenOwnerLine } from "../screen-owner-prompts.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** Reference stills into the first brief, and pair images later, at most. */
@@ -463,7 +464,7 @@ function resumedLedger(p: PromptInput): string {
 
 /** The prompt that opens a builder's session: who it is, the goal, the contract and this iteration's news. */
 function openingPrompt(p: PromptInput): string {
-  const lines = [...openingHead(p), ...ownershipLines(p), ...conventionLines(p)];
+  const lines = [...openingHead(p), ...ownershipLines(p), ...conventionLines(p), ...screenOwnerLines(p)];
   lines.push(...steeringLines(p.steering));
   if (p.moveLine) lines.push("", p.moveLine);
   if (!p.pointsAtBrief && p.integrationNote) lines.push("", p.integrationNote);
@@ -568,6 +569,16 @@ function conventionLines(p: PromptInput): string[] {
     `- Tag every object you create (obj.userData.tag = "<tag>") with the tag names the checks use. Untagged objects do not exist to the checks.`,
     p.ownShape ? ownShapeLine(p) : oneScreenLine(p),
   ];
+}
+
+/**
+ * Who owns the screen (loop/screen-owner.ts), said in the prompt even when the brief carries the
+ * rest: the owner draws the HUD, the menus and the layout, every other part publishes its values.
+ * Nothing in a game of its own shape, where the rule is inert, or when no part owns the screen.
+ */
+function screenOwnerLines({ ownShape, spec }: PromptInput): string[] {
+  const line = ownShape ? null : screenOwnerLine(spec);
+  return line ? [line] : [];
 }
 
 function ownShapeLine({ entryMain, shape }: PromptInput): string {

@@ -8,6 +8,7 @@
 import { MAX_RUN_HOURS } from "./config.ts";
 import { askUser } from "./interview-question.ts";
 import { toolCall } from "./model-roles.ts";
+import { NARROW_TO_THE_ASK } from "./narrow-prompts.ts";
 
 /** The build a Loop chat may start: its launch tool, the composer's hours, stills and folder. */
 export interface LaunchGrant {
@@ -34,7 +35,7 @@ export const RESUME_LOOP_CHAT =
  * nobody chose. `ask` is the question tool as the reader calls it.
  */
 function askFirst(ask: string): string {
-  return `Before you launch a build, know what the game is (what the player does in it) and how it should look and feel (a style, a game or film to match, or the stills). Take both from the conversation, the stills or the game already in this folder. If either is missing, do not guess: ask with ${ask} — one question that covers what is missing, up to 3 choices with your recommendation first — and end your reply; launch once they answer. Ask even when the user asks for speed: an answer costs them a click, a build in the wrong style costs hours. Never ask what they already said or showed, and ask once: after their answer, a gap in look takes your recommendation; a system they did not name goes in cut — a build is narrowed, never widened.`;
+  return `Before you launch a build, know what the game is (what the player does in it) and how it should look and feel (a style, a game or film to match, or the stills). Take both from the conversation, the stills or the game already in this folder. If either is missing, do not guess: ask with ${ask} — one question that covers what is missing, up to 3 choices with your recommendation first — and end your reply; launch once they answer. Ask even when the user asks for speed: an answer costs them a click, a build in the wrong style costs hours. Never ask what they already said or showed, and ask once: after their answer, a gap in look takes your recommendation; ${NARROW_TO_THE_ASK}: a build is narrowed, never widened.`;
 }
 
 /**

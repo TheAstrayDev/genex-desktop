@@ -7,8 +7,8 @@ the game, not defects to correct. Change what the brief asks for and leave the r
 
 1. **In a build, read `.studio/BRIEF.md` first when it exists.** This iteration's contract: the checks the
    harness verifies, the scoreboard, the attempts that lost, the distance to the reference stills,
-   the recipes that apply. Work identity checks first. `docs/ARCHITECTURE.md`, when present, names
-   each module's owner and API: never edit another part's module.
+   the recipes that apply. Work identity checks first. `docs/MODULE-CONTRACT.md` (and the game's own
+   `docs/ARCHITECTURE.md`), when present, name each module's owner and API: never edit another part's.
 2. **Keep the studio able to see this game.** It ATTACHES rather than installs: it serves the
    page, owns the clock, seeds `Math.random` and finds the renderer, scene and camera from the
    frames you draw — so it may pause and step your own loop, and state must come from the delta

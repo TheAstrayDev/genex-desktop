@@ -6165,7 +6165,7 @@ describe("a module contract before loop workers", () => {
     );
     const base = customEvents(events, "autopilot_base").find((e) => e.runId === runId)!;
     assert.equal(base.empty, true, "the starting point is an empty world");
-    assert.match(results.planned, /The module contract is committed on integration as docs\/ARCHITECTURE\.md/);
+    assert.match(results.planned, /The module contract is committed on integration as docs\/MODULE-CONTRACT\.md/);
     // Red before the fix: "the build you would fork from does not run … renders effectively black".
     assert.equal(results.started.started, "plaza", JSON.stringify(results.started));
     const contractCommit = await git(project.dir, ["rev-parse", `refs/studio/runs/${runId}/integration`]);

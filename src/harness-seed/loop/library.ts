@@ -56,6 +56,7 @@ import {
   FINISH_SECTION_HEAD,
 } from "./facet/stage-prompts.ts";
 import { heldHudBriefRule } from "./held-hud-prompts.ts";
+import { screenOwnerLine, type ScreenOwnerSpec } from "./screen-owner-prompts.ts";
 import type { Check, FacetSpec } from "./spec.ts";
 import type { ReferenceStats, Scoreboard } from "./checks.ts";
 import type { StyleStats } from "./style.ts";
@@ -754,7 +755,8 @@ export interface BriefOptions {
   entryMain?: string;
   ownShape?: boolean;
   build?: string | null;
-  spec: Pick<FacetSpec, "id" | "title" | "intent" | "identity" | "owns" | "checks">;
+  /** The part; `ownsScreen` / `screenOwner` (loop/screen-owner.ts) name who draws the screen. */
+  spec: Pick<FacetSpec, "id" | "title" | "intent" | "identity" | "owns" | "checks"> & ScreenOwnerSpec;
   iteration: number;
   board?: Scoreboard | null;
   comparison?: { flips?: string[]; regressions?: string[] } | null;
@@ -1169,8 +1171,10 @@ function briefRules(
     // A game keeping an edited older HUD (held-hud.ts) is told only what that HUD draws.
     screen
       ? (heldHudBriefRule(run) ??
-        `- ONE SCREEN: all UI goes through \`__studio.hud\`, drawn into the canvas: text, bars, arcs and gauges, vector paths, images, rounded panels and bundled fonts, anchored to the frame in frame fractions (their lengths in frame heights, so a curve stays round and sharp — never build one out of rectangles). Keep the middle of the view for the game: the harness measures how much of the frame the HUD covers and which items run into each other. No DOM elements, no second HUD quad or canvas, no camera-parented panels — the harness-owned checks no-dom-ui and single-hud fail the build otherwise.`)
+        `- ONE SCREEN: all UI goes through \`__studio.hud\`, drawn into the canvas: text, bars, arcs and gauges, vector paths, images, rounded panels and bundled fonts, anchored to the frame in frame fractions (a bar's length is a fraction of the frame's width and its thickness of its height; arcs, paths, panels and images are sized in frame heights, so a curve stays round and sharp — never build one out of rectangles). Keep the middle of the view for the game: the harness measures how much of the frame the HUD covers and which items run into each other. No DOM elements, no second HUD quad or canvas, no camera-parented panels — the harness-owned checks no-dom-ui and single-hud fail the build otherwise.`)
       : `- THE GAME'S OWN SCREEN: this game has its own UI and input handling — keep them as they are; do not add __studio.hud overlays or a second input path.`,
+    // Who owns that screen (loop/screen-owner.ts), where the rule holds: nothing when no part does.
+    ...briefScreenOwner(spec, screen && template),
     template
       ? `- ONE INPUT PATH: read keys from ctx.keys (Mouse1/Mouse2 included), mouse look from ctx.look, wheel from ctx.wheel — never add your own pointer-lock or mousemove listeners; studio.js owns them and feeds the same ctx a human's mouse does.`
       : `- THIS GAME'S INPUT PATH: it already reads its own keys and mouse — leave that alone. The studio's input arrives as real DOM events on the page, so the listeners this game has are the ones that get it.`,
@@ -1187,6 +1191,12 @@ function briefRules(
       ? `- You are resuming your own session: you remember your previous attempt — change the mechanism where a check keeps failing, do not re-tune the same numbers.`
       : "",
   ];
+}
+
+/** The screen owner's line (screen-owner-prompts.ts) for a template game's brief, or nothing. */
+function briefScreenOwner(spec: BriefOptions["spec"], applies: boolean): string[] {
+  const line = applies ? screenOwnerLine(spec) : null;
+  return line ? [line] : [];
 }
 
 /**

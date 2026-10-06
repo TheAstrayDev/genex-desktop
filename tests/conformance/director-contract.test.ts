@@ -932,7 +932,7 @@ describe("a game the user brought, under a contract (review)", () => {
  * stage may accept an empty world, and the contract's commit on top of it became the fork point
  * every loop worker had to take. The fork gate looked at that commit as a game, not a start, and
  * refused every worker over the blank world the base stage had accepted; and a branch whose only
- * change was docs/ARCHITECTURE.md counted as the night's work at the close.
+ * change was the contract file (now docs/MODULE-CONTRACT.md) counted as the night's work at the close.
  */
 describe("a contract written on the run's starting point (review)", () => {
   const SEEN = { ok: true, state: { world: { groups: [] } }, shots: [{ camera: "default" }], problems: [] };
@@ -1181,7 +1181,7 @@ describe("a build paused before the contract gate shipped, resumed (review)", ()
     }
     const gate = await contractAtFork(night as never, { id: "car", args, mode: WorkerMode.Loop, commit: carWork });
     assert.deepEqual(gate, { owns: null });
-    assert.equal(await fixtureGit(repo, ["rev-parse", "HEAD"]), head, "no docs/ARCHITECTURE.md committed");
+    assert.equal(await fixtureGit(repo, ["rev-parse", "HEAD"]), head, "no docs/MODULE-CONTRACT.md committed");
     assert.equal(night.state.contract, undefined);
   });
 

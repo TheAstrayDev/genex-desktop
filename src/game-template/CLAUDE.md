@@ -6,15 +6,15 @@ player, ground, HUD or loop to preserve. Build the scene and mechanics from the 
 game's controls and viewpoints, replace `phase: "empty"`. Five rules; tables in `docs/CONTRACT.md`.
 
 1. **In a build, read `.studio/BRIEF.md` first when it exists.** This iteration's contract: the checks,
-   the scoreboard, the attempts that lost, the reference distance, the recipes. Work identity checks
-   first. `docs/ARCHITECTURE.md`, when present, names each module's owner and API: never edit another's.
+   the scoreboard, the attempts that lost, the reference distance, the recipes; identity checks first.
+   `docs/MODULE-CONTRACT.md` (and the game's own `docs/ARCHITECTURE.md`), when present, name each module's owner and API: never edit another's.
 2. **Keep `window.__studio` working.** `installStudio({ scene, renderer, camera, player, … })`
    from `src/studio.js` — never remove a method. A build the harness cannot inspect is a loss.
 3. **One screen, one input path.** All UI is `__studio.hud` in the canvas: text, bars, arcs, paths, images, panels,
    fonts at frame-fraction anchors, the middle kept for play (coverage and overlap are measured); no DOM, no second HUD or canvas; names are scene sprites; input from `ctx.keys`/`ctx.look`/`ctx.wheel` in `update()`.
 4. **Tag everything, make it measurable.** Tag every object (`userData.tag`), a camera per mechanic; a probe
-   reports what a player would notice, `state()` stays small; `config.demos` reach what the walk cannot;
-   the game opens on its title or menu and starts on a key; `config.begin`/`config.flow` let judges skip it.
+   reports what a player would notice, `state()` stays small; `config.demos` reach what the walk cannot. A title,
+   start key or countdown MUST come with `config.begin` and `config.flow`, or the judges see the title, not the game.
 5. **Deterministic, textured, modelled.** Randomness only from the `rng` in `update()` or a
    generator seeded in `reset(seed)`; time only from `dt`. `references/` is for you to LOOK at.
    Materials come from `src/materials.js` and foliage from `src/foliage.js`. Use procedural geometry,

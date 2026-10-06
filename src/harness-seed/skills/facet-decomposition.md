@@ -120,8 +120,8 @@ own module under `src/` (`city.js`, `lighting.js`, `movement.js`) in `owns`, and
 (its notes and files) what each module exports for the others and the conventions they share
 (axes, signs, units): the base builder writes that contract as the shared stubs every facet forks
 from, and no facet edits another's module — what it needs goes through the API. When
-the game carries `docs/ARCHITECTURE.md`, it is that contract already. The `mainOwner`
-facet is the only one that may restructure `src/main.js` and `src/studio.js`. Non-owner facets
+the game carries `docs/MODULE-CONTRACT.md` (the harness's) or its own `docs/ARCHITECTURE.md`, that
+is the contract already: read both when present. The `mainOwner` facet is the only one that may restructure `src/main.js` and `src/studio.js`. Non-owner facets
 touch main.js only to add their single import + init line inside the marked FACET WIRING block,
 and write their notes to `NOTES.<facet-id>.md`, never the shared `NOTES.md`.
 

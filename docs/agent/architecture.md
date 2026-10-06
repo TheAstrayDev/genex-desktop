@@ -619,7 +619,7 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
   a proposal typed `scope: "adds"` is a decision card (`facet/beyond.ts`), never a move.
   `critic=screen` marks the screen's one owner (`loop/screen-owner.ts`).
 - Two or more looping parts need `plan contract=` (`director/contract-gate.ts`), committed as
-  `docs/ARCHITECTURE.md` before loop workers fork; `integrate worker=a,b` is a wave (one health
+  `docs/MODULE-CONTRACT.md` before loop workers fork; `integrate worker=a,b` is a wave (one health
   pass, `state.waveHead`); `loop/registry.ts` refuses lost registrations.
 - The finish mark (`budgets.ts` `finishMarkMs`) or `judge ship=yes` runs the art director
   (`director/art-direction.ts`, `loop/ship-review.ts`): defects go to their parts' owners; it never

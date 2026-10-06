@@ -186,7 +186,7 @@ function isStart(night: Night, commit: string | null): boolean {
 
 /**
  * Is `head` the run's starting point with only the contract written on it? The close has nothing
- * to land there and the art director nothing to judge: docs/ARCHITECTURE.md is not the night's work.
+ * to land there and the art director nothing to judge: docs/MODULE-CONTRACT.md is not the night's work.
  */
 export function contractAloneOnStart(night: Night, head: string | null | undefined): boolean {
   const contract = night.state.contract;
