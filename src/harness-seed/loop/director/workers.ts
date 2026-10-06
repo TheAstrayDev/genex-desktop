@@ -388,10 +388,22 @@ const MESSAGE_ADDED = {
   notCut: (items: string[]) => `plan: not cut — the user asked for ${items.join("; ")}`,
 } as const;
 
-/** When an addition's card went to the user: how many of their steers had arrived by then. */
+/**
+ * When an addition's card went to the user: how many of their steers its night's inbox held by
+ * then, and the time. A count holds only within one inbox: a reopened build hears the user from its
+ * ask on, while the plan and its cards go on, so the time is what orders a card against a later
+ * night's steers. A card kept before the time was has its count alone.
+ */
 interface AddedAsked {
   item: string;
   steers: number;
+  at?: string;
+}
+
+/** One of the user's steers to the build, and when the log took it (null: it did not say). */
+interface SentSteer {
+  text: string;
+  at: string | null;
 }
 
 /**
@@ -411,15 +423,16 @@ async function settlePlanScope(
   const added: string[] = plan.added ?? [];
   const scope = runScope(night.run);
   const withCuts = scope ? scopeWith(scope, { cut: cutsOutsideAsk(night, plan, scope) }) : undefined;
-  const steers: string[] = added.length ? await night.inbox.steering(undefined, false).catch(() => []) : [];
+  const { sent, steers } = added.length ? await buildSteering(night) : { sent: null, steers: [] };
   const askedAt: AddedAsked[] = Array.isArray(previous?.addedAskedAt) ? [...previous.addedAskedAt] : [];
   const instruction = String(args.scope_instruction ?? "");
   const next = withCuts
-    ? widenedByUser(withCuts, answeredBy(added, instruction, steers, askedAt), instruction, steers)
+    ? widenedByUser(withCuts, answeredBy(added, instruction, steers, askedAt, sent), instruction, steers)
     : undefined;
   const asked = [...new Set<string>([...(previous?.addedAsked ?? []), ...(scope?.added ?? [])])];
   const fresh = added.filter((item) => !asked.includes(item) && !next?.inScope.includes(item));
-  for (const item of fresh) askedAt.push({ item, steers: steers.length });
+  const askedNow = new Date().toISOString();
+  for (const item of fresh) askedAt.push({ item, steers: steers.length, at: askedNow });
   if (asked.length || fresh.length) plan.addedAsked = [...asked, ...fresh];
   if (askedAt.length) plan.addedAskedAt = askedAt;
   const kept = next ? scopeWith(next, { added: fresh }) : undefined;
@@ -443,6 +456,26 @@ function cutsOutsideAsk(night: Night, plan: AnyRecord, scope: RunScope): string[
 }
 
 /**
+ * The user's steers to the build with when each was sent, or null from a kept run-inbox.ts from
+ * before it could say (or when the log cannot be read): the cards are then ordered by count.
+ */
+async function sentSteering(night: Night): Promise<SentSteer[] | null> {
+  const { inbox } = night;
+  if (typeof inbox.sentSteering !== "function") return null;
+  return inbox.sentSteering().catch(() => null);
+}
+
+/**
+ * The user's steers to the build, in log order, and when each was sent (`sent`, null when the
+ * inbox could not say: they are then the inbox's plain ones).
+ */
+async function buildSteering(night: Night): Promise<{ sent: SentSteer[] | null; steers: string[] }> {
+  const sent = await sentSteering(night);
+  if (sent) return { sent, steers: sent.map((steer) => steer.text) };
+  return { sent, steers: await night.inbox.steering(undefined, false).catch(() => []) };
+}
+
+/**
  * The additions the quoted steer can answer: those whose card had gone to the user before it
  * arrived. A steer sent before any card asked about an item (an acceptance revision, say) is an
  * answer to something else.
@@ -452,10 +485,28 @@ function answeredBy(
   instruction: string,
   steers: readonly string[],
   askedAt: readonly AddedAsked[],
+  sent: readonly SentSteer[] | null = null,
 ): string[] {
   const at = instruction ? steers.lastIndexOf(instruction) : -1;
   if (at < 0) return [];
-  return added.filter((item) => askedAt.some((asked) => asked.item === item && asked.steers <= at));
+  const sentMs = timeOf(sent?.[at]?.at);
+  return added.filter((item) => askedAt.some((asked) => asked.item === item && askedBefore(asked, at, sentMs)));
+}
+
+/**
+ * Did this card go to the user before the steer at `at` in this inbox, sent at `sentMs`? By time
+ * when both say when; by count otherwise, which only holds when the card was asked in this inbox.
+ */
+function askedBefore(asked: AddedAsked, at: number, sentMs: number | null): boolean {
+  const askedMs = timeOf(asked.at);
+  if (sentMs === null || askedMs === null) return asked.steers <= at;
+  return askedMs <= sentMs;
+}
+
+/** An ISO time in milliseconds, or null when it is not one. */
+function timeOf(iso: unknown): number | null {
+  const ms = typeof iso === "string" ? Date.parse(iso) : Number.NaN;
+  return Number.isNaN(ms) ? null : ms;
 }
 
 /** A scope with more cut or added items (each list only grows, capped as scope.ts caps it); the same scope when none. */

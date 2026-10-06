@@ -1203,6 +1203,79 @@ describe("the night's plan, before anyone builds", () => {
     assert.equal(nothingAsked.state.plan, null, "and is not taken");
   });
 
+  /**
+   * Review SR-5: a card's place among the user's steers was a count of the steers its night's inbox
+   * held. A reopened build hears the user only from its ask on, so a yes sent after the reopen sat
+   * at an index below that count and never answered a card the finished build had posted.
+   */
+  it("SR-5. a yes the user sends after a reopen answers an addition the finished build asked about", async () => {
+    const { setPlan } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const { createRunInbox } = await import("../../src/harness-seed/loop/run-inbox.ts");
+    const { createScope } = await import("../../src/harness-seed/loop/scope.ts");
+    const { HostMethod } = await import("../../src/harness-seed/loop/host-methods.ts");
+    const { EventKind, RunEvent } = await import("../../src/harness-seed/loop/run-events.ts");
+    const args = {
+      summary: "One race against four rivals.",
+      workers: JSON.stringify([
+        { id: "race", done: ["four rivals race one lap"] },
+        { id: "pursuit", done: ["a pursuit meter fills"], added: true },
+      ]),
+      added: '["a pursuit meter"]',
+    };
+    const log: any[] = [];
+    const steer = (id: string, text: string, sentMs: number) =>
+      log.push({
+        id,
+        created_at: new Date(sentMs).toISOString(),
+        data: { type: EventKind.Custom, event_type: RunEvent.RunSteering, payload: { runId: "apex", text } },
+      });
+    const ctx = {
+      threadId: "t",
+      call: async (method: string, params: { after?: string }) => {
+        if (method !== HostMethod.EventsList) return null;
+        const from = params.after ? log.findIndex((event) => event.id === params.after) + 1 : 0;
+        return log.slice(from);
+      },
+    };
+    const decisions: string[] = [];
+    const run = {
+      runId: "apex",
+      project: "apex",
+      goal: "a street race",
+      budgets: {},
+      scope: createScope({ asked: ["a street race"], inScope: ["one race"] }),
+    };
+    const nightOn = (after: string | null, plan: any) => ({
+      run,
+      ctx,
+      resume: after !== null,
+      waking: false,
+      softDeadline: Date.now() + 60 * 60_000,
+      state: { plan, goals: undefined, planReviewUntil: null, planSaidFrom: 0, planGo: false } as any,
+      journal: { director: {}, plan: {}, run: { ...run } } as any,
+      saveJournal: async () => {},
+      note: () => {},
+      appendRun: async () => {},
+      decision: async (text: string) => void decisions.push(text),
+      inbox: createRunInbox(ctx as never, { threadId: "t", runId: "apex", after }),
+    });
+    // The finished build: two steers about the cars, then its plan's card about the pursuit meter.
+    steer("s1", "make the cars faster", Date.now() - 120_000);
+    steer("s2", "and louder", Date.now() - 60_000);
+    const finished = nightOn(null, null);
+    await setPlan(finished as never, args);
+    assert.equal(decisions.length, 1, "the finished build asked about the pursuit meter");
+
+    // Reopened: its inbox reads from the reopening ask on; the plan, and the card it asked, go on.
+    log.push({ id: "ask", created_at: new Date().toISOString(), data: { type: EventKind.Custom } });
+    const said = "yes, keep the pursuit meter";
+    steer("s3", said, Date.now() + 1_000);
+    const reopened = nightOn("ask", finished.state.plan);
+    await setPlan(reopened as never, { ...args, scope_instruction: said });
+    assert.ok(run.scope.inScope.includes("a pursuit meter"), "the user's yes after the reopen widens the scope");
+    assert.equal(decisions.length, 1, "and nothing is asked twice");
+  });
+
   it("takes what kind of game this is on the plan, and refuses a kind that is not one", () => {
     const one = JSON.stringify([{ id: "board" }]);
     const board = (

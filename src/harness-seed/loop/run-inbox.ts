@@ -186,8 +186,8 @@ export function conversationThrough(events: readonly HarnessEvent[], messageId?:
     });
 }
 
-/** One steer the user sent a run: the event it came in, and its payload. */
-type Steer = AnyRecord & { id: string };
+/** One steer the user sent a run: the event it came in, its payload, and when the event was logged. */
+type Steer = AnyRecord & { id: string; loggedAt?: string | null };
 
 /** What a run's log says so far: whether this session was asked to wrap up, the steers, and who got them. */
 interface InboxFold {
@@ -229,7 +229,7 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   // The director's own worker_steer events are steering too — but its own, not the
   // user's (a director once asked the user to repeat "1 unread instruction" it had written).
   const userSteer = d.event_type === RunEvent.RunSteering && p.text?.trim() && p.source !== SteeringSource.Director;
-  if (userSteer) fold.instructions.push({ id: event.id, ...p });
+  if (userSteer) fold.instructions.push({ id: event.id, ...p, loggedAt: event.created_at ?? null });
   if (d.event_type === RunEvent.RunSteeringDelivered) absorbDelivery(fold, p);
 }
 
@@ -381,6 +381,17 @@ export function createRunInbox(
         "now",
       );
       return fresh.map((i) => ({ facetId: i.facetId, text: i.text }));
+    },
+    /**
+     * The steers `steering(facetId, false)` reads, each with when its event was logged (ISO, or
+     * null when the log did not say). Time orders them against something said outside the inbox —
+     * a card the lead posted — whichever part of the log this inbox reads from.
+     */
+    async sentSteering(facetId?: string): Promise<Array<{ text: string; at: string | null }>> {
+      await drain();
+      return fold.instructions
+        .filter((i) => !i.facetId || i.facetId === facetId)
+        .map((i) => ({ text: i.text, at: i.loggedAt ?? null }));
     },
     async backlog(): Promise<string[]> {
       await drain();
