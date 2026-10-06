@@ -16,6 +16,7 @@ import { readFile, writeFile, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { dryRunChecks, parseExpr } from "./checks.ts";
 import { lintCheck } from "./check-lint.ts";
+import { notThisBuildsQuestion } from "./harness-needs.ts";
 import { DEFAULT_HUD_BUDGET, hudBudgetFor } from "./hud-budget.ts";
 import { criticFor, inputProbesFor, isGameKind, normalizeGameTraits, wantsEyeCameras } from "./kinds.ts";
 import { isRecord } from "./json.ts";
@@ -849,7 +850,17 @@ export function validateFacetSpec<S extends SpecToValidate>(
   if ((spec.checks ?? []).length > 0 && kept.length === 0) problems.push(`facet ${spec.id}: every check was unusable`);
   const heavy = visionHeavy(spec.id, kept, spec.critic);
   if (heavy) problems.push(heavy);
-  const { unsatisfiable, stateKeys } = dryRunChecks(kept, { state, demoStates });
+  const dryRun = dryRunChecks(kept, { state, demoStates });
+  const { stateKeys } = dryRun;
+  // A harness check over something this build does not have (a front-end, a measuring HUD) does
+  // not apply to it: no "expose it" note pushes the builder to add one (loop/harness-needs.ts).
+  const unsatisfiable = dryRun.unsatisfiable.filter(
+    (entry) =>
+      !notThisBuildsQuestion(
+        kept.find((c) => c.id === entry.id),
+        entry.missing,
+      ),
+  );
   noteUnsatisfiable(kept, unsatisfiable, stateKeys);
   const keptIds = new Set(kept.map((c) => c.id));
   const done = (spec.done ?? []).filter((d) => keptIds.has(d.id));
@@ -951,17 +962,27 @@ export const HARNESS_CHECKS: Record<string, AnyRecord & { expr?: string; note: s
     note: "harness-owned: no two HUD items run into each other",
   },
   // A game with a front-end (title → start → countdown) declares `config.flow()`; the evidence
-  // pass begins it, and this asks whether that put the game into play. A game that reports no
-  // flow is unmeasured: undeclared games are not held to a menu they never had.
+  // pass begins it, and this asks whether that put the game into play. It reads the early sample
+  // (the state reachPlay left, before the drive): a race that ends or a player who dies during
+  // the drive still reached play. A game that reports no flow is not asked (loop/harness-needs.ts):
+  // undeclared games are not held to a menu they never had.
   "reaches-play": {
     kind: CheckKind.Probe,
     weight: CheckWeight.Identity,
     origin: CheckOrigin.Harness,
-    expr: "flow.playing == true",
+    expr: "early.flow.playing == true",
     needs: ["flow.playing"],
     note: "harness-owned: after begin the game is in play (state().flow.playing) — the front-end hands the player the controls",
   },
 };
+
+/** The harness checks that only hold once the game is in play: off the front-end owner's board. */
+const IN_PLAY_CHECKS: ReadonlySet<string> = new Set([
+  "reaches-play",
+  "hud-coverage",
+  "keys-move-player",
+  "look-turns-camera",
+]);
 
 /** The `hud-coverage` body for a HUD whose kind allows `budget` of the frame. */
 function hudCoverage(budget: number): AnyRecord {
@@ -1014,6 +1035,10 @@ function deltaPathsIn(expr: unknown): string[] {
  * template's controls, and a board game or a builder has neither. The two input checks read
  * the declared kind's own axes, so a top-down game is asked whether x, y or z moved and not
  * whether the first-person controller's x or z did.
+ *
+ * `keepsFrontEnd` is the worker that owns the front-end (`setup {"begin":false}`): its evidence
+ * and judges stay on the title (evidence.ts reachPlay), so the checks that only hold in play —
+ * in play, the controls move the player, the in-play HUD budget — are left off its board.
  */
 export function withHarnessChecks<S extends { checks?: Check[] }>(
   spec: S,
@@ -1022,7 +1047,8 @@ export function withHarnessChecks<S extends { checks?: Check[] }>(
     role = "facet",
     game = null,
     screen = true,
-  }: { ownsMain?: boolean; role?: string; game?: AnyRecord | null; screen?: boolean } = {},
+    keepsFrontEnd = false,
+  }: { ownsMain?: boolean; role?: string; game?: AnyRecord | null; screen?: boolean; keepsFrontEnd?: boolean } = {},
 ): S & { checks: Check[] } {
   const traits = normalizeGameTraits(game);
   const owner = ownsMain || role === "integration";
@@ -1035,7 +1061,7 @@ export function withHarnessChecks<S extends { checks?: Check[] }>(
     ...(owner && traits.mouseLook ? ["look-turns-camera"] : []),
     ...(owner && traits.keyboardMove ? ["keys-move-player"] : []),
     ...(owner && driven ? ["reaches-play"] : []),
-  ];
+  ].filter((id) => !keepsFrontEnd || !IN_PLAY_CHECKS.has(id));
   const overrides: Record<string, AnyRecord> = {
     "look-turns-camera": inputProbe(probes.look, "look-turns-camera"),
     "keys-move-player": inputProbe(probes.move, "keys-move-player"),

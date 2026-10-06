@@ -693,6 +693,35 @@ describe("a worker's contract: done, compiled and dry-run", () => {
     assert.match(place.problems.join("\n"), /3 of 4 checks are vision/);
   });
 
+  it("holds the front-end's owner to its menu, not to play, and every other worker to play", () => {
+    // `setup {"begin":false}` keeps the title on screen for that worker's evidence and judges
+    // (evidence.ts reachPlay, PlayVia.Kept): a board that asked it to be in play, to move the
+    // player from the menu, or to keep a full title panel inside the in-play HUD budget could
+    // never pass, and its worker could never finish.
+    const front = compileWorkerSpec(
+      { id: "menu", brief: "a title, a countdown and results", kind: "racing", setup: { begin: false } } as never,
+      null,
+    );
+    const ids = checksOf(front.spec).map((c) => c.id);
+    for (const inPlay of ["reaches-play", "hud-coverage", "keys-move-player"])
+      assert.ok(!ids.includes(inPlay), `${inPlay} is not on the front-end owner's board: ${ids.join(", ")}`);
+    assert.ok(ids.includes("hud-overlap"), "a menu's pieces still must not run into each other");
+    assert.ok(ids.includes("no-dom-ui"));
+
+    const car = compileWorkerSpec({ id: "car", brief: "a car", kind: "racing" } as never, null);
+    for (const inPlay of ["reaches-play", "hud-coverage", "keys-move-player"])
+      assert.ok(checkNamed(car.spec, inPlay), `${inPlay} is on a normal worker's board`);
+
+    // A harness check the ledger once saw unmeasured is not the director's to re-point or drop.
+    const rarely = compileWorkerSpec({ id: "car", brief: "a car", kind: "racing" } as never, null, {
+      rarelyMeasurable: [
+        { id: "reaches-play", rounds: 4 },
+        { id: "hud-coverage", rounds: 3 },
+      ],
+    });
+    assert.deepEqual(rarely.rarelyMeasurable, []);
+  });
+
   it("finishes a worker on the checks it was given, not on the ones the judge grew", () => {
     const board = toScoreboard([
       { id: "speed-kept", kind: "probe", weight: "identity", pass: true },

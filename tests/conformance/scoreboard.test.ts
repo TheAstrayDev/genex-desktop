@@ -65,6 +65,7 @@ import {
 } from "../../src/harness-seed/loop/library.ts";
 import { mechanicalReview, parseDiff } from "../../src/harness-seed/loop/review.ts";
 import { CheckLintCode, lintCheck } from "../../src/harness-seed/loop/check-lint.ts";
+import { mineValidationTasks } from "../../src/harness-seed/loop/skillopt.ts";
 import type { Check } from "../../src/harness-seed/loop/spec.ts";
 import { askVisionBoard, cameraSubset, normalizeLiveness, selectShots } from "../../src/harness-seed/loop/judge.ts";
 import { parseRecipeMarkdown, spikeCandidates } from "../../src/harness-seed/loop/spike.ts";
@@ -554,6 +555,26 @@ describe("facet specs", () => {
       [{ kind: "vision", ask: "Are there at least 60 HUD items?" }, null],
       [{ kind: "probe", expr: "len(hud.items) >=" }, null],
       [{ kind: "probe", expr: 60 }, null],
+      // The JS spelling of the same floor: the probe scope resolves `.length` on the list.
+      [{ kind: "probe", expr: "hud.items.length >= 60" }, "hud.items"],
+      [{ kind: "probe", expr: "state.hud.items.length > 59" }, "hud.items"],
+      [{ kind: "probe", expr: "hud.items.length <= 64" }, null],
+      [{ kind: "probe", expr: "hud.items.length > 0" }, null],
+      // An index that must exist is a floor of one more than it.
+      [{ kind: "probe", expr: "has('hud.items.59')" }, "hud.items"],
+      [{ kind: "probe", expr: "has('state.hud.items.1') && player.speed > 1" }, "hud.items"],
+      [{ kind: "probe", expr: "has('hud.items.0')" }, null],
+      [{ kind: "probe", expr: "!has('hud.items.64')" }, null],
+      [{ kind: "probe", expr: "has('player.items.59')" }, null],
+      // A range ruled out from 0 up is a floor above it; one that still allows nothing is not.
+      [{ kind: "probe", expr: "!(len(hud.items) in [0, 59])" }, "hud.items"],
+      [{ kind: "probe", expr: "!(len(hud.items) in [0, 0])" }, null],
+      [{ kind: "probe", expr: "!(len(hud.items) in [5, 59])" }, null],
+      // min/max against a number still reads the quantity.
+      [{ kind: "probe", expr: "max(len(hud.items), 0) >= 60" }, "hud.items"],
+      [{ kind: "probe", expr: "min(__render.drawCalls, 5000) > 400" }, "__render.drawCalls"],
+      [{ kind: "probe", expr: "min(len(hud.items), 64) <= 64" }, null],
+      [{ kind: "probe", expr: "max(len(hud.items), player.speed) >= 60" }, null],
     ];
     for (const [check, quantity] of table) {
       const finding = lintCheck(check);
@@ -716,6 +737,54 @@ describe("the board a game actually carries", () => {
       "no-dom-ui",
       "single-hud",
     ]);
+  });
+
+  it("a harness check whose needs the build does not report is not its question: no nudge, no count, no lost lesson", () => {
+    // A racer with no front-end and an older HUD: reaches-play and the two HUD measurements have
+    // nothing to read. The template declares no flow, and a kept hud.js measures nothing.
+    const state = { player: { x: 0, y: 0, z: 0 }, hud: { items: ["speed"] } };
+    const driven = { player: { x: 3, y: 0, z: 0 }, hud: { items: ["speed"] } };
+    const director = { id: "lap-time", kind: "probe", expr: "race.lap > 0", needs: ["race.lap"] };
+    const board = withHarnessChecks(
+      normalizeFacetSpec({ id: "car", intent: "a car that drives", checks: [director] }),
+      { ownsMain: true, game: { kind: "racing" } as never },
+    );
+    const validated = validateFacetSpec(board, { state });
+    const notes = (id: string) => String(validated.spec.checks.find((c: { id: string }) => c.id === id)?.note);
+    assert.doesNotMatch(notes("reaches-play"), /expose it/);
+    assert.doesNotMatch(notes("hud-coverage"), /expose it/);
+    assert.ok(!validated.unsatisfiable.some((u: { id: string }) => u.id === "reaches-play"));
+    // The director's own contract still asks the build to report what it names.
+    assert.match(notes("lap-time"), /does not report race\.lap yet — expose it/);
+
+    const probes = validated.spec.checks.filter((c: { kind: string }) => c.kind === "probe");
+    const results = probes.map((c: Check) => evaluateProbeCheck(c, { state: driven, stateEarly: state }));
+    const summary = summarizeScoreboard(toScoreboard(results), validated.spec);
+    assert.deepEqual(
+      summary.unmeasuredChecks.map((u: { id: string }) => u.id),
+      ["lap-time"],
+    );
+    assert.equal(summary.unmeasured, 1);
+    assert.equal(summary.total, summary.passing + summary.failing.length + summary.unmeasured);
+    // The lesson miner drops a round with anything unmeasured; with the director's check
+    // answered, the harness's inapplicable ones no longer cost it the round.
+    const answered = probes.map((c: Check) =>
+      evaluateProbeCheck(c, {
+        state: { ...driven, race: { lap: 1 } },
+        stateEarly: { ...state, race: { lap: 0 } },
+      }),
+    );
+    const scoreboard = summarizeScoreboard(toScoreboard(answered), validated.spec);
+    assert.equal(scoreboard.unmeasured, 0);
+    assert.equal(scoreboard.identityAllPass, true);
+    const event = {
+      data: {
+        type: "custom",
+        event_type: "facet_iteration",
+        payload: { facetId: "car", iteration: 1, facetTitle: "Car", biggest_gap: "no drift", scoreboard },
+      },
+    };
+    assert.equal(mineValidationTasks([event] as never, 10).length, 1);
   });
 
   it("offers the planner what a sibling family learned, and tells it the truth about its own board", () => {

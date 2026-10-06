@@ -60,6 +60,12 @@ const GOAL_MORE = "max";
 /** The probe scope's alias for the state itself, and the early state's prefix. */
 const SCOPE_PREFIXES = /^(?:state\.|early\.)/;
 
+/** A list's length as the probe scope resolves it: `hud.items.length` is `len(hud.items)`. */
+const LENGTH_SUFFIX = /\.length$/;
+
+/** A path that names one element of a list by its index: `hud.items.59`. */
+const INDEXED = /^(.+)\.(\d+)$/;
+
 /** What the lint refused, and the sentence the author is told. */
 export interface CheckLintFinding {
   code: CheckLintCode;
@@ -104,20 +110,49 @@ const NEGATED: Readonly<Record<string, string>> = {
   "!=": "==",
 };
 
-/** A path as the scope resolves it: `state.hud.items` and `hud.items` are one quantity. */
-const bare = (path: string): string => path.replace(SCOPE_PREFIXES, "");
+/**
+ * A path as the scope resolves it: `state.hud.items`, `hud.items` and (for the count it asks
+ * about) `hud.items.length` are one quantity.
+ */
+const bare = (path: string): string => path.replace(SCOPE_PREFIXES, "").replace(LENGTH_SUFFIX, "");
 
 const isDrawQuantity = (path: string): boolean => (STUDIO_DRAW_QUANTITIES as readonly string[]).includes(bare(path));
 
-/** The draw quantity a node reads directly — `x`, `len(x)`, `delta('x')`, `abs(…)` of one — or null. */
+/** The draw quantity a `min`/`max` of it and numbers reads — `max(len(hud.items), 0)` — or null. */
+function clampedQuantity(args: readonly ExprNode[]): string | null {
+  const quantities = args.map(quantityOf).filter((q): q is string => q !== null);
+  const numbers = args.filter((arg) => numberOf(arg) !== null);
+  const onlyOne = quantities.length === 1 && quantities.length + numbers.length === args.length;
+  return onlyOne ? (quantities[0] ?? null) : null;
+}
+
+/**
+ * The draw quantity a node reads directly — `x`, `x.length`, `len(x)`, `delta('x')`, or `abs`,
+ * `min` or `max` of one — or null.
+ */
 function quantityOf(node: ExprNode | undefined): string | null {
   if (!node) return null;
   if (node.type === "ref") return isDrawQuantity(node.path) ? bare(node.path) : null;
-  if (node.type !== "call" || node.args.length !== 1) return null;
+  if (node.type !== "call") return null;
+  if (node.name === "min" || node.name === "max") return clampedQuantity(node.args);
+  if (node.args.length !== 1) return null;
   const [arg] = node.args;
   if (node.name === "len" || node.name === "abs") return quantityOf(arg);
   const literalPath = node.name === "delta" && arg?.type === "literal" && typeof arg.value === "string";
   return literalPath && isDrawQuantity(String(arg.value)) ? bare(String(arg.value)) : null;
+}
+
+/**
+ * The draw quantity a `has('x.<n>')` asks to hold more than n elements of, or null: index 0
+ * only asks that the list is not empty; index 59 asks for sixty.
+ */
+function indexFloor(node: Extract<ExprNode, { type: "call" }>): string | null {
+  const [arg] = node.args;
+  const literal = node.name === "has" && node.args.length === 1 && arg?.type === "literal";
+  if (!literal || typeof arg.value !== "string") return null;
+  const [, list, index] = INDEXED.exec(arg.value.replace(SCOPE_PREFIXES, "")) ?? [];
+  if (!list || !index || !isDrawQuantity(list)) return null;
+  return Number(index) + 1 > EXISTENCE_FLOOR ? bare(list) : null;
 }
 
 /** A number written as a literal (or a negated one), else null. */
@@ -139,13 +174,19 @@ function floorIn(op: string, left: ExprNode, right: ExprNode): string | null {
   return ASKS_AN_AMOUNT[asWritten]?.(bound) === true ? quantity : null;
 }
 
-/** The quantity an `x in [a, b]` asks for an amount of, or null. */
-function floorInRange(left: ExprNode, items: readonly ExprNode[]): string | null {
+/**
+ * The quantity an `x in [a, b]` asks for an amount of, or null. Under `!` a two-number range is
+ * ruled out: `!(x in [0, 59])` leaves only x > 59, a floor, while a range that starts above zero
+ * still lets x fall below it and so asks for no amount.
+ */
+function floorInRange(left: ExprNode, items: readonly ExprNode[], negated: boolean): string | null {
   const quantity = quantityOf(left);
   if (!quantity) return null;
-  const bounds = items.map(numberOf);
-  if (bounds.length === 0 || bounds.some((b) => b === null)) return null;
-  return Math.min(...(bounds as number[])) > EXISTENCE_FLOOR ? quantity : null;
+  const bounds = items.map(numberOf).filter((b): b is number => b !== null);
+  if (bounds.length === 0 || bounds.length !== items.length) return null;
+  if (!negated) return Math.min(...bounds) > EXISTENCE_FLOOR ? quantity : null;
+  const onlyAbove = bounds.length === 2 && Math.min(...bounds) <= 0;
+  return onlyAbove && ASKS_AN_AMOUNT[">"]?.(Math.max(...bounds)) === true ? quantity : null;
 }
 
 /** The first draw quantity anywhere in the expression that is asked for an amount, or null. */
@@ -156,7 +197,9 @@ function floorAnywhere(node: ExprNode, negated: boolean): string | null {
       return op ? floorIn(op, node.left, node.right) : null;
     }
     case "in":
-      return negated ? null : floorInRange(node.left, node.items);
+      return floorInRange(node.left, node.items, negated);
+    case "call":
+      return negated ? null : indexFloor(node);
     case "not":
       return floorAnywhere(node.operand, !negated);
     case "and":
@@ -185,8 +228,9 @@ function expressionOf(check: { kind?: unknown; expr?: unknown }): ExprNode | nul
  * check the lint has nothing against. Pixel, probe, metric and demo expressions are read as
  * their parsed AST: a comparison or an `in` range that asks a draw quantity for more than its
  * existence is a floor, read the same whichever side the number is written on. A metric that
- * ratchets a draw quantity upward (`goal: "max"`) is the same floor without a number. Scene
- * checks are JavaScript and are not read here.
+ * ratchets a draw quantity upward (`goal: "max"`) is the same floor without a number, and so is
+ * `has('hud.items.59')`. Scene checks are JavaScript and are not read here, and neither is
+ * arithmetic over a quantity (`len(hud.items) - 60 >= 0`): a deliberate detour, not a draft.
  */
 export function lintCheck(
   check: { kind?: unknown; expr?: unknown; goal?: unknown } | null | undefined,

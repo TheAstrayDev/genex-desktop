@@ -21,6 +21,7 @@ import type { Check, CheckKind, CheckLike, CheckOrigin, CheckWeight } from "./sp
 import { HostMethod } from "./host-methods.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON, clipMarked } from "./text.ts";
 import { isRecord } from "./json.ts";
+import { notThisBuildsQuestion } from "./harness-needs.ts";
 import type { ElidedKind, StateShape } from "./state-shape.ts";
 import type { AnyRecord, HarnessCtx } from "../types/harness.d.ts";
 import type { PreviewPixelStats } from "../types/host-api.d.ts";
@@ -1458,14 +1459,20 @@ function settleMeasured(
  * only the questions a judge grew from its own defect list. They are two different things and
  * one night proved it: a part whose nine planned checks all passed read "1 of 10" because the
  * judge had grown a question about a number no camera can see. The screen says "Passed 3 ·
- * Failed 2 · Couldn't measure 4 · 3 judge notes" off these fields.
+ * Failed 2 · Couldn't measure 4 · 3 judge notes" off these fields. A harness-owned check that
+ * does not apply to this build (loop/harness-needs.ts) is in none of those counts; identity
+ * still reads the whole board, so it never turns an unanswerable board into a satisfied one.
  */
 export function summarizeScoreboard(
   board: Scoreboard | null | undefined,
   spec: { checks?: readonly Check[] } | null | undefined,
 ) {
-  const entries = Object.values(board ?? {});
-  const identity = entries.filter((e) => e.weight === Weight.Identity);
+  const all = Object.values(board ?? {});
+  const specChecks = new Map((spec?.checks ?? []).map((c) => [c?.id, c]));
+  const applies = (e: CheckResult): boolean =>
+    isMeasured(e) || e.unavailable !== true || !notThisBuildsQuestion(specChecks.get(e.id), e.missing);
+  const entries = all.filter(applies);
+  const identity = all.filter((e) => e.weight === Weight.Identity);
   const measuredPass = (e: CheckResult): boolean => e.pass === true;
   // The board entry carries `origin` only where the loop seeded it; the spec is the authority.
   const grownIds = new Set((spec?.checks ?? []).filter((c) => c?.origin === Origin.Judge).map((c) => c.id));

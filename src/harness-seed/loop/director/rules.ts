@@ -20,6 +20,7 @@ import { parsePlanSteering } from "../replan.ts";
 import { allowedFile, mechanicalReview } from "../review.ts";
 import { setupVerifyExpr } from "../scout.ts";
 import {
+  CheckOrigin,
   CheckWeight,
   MoveOwner,
   normalizeFacetSpec,
@@ -574,17 +575,24 @@ export interface WorkerSpecInput {
 /**
  * The harness's own checks for the kind and the traits the director named. Only what it named: a
  * trait it did not mention is not declared false — it is simply not declared, and the kind (the
- * run's, unless this part differs) decides.
+ * run's, unless this part differs) decides. The front-end's owner (`keepsFrontEnd`) is judged on
+ * its menu, so the checks that only hold in play stay off its board.
  */
 function withDeclaredGame<S extends FacetSpec>(
   spec: S,
-  { kind, traits, ownsMain, screen }: { kind: string | null; traits: string[]; ownsMain: boolean; screen: boolean },
+  {
+    kind,
+    traits,
+    ownsMain,
+    screen,
+    keepsFrontEnd,
+  }: { kind: string | null; traits: string[]; ownsMain: boolean; screen: boolean; keepsFrontEnd: boolean },
 ): S {
   const kindName = isGameKind(kind) ? kind : null;
   if (!kindName && !traits.length) return spec;
   const declared: AnyRecord = { ...(kindName ? { kind: kindName } : {}) };
   for (const trait of Object.values(GameTrait)) if (traits.includes(trait)) declared[trait] = true;
-  return withHarnessChecks(spec, { ownsMain, game: normalizeGameTraits(declared), screen });
+  return withHarnessChecks(spec, { ownsMain, game: normalizeGameTraits(declared), screen, keepsFrontEnd });
 }
 
 /** What the dry run could not do when nothing in this run has looked at the fork point yet. */
@@ -640,7 +648,7 @@ export function compileWorkerSpec(
     { id, title: title || id, intent: brief, owns, identity, cameras, checks, done, milestones, budgetShare: 0 },
     index,
   );
-  spec = withDeclaredGame(spec, { kind, traits, ownsMain, screen });
+  spec = withDeclaredGame(spec, { kind, traits, ownsMain, screen, keepsFrontEnd: setup?.begin === false });
   const expr = setupVerifyExpr(setup?.verify);
   if (expr) spec = withRequestedStateCheck(spec, { expr, note: setup?.note ?? "" });
   // Before validation: a screen part's board may be mostly vision (spec.ts visionHeavy).
@@ -669,8 +677,9 @@ export function compileWorkerSpec(
     stateKeys: validated.stateKeys ?? null,
     identityTotal: spec.checks.filter((c) => c.weight === CheckWeight.Identity).length,
     notVerified: notVerifiedWords(base, forkedFrom),
+    // The harness's own checks are not the director's to re-point or drop.
     rarelyMeasurable: (rarely ?? [])
-      .filter((entry) => spec.checks.some((check) => check.id === entry.id))
+      .filter((entry) => spec.checks.some((check) => check.id === entry.id && check.origin !== CheckOrigin.Harness))
       .map((entry) => ({ id: entry.id, rounds: entry.rounds })),
   };
 }

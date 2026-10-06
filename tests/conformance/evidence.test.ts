@@ -604,8 +604,14 @@ describe("the harness's own checks on the result a player gets", () => {
     const check = harnessCheck("reaches-play", { ownsMain: true, game: { kind: "racing" } });
     assert.ok(check, "a keyboard-moved game's main owner carries reaches-play");
     assert.equal(check.weight, "identity");
-    assert.equal(evaluateProbeCheck(check, { state: { flow: { phase: "play", playing: true } } }).pass, true);
-    assert.equal(evaluateProbeCheck(check, { state: { flow: { phase: "countdown", playing: false } } }).pass, false);
+    // Read off the early sample — the state reachPlay left, after begin and before the drive.
+    const playing = { flow: { phase: "play", playing: true } };
+    const countdown = { flow: { phase: "countdown", playing: false } };
+    assert.equal(evaluateProbeCheck(check, { state: playing, stateEarly: playing }).pass, true);
+    assert.equal(evaluateProbeCheck(check, { state: countdown, stateEarly: countdown }).pass, false);
+    // A race that ends (or a player who dies) during the drive did reach play: begin worked.
+    const results = { flow: { phase: "results", playing: false } };
+    assert.equal(evaluateProbeCheck(check, { state: results, stateEarly: playing }).pass, true);
     const undeclared = evaluateProbeCheck(check, { state: { player: { x: 1 } } });
     assert.equal(undeclared.pass, null);
     assert.equal(undeclared.unavailable, true);
