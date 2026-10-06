@@ -659,6 +659,30 @@ restored on a Resume; `report.shipReview` and the `finish` answer say whether th
 would ship the head the close stood on and how many defects are left. It never vetoes a landing.
 When the lead names no cameras, a blind judge shows every view both builds have, cut alike.
 
+The art director also looks on the studio's own schedule while loop workers build, in every run
+(timed, goal, ∞), however busy the lead is (`art-direction.ts` `shipLookAt`, `WakeCause.ShipLook`,
+an uncapped wake the loop answers with `shipLookPass` before the lead's turn): once the first wave
+is in — every running loop worker has had kept work merged (`integrate.ts` marks `integrated`) — or
+after `SHIP_LOOK_EVERY_MS` (90 minutes) of working time, then every 90 working minutes on a head no
+review stands on. A review the lead asked for, the mark's or the finish gate's resets that clock; a
+look that gave no review is tried again 30 minutes later (`SHIP_LOOK_GAP_MS`), and no regular look
+comes within 30 minutes before an unsaid finish mark, whose own look takes its place. A wake that
+carries the user's words leaves the look for the next wake. The cadence is journaled in working
+time (`nextShipLookWorkedMs`). The regular look only routes defects:
+owners are told as building workers (beside their move), the wake says it is not the finish mark,
+and the finish stage still begins at the mark or a goal build's idle or finish look. Each review
+also names up to eight short things that already work (`doNotRegress`, cut at a word; an older
+rubric's `strengths` stand in). A review with a verdict puts the list on every running loop
+worker's spec and a loop worker started later takes the latest; its brief shows it ("Do not
+regress") and its round's taste judge is told that the accepted build losing one is a regression
+to name. `state.lastShip` and `report.shipReview` keep the list; an unreadable review keeps the last.
+
+A goal or ∞ build's wake digest names its required outcomes on every wake while some are
+unverified (`required outcomes: N/M verified on this revision`, `progress.ts` `outcomeTally`), and
+every 60 working minutes (`VERIFY_NUDGE_EVERY_MS`) and after each ship review adds VERIFY THE
+OUTCOMES, asking for `playtest goal=<id>` on each one still unverified (journaled as
+`verifyNudgedWorkedMs`; never in the wrap-up).
+
 The initial plan freezes required acceptance scenarios in the versioned director journal. A
 reopened build is a goal commission, the Loop's hours or ∞ its ceiling (`reopen-run.ts`
 `reopenBudgets`), and takes none of the finished night's outcomes: its journal records

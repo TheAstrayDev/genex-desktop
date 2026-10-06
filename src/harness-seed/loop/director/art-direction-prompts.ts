@@ -92,6 +92,23 @@ export function shipGateSkipped(head: string | null): string {
 interface ShipWords {
   ship: boolean | null;
   defects: readonly ShipDefect[];
+  /** What already works and must stay (absent from a review kept before the list). */
+  doNotRegress?: readonly string[];
+}
+
+/** The heading of the regular look's paragraph: whose look it is, and that it is not the finish mark. */
+const SHIP_LOOK_HEADING =
+  "THE ART DIRECTOR'S LOOK AT THE WHOLE GAME — the studio's regular look while workers build, not the finish mark";
+
+/** What the lead does after a regular look: its defects are already with their owners, and building goes on. */
+const SHIP_LOOK_NEXT =
+  "Each defect is on its owner's board — a building owner fixes it beside its move — or, for a part nobody builds now, on your ledger. The build stage goes on: no finish stage before the finish mark. Steer by the verdict, not by single defects.";
+
+/** The do-not-regress list in a line, as the lead reads it, or nothing when the review named none. */
+function doNotRegressLine(review: ShipWords): string {
+  const items = review.doNotRegress ?? [];
+  if (!items.length) return "";
+  return `DO NOT REGRESS (every loop worker's brief and its taste judge carry this): ${items.join("; ")}`;
 }
 
 /** One defect in a line: how much it matters, what, and where it shows. */
@@ -142,15 +159,41 @@ export function artDirectionBlock({
 }): string {
   const heading = "THE FINISH MARK — the art director's look at the whole game";
   if (!review) return [heading, `- no ship review: ${skipped ?? ART_SKIPPED.notJudged}`, FINISH_MARK_RULE].join("\n");
+  return [heading, ...reviewLines(head, review), shipNext(review)].filter(Boolean).join("\n");
+}
+
+/** A review's verdict on the integrated build, its defects by part, and what must not regress. */
+function reviewLines(head: string | null, review: ShipWords): string[] {
   const groups = Object.entries(defectsByPart(review.defects)).map(
     ([part, lines]) => `- ${part}: ${lines.join(" | ")}`,
   );
   return [
-    heading,
     `The art director ${verdictWords(review)} the integrated build ${shortSha(head)} as the user's demo today.`,
     ...(groups.length ? ["DEFECTS BY PART:", ...groups] : ["- no defects named"]),
-    shipNext(review),
-  ].join("\n");
+    doNotRegressLine(review),
+  ];
+}
+
+/**
+ * The wake's paragraph after the art director's regular look (art-direction.ts `shipLookPass`):
+ * the verdict, the defects by part, what must not regress, and that the build stage goes on — or,
+ * when it could not look, why, and that the studio looks again later.
+ */
+export function shipLookBlock({
+  head,
+  review,
+  skipped = null,
+}: {
+  head: string | null;
+  review: ShipWords | null;
+  skipped?: string | null;
+}): string {
+  if (!review)
+    return [
+      SHIP_LOOK_HEADING,
+      `- no ship review: ${skipped ?? ART_SKIPPED.notJudged}; the studio looks again later`,
+    ].join("\n");
+  return [SHIP_LOOK_HEADING, ...reviewLines(head, review), SHIP_LOOK_NEXT].filter(Boolean).join("\n");
 }
 
 /** What `finish` adds about the art director's last look at the head it closed on, or nothing. */

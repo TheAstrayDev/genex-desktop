@@ -12,6 +12,16 @@
  * owner's board in the director's name, so its fix keeps the round (a strong flip). The verdict
  * is reported, never a landing veto, and it turns a goal build's finish back at most once.
  *
+ * Nor does the look wait for the mark: four busy workers kept one ∞ build's lead from ever idling,
+ * and nobody looked at the whole game in three hours. So the studio also looks on its own while
+ * loop workers build (`shipLookAt`): once the first wave is in (every running loop worker has
+ * kept work merged, or after `SHIP_LOOK_EVERY_MS` of working time), then every `SHIP_LOOK_EVERY_MS`
+ * on a head it has not reviewed — never within `SHIP_LOOK_GAP_MS` before a timed build's mark,
+ * whose own look takes its place. That regular look only routes defects: owners keep building,
+ * and the finish stage still begins at the mark. Each review also names what already works and
+ * must stay (`doNotRegress`): the latest list rides in every loop worker's spec, so its brief and
+ * its taste judge hold the build to it.
+ *
  * A new module, bound onto the night (director.ts `NIGHT_MODULES`): callers in older modules reach
  * it through the night and check that it is there. It reads budgets.ts and rules.ts by namespace,
  * so a kept older copy of either never stops it linking.
@@ -67,13 +77,33 @@ const MAX_REPLACEMENTS = 8;
 const ART_DIRECTOR = "art-director";
 /** The ledger's owner of a defect no part owns: the lead's integration. */
 const LEAD_OWNS = BuildTarget.Integration;
+/** How much working time passes between the studio's regular looks at the whole game while workers build. */
+export const SHIP_LOOK_EVERY_MS = 90 * MINUTE_MS;
+/**
+ * No regular look comes this soon before a timed build's finish mark (the mark looks itself), and
+ * one the art director could not give is tried again after this much working time.
+ */
+export const SHIP_LOOK_GAP_MS = 30 * MINUTE_MS;
 
-/** The art director's last word on the integration branch: the head it looked at, ship or not, and its defects. */
+/**
+ * The art director's last word on the integration branch: the head it looked at, ship or not, its
+ * defects, and what already works and must stay (absent from a journal written before the list).
+ */
 export interface LastShip {
   head: string | null;
   ship: boolean | null;
   defects: ShipDefect[];
+  doNotRegress?: string[];
   at: number;
+}
+
+/** When the next regular look is due, as the wake loop keeps it, and the clocks it is read against. */
+export interface ShipCadence {
+  /** The working time the next look is due at; null until the first look of the night. */
+  nextAtWorkedMs: number | null;
+  now: number;
+  /** When the finish mark comes, while it is unsaid (wake.ts `finishMarkView`), or null. */
+  finishMarkAt: number | null;
 }
 
 /** One ship defect as a question on its owner's board: the part it is for (null: nobody's), and the check. */
@@ -98,6 +128,11 @@ export interface ArtDirectionAsk {
   final?: boolean;
   /** How long its judge calls may take from the start of the pass. */
   judgeMs?: number;
+  /**
+   * The look is the finish look (the mark's, a goal build's finish gate): from it on, every owner
+   * of a defect is told as a finisher. False for the regular look, after which owners keep building.
+   */
+  finishLook?: boolean;
 }
 
 /** The plan's parts as the art director is told them: the only ids a defect may name. */
@@ -305,21 +340,33 @@ function tellRetired(night: Night, retired: ReadonlyMap<string, string[]>): void
 }
 
 /**
+ * The art director's do-not-regress list on a loop worker's spec, where its brief (library.ts
+ * `renderBrief`) and its round's taste judge (judge.ts `tasteVeto`) read it. An empty list says nothing.
+ */
+function giveDoNotRegress(worker: Worker & { spec: AnyRecord }, doNotRegress: readonly string[]): void {
+  worker.spec.doNotRegress = [...doNotRegress];
+}
+
+/**
  * Hand each ship defect to its owner: the running loop worker whose part it names gets it on its
  * board as the director's own question (its fix is a strong flip, so the round is kept); a part
  * that is finished, a single session or not started has it on the ledger under its id; a defect
  * no part owns is the lead's, on the ledger under the integration. A review with a verdict first
- * takes the earlier reviews' questions it does not ask again off the running boards. Answers what
- * went where.
+ * takes the earlier reviews' questions it does not ask again off the running boards, and gives every
+ * running loop worker its do-not-regress list in place of the last one. Answers what went where.
  */
 export function routeShipDefects(
   night: Night,
-  review: Pick<ShipReview, "defects"> & Partial<Pick<ShipReview, "ship">>,
+  review: Pick<ShipReview, "defects"> & Partial<Pick<ShipReview, "ship" | "doNotRegress">>,
 ): ShipRoute[] {
   const { note, state } = night;
   const routes = shipDefectsToChecks(review, state.workers, state.plan);
-  // Only a review with a verdict replaces the last one's questions: one nobody could read leaves them.
-  if (typeof review.ship === "boolean") tellRetired(night, retireShipChecks(night, routes));
+  // Only a review with a verdict replaces the last one's questions and list: one nobody could read leaves them.
+  if (typeof review.ship === "boolean") {
+    tellRetired(night, retireShipChecks(night, routes));
+    for (const worker of [...state.workers.values()].filter(takesShipDefects))
+      giveDoNotRegress(worker, review.doNotRegress ?? []);
+  }
   for (const route of routes) {
     const worker = ownerOf(state.workers, route.part, state.plan);
     if (takesShipDefects(worker)) {
@@ -372,12 +419,14 @@ const onItsBoard = (worker: Worker & { spec: AnyRecord }, check: Check): boolean
  * A loop worker starting on a part (`worker_start`, its id, `replaces` or goal naming the plan
  * part) takes the art director's defects shelved under that part while nobody ran it: each goes on
  * its board as the director's own question, as a running owner's would (so a finish worker's
- * round ends only once a blocker or visible defect is gone), and leaves the ledger. Answers the
- * routes it took.
+ * round ends only once a blocker or visible defect is gone), and leaves the ledger. Any loop worker
+ * starting takes the art director's latest do-not-regress list too. Answers the routes it took.
  */
 export function takeShelvedShipDefects(night: Night, worker: Worker): ShipRoute[] {
   const { ledger } = night.state;
   if (!takesShipDefects(worker)) return [];
+  const doNotRegress = night.state.lastShip?.doNotRegress ?? [];
+  if (doNotRegress.length) giveDoNotRegress(worker, doNotRegress);
   const part = partStartedOn(night, worker);
   if (!part) return [];
   const shelved = ledger.filter((entry) => entry.from === ART_DIRECTOR && entry.owner === part);
@@ -431,18 +480,78 @@ export function finishMarkAt(night: Night): number | null {
   return ms === null ? null : clock.softDeadline - ms;
 }
 
+/** When the night's working time began on its own clock: a Resume's goes on from the time already worked. */
+const workStarted = (night: Night): number => night.clock?.started ?? night.started;
+
+/** The loop workers building now: those that take the art director's defects on their boards. */
+const buildingWorkers = (night: Night): Worker[] => [...night.state.workers.values()].filter(takesShipDefects);
+
+/**
+ * Is the night's first integration wave in: loop workers are building, and every one of them has
+ * had kept work merged into the integration branch (integrate.ts marks it `integrated`).
+ */
+export function firstWaveIn(night: Night): boolean {
+  const building = buildingWorkers(night);
+  return building.length > 0 && building.every((worker) => worker.integrated === true);
+}
+
+/**
+ * Is there a whole game for the regular look to see: loop workers building, an integration beyond
+ * the start that nothing says does not load, and no review standing on its head.
+ */
+function lookable(night: Night): boolean {
+  const { state } = night;
+  const head = state.integrationHead;
+  if (!buildingWorkers(night).length || !movedBeyondStart(night, head)) return false;
+  return state.healthByHead.get(head) !== false && !shipReviewOn(night, head);
+}
+
+/**
+ * When the studio's regular look at the whole game is due, on the loop's clock, or null. The first
+ * comes once the first wave is in, or after `SHIP_LOOK_EVERY_MS` of working time (one worker that
+ * never keeps a round does not hold it back); each later one at the working time the cadence names.
+ * None within `SHIP_LOOK_GAP_MS` before an unsaid finish mark — the mark looks itself — and none
+ * once the working time is over.
+ */
+export function shipLookAt(night: Night, { nextAtWorkedMs, now, finishMarkAt }: ShipCadence): number | null {
+  if (now >= night.softDeadline || !lookable(night)) return null;
+  const started = workStarted(night);
+  const firstAt = firstWaveIn(night) ? now : started + SHIP_LOOK_EVERY_MS;
+  // A look already overdue happens now: it is now that must keep clear of the mark.
+  const due = Math.max(now, nextAtWorkedMs === null ? firstAt : started + nextAtWorkedMs);
+  const markLooks = finishMarkAt !== null && due >= finishMarkAt - SHIP_LOOK_GAP_MS;
+  return markLooks ? null : due;
+}
+
+/**
+ * The working time the next regular look is due at after a look that ended `now`: a whole
+ * `SHIP_LOOK_EVERY_MS` after one the art director gave (the lead's own `judge ship=yes` and the
+ * mark's count), `SHIP_LOOK_GAP_MS` after one it could not give.
+ */
+export function shipLookAfter(night: Night, { now, looked }: { now: number; looked: boolean }): number {
+  return now - workStarted(night) + (looked ? SHIP_LOOK_EVERY_MS : SHIP_LOOK_GAP_MS);
+}
+
+/**
+ * The studio's regular look at the whole game (`shipLookAt`): the art director's pass, whose
+ * defects go to their owners while they keep building — no finish mark, and no finish stage.
+ */
+export function shipLookPass(night: Night): Promise<ArtDirection> {
+  return artDirectionPass(night, { finishLook: false });
+}
+
 /**
  * The studio's own look at the finish mark: when the integration branch has moved beyond the start
  * and nothing says it does not load, the art director judges it (`judge ship=yes`, through the
  * studio's window when every other is taken, done by `ART_DIRECTION_JUDGE_MS`) and its defects go
  * to their owners. `how` lets the same look answer the close's own question (the finish gate).
- * From this look on the night is past its finish mark (`pastFinishMark`). Answers the review, or
- * why there was none.
+ * From this look on the night is past its finish mark (`pastFinishMark`) — unless it is the
+ * regular look (`finishLook: false`, `shipLookPass`). Answers the review, or why there was none.
  */
 export async function artDirectionPass(night: Night, how: ArtDirectionAsk = {}): Promise<ArtDirection> {
   const { ctx, note, state } = night;
-  const { ask = {}, final = false, judgeMs = ART_DIRECTION_JUDGE_MS } = how;
-  finishLooked.add(night);
+  const { ask = {}, final = false, judgeMs = ART_DIRECTION_JUDGE_MS, finishLook = true } = how;
+  if (finishLook) finishLooked.add(night);
   const head = (await night.syncHead().catch(() => null)) ?? state.integrationHead;
   if (ctx.cancelled) return { head, review: null, skipped: ART_SKIPPED.stopped };
   if (!movedBeyondStart(night, head)) return { head, review: null, skipped: ART_SKIPPED.nothingNew };
@@ -518,6 +627,7 @@ export function shipReport(night: Night): AnyRecord | null {
     ship: review.ship,
     defectsLeft: review.defects.length,
     blockers: review.defects.filter((d) => d.severity === DefectSeverity.Blocker).length,
+    doNotRegress: review.doNotRegress ?? [],
     at: new Date(review.at).toISOString(),
   };
 }

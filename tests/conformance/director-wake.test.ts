@@ -297,6 +297,21 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     assert.deepEqual(nextWake(view({ running: 0, finishMarkAt: mark })), { at: T0, reasons: [WakeCause.IdleAsk] });
   });
 
+  it("W10c. the art director's regular look is a timer of its own: due at its time, uncapped, and never in the wrap-up", () => {
+    const shipLook = WakeCause.ShipLook;
+    const look = T0 + 10 * MINUTE_MS;
+    const at = (over: Partial<WakeView>) => nextWake(view(over));
+    assert.deepEqual(at({ shipLookAt: look }), { at: look, reasons: [shipLook] });
+    // The hourly cap holds the heartbeat back, never the look: four busy workers fill the cap.
+    const wakesAt = Array.from({ length: MAX_WAKES_PER_HOUR }, (_, i) => T0 - 50 * MINUTE_MS + i * MINUTE_MS);
+    assert.deepEqual(at({ shipLookAt: look, wakesAt }), { at: look, reasons: [shipLook] });
+    // Due already (the wave came in while the lead was busy): now.
+    assert.deepEqual(at({ now: look + MINUTE_MS, shipLookAt: look }), { at: look + MINUTE_MS, reasons: [shipLook] });
+    // The wrap-up takes no look: wrapping, or a working time already over.
+    assert.equal(at({ shipLookAt: look, wrapping: true, running: 0 }), null);
+    assert.deepEqual(at({ softDeadline: T0 - 1_000, shipLookAt: look, running: 2 })?.reasons, [WakeCause.WrapUp]);
+  });
+
   it("W10b. a finish mark still unsaid when the wrap-up is due gives way to the wrap-up: the two never share a wake", () => {
     // A Mac that slept through both times, or a Resume of a night paused in its wrap-up (soft deadline now).
     const mark = T0 - 40 * MINUTE_MS;
@@ -967,5 +982,28 @@ describe("the lost-session allowance across a Resume (P08-F9)", () => {
     } as never);
     const restored = restoredWake(JSON.parse(JSON.stringify(saved)), now) as { freshSessions?: number };
     assert.equal(restored.freshSessions, 2);
+  });
+});
+
+describe("the art director's cadence and the outcome nudge across a Resume", () => {
+  it("are kept on the journal in working time, so a Resume neither looks again at once nor forgets the next nudge", async () => {
+    const { wakeRecord, restoredWake } = await import("../../src/harness-seed/loop/director/journal.ts");
+    const now = Date.now();
+    const saved = wakeRecord({
+      idleAsked: false,
+      wrapCause: null,
+      wakes: 7,
+      wakesAt: [],
+      lastWakeAt: now - 1000,
+      asleepSince: null,
+      nextShipLookWorkedMs: 150 * MINUTE_MS,
+      verifyNudgedWorkedMs: 90 * MINUTE_MS,
+    } as never);
+    const restored = restoredWake(JSON.parse(JSON.stringify(saved)), now);
+    assert.equal(restored.nextShipLookWorkedMs, 150 * MINUTE_MS);
+    assert.equal(restored.verifyNudgedWorkedMs, 90 * MINUTE_MS);
+    const garbled = restoredWake({ nextShipLookWorkedMs: "soon", verifyNudgedWorkedMs: -5 }, now);
+    assert.equal(garbled.nextShipLookWorkedMs, undefined, "a value that is no working time is none");
+    assert.equal(garbled.verifyNudgedWorkedMs, undefined);
   });
 });

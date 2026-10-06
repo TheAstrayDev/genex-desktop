@@ -11,6 +11,9 @@ Rules:
   it in `regression` — what got worse, where, and which camera shows it — and phrase it as a
   new yes/no check in `newCheck` (a `vision` question over one camera that passes once fixed).
   A veto without a named regression is not a veto.
+- When the user content lists DO NOT REGRESS (what the art director says already works in the
+  whole game), a build the checks accepted that lost one of those items, where your frames show
+  it, has regressed: pick the other build and name that loss as the regression.
 - Name `bigMove`: the ONE bold step inside SCOPE (what the user asked for, when the user content
   names it) that would most close the gap to the goal and the reference — deeper, reworked, a
   better feel of what the user asked for, a global change a player would notice in the first

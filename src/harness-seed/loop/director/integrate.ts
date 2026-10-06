@@ -354,6 +354,7 @@ async function mergeWorker(
   }
   state.integrationHead = await headOf(ctx, integrationWorktree, { label });
   journal.director.integrationHead = state.integrationHead;
+  markIntegrated(night, worker);
   await protectHead(state.integrationHead);
   await appendRun(RunEvent.IntegrationMerge, {
     facetId: worker.id,
@@ -497,6 +498,16 @@ function fixNext(night: Night): string {
 }
 
 /** What a merge asks of the lead next: look before building on it, put back what it lost, or repair it. */
+/**
+ * A worker whose kept work is now on the integration branch — and, for a conflict worker, the
+ * worker whose work it merged — counts in the first wave the art director waits for (art-direction.ts).
+ */
+function markIntegrated(night: Night, worker: Worker): void {
+  worker.integrated = true;
+  const merged = worker.merging?.of ? night.state.workers.get(worker.merging.of) : undefined;
+  if (merged) merged.integrated = true;
+}
+
 function nextAfterMerge(night: Night, health: Evidence, lost: readonly LostRegistration[]): string {
   if (health.ok) return "judge or look at integration before you build on it";
   const repair = lost.length ? WAVE_WORDS.lostNext : fixNext(night);

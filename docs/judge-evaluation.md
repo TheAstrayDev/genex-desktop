@@ -28,7 +28,10 @@ The art director's ship review (`judge/ship-review.md`, `loop/ship-review.ts`) i
 absolute judge: one build and no pair, at 1600×900. Evaluate it on single builds that reviewers
 label ship or not, each decisive defect with the plan part that owns it and its severity; a
 malformed reply must stay no verdict, never a "no", and a camera it was not shown is dropped. It is
-never put beside another build's frames.
+never put beside another build's frames. Its `doNotRegress` list (at most eight short names of
+what already works) becomes the taste judge's regression guard: evaluate the taste judge on pairs
+where the accepted build loses one listed item and must be called a regression, and on pairs that
+keep every item, whose verdicts must not change.
 
 When the run's plan carries a vision (`docs/VISION.md`, `loop/vision.ts`), the taste judge, the
 liveness critic and the ship review also read a bounded excerpt of it as the direction to grow

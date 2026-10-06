@@ -41,7 +41,7 @@ import {
   writeArchitecture,
 } from "../../src/harness-seed/loop/director/contract-gate.ts";
 import { closeTheNight, integrate } from "../../src/harness-seed/loop/director/integrate.ts";
-import { shipOwed } from "../../src/harness-seed/loop/director/art-direction.ts";
+import { firstWaveIn, shipOwed } from "../../src/harness-seed/loop/director/art-direction.ts";
 import { CompletionPolicy } from "../../src/harness-seed/loop/completion-policy.ts";
 import { CONFLICT_MERGE } from "../../src/harness-seed/loop/director/conflict-worker.ts";
 import {
@@ -657,6 +657,31 @@ describe("integration in waves", () => {
     const closed = JSON.parse(await integrate(night as never, { wave: "close" }));
     assert.equal(closed.wave, "closed");
     assert.equal(night.state.waveHead, fix);
+  });
+
+  it("a clean merge brings each merged loop worker into the first wave the art director waits for", async () => {
+    const { repo, head } = await integrationRepo();
+    const { night } = stubNight(repo, head, null);
+    const car = await workerBranch(repo, head, "car", { "src/car.js": "export const car = 1;\n" });
+    const city = await workerBranch(repo, head, "city", { "src/city.js": "export const city = 1;\n" });
+    const building = (id: string, commit: string) => ({
+      id,
+      title: id,
+      from: head,
+      lastCommit: commit,
+      merging: null,
+      mode: WorkerMode.Loop,
+      state: "running",
+      spec: { id, checks: [] },
+    });
+    night.state.workers.set("car", building("car", car));
+    night.state.workers.set("city", building("city", city));
+    const waveIn = () => firstWaveIn(night as never);
+    assert.equal(waveIn(), false, "nothing merged yet");
+    JSON.parse(await integrate(night as never, { worker: "car" }));
+    assert.equal(waveIn(), false, "city's kept work is not in yet");
+    JSON.parse(await integrate(night as never, { worker: "city" }));
+    assert.equal(waveIn(), true, "every running loop worker has kept work on the integration branch");
   });
 
   it("answers a single worker's merge with exactly the keys it always had", async () => {

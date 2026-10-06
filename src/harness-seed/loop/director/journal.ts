@@ -17,9 +17,10 @@ import { durationCommission, goalCommission } from "./commission.ts";
  *
  * Its functions take the night explicitly; they are not bound onto it. It imports only names the
  * seed exported before it existed (tests/fixtures/seed-exports-pre-journal.json), and names from
- * modules newer than it (director/reopen.ts): a seed upgrade keeps a module the agent edited, and a
- * name newer than that copy would not link.
+ * modules newer than it (director/reopen.ts, loop/ship-review.ts): a seed upgrade keeps a module the
+ * agent edited, and a name newer than that copy would not link.
  */
+import { doNotRegressOf } from "../ship-review.ts";
 import { WorkerState } from "../outcomes.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
 import { runRef } from "../repo.ts";
@@ -96,6 +97,10 @@ export interface RestoredWake {
   freshSessions?: number;
   /** The finish mark was said: a Resume does not say it again. */
   finishMarkSaid?: boolean;
+  /** The working time the art director's next regular look is due at (art-direction.ts `shipLookAt`). */
+  nextShipLookWorkedMs?: number;
+  /** The working time the lead was last nudged to verify its outcomes (progress.ts `verifyNudgeDue`). */
+  verifyNudgedWorkedMs?: number;
 }
 
 /** A time for the journal: ISO, or null. */
@@ -266,6 +271,8 @@ export function wakeRecord(
   wake: Pick<WakeState, "idleAsked" | "wrapCause" | "wakes" | "wakesAt" | "lastWakeAt" | "asleepSince"> & {
     freshSessions?: number;
     finishMarkSaid?: boolean;
+    nextShipLookWorkedMs?: number | null;
+    verifyNudgedWorkedMs?: number | null;
   },
 ): AnyRecord {
   return {
@@ -278,7 +285,15 @@ export function wakeRecord(
     lastWakeAt: iso(wake.lastWakeAt),
     asleepSince: iso(wake.asleepSince),
     ...(wake.finishMarkSaid ? { finishMarkSaid: true } : {}),
+    // Working time, not wall time: a Resume's clock goes on from the time worked (`nightClock`).
+    ...(workedMsOrNull(wake.nextShipLookWorkedMs) === null ? {} : { nextShipLookWorkedMs: wake.nextShipLookWorkedMs }),
+    ...(workedMsOrNull(wake.verifyNudgedWorkedMs) === null ? {} : { verifyNudgedWorkedMs: wake.verifyNudgedWorkedMs }),
   };
+}
+
+/** A span of working time from the journal, or null when it is not one. */
+function workedMsOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 /** Does this night pick up one its journal kept: a Resume of a director's night? */
@@ -496,7 +511,8 @@ function restoredShip(saved: unknown): NightState["lastShip"] {
   const ship = (saved ?? {}) as AnyRecord;
   if (typeof ship.head !== "string" || !Array.isArray(ship.defects)) return null;
   const verdict = typeof ship.ship === "boolean" ? ship.ship : null;
-  return { head: ship.head, ship: verdict, defects: ship.defects, at: msOf(ship.at) ?? 0 };
+  const doNotRegress = doNotRegressOf({ doNotRegress: Array.isArray(ship.doNotRegress) ? ship.doNotRegress : [] });
+  return { head: ship.head, ship: verdict, defects: ship.defects, doNotRegress, at: msOf(ship.at) ?? 0 };
 }
 
 /** The wake loop's own state as the journal kept it: whether the lead was asked what next, and the wakes still in the cap's window. */
@@ -506,11 +522,15 @@ export function restoredWake(saved: unknown, now: number): RestoredWake {
     .map(msOf)
     .filter((at: number | null): at is number => at !== null && at > now - WAKE_WINDOW_MS && at <= now);
   const freshSessions = Number.isInteger(record.freshSessions) && record.freshSessions > 0 ? record.freshSessions : 0;
+  const nextShipLookWorkedMs = workedMsOrNull(record.nextShipLookWorkedMs);
+  const verifyNudgedWorkedMs = workedMsOrNull(record.verifyNudgedWorkedMs);
   return {
     idleAsked: record.idleAsked === true,
     wakesAt,
     ...(freshSessions ? { freshSessions } : {}),
     ...(record.finishMarkSaid === true ? { finishMarkSaid: true } : {}),
+    ...(nextShipLookWorkedMs === null ? {} : { nextShipLookWorkedMs }),
+    ...(verifyNudgedWorkedMs === null ? {} : { verifyNudgedWorkedMs }),
   };
 }
 

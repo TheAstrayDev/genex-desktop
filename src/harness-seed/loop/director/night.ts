@@ -126,6 +126,11 @@ export interface Worker {
   limit?: AnyRecord;
   /** A conflict worker's merge (conflict-worker.ts): opened in its worktree before its session. */
   merging?: ConflictMerge | null;
+  /**
+   * Its kept work has been merged into the integration branch at least once (integrate.ts): the
+   * art director's first regular look waits for every building worker's (art-direction.ts).
+   */
+  integrated?: boolean;
 }
 
 /** The game's shape (`gameAtStart`, setup.ts): the host's, or the template's page and entry when it names none. */
@@ -338,6 +343,10 @@ type ArtDirectionParts = Partial<
       typeof artDirectionFunctions,
       | "artDirectionPass"
       | "finishMarkAt"
+      | "firstWaveIn"
+      | "shipLookAfter"
+      | "shipLookAt"
+      | "shipLookPass"
       | "shipOwed"
       | "shipFinishGate"
       | "shipReport"
