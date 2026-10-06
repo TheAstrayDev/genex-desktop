@@ -606,6 +606,8 @@ describe("the lead's judge ship=yes (director/tools.ts)", () => {
     const finisher = night.state.workers.get("track-polish");
     assert.ok(finisher.spec.checks.some((c: Record<string, unknown>) => /road texture/.test(String(c.defect))));
     assert.ok(!night.state.ledger.some((d: Record<string, unknown>) => d.owner === "track"));
+  });
+
   it("AD-4c. a worker started for a part under another id (worker_start goal=<part>) takes that part's ship defects, as the contract gate reads its part", async () => {
     const host = fakeHost();
     const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
@@ -622,6 +624,59 @@ describe("the lead's judge ship=yes (director/tools.ts)", () => {
       night.state.ledger.map((d: Record<string, unknown>) => d.owner).sort(),
       ["integration", "track"],
       "the hud defect is not shelved as nobody's work",
+    );
+  });
+
+  it("AD-4c. a new ship review swaps the art director's questions on running boards: a reworded defect replaces the old one, a gone one leaves, a repeated one keeps its id, and an unread review changes nothing", async () => {
+    const reviews: unknown[] = [
+      SHIP_NO,
+      {
+        ...SHIP_NO,
+        defects: [
+          { what: "the speed readout is clipped at the right", camera: "default", part: "hud", severity: "blocker" },
+        ],
+      },
+      {
+        ...SHIP_NO,
+        defects: [
+          { what: "the speed readout is clipped at the right", camera: "default", part: "hud", severity: "blocker" },
+        ],
+      },
+      "the judge could not answer",
+    ];
+    const host = fakeHost();
+    const answer = () => replying(reviews.shift())();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: answer } });
+    night.state.workers.set("hud", loopWorker("hud"));
+    night.state.workers.set("track", loopWorker("track"));
+    const asked = (id: string): Array<Record<string, unknown>> =>
+      night.state.workers.get(id).spec.checks.filter((c: Record<string, unknown>) => c.origin === CheckOrigin.Director);
+
+    await night.judge({ target: "integration", ship: "yes" });
+    assert.equal(asked("hud").length, 1);
+    assert.equal(asked("track").length, 1);
+
+    await night.judge({ target: "integration", ship: "yes" });
+    assert.deepEqual(
+      asked("hud").map((c) => c.defect),
+      ["the speed readout is clipped at the right"],
+      "the reworded defect replaces the old question instead of piling up beside it",
+    );
+    assert.deepEqual(asked("track"), [], "a defect the newest review no longer names leaves the board");
+    const kept = asked("hud")[0]!.id;
+
+    await night.judge({ target: "integration", ship: "yes" });
+    assert.deepEqual(
+      asked("hud").map((c) => c.id),
+      [kept],
+      "the same defect again keeps its question",
+    );
+
+    await night.judge({ target: "integration", ship: "yes" });
+    assert.deepEqual(
+      asked("hud").map((c) => c.id),
+      [kept],
+      "a review with no verdict retires nothing",
     );
   });
 

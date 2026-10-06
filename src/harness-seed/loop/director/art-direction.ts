@@ -171,7 +171,35 @@ function shipCheck(board: { checks: AnyRecord[] }, defect: ShipDefect): Check {
     origin: CheckOrigin.Director,
     defect: text,
     note: `the art director's ship review (${defect.severity})`,
+    askedBy: ART_DIRECTOR,
   };
+}
+
+/** Is this question on a board the art director's own (`shipCheck`), by its typed field alone? */
+const isShipCheck = (check: AnyRecord): boolean => check?.askedBy === ART_DIRECTOR;
+
+/**
+ * Take the art director's earlier questions off every running board the newest review does not
+ * ask again, so a re-review swaps its set instead of adding to it: a re-review rewords the same
+ * defect, and each reworded copy was one more identity question to answer before the part is done
+ * and one more vision call a round. A question the newest review repeats word for word stays, with
+ * its id. Answers the ids it took off, by worker.
+ */
+function retireShipChecks(night: Night, routes: readonly ShipRoute[]): Map<string, string[]> {
+  const { state } = night;
+  const retired = new Map<string, string[]>();
+  for (const worker of state.workers.values()) {
+    if (!takesShipDefects(worker) || !Array.isArray(worker.spec.checks)) continue;
+    const askedAgain = new Set(
+      routes.filter((route) => ownerOf(state.workers, route.part) === worker).map((route) => route.check.defect),
+    );
+    const stale = (check: AnyRecord): boolean => isShipCheck(check) && !askedAgain.has(check.defect);
+    const gone = worker.spec.checks.filter(stale).map((check: AnyRecord) => String(check.id));
+    if (gone.length === 0) continue;
+    worker.spec.checks = worker.spec.checks.filter((check: AnyRecord) => !stale(check));
+    retired.set(worker.id, gone);
+  }
+  return retired;
 }
 
 /**
@@ -233,15 +261,33 @@ function onBoard(night: Night, worker: Worker & { spec: AnyRecord }, route: Ship
   );
 }
 
+/** Tell each worker which of the art director's earlier questions left its board. */
+function tellRetired(night: Night, retired: ReadonlyMap<string, string[]>): void {
+  for (const [id, gone] of retired) {
+    night.state.workers
+      .get(id)
+      ?.steering.push(
+        `The art director looked at the whole game again: its earlier questions ${gone.join(", ")} are off your board — its newest review replaces them.`,
+      );
+  }
+}
+
 /**
  * Hand each ship defect to its owner: the running loop worker whose part it names gets it on its
  * board as the director's own question (its fix is a strong flip, so the round is kept); a part
  * that is finished, a single session or not started has it on the ledger under its id; a defect
- * no part owns is the lead's, on the ledger under the integration. Answers what went where.
+ * no part owns is the lead's, on the ledger under the integration. A review with a verdict first
+ * takes the earlier reviews' questions it does not ask again off the running boards. Answers what
+ * went where.
  */
-export function routeShipDefects(night: Night, review: Pick<ShipReview, "defects">): ShipRoute[] {
+export function routeShipDefects(
+  night: Night,
+  review: Pick<ShipReview, "defects"> & Partial<Pick<ShipReview, "ship">>,
+): ShipRoute[] {
   const { note, state } = night;
   const routes = shipDefectsToChecks(review, state.workers, state.plan);
+  // Only a review with a verdict replaces the last one's questions: one nobody could read leaves them.
+  if (typeof review.ship === "boolean") tellRetired(night, retireShipChecks(night, routes));
   for (const route of routes) {
     const worker = ownerOf(state.workers, route.part, state.plan);
     if (takesShipDefects(worker)) {
