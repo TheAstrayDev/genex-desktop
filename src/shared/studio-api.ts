@@ -16,6 +16,7 @@ import type { EngineDescriptor } from "./engine-descriptor.ts";
 import type { FolderInspection, GameLocation, GameName, GameNameRequest, GameProject } from "./game-project.ts";
 import type { BuildProblem, InstallResult } from "./build-problem.ts";
 import type { NightReview } from "./run-review.ts";
+import type { StagedTarget } from "./self-change-files.ts";
 import type { CodexLoginState } from "./codex-login.ts";
 import type { ClaudeLoginState } from "./claude-login.ts";
 import type { ProjectAsset, ProjectAssets } from "./game-assets.ts";
@@ -83,11 +84,14 @@ export interface SelfChange {
 }
 
 export interface StagedProposal {
+  /** What it changes (`self-change-files.ts`): a skill when absent, or the lessons every brief carries. */
+  target?: StagedTarget;
   skill: string;
   file: string;
   proposedText: string;
   currentText: string;
-  gate: { accept: boolean; votes: string; reason: string };
+  /** The blind gate's verdict on a skill edit; lessons are not gated, so they carry none. */
+  gate?: { accept: boolean; votes: string; reason: string };
   rationale: string;
   /** Plain-language description for the person using the app; absent on older proposals. */
   title?: string;

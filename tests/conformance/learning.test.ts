@@ -281,6 +281,21 @@ describe("the next night's briefs carry them", () => {
       "this game before every game",
     );
   });
+  it("carries at most six lessons from past runs, so the brief stays about this round's move", () => {
+    const many = Array.from({ length: 8 }, (_, i) => `past lesson ${i + 1}`);
+    const text = renderBrief({
+      run: { runId: "run_d", goal: "make the crashes hurt" },
+      spec: { id: "crumple", title: "Crash damage", intent: "dents where the hits land", checks: [] },
+      iteration: 1,
+      board: {},
+      comparison: null,
+      steering: [],
+      lessons: many,
+      gameLessons: [],
+    } as never);
+    assert.match(text, /## Lessons from past runs/);
+    assert.equal(text.split("\n").filter((line) => /^- past lesson \d+$/.test(line)).length, 6);
+  });
 });
 
 describe("a check nobody can measure stops being written", () => {

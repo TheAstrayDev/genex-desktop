@@ -542,11 +542,12 @@ journal ([the full journal](#the-night-director-workers-and-judging)). The Mac i
 
 **Learned changes** are applied, listed and undone by the host
 ([`src/main/self-changes.ts`](../../src/main/self-changes.ts)): SkillOpt's staged records (only
-`skills/<skill>.md`, landing whole on the text they were staged against, else replaying their
-anchored edits all or none), the architect's, and the agent's own. Each records
+`skills/<skill>.md`, or `library/contract-lessons.md` for `target: "lessons"`, landing whole on their
+staged text, else replaying their anchored edits all or none), the architect's,
+and the agent's own. Each records
 `post_snapshot_id`; **Undo this change** (`studio:selfchange.undo`) reverses only its diff and
 records `self_change_undone`. Rewinds put `library/games` back afterwards; `rollbackTo` refuses
-while a run, contractor or user turn is in flight. `StudioSettings.learning` gates automatic apply,
+during a run, contractor or user turn. `StudioSettings.learning` gates automatic apply,
 the sweep, the architect and `studio:skillopt.start`; the harness asks `learning.enabled` first.
 
 ## The night: director, workers and judging

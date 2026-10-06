@@ -509,7 +509,7 @@ function templateOwnership({ spec: facet, entryMain, ownsMain }: PromptInput): s
 function conventionLines(p: PromptInput): string[] {
   if (p.pointsAtBrief) return [];
   return [
-    `- Keep your working notes in ${facetNotes(p.spec.id)} — do not edit the shared NOTES.md; the integrator folds notes together.`,
+    `- Keep your working notes in ${facetNotes(p.spec.id)} — do not edit the shared NOTES.md.`,
     `- Tag every object you create (obj.userData.tag = "<tag>") with the tag names the checks use. Untagged objects do not exist to the checks.`,
     p.ownShape ? ownShapeLine(p) : oneScreenLine(p),
   ];

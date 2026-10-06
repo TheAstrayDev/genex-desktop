@@ -157,6 +157,8 @@ export interface ResumableState {
   /** WP1e: the builder's HARNESS: flags, deduplicated across iterations. */
   seenFlags: Set<string>;
   flags: AnyRecord[];
+  /** The builder's lessons this facet already logged as `facet_lessons`, so none is logged twice. */
+  seenLessons: Set<string>;
   /** WP4e: last iteration's per-camera distances and pair images, for the brief and the prompt. */
   lastStyle: AnyRecord | null;
   lastPairs: AnyRecord[];
@@ -283,6 +285,7 @@ export const RESUMABLE_FIELDS = {
   replanRequests: Carry.List,
   seenFlags: Carry.Set,
   flags: Carry.List,
+  seenLessons: Carry.Set,
   lastStyle: Carry.Value,
   lastPairs: Carry.Value,
   moves: Carry.List,
@@ -335,6 +338,7 @@ function freshResumable(facet: AnyRecord, initialDefects: unknown): ResumableSta
     replanRequests: [],
     seenFlags: new Set(),
     flags: [],
+    seenLessons: new Set(),
     lastStyle: null,
     lastPairs: [],
     moves: [],

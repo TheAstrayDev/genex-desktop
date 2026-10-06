@@ -34,6 +34,7 @@ import { gameLine } from "./kinds.ts";
 import { roleEngine, RoleKey, toolCall } from "./model-roles.ts";
 import { clip, CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, sharesStem } from "./text.ts";
 import { isRecord } from "./json.ts";
+import { lessonLine, MAX_CONTRACT_LESSONS, renderContractLessons } from "./contract-lessons.ts";
 import { RECIPE_ID_CHARS } from "./config.ts";
 import type { Check, FacetSpec } from "./spec.ts";
 import type { ReferenceStats, Scoreboard } from "./checks.ts";
@@ -58,8 +59,6 @@ const RECIPE_NOTE_CHARS = 160;
 const RECIPE_TEXT_CHARS = 1_200;
 /** The results a recipe remembers, the newest kept. */
 const MAX_RECIPE_EVIDENCE = 24;
-/** The contract lessons the library keeps. */
-const MAX_CONTRACT_LESSONS = 40;
 /**
  * What a builder's brief carries: ledger defects, the judge's polish notes, earlier rounds (the
  * latest), diff-stat lines each, this game's lessons and past runs' lessons. Six defects, not
@@ -71,7 +70,8 @@ const MAX_BRIEF_POLISH = 3;
 const EARLIER_ROUNDS_SHOWN = 3;
 const DIFF_STAT_LINES = 12;
 const MAX_GAME_LESSONS = 5;
-const MAX_BRIEF_LESSONS = 12;
+/** Past runs' lessons: six, not twelve, now that the file is applied — briefs already run 20-39 KB. */
+const MAX_BRIEF_LESSONS = 6;
 /** A recipe is promoted after this many wins (and more wins than losses), and retired after this many losses outnumbering its wins this many times over. */
 const PROMOTE_AFTER_WINS = 2;
 const RETIRE_AFTER_LOSSES = 3;
@@ -120,8 +120,9 @@ const LESSONS_FILE = "contract-lessons.md";
 
 /**
  * Lessons every facet re-learned, promoted into a durable list the brief carries (WP8):
- * `library/contract-lessons.md`, one bullet per line, written by SkillOpt from `## Fixed by
- * looking` / `HARNESS:` notes across runs and gated like a skill edit.
+ * `library/contract-lessons.md`, one bullet per line. SkillOpt distils them from `## Fixed by
+ * looking` / `HARNESS:` notes across runs in one light model call — no blind gate — and stages
+ * them (loop/contract-lessons.ts); the host applies them by the user's switches, and Undo works.
  */
 export async function loadContractLessons(workspace: string): Promise<string[]> {
   const text = await readFile(path.join(workspace, "library", LESSONS_FILE), "utf8").catch(() => "");
@@ -137,16 +138,13 @@ export async function saveContractLessons(
 ): Promise<string[]> {
   const dir = path.join(workspace, "library");
   await mkdir(dir, { recursive: true });
-  const unique = [...new Set((lessons ?? []).map((l) => String(l).trim()).filter(Boolean))].slice(
-    0,
-    MAX_CONTRACT_LESSONS,
-  );
-  await writeFile(
-    path.join(dir, LESSONS_FILE),
-    `# Lessons the runs learned (read by every brief)\n\n${unique.map((l) => `- ${l}`).join("\n")}\n`,
-  );
+  const unique = [...new Set((lessons ?? []).map(lessonLine).filter(Boolean))].slice(0, MAX_CONTRACT_LESSONS);
+  await writeFile(path.join(dir, LESSONS_FILE), renderContractLessons(unique));
   return unique;
 }
+
+/** The file for a list of lessons; staged changes to it are bounded edits (loop/contract-lessons.ts). */
+export { renderContractLessons };
 
 /** Where a recipe stands: new, proven by its wins, or retired by its losses. Libraries keep it: never rename a value. */
 export const RecipeStatus = {

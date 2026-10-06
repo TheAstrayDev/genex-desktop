@@ -19,6 +19,7 @@ import { RoundFlow } from "../flow.ts";
 import { StopCode, stopWith } from "../../outcomes.ts";
 import { roundFields } from "../record.ts";
 import { ReplanSource } from "./replans.ts";
+import { lessonsPayload, unseenLessons } from "../lessons.ts";
 
 /** The most attempts a facet remembers for its briefs, newest last. */
 const MAX_ATTEMPTS = 12;
@@ -37,6 +38,7 @@ export async function keepOrRollBack(loop: FacetLoop, round: FacetRound): Promis
   round.diffStat = "";
   // Read before a rollback takes them: a lost attempt's notes are what it tried (P12-V1).
   round.attemptNotes = await builderNotes(loop);
+  await logRoundLessons(loop, round.attemptNotes);
   if (round.won) {
     await keepWinner(loop, round);
     return;
@@ -197,6 +199,17 @@ export async function rememberAttempt(loop: FacetLoop, round: FacetRound): Promi
   await recordRecipeOutcomes(loop, round);
   updateFailureStreaks(loop, round);
   if (!round.challengerBroken) result.judged = (result.judged ?? 0) + 1;
+}
+
+/**
+ * The round's new lessons go to the log now, won or lost: a lost round's notes are reset away
+ * next, and a facet a crash cuts short never reaches its final flush. Logging is a courtesy to
+ * the next pass — a failed append never costs the round.
+ */
+async function logRoundLessons(loop: FacetLoop, notes: string): Promise<void> {
+  const lessons = unseenLessons(loop, notes);
+  if (!lessons.length) return;
+  await loop.appendRun(RunEvent.FacetLessons, lessonsPayload(loop, lessons)).catch(() => {});
 }
 
 /** The builder's notes for this facet as its working folder holds them now; empty when there are none. */

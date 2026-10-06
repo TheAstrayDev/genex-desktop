@@ -6830,6 +6830,86 @@ describe("a lost attempt's own notes (P12-V1)", () => {
   });
 });
 
+describe("lessons a builder wrote in a round that lost (WP-LEARN)", () => {
+  it("a lesson written in a round that lost reaches facet_lessons, once, before the facet ends", async () => {
+    const { keepOrRollBack } = await import("../../src/harness-seed/loop/facet/phases/keep.ts");
+    const dir = await tmpDir("facet-lessons-");
+    const sh = (command: string) =>
+      promisify(execFile)("sh", ["-c", command], { cwd: dir }).then(
+        ({ stdout, stderr }) => ({ code: 0, stdout, stderr }),
+        (err: { code?: number; stdout?: string; stderr?: string }) => ({
+          code: err.code ?? 1,
+          stdout: err.stdout ?? "",
+          stderr: err.stderr ?? "",
+        }),
+      );
+    const notes = path.join(dir, "docs", "notes", "NOTES.sky.md");
+    await mkdir(path.dirname(notes), { recursive: true });
+    await writeFile(notes, "incumbent: plain gradient\n");
+    await sh(
+      "git init -q && git -c user.name=t -c user.email=t@x add -A && git -c user.name=t -c user.email=t@x commit -qm base",
+    );
+    const incumbent = (await sh("git rev-parse HEAD")).stdout.trim();
+    const ctx = {
+      call: async (method: string, params: { command?: string }) =>
+        method === HostMethod.RunExec
+          ? sh(`git -c user.name=t -c user.email=t@x ${String(params.command).replace(/^git /, "")}`)
+          : null,
+    };
+    const appended: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const loop = {
+      ctx,
+      facet: { id: "sky" },
+      run: { runId: "r1", project: "skyline" },
+      worktree: dir,
+      workdir: dir,
+      gitWhere: dir,
+      gitOptions: {},
+      git: async (command: string) => (await sh(command)).stdout.trim(),
+      incumbentCommit: incumbent,
+      result: {} as Record<string, unknown>,
+      seenLessons: new Set<string>(),
+      appendRun: async (type: string, payload: Record<string, unknown>) => {
+        appended.push({ type, payload });
+      },
+    };
+    const lose = async (iteration: number, written: string) => {
+      await writeFile(notes, written);
+      const round = { iteration, won: false, verdict: { reason: "the sky is flat" }, verdictSource: "judge" };
+      await keepOrRollBack(loop as never, round as never);
+    };
+
+    await lose(2, "## Fixed by looking\n- serve dist, not src, before judging the sky\n");
+    assert.equal(await readFile(notes, "utf8"), "incumbent: plain gradient\n", "the rollback took the notes away");
+    const lessons = () => appended.filter((entry) => entry.type === "facet_lessons");
+    assert.equal(lessons().length, 1, "the lost round's lesson is already in the log");
+    assert.deepEqual(lessons()[0]!.payload.lessons, ["serve dist, not src, before judging the sky"]);
+    assert.equal(lessons()[0]!.payload.project, "skyline", "the lesson names its game");
+    assert.equal(lessons()[0]!.payload.facetId, "sky");
+
+    // The builder writes the same lesson again, plus a new flag: only the new line is logged.
+    await lose(
+      3,
+      "## Fixed by looking\n- serve dist, not src, before judging the sky\n\nHARNESS: sky-lit cannot see the sun\n",
+    );
+    assert.equal(lessons().length, 2);
+    assert.deepEqual(lessons()[1]!.payload.lessons, ["HARNESS: sky-lit cannot see the sun"]);
+    await lose(4, "## Fixed by looking\n- serve dist, not src, before judging the sky\n");
+    assert.equal(lessons().length, 2, "a lesson already logged is never logged twice");
+  });
+
+  it("a yielded facet remembers which lessons it already logged", async () => {
+    const { restoreResumable, resumeSnapshot } = await import("../../src/harness-seed/loop/facet/state.ts");
+    const { unseenLessons } = await import("../../src/harness-seed/loop/facet/lessons.ts");
+    // A facet on its first round: every carried set empty.
+    const loop = { ...restoreResumable(null, {} as never), facet: { id: "sky" }, run: {}, result: {} };
+    const notes = "## Fixed by looking\n- one lesson to keep\n";
+    assert.deepEqual(unseenLessons(loop as never, notes), ["one lesson to keep"]);
+    const restored = restoreResumable(resumeSnapshot(loop as never), {} as never);
+    assert.deepEqual(unseenLessons(restored as never, notes), [], "the resumed facet does not log it again");
+  });
+});
+
 describe("a spike the user stopped (P12-F10)", () => {
   it("says it was stopped, and is neither checked nor read as a verdict", async () => {
     const { runSpike } = await import("../../src/harness-seed/loop/spike.ts");

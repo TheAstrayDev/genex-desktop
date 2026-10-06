@@ -35,6 +35,6 @@ __BUILD_RULE__
 Two lessons every contractor re-learned: before re-tuning lighting, fog or a material, capture the
 game and look at what it already draws; and a check that cannot pass as written is not yours to
 force — write a `HARNESS:` line naming the check id and why in your notes
-(`docs/notes/NOTES.<facet-id>.md` in a facet run, `NOTES.md` in a chat build), whose
-`## Fixed by looking` section is mined into the next run. Helper scripts of your own go under
-`.studio/`, never into the game.
+(`docs/notes/NOTES.<facet-id>.md` in a facet run, `NOTES.md` in a chat build, read back whole); a
+facet's `## Fixed by looking` bullets become lessons Studio adds to later briefs or lists in
+Activity. Helper scripts of your own go under `.studio/`, never into the game.

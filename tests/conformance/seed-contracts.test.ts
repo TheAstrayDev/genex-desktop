@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as seedChatDispatch from "../../src/harness-seed/loop/chat-dispatch.ts";
+import * as seedContractLessons from "../../src/harness-seed/loop/contract-lessons.ts";
 import * as seedCompletionPolicy from "../../src/harness-seed/loop/completion-policy.ts";
 import { endsSessions as seedEndsSessions } from "../../src/harness-seed/loop/compaction-log.ts";
 import * as seedDelegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
@@ -51,6 +52,7 @@ import {
 } from "../../src/shared/run-state.ts";
 import { applyEdits, SKILL_EDIT_OPS } from "../../src/shared/skill-edits.ts";
 import * as studioStateShape from "../../src/shared/studio-state-shape.ts";
+import { CONTRACT_LESSONS_FILE, LESSONS_SKILL, StagedTarget } from "../../src/shared/self-change-files.ts";
 import { EventKind, type EventEnvelope, MessageUsageSource } from "../../src/shared/event-log.ts";
 import { DIRECTOR_LOOP_ENV, harnessRunEnv } from "../../src/shared/protocol.ts";
 
@@ -372,6 +374,12 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("names an event's kind of data as the log does", () => {
     assert.deepEqual(seedRunEvents.EventKind, EventKind);
+  });
+
+  it("stages a lessons suggestion for the file the host lets it write", () => {
+    assert.deepEqual(seedContractLessons.StagedTarget, StagedTarget);
+    assert.equal(seedContractLessons.CONTRACT_LESSONS_FILE, CONTRACT_LESSONS_FILE);
+    assert.equal(seedContractLessons.LESSONS_SKILL, LESSONS_SKILL);
   });
 
   it("marks a reply's usage source as the log does", () => {

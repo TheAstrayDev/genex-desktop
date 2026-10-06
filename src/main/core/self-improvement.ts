@@ -4,7 +4,8 @@
  * stays in the core.
  */
 import path from "node:path";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { StagedTarget } from "../../shared/self-change-files.ts";
 import { undoneSelfChanges } from "../../shared/run-review.ts";
 import {
   RUNS_AS_CODE,
@@ -13,6 +14,7 @@ import {
   findStaged,
   proposalTarget,
   rebaseProposal,
+  type ChangeRecord,
   type StagedRecord,
 } from "../self-changes.ts";
 import type { SnapshotRecord } from "../../substrate/snapshots.ts";
@@ -476,15 +478,20 @@ export class SelfImprovementService {
     const staged = await this.stagedList();
     const proposal = staged[findStaged(staged, index, key)];
     if (!proposal) throw new Error(MESSAGE.suggestionGone);
-    const { skill, file } = proposalTarget(proposal);
+    const { target: kind, skill, file } = proposalTarget(proposal);
+    const lessons = kind === StagedTarget.Lessons;
     const target = path.join(this.#core.layout.harnessWs, file);
-    const current = await readFile(target, "utf8").catch(() => null);
+    // The first lessons suggestion starts their file; a skill's file must still be there.
+    const missing = lessons ? "" : null;
+    const current = await readFile(target, "utf8").catch(() => missing);
     if (current === null) throw new SuggestionRefused(MESSAGE.suggestionTargetGone);
     const text = rebaseProposal(proposal, current);
 
     const snapshot = await this.#core.snapshot(SnapshotScope.Harness, `skillopt: approved edits to ${skill}`);
+    await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, text);
-    await writeFile(path.join(this.#core.layout.harnessWs, "skills", `${skill}.best.md`), text);
+    // A skill keeps its accepted version beside it; lessons are no skill and leave no archive.
+    if (!lessons) await writeFile(path.join(this.#core.layout.harnessWs, "skills", `${skill}.best.md`), text);
     // The change's own "after": its exact diff, what an undo reverses, and — once it is known
     // to be as healthy as the last good version — the point a later rewind keeps it at.
     const post = await this.#core.snapshot(
@@ -496,6 +503,7 @@ export class SelfImprovementService {
     await this.removeStaged(proposal);
     await this.#core.append([
       customEventData(CustomEvent.SkilloptAccepted, {
+        ...(lessons ? { target: kind, file } : {}),
         skill,
         edits: proposal.edits,
         gate: proposal.gate,
@@ -573,10 +581,7 @@ export class SelfImprovementService {
       throw new Error(MESSAGE.undoConflict);
     }
     if (!reverted) throw new Error(MESSAGE.changeAlreadyGone);
-    if (change.skill) {
-      const live = await readFile(path.join(this.#core.layout.harnessWs, change.file), "utf8");
-      await writeFile(path.join(this.#core.layout.harnessWs, "skills", `${change.skill}.best.md`), live);
-    }
+    await this.#archiveSkill(change);
     const undo = await this.#core.snapshot(SnapshotScope.Harness, `after undo: ${change.file}`);
     await this.#x.recovery.inheritHealth(undo);
     await this.#core.append([
@@ -602,6 +607,13 @@ export class SelfImprovementService {
         await this.#core.recover(`undoing ${change.file} failed its live healthcheck`);
     }
     return { file: change.file };
+  }
+
+  /** An undone skill edit's skill keeps its live text as its accepted version; lessons keep no archive. */
+  async #archiveSkill(change: ChangeRecord): Promise<void> {
+    if (!change.skill || change.target === StagedTarget.Lessons) return;
+    const live = await readFile(path.join(this.#core.layout.harnessWs, change.file), "utf8");
+    await writeFile(path.join(this.#core.layout.harnessWs, "skills", `${change.skill}.best.md`), live);
   }
 
   /**

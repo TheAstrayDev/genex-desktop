@@ -26,5 +26,5 @@ Three lessons every facet re-learned: non-owner facets touch `src/main.js` only 
 WIRING` block (one import, one init line — the harness union-merges it, anything else conflicts);
 before re-tuning lighting or fog, capture what the base already draws; and a check that cannot pass
 as written is not yours to force — write a `HARNESS:` line naming the id and why in
-`docs/notes/NOTES.<facet-id>.md` (`NOTES.md` in a chat build), whose `## Fixed by looking` section
-is mined into the next run.
+`docs/notes/NOTES.<facet-id>.md` (`NOTES.md` in a chat build, read back whole next time). A facet's
+`## Fixed by looking` bullets become lessons Studio adds to later briefs or lists in Activity.
