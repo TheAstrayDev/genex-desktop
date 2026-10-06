@@ -72,6 +72,7 @@ import {
   WrapCause,
 } from "./wake-schedule.ts";
 import { cutShortWake, midTurnUserSays } from "./live-prompts.ts";
+import { artDirectionBlock, ART_SKIPPED } from "./art-direction-prompts.ts";
 import { workingGoal } from "../goal-prompts.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { DelegateResult } from "../../types/host-api.d.ts";
@@ -173,6 +174,10 @@ export interface WakeState {
   finishSaid: boolean;
   /** The plan window (its `planReviewUntil`) whose closing a wake has said. */
   planWindowSaid: number | null;
+  /** The finish mark was said (art-direction.ts): once a night, and the journal keeps it. */
+  finishMarkSaid: boolean;
+  /** A goal build idle with no ship review on its head is owed its finish mark now (`TurnEnd.ArtDirection`). */
+  finishMarkDue: boolean;
   /** The log's sequence number, and the time, the loop last saved the journal (a kept older night.ts counts only these). */
   journaledSeq: number;
   journaledAt: number;
@@ -226,6 +231,8 @@ function newWakeState(restored: RestoredWake = { idleAsked: false, wakesAt: [] }
     finishNew: false,
     finishSaid: false,
     planWindowSaid: null,
+    finishMarkSaid: restored.finishMarkSaid === true,
+    finishMarkDue: false,
     journaledSeq: 0,
     journaledAt: 0,
     limitWaits: 0,
@@ -365,7 +372,26 @@ async function turnFacts(
     idleAsked: wake.idleAsked,
     workingTimeLeft: now < night.softDeadline && !finishRequested,
     finishRequested,
+    artDirectionOwed: artDirectionOwed(night, wake),
   };
+}
+
+/** A goal build the art director has not looked at yet, on a night that has the art director. */
+function artDirectionOwed(night: Night, wake: WakeState): boolean {
+  if (wake.finishMarkSaid || typeof night.shipOwed !== "function") return false;
+  return night.shipOwed();
+}
+
+/**
+ * When the finish mark wakes the lead: now for a goal build sent to art direction, a timed build's
+ * mark (art-direction.ts `finishMarkAt`) while it is ahead of the wrap-up, or never once it was
+ * said — or on a night without the art director.
+ */
+function finishMarkView(night: Night, wake: WakeState, now: number): number | null {
+  if (wake.finishMarkSaid || !WakeCause.FinishMark) return null;
+  if (wake.finishMarkDue) return now;
+  const at = typeof night.finishMarkAt === "function" ? night.finishMarkAt() : null;
+  return at !== null && at < night.softDeadline ? at : null;
 }
 
 /**
@@ -383,6 +409,7 @@ function startWrapUp(night: Night, wake: WakeState, cause: WrapCause, now: numbe
 function settleTurn(night: Night, wake: WakeState, verdict: TurnVerdict, result: Partial<DelegateResult>, now: number) {
   wake.idleAsked = verdict.idleAsked;
   if (verdict.next === TurnEnd.AskIdle) wake.idleDue = true;
+  if (verdict.next === TurnEnd.ArtDirection) wake.finishMarkDue = true;
   if (verdict.next !== TurnEnd.WrapUp) return;
   if (verdict.wrapCause === WrapCause.Failed) wake.failed = result;
   startWrapUp(night, wake, verdict.wrapCause ?? WrapCause.Deadline, now);
@@ -424,6 +451,7 @@ function wakeView(night: Night, wake: WakeState, now: number): WakeView {
     idleDue: wake.idleDue,
     idleAsked: wake.idleAsked,
     wakesAt: wake.wakesAt,
+    finishMarkAt: finishMarkView(night, wake, now),
   };
 }
 
@@ -482,6 +510,10 @@ function markSaid(night: Night, wake: WakeState, reasons: readonly WakeReason[],
   if (wake.finishNew) wake.finishSaid = true;
   wake.finishNew = false;
   if (reasons.includes(WakeCause.PlanWindow)) wake.planWindowSaid = state.planReviewUntil;
+  if (reasons.includes(WakeCause.FinishMark)) {
+    wake.finishMarkSaid = true;
+    wake.finishMarkDue = false;
+  }
   // The workers' limit has lifted: gone from the night, so nothing names it or wakes for it again.
   if (reasons.includes(WakeCause.WorkersLimitLifted)) state.workerLimit = null;
   if (!reasons.includes(WakeCause.WrapUp)) return;
@@ -600,12 +632,15 @@ function digestFacts(
     planWindowUntil: planWindowOpen(state, said.now) ? state.planReviewUntil : null,
     workersLimit: workersLimitFacts(state, said.now),
     finishRequested: wake.finishSaid,
+    finishMarkAt: finishMarkView(night, wake, said.now),
     card: cardFacts(night),
   };
 }
 
 /** The message that wakes the lead: the user's words, the news, the night, the card and the closing. */
 async function wakePrompt(night: Night, wake: WakeState, due: Wake, clock: WakeClock): Promise<string> {
+  // The art director looks before anything is read, so where its defects went is this wake's news.
+  const art = due.reasons.includes(WakeCause.FinishMark) ? await finishMarkBlock(night) : "";
   const now = clock.now();
   const userSays = await tellUser(night, wake);
   const happened = readUnread(night);
@@ -615,7 +650,7 @@ async function wakePrompt(night: Night, wake: WakeState, due: Wake, clock: WakeC
     minutesLeft: minutes(night.softDeadline - now),
     reasons: due.reasons,
   });
-  const closing = closingFor(night, wake, due.reasons, now);
+  const closing = [art, closingFor(night, wake, due.reasons, now)].filter(Boolean).join("\n\n");
   const told = digestFacts(night, wake, { now, reasons: due.reasons, userSays, finishNew, happened, closing });
   const director = night.journal.director;
   const card = JSON.stringify(told.card);
@@ -638,6 +673,22 @@ async function wakePrompt(night: Night, wake: WakeState, due: Wake, clock: WakeC
   // What the lead has now been told is heard: a restart during its turn does not tell it again.
   await keepWake(night, wake, now);
   return prompt;
+}
+
+/**
+ * The finish mark's paragraph: the studio's own ship review of the integrated build
+ * (art-direction.ts `artDirectionPass`), its defects by part, and the rule from here — or, on a
+ * night bound without the art director, the rule alone.
+ */
+async function finishMarkBlock(night: Night): Promise<string> {
+  if (typeof night.artDirectionPass !== "function")
+    return artDirectionBlock({ head: night.state.integrationHead, review: null, skipped: ART_SKIPPED.olderTools });
+  const pass = await night.artDirectionPass().catch((err: unknown) => ({
+    head: night.state.integrationHead,
+    review: null,
+    skipped: String((err as Error)?.message ?? err),
+  }));
+  return artDirectionBlock(pass);
 }
 
 /** The digest's build card on its own, or nothing from an older wake-prompts.ts that cannot render one. */

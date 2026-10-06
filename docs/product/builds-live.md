@@ -6,7 +6,9 @@ Auto edits directly; Loop can delegate workers while the chat leads and reviews.
 use their working window. Until-satisfied builds finish on verified required
 outcomes; time is a safety ceiling. Acceptance persists across workers and restarts. External
 blockers pause the run, keeping its checkpoint. User Finish overrides the clock, never the
-final judge. Maximum concurrent workers defaults to four; saved choices stay. [Harness runtime](../harness-runtime.md#goal-completion-and-worker-approvals)
+final judge. Late in a timed build, and once before a goal build finishes, an art director looks
+at the whole game at full size and hands each defect to the part that owns it; whether it would
+ship the build is reported, never a veto. Maximum concurrent workers defaults to four; saved choices stay. [Harness runtime](../harness-runtime.md#goal-completion-and-worker-approvals)
 owns completion and recovery details.
 
 An active run opens Builds once; later tab choices are the user's, except that showing a

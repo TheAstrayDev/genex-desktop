@@ -18,7 +18,12 @@ import { attemptRef } from "../repo.ts";
 import { RunEvent, SteeringSource } from "../run-events.ts";
 import { CheckKind, CheckWeight, MoveOwner, normalizeFacetSpec, normalizeMilestone } from "../spec.ts";
 import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
-import { STEER_BACK_TO_BUILD, STEER_EMPTY_REFUSAL, steerStageRefusal, steerStageWords } from "../facet/stage-prompts.ts";
+import {
+  STEER_BACK_TO_BUILD,
+  STEER_EMPTY_REFUSAL,
+  steerStageRefusal,
+  steerStageWords,
+} from "../facet/stage-prompts.ts";
 import { CLIP_REASON } from "../text.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
 import { Against, againstWords, observedFrom, VerdictPass, VerdictRule } from "../verdict.ts";
@@ -30,6 +35,10 @@ import { setAsideStrays } from "./lead-session.ts";
 import { LEAD_DIRTY, LEAD_LIVE_DIRTY } from "./lead-session-prompts.ts";
 import { BuildTarget, WindowLease } from "./night.ts";
 import { finalJudgeQuestion } from "./close-prompts.ts";
+import { routeShipDefects, shipParts } from "./art-direction.ts";
+import { defectsByPart, SHIP_QUESTION, shipNext } from "./art-direction-prompts.ts";
+import { SHIP_VIEW, shipReview } from "../ship-review.ts";
+import { JudgeParse } from "../judge-provenance.ts";
 import { plainly } from "./rules.ts";
 import { DirectorTool, headSynced } from "./tool-specs.ts";
 import { passDeadline } from "./wake-schedule.ts";
@@ -37,6 +46,7 @@ import { workingGoal } from "../goal-prompts.ts";
 import type { LastJudge, Night, Worker } from "./night.ts";
 import type { CheckResult } from "../checks.ts";
 import type { Evidence, Shot } from "../evidence.ts";
+import type { ShipReview } from "../ship-review.ts";
 import type { VisionAsk } from "../judge.ts";
 import type { Check } from "../spec.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
@@ -218,6 +228,8 @@ interface JudgeAsk {
   final: boolean;
   /** When the judge's calls must be done by, when that is sooner than the pass's deadline (`judgeRun`). */
   until: number;
+  /** The art director's absolute look at the whole game (`ship=yes`), at `SHIP_VIEW`. */
+  ship?: boolean;
 }
 
 /** How a judge is asked for: by the lead (the defaults), or by the close (`judgeTheLanding`). */
@@ -417,12 +429,33 @@ async function otherBuild(night: Night, pass: JudgePass): Promise<{ other: Evide
   return { other, worker: against.worker ?? null };
 }
 
+/** A build's frames that are views of the game: its cameras and its player's eyes, not demos or the user's page. */
+function viewsOf(evidence: Evidence): string[] {
+  const views = (evidence.shots ?? [])
+    .map((shot: Shot) => shot.camera)
+    .filter((camera): camera is string => typeof camera === "string" && camera !== "user:view")
+    .filter((camera) => !camera.startsWith("demo:"));
+  return [...new Set(views)];
+}
+
+/**
+ * The cameras a whole-game blind verdict shows when the lead named none: every view both builds
+ * have, in this build's order — so neither side is judged on a camera the other lacks. The tool
+ * has always said "default: every registered camera"; the judge saw the default one alone.
+ */
+function camerasBothShow(evidence: Evidence, other: Evidence): string[] {
+  const theirs = new Set(viewsOf(other));
+  return viewsOf(evidence).filter((camera) => theirs.has(camera));
+}
+
 /** The blind verdict between this build and the other one, with the provider's patience. */
 async function blindVerdict(night: Night, pass: JudgePass, other: Evidence): Promise<void> {
   const { ctx, run } = night;
   const { againstKey, cameras, evidence, judgement, n, out } = pass;
   // In the wrap-up the working deadline has passed (or moved to its start): the wrap-up's own end holds.
   const deadline = judgeDeadline(night, pass);
+  const both = cameras.length ? [] : camerasBothShow(evidence, other);
+  const shown = cameras.length ? cameras : both;
   try {
     const verdict = await withProviderPatience(
       ctx,
@@ -433,7 +466,8 @@ async function blindVerdict(night: Night, pass: JudgePass, other: Evidence): Pro
           incumbentSnapshot: null,
           incumbentEvidence: other,
           iterationId: `director_${n}`,
-          cameras: cameras.length ? cameras : null,
+          cameras: shown.length ? shown : null,
+          everyCamera: both.length > 0,
         }),
       { deadline, delays: outageDelays(run), label: "the director's judge" },
     );
@@ -483,6 +517,60 @@ async function compareJudged(night: Night, pass: JudgePass): Promise<Worker | nu
   if (other?.ok) await blindVerdict(night, pass, other);
   else out.verdict = { against: againstKey, error: "the other build could not be observed" };
   return worker;
+}
+
+/** An answer the art director could not give: no verdict, never a "no". */
+const unreadShip = (why: unknown): ShipReview => ({
+  ship: null,
+  defects: [],
+  strengths: [],
+  reason: String((why as Error)?.message ?? why).slice(0, CLIP_REASON),
+  parse: JudgeParse.Invalid,
+});
+
+/**
+ * The art director's absolute look (`ship=yes`, loop/ship-review.ts) at the build this pass saw at
+ * `SHIP_VIEW`: ship or not, the defects grouped by the plan part that owns them, and what next. On
+ * the integration branch its defects go to their owners (art-direction.ts) and its word is kept as
+ * `state.lastShip` for that head, which the journal carries across a Resume.
+ */
+async function shipStep(night: Night, pass: JudgePass): Promise<void> {
+  const { ctx, integrationWorktree, recordVerdict, run, state } = night;
+  const { evidence, head, out, target } = pass;
+  if (!pass.ship) return;
+  if (!evidence.ok) {
+    out.ship = { ship: null, error: "the build could not be looked at, so the art director did not judge it" };
+    return;
+  }
+  const asking = () =>
+    shipReview(ctx, { run: judgeRun(night, pass), evidence, parts: shipParts(state.plan), view: SHIP_VIEW });
+  const patience = { deadline: judgeDeadline(night, pass), delays: outageDelays(run), label: "the art director" };
+  const review = await withProviderPatience(ctx, asking, patience).catch(unreadShip);
+  const onIntegration = target.root === integrationWorktree;
+  if (onIntegration) {
+    routeShipDefects(night, review);
+    state.lastShip = { head, ship: review.ship, defects: review.defects, at: Date.now() };
+  }
+  out.ship = {
+    ship: review.ship,
+    defects: review.defects,
+    defectsByPart: defectsByPart(review.defects),
+    strengths: review.strengths,
+    reason: review.reason,
+    next: shipNext(review),
+    ...(review.judged ? { judged: review.judged } : {}),
+  };
+  await recordVerdict({
+    pass: VerdictPass.Judge,
+    head,
+    worker: target.worker?.id ?? null,
+    ...observedFrom(evidence),
+    question: SHIP_QUESTION,
+    answer: review.ship,
+    judgeCalls: review.ship === null ? 0 : 1,
+    kept: null,
+    rule: VerdictRule.Starts,
+  });
 }
 
 /**
@@ -565,6 +653,8 @@ async function judgeOnWindow(night: Night, ask: JudgeAsk, handle: string | null)
     setup: target.worker?.setup ?? run.setup ?? null,
     scaffold: state.baseHeads.has(head),
     inheritedConsole: consoleInheritedBy(target.worker),
+    // The art director looks at a real screen's size; the window is 960×600 again once released.
+    ...(ask.ship ? { viewport: SHIP_VIEW } : {}),
   });
   const onIntegration = target.root === integrationWorktree;
   rememberJudgedHead(night, head, evidence);
@@ -589,6 +679,7 @@ async function judgeOnWindow(night: Night, ask: JudgeAsk, handle: string | null)
   await askJudgeQuestion(night, pass);
   /** The worker whose build this one was put beside, when it was put beside one. */
   const againstWorker = await compareJudged(night, pass);
+  await shipStep(night, pass);
   pass.out.head = head ?? null;
   if (onIntegration) {
     journal.director.lastJudge = judgement;
@@ -624,6 +715,7 @@ export async function judge(
     head,
     final,
     until,
+    ship: yes(args.ship, false),
   };
   // The lead's judge is a choice, not an obligation: when every window is a worker's, the director
   // is told so and picks its moment, rather than the studio taking the user's window for it. The

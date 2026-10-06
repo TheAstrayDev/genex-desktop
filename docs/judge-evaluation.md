@@ -23,6 +23,11 @@ comparison. Start with these authored tasks; use the same inputs for every candi
 | Missing evidence | An absent camera, malformed judge response or unavailable WebGPU measurement | Missing/invalid evidence remains distinguishable from a measured pass |
 | Scope | The requested change versus an unrelated attractive addition | Frozen task brief and evidence of the requested behavior |
 
+The art director's ship review (`judge/ship-review.md`, `loop/ship-review.ts`) is the one
+absolute judge: one build and no pair, at 1600×900. Evaluate it on single builds that reviewers
+label ship or not, each decisive defect with the plan part that owns it and its severity; a
+malformed reply must stay no verdict, never a "no".
+
 These are test cases, not human-labelled quality results. Begin without model calls by checking
 capture reproducibility, malformed responses, budget limits and blind-label handling through the
 existing conformance and harness suites. A real-model campaign requires its own authorized

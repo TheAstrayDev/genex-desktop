@@ -49,7 +49,9 @@ import { LEAD_DIRTY, LEAD_FIX_NEXT, LEAD_SET_ASIDE } from "./lead-session-prompt
 import type { SetAside } from "./lead-session.ts";
 import { BuildTarget, WindowLease } from "./night.ts";
 import { LandingHow, landingWords } from "./rules.ts";
+import { shipFinishLine } from "./art-direction-prompts.ts";
 import type { LastJudge, Night, Worker } from "./night.ts";
+import type { LastShip } from "./art-direction.ts";
 import type { Evidence } from "../evidence.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
 import type { EventData } from "../../types/host-api.d.ts";
@@ -549,9 +551,16 @@ export async function closeTheNight(
   return landed;
 }
 
+/** The art director's last look at the head the close stood on, when the night has the art director. */
+function shipOnHead(night: Night): LastShip | null {
+  return typeof night.shipReviewOn === "function" ? night.shipReviewOn(night.state.integrationHead) : null;
+}
+
 /** What `finish` tells the director once the run is closed. */
 function finishAnswer(night: Night, landed: AnyRecord): string {
   const { state } = night;
+  // Whether the art director would ship the head the close stood on: reported, never a veto.
+  const ship = shipFinishLine(shipOnHead(night));
   const end = "End your session now with a one-paragraph summary for the user";
   // The close judged the build after the lead's summary was written: what the landing may claim
   // is the lead's to pass on, and no more.
@@ -559,9 +568,9 @@ function finishAnswer(night: Night, landed: AnyRecord): string {
     ? ` — ${LANDING_WORDS.leftInGame(landed.leftInGame)} — tell the user, and leave them as they are`
     : "";
   if (landed.ok)
-    return `the run is closed — the integrated build ${shortSha(state.integrationHead)} is live in the game folder (${landed.line})${left}. ${end}; say what the landing may claim, in brackets above, and claim no more.`;
+    return `the run is closed — the integrated build ${shortSha(state.integrationHead)} is live in the game folder (${landed.line})${left}. ${end}; say what the landing may claim, in brackets above, and claim no more.${ship}`;
   const outcome = landed.reason ? ` — not landed: ${landed.reason}` : "";
-  return `the run is closed${outcome}. ${end}.`;
+  return `the run is closed${outcome}. ${end}.${ship}`;
 }
 
 /**
@@ -594,6 +603,9 @@ export async function finish(night: Night, args: AnyRecord) {
   if (victory && state.goals && goalDecision(state.goals, state.integrationHead) !== GoalStatus.Passed) {
     return "finish cannot claim victory: required acceptance is not verified on the integrated revision. Run playtest goal=<id>, or finish with victory=no and explain the gaps.";
   }
+  // A goal build's finish with no ship review on its head: the art director looks once first.
+  const shipRefusal = land && typeof night.shipFinishGate === "function" ? await night.shipFinishGate(userEnds) : null;
+  if (shipRefusal) return shipRefusal;
   state.finish = { summary, land, victory, at: Date.now() };
   ctx.setStatus(`run ${run.runId} · director finishing`);
   const landed = await closeTheNight({
@@ -867,6 +879,9 @@ export async function closeRun(night: Night, landed: AnyRecord): Promise<void> {
   report.workers = { ...report.workers, ...workers };
   report.notes = [...report.notes, ...(journal.director.notes ?? [])];
   report.landingResult = landingResult(landed);
+  // Whether the art director would ship the head this close stands on: reported, never a veto.
+  const shipReview = typeof night.shipReport === "function" ? night.shipReport() : null;
+  if (shipReview) report.shipReview = shipReview;
   // The night's last verdict, in the same shape as every other: what became of the build, and
   // whether anybody preferred it. Emitted here rather than at each caller so a close by finish,
   // by the clock, by a limit, by a quit or by a crash all leave one.

@@ -58,6 +58,7 @@ import * as workerFunctions from "./director/workers.ts";
 import * as toolFunctions from "./director/tools.ts";
 import * as integrateFunctions from "./director/integrate.ts";
 import * as setupFunctions from "./director/setup.ts";
+import * as artDirectionFunctions from "./director/art-direction.ts";
 import * as briefFunctions from "./director/briefs.ts";
 import * as journalFunctions from "./director/journal.ts";
 import * as journalPromptFunctions from "./director/journal-prompts.ts";
@@ -135,7 +136,14 @@ export { WINDOW_RETRIES_MS } from "./config.ts";
 export { PLAN_REVIEW_WAIT_MS };
 
 /** The director's modules, whose functions `bindNight` puts on the night. */
-const NIGHT_MODULES = [nightFunctions, workerFunctions, toolFunctions, integrateFunctions, setupFunctions];
+const NIGHT_MODULES = [
+  nightFunctions,
+  workerFunctions,
+  toolFunctions,
+  integrateFunctions,
+  setupFunctions,
+  artDirectionFunctions,
+];
 /** Every part a lead that writes nothing depends on: its words and its hands for one (lead-session.ts `servesLead`). */
 const LEAD_PARTS = [
   ...NIGHT_MODULES,

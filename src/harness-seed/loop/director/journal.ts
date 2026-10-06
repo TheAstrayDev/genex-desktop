@@ -21,6 +21,7 @@ import { durationCommission, goalCommission } from "./commission.ts";
  * name newer than that copy would not link.
  */
 import { WorkerState } from "../outcomes.ts";
+import { FacetStage, isFinishing } from "../facet/stage.ts";
 import { runRef } from "../repo.ts";
 import { clip } from "../text.ts";
 import { MAX_LEDGER, wrapReserveMs } from "./budgets.ts";
@@ -81,6 +82,8 @@ export interface PriorWorker {
   /** Its last commit — its last accepted round's while it built. */
   lastCommit: string | null;
   ref: string;
+  /** It was finishing (`stage=finish`): a lead that starts it again starts it in that stage. */
+  stage?: FacetStage;
 }
 
 /** What the wake loop takes back from the journal on a Resume. */
@@ -89,6 +92,8 @@ export interface RestoredWake {
   wakesAt: number[];
   /** Lost sessions the night has already replaced: the allowance does not start again on a Resume (P08-F9). */
   freshSessions?: number;
+  /** The finish mark was said: a Resume does not say it again. */
+  finishMarkSaid?: boolean;
 }
 
 /** A time for the journal: ISO, or null. */
@@ -166,6 +171,7 @@ function workerRecord(worker: Worker, runId: string): AnyRecord {
     lastRound: lastRoundOf(rounds),
     lastCommit: worker.lastCommit ?? worker.lastAccepted ?? null,
     ref: runRef(runId, "workers", worker.id),
+    ...(worker.spec && isFinishing(worker.spec) ? { stage: FacetStage.Finish } : {}),
   };
 }
 
@@ -222,6 +228,9 @@ export function recordNight(night: Night, now = Date.now()): void {
     judges: state.judges,
     plays: state.plays,
   });
+  // The art director's last word and a goal build's one turned-back finish: kept once there is one.
+  if (state.lastShip) director.lastShip = { ...state.lastShip, at: iso(state.lastShip.at) };
+  if (state.shipFinishRefused) director.shipFinishRefused = true;
   director.completionPolicy = durationCommission(night.run) ? CompletionPolicy.Duration : CompletionPolicy.Goal;
   director.workers ??= {};
   for (const worker of state.workers.values()) director.workers[worker.id] = workerRecord(worker, night.run.runId);
@@ -246,6 +255,7 @@ export function journalText(journal: AnyRecord): string | null {
 export function wakeRecord(
   wake: Pick<WakeState, "idleAsked" | "wrapCause" | "wakes" | "wakesAt" | "lastWakeAt" | "asleepSince"> & {
     freshSessions?: number;
+    finishMarkSaid?: boolean;
   },
 ): AnyRecord {
   return {
@@ -257,6 +267,7 @@ export function wakeRecord(
     wakesAt: wake.wakesAt.map(iso),
     lastWakeAt: iso(wake.lastWakeAt),
     asleepSince: iso(wake.asleepSince),
+    ...(wake.finishMarkSaid ? { finishMarkSaid: true } : {}),
   };
 }
 
@@ -345,6 +356,7 @@ function priorWorkersOf(saved: unknown, runId: string): PriorWorker[] {
       accepted: countOf(record?.accepted),
       lastCommit: typeof record?.lastCommit === "string" ? record.lastCommit : null,
       ref: String(record?.ref ?? runRef(runId, "workers", id)),
+      ...(record?.stage === FacetStage.Finish ? { stage: FacetStage.Finish } : {}),
     };
   });
 }
@@ -402,6 +414,8 @@ export function restoreNight(night: Night, now = Date.now()): void {
   state.judges = passesSoFar(saved.judges);
   state.plays = passesSoFar(saved.plays);
   night.priorWorkers = priorWorkersOf(saved.workers, night.run.runId);
+  state.lastShip = restoredShip(saved.lastShip);
+  if (saved.shipFinishRefused === true) state.shipFinishRefused = true;
   carryForward(night);
 }
 
@@ -415,6 +429,14 @@ function outcomesFromPlan(saved: AnyRecord, night: Night) {
   return parts ? createGoals(parts) : undefined;
 }
 
+/** The art director's last word as the journal kept it, or none when it is not one. */
+function restoredShip(saved: unknown): NightState["lastShip"] {
+  const ship = (saved ?? {}) as AnyRecord;
+  if (typeof ship.head !== "string" || !Array.isArray(ship.defects)) return null;
+  const verdict = typeof ship.ship === "boolean" ? ship.ship : null;
+  return { head: ship.head, ship: verdict, defects: ship.defects, at: msOf(ship.at) ?? 0 };
+}
+
 /** The wake loop's own state as the journal kept it: whether the lead was asked what next, and the wakes still in the cap's window. */
 export function restoredWake(saved: unknown, now: number): RestoredWake {
   const record = (saved ?? {}) as AnyRecord;
@@ -422,7 +444,12 @@ export function restoredWake(saved: unknown, now: number): RestoredWake {
     .map(msOf)
     .filter((at: number | null): at is number => at !== null && at > now - WAKE_WINDOW_MS && at <= now);
   const freshSessions = Number.isInteger(record.freshSessions) && record.freshSessions > 0 ? record.freshSessions : 0;
-  return { idleAsked: record.idleAsked === true, wakesAt, ...(freshSessions ? { freshSessions } : {}) };
+  return {
+    idleAsked: record.idleAsked === true,
+    wakesAt,
+    ...(freshSessions ? { freshSessions } : {}),
+    ...(record.finishMarkSaid === true ? { finishMarkSaid: true } : {}),
+  };
 }
 
 /** The workers from before the pause that no worker of this session has taken the id of. */
@@ -506,6 +533,7 @@ function statusOf(worker: PriorWorker): AnyRecord {
     ref: worker.ref,
     owns: worker.owns,
     brief: clip(worker.brief, STATUS_BRIEF_CHARS),
+    ...(worker.stage ? { stage: worker.stage } : {}),
   };
 }
 

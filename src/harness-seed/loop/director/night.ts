@@ -28,7 +28,7 @@ import {
   writeRunArtifact,
 } from "../run-events.ts";
 import { isCommit } from "../shell.ts";
-import { isTruncatedState } from "../state-shape.ts";
+import { isTruncatedState, statePathsNamedByChecks } from "../state-shape.ts";
 import { verdictRecord } from "../verdict.ts";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -51,6 +51,8 @@ import type { ConflictMerge } from "./conflict-worker.ts";
 import type { LeadSeat } from "./lead-session.ts";
 import type { ShelvedDefect } from "./rules.ts";
 import type { NoteKind } from "./wake-schedule.ts";
+import type * as artDirectionFunctions from "./art-direction.ts";
+import type { LastShip } from "./art-direction.ts";
 import type * as integrateFunctions from "./integrate.ts";
 import type * as nightFunctions from "./night.ts";
 import type * as setupFunctions from "./setup.ts";
@@ -206,6 +208,10 @@ export interface NightState {
   plays: number;
   softDeadline: number;
   finalDeadline: number;
+  /** The art director's last word on the integration branch (art-direction.ts); absent until it looks. */
+  lastShip?: LastShip | null;
+  /** A goal build's finish was turned back once for the art director's defects: never again. */
+  shipFinishRefused?: boolean;
 }
 
 /**
@@ -295,6 +301,18 @@ type Bound<F> = F extends (night: never, ...args: infer A) => infer R ? (...args
 type FunctionKey<M> = { [K in keyof M]: M[K] extends (...args: never[]) => unknown ? K : never }[keyof M];
 /** Every function of one of the director's modules, bound to the night (`bindNight`). */
 type BoundModule<M> = { readonly [K in Exclude<FunctionKey<M>, "bindNight" | "prepareNight">]: Bound<M[K]> };
+/**
+ * The art director's functions of the night (art-direction.ts): absent on a night bound without it
+ * (a kept older director.ts), so a caller checks that one is there before it calls it.
+ */
+type ArtDirectionParts = Partial<
+  BoundModule<
+    Pick<
+      typeof artDirectionFunctions,
+      "artDirectionPass" | "finishMarkAt" | "shipOwed" | "shipFinishGate" | "shipReport" | "shipReviewOn"
+    >
+  >
+>;
 
 /**
  * The night: its data, and every function of the director's modules bound to it by bindNight,
@@ -306,7 +324,8 @@ export interface Night
     BoundModule<typeof workerFunctions>,
     BoundModule<typeof toolFunctions>,
     BoundModule<typeof integrateFunctions>,
-    BoundModule<typeof setupFunctions> {
+    BoundModule<typeof setupFunctions>,
+    ArtDirectionParts {
   /**
    * Generic, so written out (`Bound` would fix its `T` to unknown). A pass that may borrow a
    * window always gets one, so only a pass that may not can be told there is none.
@@ -634,6 +653,8 @@ export async function evidenceOf(
     motion = 6,
     scaffold = false,
     inheritedConsole = [],
+    keepPaths = boardStatePaths(night),
+    viewport = null,
   }: {
     handle?: string | null;
     label: string;
@@ -642,10 +663,16 @@ export async function evidenceOf(
     motion?: number;
     scaffold?: boolean;
     inheritedConsole?: string[];
+    /** The state paths the boards read, cut last (default: every running worker's probes). */
+    keepPaths?: string[];
+    /** Look at this size (the art director's 1600×900): the leased window only. */
+    viewport?: { width: number; height: number } | null;
   },
 ): Promise<Evidence> {
   const { ctx, run } = night;
   return gatherEvidence(ctx, {
+    keepPaths,
+    ...(viewport ? { viewport } : {}),
     run,
     iterationId: scaffold ? "base" : label,
     seed: PAGE_SEED,
@@ -661,6 +688,16 @@ export async function evidenceOf(
     scaffold,
     inheritedConsole,
   });
+}
+
+/**
+ * The state paths every worker's board reads (`statePathsNamedByChecks`): a look at a build the
+ * workers share — integration's health, the close, a judge — asks the studio to cut them last, so
+ * a probe is read from a bounded state and never finds its path cut away.
+ */
+function boardStatePaths(night: Night): string[] {
+  const checks = [...(night.state?.workers?.values() ?? [])].flatMap((worker) => worker.spec?.checks ?? []);
+  return statePathsNamedByChecks(checks);
 }
 
 /** Every distinct console error a build logged — the baseline the next pass forgives, not the five a prompt shows. */

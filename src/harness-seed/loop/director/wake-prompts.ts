@@ -118,6 +118,8 @@ export interface DigestFacts {
   planWindowUntil: number | null;
   workersLimit: WorkersLimitFacts | null;
   finishRequested: boolean;
+  /** When the finish mark comes, while it is ahead and unsaid (art-direction.ts); absent: none. */
+  finishMarkAt?: number | null;
   card: CardFacts;
   /** The paragraph this wake ends on: carry on, what next, or the wrap-up. */
   closing: string;
@@ -143,6 +145,7 @@ export const REASON_WORDS = {
   [WakeCause.WrapUp]: "the wrap-up",
   [WakeCause.WorkersLimitLifted]: "the workers' engine limit has reset",
   [WakeCause.IdleAsk]: "nothing is running",
+  [WakeCause.FinishMark]: "the finish mark — the art director looked at the whole game",
 } as const satisfies Record<WakeReason, string>;
 
 /** The one line a finish request adds to the user's part of a digest. */
@@ -209,10 +212,16 @@ function happenedSection(happened: readonly string[]): string {
 }
 
 /** The clock, as the lead plans against it. */
-function timeLine({ now, softDeadline, finalDeadline, wrapping }: DigestFacts): string {
+function timeLine({ now, softDeadline, finalDeadline, wrapping, finishMarkAt }: DigestFacts): string {
   if (wrapping)
     return `- time: wrapping up — ${minutes(finalDeadline - now)} minutes left, until ${utc(finalDeadline)}`;
-  return `- time: ${minutes(softDeadline - now)} working minutes, wrap-up at ${utc(softDeadline)}, ${minutes(finalDeadline - now)} minutes in all`;
+  return `- time: ${minutes(softDeadline - now)} working minutes, ${finishMarkWords(finishMarkAt, now)}wrap-up at ${utc(softDeadline)}, ${minutes(finalDeadline - now)} minutes in all`;
+}
+
+/** The finish mark ahead, as the time line names it: from then no new parts, the owners finish theirs. */
+function finishMarkWords(at: number | null | undefined, now: number): string {
+  if (typeof at !== "number" || at <= now) return "";
+  return `finish mark at ${utc(at)} (from then no new parts: the art director looks and the owners finish), `;
 }
 
 /** What the last health pass said about the integration head. */

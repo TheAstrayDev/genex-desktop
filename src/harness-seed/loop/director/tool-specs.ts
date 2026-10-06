@@ -303,6 +303,11 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
           type: "string",
           description: "One yes/no question for the vision judge about the default (or first listed) camera.",
         },
+        ship: {
+          type: "string",
+          description:
+            "yes: the art director's absolute look at the whole game at 1600x900: ship or not, defects by part.",
+        },
       },
     },
   },

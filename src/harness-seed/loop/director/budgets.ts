@@ -64,6 +64,14 @@ const PREPARATION_SHARE = 3;
 const PREPARATION_FLOOR_MS = MINUTE_MS;
 /** The pool windows a night keeps for the director itself (its own look, and every pass's lease). */
 const DIRECTOR_WINDOWS = 2;
+/**
+ * The finish mark: the share of a timed build's working time kept for finishing what exists,
+ * never less than half an hour nor more than two, and none for a build under an hour and a half.
+ */
+const FINISH_MARK_SHARE = 0.3;
+const FINISH_MARK_MIN_MS = 30 * MINUTE_MS;
+const FINISH_MARK_MAX_MS = 120 * MINUTE_MS;
+const FINISH_MARK_FLOOR_MS = 90 * MINUTE_MS;
 
 /** The director's session ends this long before the hard deadline; a wrap-up session gets the rest. */
 export function wrapReserveMs(total: number): number {
@@ -78,6 +86,20 @@ export function timedWorkRemaining(
   finishing = false,
 ): boolean {
   return durationCommission(run) && !finishing && now < softDeadline;
+}
+
+/**
+ * How long before the end of its working time a timed build reaches its finish mark: from there
+ * the art director looks at the whole game and the owners finish their parts, with no new parts.
+ * Null for a goal build (it is reviewed when its lead idles or finishes) and for one too short to
+ * split.
+ */
+export function finishMarkMs(
+  run: Pick<Run, "reference"> & { budgets?: Run["budgets"] },
+  workingMs: number,
+): number | null {
+  if (!durationCommission(run) || !(workingMs >= FINISH_MARK_FLOOR_MS)) return null;
+  return Math.max(FINISH_MARK_MIN_MS, Math.min(FINISH_MARK_MAX_MS, Math.round(workingMs * FINISH_MARK_SHARE)));
 }
 
 /** Preparation must leave the lead time to build, recover and inspect before wrap-up.

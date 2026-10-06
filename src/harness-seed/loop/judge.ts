@@ -362,9 +362,10 @@ async function askJudge(ctx: HarnessCtx, ask: JudgeAsk): Promise<AnyRecord> {
 
 /**
  * `askJudge`, with the record of how the verdict was made. An evaluation profile's pin
- * (`judge/pin.json`) names the engine and model, and may forbid the fallback.
+ * (`judge/pin.json`) names the engine and model, and may forbid the fallback. Exported for the
+ * judges that live in modules of their own (ship-review.ts).
  */
-async function askJudgeFor(ctx: HarnessCtx, ask: JudgeAsk): Promise<JudgeAnswer> {
+export async function askJudgeFor(ctx: HarnessCtx, ask: JudgeAsk): Promise<JudgeAnswer> {
   const { run } = ask;
   const using = judgeEngineFor(run, await readJudgePin(ctx.workspace));
   const sha = promptSha256(ask.systemPrompt);
@@ -703,6 +704,7 @@ export async function blindCompare(
     incumbentEvidence,
     iterationId,
     cameras = null,
+    everyCamera = false,
     extraContext = "",
     random = Math.random,
   }: {
@@ -712,6 +714,8 @@ export async function blindCompare(
     incumbentEvidence?: Candidate | null;
     iterationId?: string;
     cameras?: string[] | null;
+    /** Every camera in `cameras` on both sides, not the taste judge's default and two more (`tasteImages`). */
+    everyCamera?: boolean;
     extraContext?: string;
     /** The shuffle (tests pass their own): below one half puts the challenger on A. */
     random?: Shuffle;
@@ -743,7 +747,7 @@ export async function blindCompare(
   const A = challengerIsA ? challenger : incumbent;
   const B = challengerIsA ? incumbent : challenger;
 
-  const images = tasteImages({ run, A, B, cameras });
+  const images = tasteImages({ run, A, B, cameras, everyCamera });
   const hudBudget = hudBudgetFor(run.game);
 
   const userContent = [
@@ -1009,6 +1013,7 @@ export function tasteImages({
   cameras = null,
   board = null,
   max = MAX_TASTE_IMAGES,
+  everyCamera = false,
 }: {
   run: Run;
   facet?: AnyRecord | null;
@@ -1017,8 +1022,10 @@ export function tasteImages({
   cameras?: string[] | null;
   board?: Scoreboard | null;
   max?: number;
+  /** Every camera in `cameras` on both sides (a whole-game judge), cut alike by `fairCut`. */
+  everyCamera?: boolean;
 }): MessageImage[] {
-  const perSide = tasteCameras(cameras, facet);
+  const perSide = everyCamera && cameras?.length ? cameras : tasteCameras(cameras, facet);
   const a = imagesForCandidate(A, "BUILD A", perSide, { motion: false });
   const b = imagesForCandidate(B, "BUILD B", perSide, { motion: false });
   const wantsMotion = tasteWantsMotion(facet, board);

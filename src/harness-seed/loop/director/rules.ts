@@ -516,8 +516,8 @@ export function makeRouteDefect({
 const takesDefects = (worker: Worker): worker is Worker & { spec: FacetSpec } =>
   isRunning(worker) && worker.mode === WorkerMode.Loop && Boolean(worker.spec);
 
-/** A defect nobody can build now goes on the run's ledger, once, for the director's next integration. */
-function shelveDefect(
+/** A defect nobody can build now goes on the run's ledger, once, for the director's next integration (art-direction.ts shelves its own here). */
+export function shelveDefect(
   ledger: ShelvedDefect[],
   { text, from, owner }: { text: string; from: string; owner: string },
 ): void {
@@ -538,8 +538,8 @@ function newCamera(spec: AnyRecord, check: Check): string | null {
   return camera;
 }
 
-/** Put a routed defect's check on a worker's board (and its camera on its spec); false when it was already there. */
-function putOnBoard(spec: AnyRecord, check: Check): boolean {
+/** Put a routed defect's check on a worker's board (and its camera on its spec); false when it was already there (art-direction.ts puts its own here). */
+export function putOnBoard(spec: AnyRecord, check: Check): boolean {
   if (!Array.isArray(spec.checks)) spec.checks = [];
   if (alreadyOnBoard(spec.checks, check)) return false;
   spec.checks.push(check);

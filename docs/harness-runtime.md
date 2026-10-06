@@ -540,6 +540,25 @@ lands when the close's look loaded it or a judge saw it load, the close's own in
 `finish` tells the lead. A workspace that kept an agent-edited older `integrate.ts` keeps its older
 close; one that kept an older `tools.ts` lands as before and notes that it did not judge.
 
+The art director is the one absolute judge (`loop/ship-review.ts`, rubric `judge/ship-review.md`):
+one build, every frame the evidence pass took of a registered camera, the player's eyes and each
+demo's end, then the first, middle and last motion frames and the reference (at most 14), captured
+at 1600×900 on that lease only (`SHIP_VIEW`), asked "would you ship this as the user's demo
+today?" with the user's scope beside the goal. Each defect names a plan part (kept only when it is
+one of the plan's ids) and a severity (`blocker`, `visible`, `nit`); an unreadable answer is no
+verdict, never a "no". The lead asks for it with `judge ship=yes`; the studio runs it itself at the
+finish mark (`director/art-direction.ts`): a timed build's last 30% of working time
+(`budgets.ts` `finishMarkMs`, 30 to 120 minutes, none under 90), said once (`WakeCause.FinishMark`,
+journaled); a goal build once, when its lead idles a second time or calls `finish` with no review on
+its head (a "no" turns that finish back once, never twice, and never the user's own finish). The
+lead is woken with the defects by part and the rule from there: no new parts, `worker_steer
+stage=finish` on each owner, integrate, `judge ship=yes` again. Each defect on the integration
+branch becomes a director-origin vision check on its running owner's board (its fix is a strong
+flip), or a ledger line under its finished part or the lead. `state.lastShip` is journaled and
+restored on a Resume; `report.shipReview` and the `finish` answer say whether the art director
+would ship the head the close stood on and how many defects are left. It never vetoes a landing.
+When the lead names no cameras, a blind judge shows every view both builds have, cut alike.
+
 The initial plan freezes required acceptance scenarios in the versioned director journal. A
 reopened build is a goal commission, the Loop's hours or ∞ its ceiling (`reopen-run.ts`
 `reopenBudgets`), and takes none of the finished night's outcomes: its journal records

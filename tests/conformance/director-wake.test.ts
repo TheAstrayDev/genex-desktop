@@ -279,6 +279,53 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     );
   });
 
+  it("W10. the finish mark is a timer: it wakes the lead once at its time, uncapped, and never in the wrap-up", () => {
+    const mark = T0 + 10 * MINUTE_MS;
+    assert.deepEqual(nextWake(view({ finishMarkAt: mark })), { at: mark, reasons: [WakeCause.FinishMark] });
+    // The hourly cap holds the heartbeat back, never the mark.
+    const wakesAt = Array.from({ length: MAX_WAKES_PER_HOUR }, (_, i) => T0 - 50 * MINUTE_MS + i * MINUTE_MS);
+    assert.deepEqual(nextWake(view({ finishMarkAt: mark, wakesAt })), { at: mark, reasons: [WakeCause.FinishMark] });
+    // A mark already past (a goal run sent to art direction, a Resume after it) is due now.
+    assert.deepEqual(nextWake(view({ now: mark + MINUTE_MS, finishMarkAt: mark })), {
+      at: mark + MINUTE_MS,
+      reasons: [WakeCause.FinishMark],
+    });
+    // Wrapping up, the mark is gone; once said, the loop hands the schedule none.
+    assert.equal(nextWake(view({ finishMarkAt: mark, wrapping: true, running: 0 })), null);
+    assert.deepEqual(nextWake(view({ finishMarkAt: null })), { at: T0 + HEARTBEAT_MS, reasons: [WakeCause.Heartbeat] });
+    // A timer ahead, like the wrap-up: a night gone idle before its mark is still asked what next.
+    assert.deepEqual(nextWake(view({ running: 0, finishMarkAt: mark })), { at: T0, reasons: [WakeCause.IdleAsk] });
+  });
+
+  it("W11. a goal run idle twice with no ship review on its head is sent to art direction once, then wraps up", () => {
+    const idle = {
+      ok: true,
+      closed: false,
+      running: 0,
+      planWindowOpen: false,
+      workersLimitPending: false,
+      idleAsked: true,
+      workingTimeLeft: true,
+      finishRequested: false,
+      artDirectionOwed: true,
+    };
+    assert.deepEqual(afterTurn(idle), { next: TurnEnd.ArtDirection, idleAsked: true });
+    // Art direction said (or never owed): the second idle turn wraps up as before.
+    assert.deepEqual(afterTurn({ ...idle, artDirectionOwed: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: true,
+      wrapCause: WrapCause.Idle,
+    });
+    // The first idle turn is still asked what next, a busy one sleeps, and no working time wraps up.
+    assert.deepEqual(afterTurn({ ...idle, idleAsked: false }), { next: TurnEnd.AskIdle, idleAsked: true });
+    assert.deepEqual(afterTurn({ ...idle, running: 1 }), { next: TurnEnd.Sleep, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...idle, workingTimeLeft: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: true,
+      wrapCause: WrapCause.Deadline,
+    });
+  });
+
   it("the wake loop is the default; the long turn is only asked for by name", () => {
     assert.equal(directorLoopOf({}), DirectorLoop.Wake);
     assert.equal(directorLoopOf({ directorLoop: "wake" }), DirectorLoop.Wake);
