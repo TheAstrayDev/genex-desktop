@@ -498,6 +498,38 @@ describe("reopening the finished build once the reply has ended", () => {
     assert.equal("scope" in (legacy.starts[0]?.run ?? {}), false, "a build from before scope stays without one");
   });
 
+  it("R4d. a reopening message the user edited in the queue joins the scope as edited; a command's result never proves words the user's", async () => {
+    const { createScope } = await import("../../src/harness-seed/loop/scope.ts");
+    const scope = createScope({ asked: ["a dusk plaza"], inScope: ["the plaza"], cut: ["a city"] });
+    const scoped = (): Json => ({ ...finishedJournal(), run: { ...finishedJournal().run, scope } });
+    const queuedAs = (id: string, words: string, action: Json): Entry[] => [
+      { id, data: { type: "messages", messages: [{ role: "user", content: words }] } },
+      custom(`${id}q`, "coordinator_message_queued", { messageId: `m_${id}`, action: { text: words, ...action } }),
+    ];
+
+    const edited = studioWith({
+      log: [
+        ...finishedLog(),
+        ...queuedAs("e3", "please add some plants to the plaza", {}),
+        custom("e4", "coordinator_message_updated", { messageId: "m_e3", text: ask.words }),
+      ],
+      journal: scoped(),
+    });
+    await reopenAfterReply(edited.studio as never, edited.ctx, night as never, ask, edited.start, clock);
+    assert.deepEqual(
+      edited.starts[0]?.run.scope?.asked,
+      ["a dusk plaza", ask.words],
+      "the words the user sent, edited",
+    );
+
+    const reported = studioWith({
+      log: [...finishedLog(), ...queuedAs("e3", ask.words, { origin: "command-result" })],
+      journal: scoped(),
+    });
+    await reopenAfterReply(reported.studio as never, reported.ctx, night as never, ask, reported.start, clock);
+    assert.deepEqual(reported.starts[0]?.run.scope, scope, "the chat's own report is not the user's words");
+  });
+
   it("R5. refused with nothing written, recorded or started, and one word to the chat: not the latest, not finished, a build under way, no journal, Stop", async () => {
     const rows: Array<{ label: string; set: (s: ReturnType<typeof studioWith>) => void; why: RegExp }> = [
       {

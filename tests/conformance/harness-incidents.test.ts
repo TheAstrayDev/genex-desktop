@@ -9680,4 +9680,82 @@ describe("MAP-5. scope inflated without the user", () => {
     await rig.core.stopThread(thread).catch(() => {});
     await waitForLog(rig.core, paused(2), 60_000, "the resumed night to pause").catch(() => {});
   });
+
+  it("MAP-5b. lists sent as text (Claude Code declares intake fields as strings) still launch, and the chat's own command report is not in the user's words", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    let calls = 0;
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        calls++;
+        if (calls > 1)
+          return new Promise((resolve) =>
+            request.signal?.addEventListener("abort", () =>
+              resolve({ ok: false, stopReason: "stopped", summary: "" } as never),
+            ),
+          );
+        return {
+          ok: true,
+          engine: "vendor",
+          summary: "Recap: one race. Starting it now.",
+          turns: 1,
+          usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 0, cost_usd: 0 },
+          studioToolCalls: [
+            {
+              name: "start_autopilot",
+              args: {
+                goal: "A neon night street race",
+                direction: "NFS",
+                in_scope: '["one race", "one hero car"]',
+                cut: "police pursuit\nopen world",
+              },
+            },
+          ],
+        };
+      },
+    });
+    await rig.core.games.scaffold("apex", { title: "apex" });
+    const thread = await rig.core.threadForGame("apex");
+    // A command the user ran from a reply: the chat queued its result as a message, settled.
+    const report = "Command finished: npm test passed";
+    await rig.core.store.appendEvents(thread, [
+      { type: "messages", messages: [{ role: "user", content: report }] },
+      {
+        type: "custom",
+        event_type: "coordinator_message_queued",
+        payload: { messageId: "m_report", action: { text: report, threadId: thread, origin: "command-result" } },
+      },
+      { type: "custom", event_type: "coordinator_message_handled", payload: { messageId: "m_report" } },
+    ] as never);
+
+    await rig.core.sendUserMessage(ASK, { thread, engine: "vendor", autopilot: { hours: 1 } });
+    const log = await waitForLog(
+      rig.core,
+      // Launched, or refused: a refused call answers the model that it "did not run".
+      (events) => customEvents(events, "run_registered").length >= 1 || JSON.stringify(events).includes("did not run"),
+      60_000,
+      "the launch or its refusal",
+    );
+    try {
+      const [launched] = customEvents(log, "run_registered") as Array<Record<string, any>>;
+      assert.ok(launched, "the launch was not refused for lists sent as text");
+      assert.deepEqual(launched.scope?.asked, [ASK], "the user's words only, without the chat's report");
+      assert.deepEqual(launched.scope?.inScope, ["one race", "one hero car"]);
+      assert.deepEqual(launched.scope?.cut, ["police pursuit", "open world"]);
+    } finally {
+      await rig.core.stopThread(thread).catch(() => {});
+      await waitForLog(
+        rig.core,
+        (events) => customEvents(events, "autopilot_paused").length + customEvents(events, "run_finished").length >= 1,
+        60_000,
+        "the night to pause",
+      ).catch(() => {});
+    }
+  });
 });

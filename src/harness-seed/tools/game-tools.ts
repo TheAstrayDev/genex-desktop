@@ -47,7 +47,17 @@ const SLUG_STOP = new Set([
 ]);
 
 const str = (description: string) => ({ type: "string", description });
-const list = (description: string) => ({ type: "array", items: { type: "string" }, description });
+/**
+ * A list parameter. Engines that declare intake fields as strings (claude-code.ts `intakeTool`) send
+ * it as a JSON array in a string or one item per line: the registry lets that text through
+ * (`acceptJsonString`) and `scopeItems` reads every shape.
+ */
+const list = (description: string) => ({
+  type: "array",
+  items: { type: "string" },
+  acceptJsonString: true,
+  description,
+});
 
 /** What a launch's goal is: the user's ask, nothing they did not ask for. */
 const GOAL_WORDS = "one paragraph in the user's words; add nothing they did not ask for — put it in cut, or ask";

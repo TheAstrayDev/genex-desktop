@@ -9,8 +9,14 @@
  * A Midnight Apex night grew police, traffic and a pursuit meter out of "an NFS-inspired racing
  * game": the contractor's paraphrase was the only ask any agent read, and nothing said what was cut.
  *
- * A new module, so a kept older sibling can never shadow these names; it imports nothing.
+ * A new module, so a kept older sibling can never shadow these names; it imports only the log's own
+ * folds (run-inbox.ts `conversationThrough`, message-queue.ts `messageQueueState`), which every seed has.
  */
+
+import { messageQueueState } from "./message-queue.ts";
+import { EventKind, RunEvent } from "./run-events.ts";
+import { conversationThrough } from "./run-inbox.ts";
+import type { AnyRecord, HarnessEvent } from "../types/harness.d.ts";
 
 /** Whether a proposal deepens what the user asked for or adds something they did not name. */
 export const MoveScope = { Deepens: "deepens", Adds: "adds" } as const;
@@ -64,6 +70,12 @@ function words(values: unknown): string[] {
   return kept;
 }
 
+/** The non-empty strings of a list, trimmed, every one kept: the user's words, repeats and all. */
+function said(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values.flatMap((value) => (typeof value === "string" && value.trim() ? [value.trim()] : []));
+}
+
 /** A list of scope items, each clipped, at most `SCOPE_ITEMS`. */
 function items(values: unknown): string[] {
   return words(words(values).map((text) => text.slice(0, SCOPE_ITEM_CHARS))).slice(0, SCOPE_ITEMS);
@@ -74,7 +86,7 @@ function items(values: unknown): string[] {
  * many of the newest as fit, in the order they were sent.
  */
 function boundAsked(values: unknown): string[] {
-  const messages = words(values).map((text) => text.slice(0, ASKED_MESSAGE_CHARS));
+  const messages = said(values).map((text) => text.slice(0, ASKED_MESSAGE_CHARS));
   const [first, ...rest] = messages;
   if (first === undefined) return [];
   const newest: string[] = [];
@@ -165,4 +177,49 @@ export function addToScope(
 /** Does a proposal add something the user did not ask for? Only its typed `scope` says so; none deepens. */
 export function isBeyondScope(proposal: { scope?: unknown } | null | undefined): boolean {
   return proposal?.scope === MoveScope.Adds;
+}
+
+/** The records that open or close a run on a thread; a new build's ask starts after the latest. */
+const RUN_BOUNDARIES: readonly string[] = [RunEvent.RunRegistered, RunEvent.RunStarted, RunEvent.RunFinished];
+
+/** Which of a thread's user messages `userWordsInLog` reads. */
+export interface UserWordsWindow {
+  /** The queued message the words run up to (itself included); later messages are left out. */
+  through?: string | null;
+  /** Only what was said after the thread's latest run opened or closed: the ask of a new build. */
+  sinceLastRun?: boolean;
+}
+
+/**
+ * The user's own messages in a thread's log, trimmed, in the order sent: as the queue has them (an
+ * edit applied, a removed message gone, nothing after `through`), never a message the chat wrote
+ * itself (a command's result, queued with an `origin`) nor any model's words.
+ */
+export function userWordsInLog(events: readonly HarnessEvent[], window: UserWordsWindow = {}): string[] {
+  const chatWrote = chatWrittenEvents(events);
+  const view = conversationThrough(events, window.through);
+  const start = window.sinceLastRun ? view.findLastIndex(isRunBoundary) + 1 : 0;
+  return said(
+    view
+      .slice(start)
+      .filter((event) => !chatWrote.has(event.id))
+      .flatMap((event) => (event.data?.type === EventKind.Messages ? (event.data.messages ?? []) : []))
+      .filter((message: AnyRecord) => message?.role === "user")
+      .map((message: AnyRecord) => message.content),
+  );
+}
+
+/** The ids of the logged messages the chat queued itself (`origin` set: chat-dispatch.ts `chatWrote`). */
+function chatWrittenEvents(events: readonly HarnessEvent[]): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messageQueueState(events).messages.values()) {
+    const origin = message.action?.origin;
+    if (message.eventId && origin !== undefined && origin !== null) ids.add(message.eventId);
+  }
+  return ids;
+}
+
+/** Does this record open or close a run? */
+function isRunBoundary(event: HarnessEvent): boolean {
+  return event.data?.type === EventKind.Custom && RUN_BOUNDARIES.includes(String(event.data.event_type));
 }

@@ -45,7 +45,7 @@ import { followupAsk } from "./studio-prompts.ts";
 import { type ActiveRun, type RunReopen, StatusLane, type Studio } from "./studio-state.ts";
 import { clampRunHours } from "./config.ts";
 import { CLIP_GAME_TITLE } from "./text.ts";
-import { createScope } from "./scope.ts";
+import { createScope, userWordsInLog } from "./scope.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, HarnessEvent, Host, HostCall } from "../types/harness.d.ts";
 import type { ModelPreferences, RunSpec } from "../types/host-api.d.ts";
 import type { QueueAction, SteerHandle } from "./message-queue.ts";
@@ -791,19 +791,16 @@ export function intakeBudgets(spec: AnyRecord): RunSpec["budgets"] {
 }
 
 /**
- * The user's own messages on this thread up to the one that launched, as the log has them — never a
- * model's words. A queued message sees its thread only up to itself (`conversationThrough`). With
- * none in the log, the launching message's own text.
+ * The user's own messages for this build, as the log has them (scope.ts `userWordsInLog`): since the
+ * thread's previous run, up to the one that launched, never the chat's own reports nor a model's
+ * words. With none in the log, the launching message's own text.
  */
 async function userWordsSoFar(host: Host, action: QueueAction): Promise<string[]> {
   const events: HarnessEvent[] = await host
     .call(HostMethod.EventsList, { threadId: action.threadId })
     .then((listed) => (Array.isArray(listed) ? listed : []))
     .catch(() => []);
-  const said = conversationThrough(events, action.messageId)
-    .flatMap((event) => (event.data?.type === EventKind.Messages ? (event.data.messages ?? []) : []))
-    .filter((message: AnyRecord) => message?.role === "user" && typeof message.content === "string")
-    .map((message: AnyRecord) => String(message.content));
+  const said = userWordsInLog(events, { through: action.messageId, sinceLastRun: true });
   return said.length ? said : [String(action.text ?? "")];
 }
 

@@ -16,8 +16,11 @@ import {
   SCOPE_ITEM_CHARS,
   SCOPE_ITEMS,
   scopeItems,
+  userWordsInLog,
 } from "../../src/harness-seed/loop/scope.ts";
-import { DIRECTOR_SCOPE_RULE, SCOPE_RULE, scopeLines } from "../../src/harness-seed/loop/scope-prompts.ts";
+import { scopeLines } from "../../src/harness-seed/loop/scope-prompts.ts";
+import { argumentProblems } from "../../src/harness-seed/tools/index.ts";
+import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
 
 const ASK = "Create a hyper-realistic NFS-inspired racing game";
 
@@ -49,7 +52,12 @@ describe("the scope contract", () => {
     assert.ok(asked.join("").length <= ASKED_CHARS, `bounded: ${asked.join("").length}`);
   });
 
-  it("drops what is not words, and a duplicate", () => {
+  it("keeps the user's repeated answers in the ask, in the order they were sent", () => {
+    const asked = createScope({ asked: [ASK, "yes", "faster", "yes", "faster"] }).asked;
+    assert.deepEqual(asked, [ASK, "yes", "faster", "yes", "faster"]);
+  });
+
+  it("drops what is not words, and a duplicate item", () => {
     const scope = createScope({ asked: [ASK, "", 7 as never], inScope: ["race", "race", " ", null as never], cut: [] });
     assert.deepEqual(scope.asked, [ASK]);
     assert.deepEqual(scope.inScope, ["race"]);
@@ -150,10 +158,86 @@ describe("the scope as agents read it", () => {
     assert.equal(scopeLines(null), "");
     assert.equal(scopeLines(undefined), "");
   });
+});
 
-  it("gives judges and the director one rule each", () => {
-    assert.match(SCOPE_RULE, /scope:"adds"/);
-    assert.match(DIRECTOR_SCOPE_RULE, /Decide what to cut, not what to add/);
-    assert.match(DIRECTOR_SCOPE_RULE, /decision card/);
+/** One logged event of a thread, as the host lists it. */
+type Logged = { id: string; data: Record<string, unknown> };
+const said = (id: string, content: string): Logged => ({
+  id,
+  data: { type: "messages", messages: [{ role: "user", content }] },
+});
+const answered = (id: string, content: string): Logged => ({
+  id,
+  data: { type: "messages", messages: [{ role: "assistant", content }] },
+});
+const record = (id: string, event_type: string, payload: Record<string, unknown>): Logged => ({
+  id,
+  data: { type: "custom", event_type, payload },
+});
+/** A message the queue took: its words, then its queue record (`action` as the queue keeps it). */
+const queued = (id: string, messageId: string, content: string, action: Record<string, unknown> = {}): Logged[] => [
+  said(id, content),
+  record(`${id}q`, "coordinator_message_queued", { messageId, action: { text: content, messageId, ...action } }),
+];
+
+describe("the user's words in a chat's log", () => {
+  it("are what the person wrote: never the chat's own report, an assistant's words, a removed message or one sent later", () => {
+    const log = [
+      ...queued("e1", "m1", ASK),
+      answered("e2", "Which car?"),
+      ...queued("e3", "m2", "Command finished: npm test passed", { origin: "command-result" }),
+      ...queued("e4", "m3", "a red one"),
+      ...queued("e5", "m4", "never mind that"),
+      record("e6", "coordinator_message_removed", { messageId: "m4" }),
+      ...queued("e7", "m5", "start it"),
+      ...queued("e8", "m6", "and a later thought"),
+    ];
+    assert.deepEqual(userWordsInLog(log as never, { through: "m5" }), [ASK, "a red one", "start it"]);
+    assert.deepEqual(userWordsInLog(log as never), [ASK, "a red one", "start it", "and a later thought"]);
   });
+
+  it("read a queued message as the user edited it", () => {
+    const log = [
+      ...queued("e1", "m1", "a blue car"),
+      record("e2", "coordinator_message_updated", { messageId: "m1", text: "a red car" }),
+    ];
+    assert.deepEqual(userWordsInLog(log as never), ["a red car"]);
+  });
+
+  it("for a new build start after the thread's previous run, and are the whole thread when there was none", () => {
+    const earlier = [
+      ...queued("e1", "m1", "an old space shooter"),
+      record("e2", "run_registered", { runId: "run_old" }),
+      ...queued("e3", "m2", "make the stars brighter"),
+      record("e4", "run_finished", { runId: "run_old" }),
+    ];
+    const log = [...earlier, ...queued("e5", "m3", ASK), ...queued("e6", "m4", "at night")];
+    assert.deepEqual(userWordsInLog(log as never, { through: "m4", sinceLastRun: true }), [ASK, "at night"]);
+    const first = [...queued("e1", "m1", ASK), ...queued("e2", "m2", "at night")];
+    assert.deepEqual(userWordsInLog(first as never, { through: "m2", sinceLastRun: true }), [ASK, "at night"]);
+    assert.deepEqual(userWordsInLog([] as never, { sinceLastRun: true }), []);
+  });
+});
+
+describe("a launch's lists as engines send them", () => {
+  // Claude Code declares every intake parameter as a string (claude-code.ts `intakeTool`), so the
+  // lists come as a JSON array in a string or one item per line; the registry must not refuse them.
+  const args = {
+    goal: ASK,
+    direction: "NFS",
+    in_scope: '["one race", "one hero car"]',
+    cut: "police pursuit\nopen world",
+  };
+
+  for (const name of ["start_autopilot", "start_unattended_run"]) {
+    it(`${name} takes in_scope and cut as text and carries them as lists`, async () => {
+      const tool = gameTools.find((t) => t.name === name);
+      assert.ok(tool);
+      assert.deepEqual(argumentProblems(tool.parameters as never, args), [], "the launch is not refused");
+      const ctx = { autopilot: { hours: 1 }, loop: { hours: 1 }, engine: "vendor" };
+      const result = (await tool.execute(args, ctx as never)) as { details?: { run?: Record<string, unknown> } };
+      assert.deepEqual(result.details?.run?.inScope, ["one race", "one hero car"]);
+      assert.deepEqual(result.details?.run?.cut, ["police pursuit", "open world"]);
+    });
+  }
 });
