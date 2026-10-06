@@ -35,7 +35,9 @@ export interface ReopenMark {
  * new commission's to set (`goals: null`, which journal.ts reads as waiting for the lead's plan for
  * the ask, never as the old plan's parts), and its checkpoints and progress review are earned anew:
  * the finished night's verified outcomes would tell the lead to finish, or refuse every worker for
- * the ask. Everything else — the plan, the workers, the defects nobody owns, the log — goes on.
+ * the ask. So is the art director's word: its review judged the finished build for the old ask, and
+ * the finish it turned back once (`shipFinishRefused`) was the old commission's, not the new one's.
+ * Everything else — the plan, the workers, the defects nobody owns, the log — goes on.
  */
 export function reopenedJournal(journal: AnyRecord, run: AnyRecord, mark: ReopenMark): AnyRecord {
   const {
@@ -45,6 +47,8 @@ export function reopenedJournal(journal: AnyRecord, run: AnyRecord, mark: Reopen
     firstVerifiedCheckpoint: _first,
     latestVerifiedCheckpoint: _latest,
     softReviewAt: _reviewed,
+    shipFinishRefused: _turnedBack,
+    lastShip: _shipReview,
     ...director
   } = journal.director ?? {};
   const integrationHead = mark.finishedHead ?? director.integrationHead ?? null;

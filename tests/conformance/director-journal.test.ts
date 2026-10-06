@@ -1317,4 +1317,31 @@ describe("a finished build reopened (director/reopen.ts)", () => {
       [...night.state.workers.values()].map((worker: { promise?: Promise<unknown> }) => worker.promise),
     );
   });
+
+  it("K28. a finished goal build whose finish the art director turned back once is reopened: the new ask's finish is the art director's to turn back once again, and the finished head's review is not the new ask's (SR-2)", () => {
+    const finished = finishedGoalJournal();
+    const turnedBack = {
+      ...finished,
+      director: {
+        ...finished.director,
+        shipFinishRefused: true,
+        lastShip: { head: FINISHED, ship: false, defects: [{ part: "sky", severity: "visible" }], at: iso(T0) },
+        wake: { ...finished.director.wake, finishMarkSaid: true },
+      },
+    };
+    const journal = reopenedWith(turnedBack, null);
+    assert.equal("shipFinishRefused" in journal.director, false, "the once is per commission");
+    assert.equal("lastShip" in journal.director, false, "the review was of the finished build for its ask");
+    const night = fakeNight(fakeHost(), { resume: true, priorJournal: journal, run: journal.run });
+    restoreNight(night, MORNING);
+    assert.notEqual(night.state.shipFinishRefused, true, "its finish goes through the art director's gate");
+    assert.equal(night.state.lastShip, null);
+
+    // A Resume of the reopened build, paused after the art director turned its own finish back, keeps that.
+    const paused = { ...journal, director: { ...journal.director, ...turnedBack.director, reopened: MARK } };
+    const resumed = fakeNight(fakeHost(), { resume: true, priorJournal: paused, run: journal.run });
+    restoreNight(resumed, MORNING);
+    assert.equal(resumed.state.shipFinishRefused, true, "never twice within one commission");
+    assert.equal(resumed.state.lastShip?.head, FINISHED);
+  });
 });

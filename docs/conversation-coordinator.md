@@ -636,10 +636,11 @@ and the reopen's tools, rules, recording (the Loop's roles too), fallback and mo
 `reopen-run.test.ts` (R1–R12) the reopen's budgets and policy, eligibility, the message's picks
 (R3; R11 against a start over from the same message), journal rewrite, refusals, learning-pass
 wait, rewound reopen, a replay's ask and cursor once per close (R8, R8b), the queue-to-night path,
-a command's result (R9c) and the coordinator's reopen (R12); `director-journal.test.ts` (K18–K27)
+a command's result (R9c) and the coordinator's reopen (R12); `director-journal.test.ts` (K18–K28)
 the reopened night's clock, fork, journal read-back, words and worker ids, and its outcomes: set by
 its plan for the ask, the finished night's never gating a build reopened with hours, asked of its
-plan again by a Resume before it plans; `command-report.test.ts` and `composer-model.test.ts` a
+plan again by a Resume before it plans; the art director's review and once-only turned-back finish
+are per commission (K28); `command-report.test.ts` and `composer-model.test.ts` a
 command's result's Loop (`reportCommissions`); `chat-feedback.test.ts` one row per run control;
 `lead-sessions-host.test.ts` covers the lead's grant, lock and bookmark on the host, hostile roots
 and links too, and the run's controls (only for the chat's own session, the asker's own hold, a
