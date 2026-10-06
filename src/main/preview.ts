@@ -1,5 +1,5 @@
 import { previewVisibility } from "./preview-visibility.ts";
-import { CaptureSurface, type PreviewGone, previewGone } from "../shared/preview-contract.ts";
+import { CaptureSurface, type PreviewGone, PreviewConsoleSource, previewGone } from "../shared/preview-contract.ts";
 import { PreviewProfiler, type ProfileRequest } from "../substrate/preview-profiler.ts";
 /**
  * Game preview.
@@ -348,7 +348,13 @@ export class GamePreview {
     wc.on("render-process-gone", (_event, details) => {
       this.#crashed = true;
       this.#gone = previewGone(details.reason);
-      this.#push({ at: Date.now(), level: "error", message: MESSAGE.renderGone(details.reason) });
+      // Typed as the studio's own line: the crash is read off status(), never as an error the build logged.
+      this.#push({
+        at: Date.now(),
+        level: "error",
+        message: MESSAGE.renderGone(details.reason),
+        source: PreviewConsoleSource.WindowGone,
+      });
     });
     wc.on("unresponsive", () => {
       this.#unresponsive = true;
@@ -1311,7 +1317,7 @@ export class GamePreview {
             at: Date.now(),
             level: "error",
             message: MESSAGE.consoleUnavailable,
-            source: "studio:observation",
+            source: PreviewConsoleSource.Observation,
           },
         ];
   }

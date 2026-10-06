@@ -235,9 +235,10 @@ export interface PreviewSetup {
   /** One sentence for the log and the briefs: what this reaches and why. */
   note?: string;
   /**
-   * After the setup, a game that reports a front-end (`state().flow.playing === false`) is put
-   * into play with `__studio.begin()`, by default. `false` keeps its title, menu or countdown on
-   * screen: the worker that builds them, and the playtester, meet them as a player does.
+   * A game that reports a front-end (`state().flow.playing === false`) is put into play with
+   * `__studio.begin()` by default: by a studio window before the setup is replayed (the scout
+   * recorded it in play), by the evidence pass after its seed. `false` keeps its title, menu or
+   * countdown on screen for the worker that builds them; the playtester's window always does.
    */
   begin?: boolean;
 }

@@ -273,8 +273,10 @@ on an empty scaffold — the same exemption the blank-pixel rule already had, se
 (`EMPTY_SCENE_PROBE`) rather than by the game's own word. One classifier answers for every caller: `none`, `observation`, `race` or `build` — an
 observation failure is not a build defect, and "evidence pass failed" is not a race.
 `preview.status` says why a dead window's renderer went (`gone`, a `loop/preview-gone.ts` code beside
-`crashed`; `killed` and `oom` are the machine's: the pass records `machineKilled` and the classifier
-calls such a look an observation outage, retried with patience), and `preview.viewport` puts one leased window at
+`crashed`; `killed` and `oom` are the machine's: the pass records `machineKilled`, reading the status
+again at its end, and the classifier calls such a look an observation outage, retried with patience;
+the host's own `render process gone` line has `source` `studio:window-gone` and is never counted as
+the build's console error), and `preview.viewport` puts one leased window at
 another size (clamped to 1920×1200) until its release, never Live, the stand-in or a computer session's window:
 handing the lease to a session puts it back at the facet size, so size it again afterwards
 (`preview.status` `viewSize` is the size it is at now); a pass given `viewport` sizes its leased window

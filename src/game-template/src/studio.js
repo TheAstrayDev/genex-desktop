@@ -646,7 +646,8 @@ export function installStudio(config) {
         return { ok: false, reason: String(error?.message ?? error) };
       }
       renderAll();
-      return { ok: true, flow: flowNow() };
+      // As state() does: a game that reports no flow answers none, not a phase it never named.
+      return { ok: true, flow: typeof config.flow === "function" ? flowNow() : null };
     },
 
     /**

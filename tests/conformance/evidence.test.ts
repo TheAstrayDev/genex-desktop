@@ -43,6 +43,7 @@ import { applyPlayScript, CONTROL_EXERCISE } from "../../src/harness-seed/loop/p
 import { applySetup, EvidenceFailure, patientEvidence } from "../../src/harness-seed/loop/evidence.ts";
 import { FlowPhase as HarnessFlowPhase } from "../../src/harness-seed/loop/page-contract.ts";
 import { FlowPhase as TemplateFlowPhase } from "../../src/game-template/src/studio.js";
+import { PreviewConsoleSource } from "../../src/harness-seed/loop/preview-gone.ts";
 
 interface StubOptions {
   /** Base64 payload per screenshot call, in order; repeats simulate a stale compositor frame. */
@@ -50,7 +51,7 @@ interface StubOptions {
   cameras?: unknown;
   demos?: unknown;
   /** What the page logged: `error` entries are the ones a build is judged on. */
-  console?: Array<{ level: string; message: string }>;
+  console?: Array<{ level: string; message: string; source?: string }>;
   /** What `preview.ready` answers. `null` is an older studio that has no such host call. */
   ready?: Record<string, unknown> | null;
   /** What `preview.pageUi` answers. Absent is a studio that cannot see outside the canvas. */
@@ -73,8 +74,8 @@ interface StubOptions {
   failConsole?: string;
   /** Answers for `preview.evaluate` that are not the step witness. */
   evaluate?: (expression: string) => unknown;
-  /** What `preview.status` answers beyond a healthy page. */
-  status?: Record<string, unknown>;
+  /** What `preview.status` answers beyond a healthy page; a function answers the n-th read (1-based). */
+  status?: Record<string, unknown> | ((call: number) => Record<string, unknown>);
   /** A page verb's own answer (`preview.call`); `undefined` falls through to the stub's. */
   page?: (method: string, arg: unknown) => unknown;
   /** What the page does with each `preview.input` batch. */
@@ -98,6 +99,7 @@ function stubCtx(options: StubOptions) {
   let shotIndex = 0;
   let tick = 0;
   let stateCalls = 0;
+  let statusCalls = 0;
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const ctx = {
     cancelled: false,
@@ -120,8 +122,11 @@ function stubCtx(options: StubOptions) {
             : options.diff === null
               ? { compared: 0 }
               : { compared: 1_000, diffFraction: options.diff };
-        case "preview.status":
-          return { loadError: null, crashed: false, ...(options.status ?? {}) };
+        case "preview.status": {
+          statusCalls++;
+          const status = typeof options.status === "function" ? options.status(statusCalls) : options.status;
+          return { loadError: null, crashed: false, ...(status ?? {}) };
+        }
         case "preview.state":
           stateCalls++;
           return options.state ? options.state(stateCalls) : { version: 1, frame: shotIndex };
@@ -1911,5 +1916,113 @@ describe("a window the machine killed is an outage, not a broken build", () => {
     await patientEvidence(calling as never, healthy, { handle: "w1", viewport: { width: 1600, height: 900 } });
     await patientEvidence(calling as never, healthy, { viewport: { width: 1600, height: 900 } });
     assert.deepEqual(sized, [{ method: "preview.viewport", payload: { handle: "w1", width: 1600, height: 900 } }]);
+  });
+});
+
+describe("after the review: a kill mid-pass, the studio's own console line, and what a menu is spared", () => {
+  /** A page the OS kills the moment the drive's first input lands: every later read fails. */
+  function killedMidPass(gone: string) {
+    let killed = false;
+    const dead = () => {
+      if (killed) throw new Error("Target closed");
+    };
+    return stubCtx({
+      frames: ["a", "b", "c"],
+      status: () => (killed ? { crashed: true, gone } : {}),
+      input: () => {
+        killed = true;
+      },
+      page: (method: string) => {
+        if (method !== "start") dead();
+        return undefined;
+      },
+      failShot: () => (killed ? "Target closed" : null),
+      state: (call: number) => {
+        dead();
+        return { version: 1, frame: call };
+      },
+    });
+  }
+
+  it("reads a kill that lands during the drive, after the load, and calls the look an outage", async () => {
+    const evidence = await gather(killedMidPass("oom").ctx);
+    assert.equal(evidence.machineKilled, true, evidence.problems.join(" | "));
+    assert.ok(evidence.problems.includes("the renderer crashed"), evidence.problems.join(" | "));
+    assert.equal(
+      classifyEvidenceFailure(evidence.problems, { machineKilled: evidence.machineKilled === true }),
+      EvidenceFailure.Observation,
+      evidence.problems.join(" | "),
+    );
+    const own = await gather(killedMidPass("crashed").ctx);
+    assert.equal("machineKilled" in own, false, "a renderer the build crashed itself is the build's");
+    assert.ok(own.problems.includes("the renderer crashed"), own.problems.join(" | "));
+    assert.equal(classifyEvidenceFailure(own.problems), EvidenceFailure.Build);
+  });
+
+  it("does not count the studio's own line about a dead window as an error the build logged", async () => {
+    const gone = { level: "error", message: "render process gone: oom", source: PreviewConsoleSource.WindowGone };
+    const killed = await gather(
+      stubCtx({ frames: ["a", "b", "c"], status: { crashed: true, gone: "oom" }, console: [gone] }).ctx,
+    );
+    assert.ok(!killed.problems.some((p: string) => /console error/.test(p)), killed.problems.join(" | "));
+    assert.equal(
+      classifyEvidenceFailure(killed.problems, { machineKilled: killed.machineKilled === true }),
+      EvidenceFailure.Observation,
+    );
+    const logged = { level: "error", message: "TypeError: car is undefined" };
+    const both = await gather(
+      stubCtx({ frames: ["a", "b", "c"], status: { crashed: true, gone: "oom" }, console: [gone, logged] }).ctx,
+    );
+    assert.ok(both.problems.includes("1 console error(s)"), both.problems.join(" | "));
+    assert.equal(
+      classifyEvidenceFailure(both.problems, { machineKilled: both.machineKilled === true }),
+      EvidenceFailure.Build,
+      "an error the build logged is still the build's",
+    );
+  });
+
+  it("holds no throttle on a menu: not for the front-end's own worker, nor when play was never reached", async () => {
+    const racing = { run: { ...run, game: { kind: "racing" } } };
+    const kept = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
+    await gather(kept.ctx, { ...racing, setup: { begin: false } });
+    assert.equal(heldThrough(kept.calls, ["w", "ArrowUp"]), null, "a menu held on W for the whole drive");
+    const stuck = stubCtx({ frames: ["a", "b", "c"], ...frontEnd({ countdownSteps: Number.POSITIVE_INFINITY }) });
+    await gather(stuck.ctx, racing);
+    assert.equal(heldThrough(stuck.calls, ["w", "ArrowUp"]), null);
+    const raced = stubCtx({ frames: ["a", "b", "c"], ...frontEnd() });
+    await gather(raced.ctx, racing);
+    assert.ok(heldThrough(raced.calls, ["w", "ArrowUp"]), "in play, the racer still cruises");
+  });
+
+  it("quotes what begin() answered when it would not take the game into play", async () => {
+    const game = frontEnd();
+    const refusing = (method: string) =>
+      method === "begin" ? { ok: false, reason: "the track failed to load" } : game.page(method);
+    const evidence = await gather(stubCtx({ frames: ["a", "b", "c"], ...game, page: refusing }).ctx);
+    const said = evidence.warnings.find((w: string) => /outside play/.test(w)) ?? "";
+    assert.match(said, /the track failed to load/);
+    assert.doesNotMatch(said, /has no __studio\.begin\(\)/);
+  });
+
+  it("cruises on a racer's own script whichever word the plan used for it", () => {
+    assert.deepEqual(cruiseFor({ kind: "racing", play: [{ type: "tap", keys: ["x"] }] }), []);
+  });
+
+  it("keeps the verified path when it reads the requested state, and calls a cut one unmeasured", async () => {
+    const cut = () => ({
+      maps: { __elided: "object", length: 900, chars: 60_000 },
+      __cut: { chars: 90_000, paths: ["maps"] },
+    });
+    const { ctx, calls } = stubCtx({ frames: ["a"], state: cut });
+    const outcome = await applySetup(ctx as never, { verify: { path: "maps.activeId", equals: "macba" }, settleMs: 1 });
+    assert.equal(outcome.reached, null, outcome.reason);
+    const read = calls.find((c) => c.method === "preview.state");
+    assert.deepEqual(read?.payload.keep, ["maps.activeId"]);
+    const whole = stubCtx({ frames: ["a"], state: () => ({ maps: { activeId: "street" } }) });
+    const wrong = await applySetup(whole.ctx as never, {
+      verify: { path: "maps.activeId", equals: "macba" },
+      settleMs: 1,
+    });
+    assert.equal(wrong.reached, false, "a state read whole and wrong is still not reached");
   });
 });

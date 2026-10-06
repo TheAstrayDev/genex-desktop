@@ -719,7 +719,7 @@ describe("a game with a front-end: begin() takes it into play, flow says whether
     seed(n: number): number;
     step(ms?: number): unknown;
     state(): Record<string, unknown>;
-    begin(): { ok: boolean; reason?: string; flow?: { phase: string; playing: boolean } };
+    begin(): { ok: boolean; reason?: string; flow?: { phase: string; playing: boolean } | null };
   };
 
   /** The template installed on a fake page that keeps its globals until the test is done. */
@@ -780,6 +780,17 @@ describe("a game with a front-end: begin() takes it into play, flow says whether
       const none = api.begin();
       assert.equal(none.ok, false);
       assert.match(String(none.reason), /config\.begin/);
+    } finally {
+      restore();
+    }
+  });
+
+  it("answers no flow from begin() for a game that reports none, as state() does", () => {
+    const { api, restore } = install(racer({ flow: false }));
+    try {
+      api.seed(1);
+      assert.deepEqual(api.begin(), { ok: true, flow: null });
+      assert.equal("flow" in api.state(), false);
     } finally {
       restore();
     }

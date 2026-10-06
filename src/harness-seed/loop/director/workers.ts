@@ -629,6 +629,22 @@ interface WorkerArgs {
   ladder: AnyRecord[];
 }
 
+/**
+ * A worker's own setup from `worker_start`. One that says only `begin` (the front-end's owner,
+ * `{"begin":false}`) keeps the run's requested state and adds the flag: that worker's windows and
+ * judges open on the run's map or mode, on its menu. Any other setup is the worker's own.
+ */
+export function workerSetupOf(raw: AnyRecord, runSetup: AnyRecord | null | undefined): AnyRecord | null {
+  const own = normalizeScoutSetup(raw);
+  if (!own || !onlyBegin(own)) return own;
+  return { ...(runSetup ?? {}), ...own };
+}
+
+/** Whether a normalized setup says nothing but `begin` (and a note). */
+function onlyBegin(setup: AnyRecord): boolean {
+  return Object.keys(setup).every((key) => key === "begin" || key === "note");
+}
+
 /** The JSON arguments of `worker_start`, parsed and held to their shapes — or the sentence that says what is wrong. */
 function parseWorkerArgs(night: Night, args: AnyRecord): WorkerArgs | string {
   const { run } = night;
@@ -641,7 +657,7 @@ function parseWorkerArgs(night: Night, args: AnyRecord): WorkerArgs | string {
   const ladder = ladderArg(args);
   if (ladder.error !== undefined) return ladder.error;
   return {
-    setup: setupRaw ? normalizeScoutSetup(setupRaw) : (run.setup ?? null),
+    setup: setupRaw ? workerSetupOf(setupRaw, run.setup) : (run.setup ?? null),
     checks: checks.value,
     done: done.value,
     ladder: ladder.value,

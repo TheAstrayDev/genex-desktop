@@ -880,15 +880,27 @@ describe("what a load waits for", () => {
 });
 
 describe("a game with a front-end, as builders and the computer tool first see it", () => {
-  /** A page with a title → race front-end, the calls it was asked, and the waits it cost. */
-  function frontEndPort(options: { flow?: boolean; playing?: boolean; begin?: boolean; reaches?: boolean } = {}) {
+  /**
+   * A page with a title → race front-end, the calls it was asked, the waits it cost and the paths
+   * each state read asked to keep. An input that lands in play picks the map (`picked`); one that
+   * lands on the menu does nothing, as the scout's recorded clicks would.
+   */
+  function frontEndPort(
+    options: { flow?: boolean; playing?: boolean; begin?: boolean; reaches?: boolean; state?: () => unknown } = {},
+  ) {
     const { flow = true, begin = true, reaches = true } = options;
     let playing = options.playing ?? false;
+    let picked = false;
     const calls: string[] = [];
     const slept: number[] = [];
+    const kept: unknown[] = [];
     const port = {
-      async studioState() {
-        return flow ? { version: 2, flow: { phase: playing ? "playing" : "menu", playing } } : { version: 2 };
+      async studioState(read?: { keep?: readonly string[] }) {
+        kept.push(read?.keep ?? null);
+        if (options.state) return options.state();
+        return flow
+          ? { version: 2, flow: { phase: playing ? "playing" : "menu", playing }, picked }
+          : { version: 2, picked };
       },
       async studioCall(method: string) {
         calls.push(method);
@@ -898,8 +910,13 @@ describe("a game with a front-end, as builders and the computer tool first see i
         return { ok: true };
       },
       async input() {
+        calls.push("input");
+        if (playing || !flow) picked = true;
         return { ok: true, applied: 0, width: 960, height: 600 };
       },
+      pointer: () => ({ x: 480, y: 300 }),
+      viewSize: () => ({ width: 960, height: 600 }),
+      consoleEntries: () => [],
     } as unknown as PreviewPort;
     const service = new PreviewService(
       { emit: () => {} } as unknown as StudioCore,
@@ -911,7 +928,7 @@ describe("a game with a front-end, as builders and the computer tool first see i
           slept.push(ms);
         },
       });
-    return { apply, calls, slept };
+    return { apply, calls, slept, kept, port, service };
   }
 
   it("begins a game that reports it is not in play, even with no setup at all, and keeps it running", async () => {
@@ -940,5 +957,50 @@ describe("a game with a front-end, as builders and the computer tool first see i
     assert.ok(stuck.slept.length > 0, "the countdown was given its time, on the injected clock");
     const none = frontEndPort({ begin: false });
     assert.match(String(await none.apply(null)), /no __studio\.begin\(\)/);
+  });
+
+  it("replays a setup in play, from where begin() left the game, the way the scout recorded it", async () => {
+    const page = frontEndPort();
+    const setup: PreviewSetup = { actions: [{ type: "tap", keys: ["m"] }], verify: { path: "picked", truthy: true } };
+    assert.equal(await page.apply(setup), null, "the map the scout picked in play is picked again");
+    assert.deepEqual(page.calls, ["start", "begin", "start", "input"]);
+  });
+
+  it("never begins for the playtester, whose grant says nothing of begin: it meets the real menu", async () => {
+    const { computerTools } = await import("../../src/main/core/computer-tools.ts");
+    for (const [role, begins] of [
+      ["playtester", false],
+      ["builder", true],
+    ] as const) {
+      const page = frontEndPort();
+      const previews = {
+        loadServed: async () => ({ problem: null, note: null }),
+        applySetup: (port: PreviewPort, setup: PreviewSetup | null, options: Record<string, unknown> = {}) =>
+          page.service.applySetup(port, setup, { ...options, sleep: async () => {} }),
+        openScreen: () => {},
+        frame: async () => {},
+      };
+      const sessionPort = { get: async () => page.port, handle: () => null, loaded: null };
+      const tools = computerTools(
+        previews as never,
+        { project: "apex", role } as never,
+        "/nonexistent/build",
+        await tmpDir("front-end-role-"),
+        sessionPort as never,
+      );
+      await tools.onLiveTool("computer", { action: "key", text: "d" });
+      assert.equal(page.calls.includes("begin"), begins, `${role}: ${page.calls.join(",")}`);
+    }
+  });
+
+  it("keeps the verified path when it reads the state, and calls a cut one unmeasured, not unreached", async () => {
+    const cut = () => ({
+      maps: { __elided: "object", length: 900, chars: 60_000 },
+      __cut: { chars: 90_000, paths: ["maps"] },
+    });
+    const page = frontEndPort({ state: cut });
+    const note = await page.apply({ verify: { path: "maps.activeId", equals: "macba" } });
+    assert.equal(note, null, String(note));
+    assert.deepEqual(page.kept.at(-1), ["maps.activeId"]);
   });
 });

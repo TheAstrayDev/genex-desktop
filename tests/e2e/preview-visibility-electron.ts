@@ -7,7 +7,7 @@ import path from "node:path";
 import { onSoundShortcut } from "../../src/main/game-sound.ts";
 import { GamePreview, registerGameScheme } from "../../src/main/preview.ts";
 import { PreviewPool } from "../../src/substrate/preview-pool.ts";
-import { PreviewGone } from "../../src/shared/preview-contract.ts";
+import { PreviewConsoleSource, PreviewGone } from "../../src/shared/preview-contract.ts";
 
 const root = mkdtempSync(path.join(os.tmpdir(), "studio-preview-visibility-"));
 app.setPath("userData", path.join(root, "profile"));
@@ -342,6 +342,10 @@ async function checkRendererGone(): Promise<void> {
     const codes: readonly unknown[] = Object.values(PreviewGone);
     check("gone: a dead window says it crashed", dead.crashed);
     check("gone: and why, as one typed code", codes.includes(dead.gone));
+    check(
+      "gone: its console line is the studio's own, typed, never an error the build logged",
+      port.consoleEntries().some((entry) => entry.source === PreviewConsoleSource.WindowGone),
+    );
     await port.reload();
     const back = port.status();
     mark("renderer-back", { crashed: back.crashed, gone: back.gone });

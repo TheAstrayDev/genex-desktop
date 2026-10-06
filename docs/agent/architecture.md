@@ -566,9 +566,9 @@ Approval dispatches the brief with the legacy `reviewPlan` flag cleared.
 
 **Scout.** Before the plan, a read-only scout (`loop/scout.ts`) plays to the requested state and
 reports a `setup` (actions or a demo, a `verify` probe), a builder count and what exists;
-`decompose` folds the plan to that ceiling (`clampFacets`). Evidence, capture and the computer tool
-replay `run.setup` after every load, then begin a game whose `state().flow` is not in play unless
-`begin: false` (the front-end's worker, the playtester); typed facets carry `requested-state`. No
+`decompose` folds the plan to that ceiling (`clampFacets`). Capture and the computer tool begin a game
+whose `state().flow` is not in play (except `begin: false` and the playtester), then replay
+`run.setup`; evidence replays, seeds, begins. Typed facets carry `requested-state`. No
 scout on a completion-only engine; a failed one is a card.
 
 **Director.** On a session-capable engine Autopilot is one session's night (`loop/director.ts`,
@@ -775,7 +775,7 @@ bad message (reason 123). With both off those members exist in no frame; a plain
 about:blank, srcdoc and blob: documents, and `--disable-speech-api` removes synthesis while the
 unprefixed API still crashes. `page-shim.test.ts` only proves the list is applied; the
 [speech selftest](verification.md#acceptance-evidence) proves it holds. Any other renderer death
-sets `status().crashed` and pushes one `render process gone: <reason>` console line (a cross-site
+sets `status().crashed` and pushes one `render process gone: <reason>` console line, source `studio:window-gone` (a cross-site
 frame's death reports nothing); nothing reloads the page, a death during `load()` rejects it, and
 un-raced `evaluate()` calls never settle.
 

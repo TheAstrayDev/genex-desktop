@@ -16,3 +16,15 @@ export const PreviewGone = {
   Integrity: "integrity-failure",
 } as const;
 export type PreviewGone = (typeof PreviewGone)[keyof typeof PreviewGone];
+
+/**
+ * The `source` of a line the studio itself writes on a game window's console (the page's own
+ * lines carry their script URL). `window-gone` is the host's note that the renderer went away:
+ * the crash is read off `preview.status`, never counted as an error the build logged. The app's
+ * copy is `PreviewConsoleSource` in `shared/preview-contract.ts`. Wire values.
+ */
+export const PreviewConsoleSource = {
+  Observation: "studio:observation",
+  WindowGone: "studio:window-gone",
+} as const;
+export type PreviewConsoleSource = (typeof PreviewConsoleSource)[keyof typeof PreviewConsoleSource];

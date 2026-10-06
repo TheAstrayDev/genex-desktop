@@ -23,6 +23,7 @@ import { clampFacets, decompose } from "../../src/harness-seed/loop/autopilot.ts
 import { applySetup, gatherEvidence } from "../../src/harness-seed/loop/gauntlet.ts";
 import { normalizeFacetSpec, withRequestedStateCheck } from "../../src/harness-seed/loop/spec.ts";
 import { evaluateProbeCheck } from "../../src/harness-seed/loop/checks.ts";
+import { workerSetupOf } from "../../src/harness-seed/loop/director/workers.ts";
 
 const REPORT = {
   seen: "Downtown Block: a brick street, sunset, the skater at spawn.",
@@ -359,6 +360,26 @@ describe("the scout says what kind of game it just drove", () => {
         JSON.stringify(begin),
       );
     assert.equal(normalizeScoutSetup({ begin: "no" } as never), null, "a begin that is not a boolean sets nothing up");
+  });
+
+  it("keeps the run's requested state for the front-end's own worker, and adds only its begin flag", () => {
+    const runSetup = {
+      actions: [{ type: "tap", keys: ["i"] }],
+      verify: { path: "maps.activeId", equals: "macba" },
+      note: "I opens the picker",
+    };
+    assert.deepEqual(
+      workerSetupOf({ begin: false }, runSetup),
+      { ...runSetup, begin: false },
+      "the menu worker is judged on the run's map, on its menu",
+    );
+    assert.deepEqual(workerSetupOf({ begin: false }, null), { begin: false });
+    assert.deepEqual(
+      workerSetupOf({ demo: "harbour" }, runSetup),
+      { demo: "harbour" },
+      "a worker's own state is its own",
+    );
+    assert.equal(workerSetupOf({ nothing: true }, runSetup), null);
   });
 
   it("reads to the planner as the kind, and says when the studio must click first", () => {

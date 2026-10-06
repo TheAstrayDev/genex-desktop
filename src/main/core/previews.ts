@@ -50,6 +50,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ReadyPhase, CaptureSurface, GameClock, GameFront } from "../../shared/preview-contract.ts";
+import { StateShape, keepPathsOf } from "../../shared/studio-state-shape.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { LiveGate, type LiveOffer } from "./live-gate.ts";
 import type { LiveBehindEvent } from "../../shared/live-behind.ts";
@@ -234,10 +235,27 @@ async function runSetupDemo(port: PreviewPort, demo: string | undefined): Promis
   return `setup demo "${demo}" did not run: ${result.reason ?? "unknown"}`;
 }
 
-/** The note for a setup whose `verify` the page's state does not meet, or null. */
+/** Whether the state bounder left an elision stub on `path` or one of its parents: the value was not read. */
+function elidedAlong(state: unknown, path: string): boolean {
+  let current: unknown = state;
+  for (const key of path.split(".")) {
+    if (current === null || typeof current !== "object") return false;
+    current = (current as Record<string, unknown>)[key];
+    const stub = current !== null && typeof current === "object" && !Array.isArray(current);
+    if (stub && typeof (current as Record<string, unknown>)[StateShape.Elided] === "string") return true;
+  }
+  return false;
+}
+
+/**
+ * The note for a setup whose `verify` the page's state does not meet, or null. The verified path
+ * is kept whole when the state is over budget; one the bounder still cut is unmeasured, not missed.
+ */
 async function setupVerifyNote(port: PreviewPort, setup: PreviewSetup): Promise<string | null> {
   if (!setup.verify) return null;
-  const state = await port.studioState().catch(() => null);
+  const keep = keepPathsOf([setup.verify.path]);
+  const state = await port.studioState(keep.length ? { keep } : undefined).catch(() => null);
+  if (elidedAlong(state, setup.verify.path)) return null;
   if (setupReached(setup.verify, state) !== false) return null;
   const value = JSON.stringify(state).slice(0, SETUP_STATE_EXCERPT_CHARS);
   return `REQUESTED STATE NOT REACHED: ${setup.verify.path} is not ${expectedValue(setup.verify)} after the setup script (${setup.note ?? "no note"}); state: ${value}`;
@@ -277,7 +295,8 @@ function replaysSomething(setup: PreviewSetup): boolean {
  * Past the game's own title, menu and countdown into play, the way every judge sees it: only for a
  * game that says it is not in play (`state().flow.playing === false`), never when the setup keeps
  * the front-end (`begin: false`, the worker that builds it and the playtester). `begin()` leaves the
- * game paused, so the window is started again. The note when play was not reached, or null.
+ * game paused, so the window is started again, before any setup is replayed. The note when play
+ * was not reached, or null.
  */
 async function beginPlay(
   port: PreviewPort,
@@ -873,19 +892,21 @@ export class PreviewService {
   }
 
   /**
-   * The requested state, reached the way a player reaches it — the run's setup script after
-   * every load, before anyone looks — and then play: a game with a title, menu or countdown is
-   * put past it the way every judge sees it (`beginPlay`), with no setup at all as much as with
-   * one, unless the setup keeps the front-end (`begin: false`). Returns a note when it did not
-   * land, never throws: a wrong state is something to tell the worker, not a reason to stop
-   * looking. `clock.sleep` is the wall clock's wait, injectable for a test.
+   * Play, then the requested state, reached the way a player reaches it — before anyone looks.
+   * A game with a title, menu or countdown is put past it the way every judge sees it
+   * (`beginPlay`), with no setup at all as much as with one, unless the setup keeps the front-end
+   * (`begin: false`) or the window is the playtester's (`keepFrontEnd`: it meets the real menu
+   * whatever an older seed sends). The run's setup script is replayed after that, from the state
+   * the scout recorded it in: its window was begun too. Returns a note when it did not land, never
+   * throws: a wrong state is something to tell the worker, not a reason to stop looking.
+   * `options.sleep` is the wall clock's wait, injectable for a test.
    */
   async applySetup(
     port: PreviewPort,
     setup: PreviewSetup | null | undefined,
-    clock: { sleep?: (ms: number) => Promise<unknown> } = {},
+    options: { sleep?: (ms: number) => Promise<unknown>; keepFrontEnd?: boolean } = {},
   ): Promise<string | null> {
-    const wait = clock.sleep ?? ((ms: number) => sleep(ms));
+    const wait = options.sleep ?? ((ms: number) => sleep(ms));
     // The knock comes first, before the clock is even started: a trusted click is what grants
     // user activation, and a title screen waiting for one is not "started" until it has it.
     if (setup?.gesture) {
@@ -894,9 +915,9 @@ export class PreviewService {
     }
     await port.studioCall(GameClock.Start).catch(() => null);
     const notes: string[] = [];
-    if (setup && replaysSomething(setup)) await replaySetup(port, setup, notes, wait);
-    const playNote = await beginPlay(port, setup, wait);
+    const playNote = options.keepFrontEnd === true ? null : await beginPlay(port, setup, wait);
     if (playNote) notes.push(playNote);
+    if (setup && replaysSomething(setup)) await replaySetup(port, setup, notes, wait);
     const verifyNote = setup ? await setupVerifyNote(port, setup) : null;
     if (verifyNote) notes.push(verifyNote);
     return notes.length ? notes.join("; ") : null;

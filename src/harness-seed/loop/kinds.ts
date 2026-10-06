@@ -263,8 +263,9 @@ export function startKeysFor(game: AnyRecord | null | undefined): string[] {
  * none. A game whose plan wrote its own script keeps full control of its controls.
  */
 export function cruiseFor(game: AnyRecord | null | undefined): string[] {
-  if (normalizePlayScript(game?.playScript)) return [];
-  const kind = normalizeGameTraits(game).kind;
+  // Read through the traits, so a plan's `play` alias counts as its own script too.
+  const { kind, playScript } = normalizeGameTraits(game);
+  if (playScript) return [];
   return [...((kind ? GAME_KINDS[kind]?.cruise : null) ?? [])];
 }
 

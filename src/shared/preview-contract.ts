@@ -124,6 +124,18 @@ export const PreviewGone = {
 export type PreviewGone = (typeof PreviewGone)[keyof typeof PreviewGone];
 
 /**
+ * The `source` of a line the studio itself puts on a game window's console, beside the page's own
+ * (whose `source` is the script URL). `window-gone` is the host's note that the renderer went
+ * away: the crash is read off `preview.status`, so the evidence pass never counts this line as an
+ * error the build logged. The harness keeps a copy in `loop/preview-gone.ts`. Wire values.
+ */
+export const PreviewConsoleSource = {
+  Observation: "studio:observation",
+  WindowGone: "studio:window-gone",
+} as const;
+export type PreviewConsoleSource = (typeof PreviewConsoleSource)[keyof typeof PreviewConsoleSource];
+
+/**
  * Electron's reasons, each read as a {@link PreviewGone}. An eviction to free memory is the
  * machine's pressure like an out-of-memory kill; a renderer that exits on its own while its page
  * is up has still gone abnormally.
@@ -231,9 +243,10 @@ export interface PreviewSetup {
   /** One sentence for the log and the briefs: what this reaches and why. */
   note?: string;
   /**
-   * After the setup, a game that reports a front-end (`state().flow.playing === false`) is put
-   * into play with `__studio.begin()`, by default. `false` keeps its title, menu or countdown on
-   * screen: the worker that builds them, and the playtester, meet them as a player does.
+   * A game that reports a front-end (`state().flow.playing === false`) is put into play with
+   * `__studio.begin()` by default: by a studio window before the setup is replayed (the scout
+   * recorded it in play), by the evidence pass after its seed. `false` keeps its title, menu or
+   * countdown on screen for the worker that builds them; the playtester's window always does.
    */
   begin?: boolean;
 }
