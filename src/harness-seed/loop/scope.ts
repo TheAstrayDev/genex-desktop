@@ -145,8 +145,11 @@ export function restoreScope(value: unknown): RunScope | undefined {
   return { ...scope, revisions: words(saved.revisions).slice(-SCOPE_REVISIONS) };
 }
 
+/** Anything that may carry a scope: a run (whose other fields are its own), a journal's run, a record. */
+export type ScopeCarrier = { readonly scope?: unknown; readonly [field: string]: unknown } | null | undefined;
+
 /** The scope a run carries, read as `restoreScope` reads a journal's; undefined for a run without one. */
-export function runScope(run: { scope?: unknown } | null | undefined): RunScope | undefined {
+export function runScope(run: ScopeCarrier): RunScope | undefined {
   return restoreScope(run?.scope);
 }
 

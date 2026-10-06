@@ -8365,8 +8365,10 @@ describe("the finish stage and the false ESCALATE (Midnight Apex, 2026-10-06)", 
     assert.match(build, /Replace the mechanism behind it, do not tune it/);
     assert.doesNotMatch(build, /THE FINISH/);
     // The critic's grow notes are the build stage's next step; a finisher builds nothing new.
-    assert.match(build, /grow = what to build next, polish = optional/);
-    assert.doesNotMatch(finish, /grow = what to build next/);
+    // Flipped (Midnight Apex scope guard, 2026-10-05): the critic's grow notes deepen what the
+    // user asked for — "what to build next" read as licence to add a system nobody asked for.
+    assert.match(build, /grow = what to deepen next, polish = optional/);
+    assert.doesNotMatch(finish, /grow = what to deepen next/);
     assert.match(finish, /polish = the work; grow waits for the build stage/);
 
     const prompt = (stage: string | undefined, extra: Record<string, unknown> = {}) =>
@@ -9760,5 +9762,297 @@ describe("MAP-5. scope inflated without the user", () => {
         "the night to pause",
       ).catch(() => {});
     }
+  });
+
+  /** The run Midnight Apex launched: the contractor's goal, and the user's own words with what was cut. */
+  const apexRun = async (scoped = true): Promise<Run> => {
+    const { createScope } = await import("../../src/harness-seed/loop/scope.ts");
+    return {
+      runId: "apex",
+      project: "apex",
+      goal: "A neon night street race with police pursuit, traffic and a pursuit meter",
+      reference: { name: "NFS", shots: [] },
+      budgets: { wallClockMs: 1000 },
+      ...(scoped
+        ? { scope: createScope({ asked: [ASK], inScope: ["one race", "one hero car"], cut: ["police pursuit"] }) }
+        : {}),
+    } as Run;
+  };
+  const CUT_LINE = "CUT — not this build; never build or propose it: police pursuit";
+
+  it("MAP-5c. the critics never heard what was cut: every judge, the playtester, the planner and the builder read the user's words and the cut list beside the goal, and a run without scope reads exactly what it did", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-05T22:00:00Z") });
+    const judge = await import("../../src/harness-seed/loop/judge.ts");
+    const { nextMoveUserPrompt } = await import("../../src/harness-seed/loop/replan-prompts.ts");
+    const { playBrief } = await import("../../src/harness-seed/loop/playtester.ts");
+    const { facetPrompt } = await import("../../src/harness-seed/loop/facet/prompt.ts");
+    const { directorBrief, singleWorkerBrief, contractBrief } = await import(
+      "../../src/harness-seed/loop/director/briefs.ts"
+    );
+    const { scopeLines, SCOPE_RULE, DIRECTOR_SCOPE_RULE } = await import(
+      "../../src/harness-seed/loop/scope-prompts.ts"
+    );
+    const scoped = await apexRun();
+    const bare = await apexRun(false);
+    const block = scopeLines(scoped);
+    const facet = { id: "race", title: "The race", intent: "one race against four rivals" };
+    const sides = { challenger: { state: { lap: 1 } }, incumbentEvidence: { state: { lap: 0 } }, random: () => 0.1 };
+    const asked = async (ask: (ctx: never, run: Run) => Promise<unknown>, run: Run) => {
+      const recorder = ctxRecorder({
+        handlers: { "engine.complete": () => ({ message: { content: '{"pick":"A"}' } }) },
+      });
+      await ask(recorder.ctx as never, run);
+      const request = recorder.paramsOf("engine.complete")[0] as { messages: Array<{ content: string }> };
+      return String(request.messages[0]?.content);
+    };
+    const judges: Record<string, (ctx: never, run: Run) => Promise<unknown>> = {
+      blind: (ctx, run) => judge.blindCompare(ctx, { run, ...sides }),
+      facet: (ctx, run) => judge.facetCompare(ctx, { run, facet, ...sides }),
+      taste: (ctx, run) => judge.tasteVeto(ctx, { run, facet, ...sides }),
+      liveness: (ctx, run) => judge.livenessCritique(ctx, { run, facet, evidence: { state: {} } }),
+    };
+    const texts: Record<string, [string, string]> = {};
+    for (const [name, ask] of Object.entries(judges)) texts[name] = [await asked(ask, scoped), await asked(ask, bare)];
+    const worker = { id: "race", title: "The race", brief: "one race", owns: [], ownsMain: false } as never;
+    const facts = {
+      softDeadline: Date.now() + 60 * 60_000,
+      finalDeadline: Date.now() + 75 * 60_000,
+      integrationWorktree: "/runs/apex/integration",
+      baseCommit: "a".repeat(40),
+    };
+    const prompts: Record<string, (run: Run) => string> = {
+      playtester: (run) => playBrief({ run, spec: facet, checks: [], maxActions: 20 }),
+      planner: (run) =>
+        nextMoveUserPrompt({
+          run,
+          spec: { ...facet, checks: [] } as never,
+          defects: [],
+          notes: "",
+          moves: [],
+          counts: null,
+          cameras: [],
+        }),
+      builder: (run) => facetPrompt({ run, spec: { ...facet, checks: [] }, iteration: 2, resumed: false }),
+      director: (run) => directorBrief({ run, ...facts } as never),
+      worker: (run) => singleWorkerBrief({ run, worker }),
+      contract: (run) => contractBrief({ run, projectLabel: "apex" }),
+    };
+    for (const [name, render] of Object.entries(prompts)) texts[name] = [render(scoped), render(bare)];
+
+    for (const [name, [withScope, without]] of Object.entries(texts)) {
+      assert.ok(withScope.includes(`- ${ASK}`), `${name} reads the user's own words: ${withScope}`);
+      assert.ok(withScope.includes(CUT_LINE), `${name} reads what was cut`);
+      assert.ok(withScope.includes(block), `${name} reads the whole scope, beside the goal`);
+      assert.ok(!without.includes("THE USER ASKED"), `${name}: a run without scope has none`);
+    }
+    for (const name of ["blind", "facet", "taste", "liveness", "playtester", "planner"])
+      assert.ok(texts[name]![0].includes(SCOPE_RULE), `${name} is told to judge what is in scope`);
+    assert.ok(texts.director![0].includes(DIRECTOR_SCOPE_RULE), "the director decides what to cut");
+    assert.ok(!texts.director![1].includes(DIRECTOR_SCOPE_RULE), "and a run without scope reads its old rules");
+    // Byte for byte: the scope is only ever added, so a run from before it reads what it read.
+    for (const [name, [withScope, without]] of Object.entries(texts)) {
+      const before = without.split("\n");
+      const added = withScope.split("\n").filter((line) => !before.includes(line));
+      const kept = withScope
+        .split("\n")
+        .filter((line) => !added.includes(line))
+        .join("\n");
+      assert.equal(kept, without, `${name}: only scope lines were added`);
+      assert.ok(
+        added.every((line) => block.split("\n").includes(line) || /SCOPE/.test(line)),
+        `${name} added only scope lines: ${added.join(" | ")}`,
+      );
+    }
+  });
+
+  it("MAP-5d. a helicopter is not the next move of a street race: a reviewer's proposal that adds to the ask is a decision card for the user, once, never the worker's move", async () => {
+    const { chooseMove, MoveSource } = await import("../../src/harness-seed/loop/facet/rules.ts");
+    const { normalizeBigMove } = await import("../../src/harness-seed/loop/big-move.ts");
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { FACET_POLICY } = await import("../../src/harness-seed/loop/facet/policy.ts");
+    const helicopter = normalizeBigMove({
+      what: "a police helicopter over the course",
+      why: "pressure",
+      scope: "adds",
+    });
+    assert.deepEqual(helicopter, { what: "a police helicopter over the course", why: "pressure", scope: "adds" });
+    assert.deepEqual(
+      normalizeBigMove({ what: "rivals that draft", scope: "sideways" }),
+      { what: "rivals that draft", why: "" },
+      "a scope that is not one is dropped, and the move deepens as before",
+    );
+    const climbed = () => ({
+      moveOwner: "director",
+      milestones: [{ id: "grid", what: "a starting grid" }],
+      checks: [],
+      cameras: [],
+    });
+    const beyond = chooseMove({ spec: climbed(), milestonesDone: ["grid"], lastBigMove: helicopter });
+    assert.notEqual(beyond.source, MoveSource.Reviewer, "the helicopter is never the worker's move");
+    assert.equal(beyond.beyond?.what, "a police helicopter over the course");
+    const deeper = { what: "rivals that draft and block", why: "a race", scope: "deepens" };
+    const kept = chooseMove({ spec: climbed(), milestonesDone: ["grid"], lastBigMove: deeper });
+    assert.equal(kept.source, MoveSource.Reviewer, "a move inside the ask is still built (GGR-8)");
+    assert.equal(kept.beyond, undefined);
+    const legacy = chooseMove({
+      spec: climbed(),
+      milestonesDone: ["grid"],
+      lastBigMove: { what: "rivals that draft" },
+    });
+    assert.equal(legacy.source, MoveSource.Reviewer, "a reviewer that names no scope deepens, as before");
+    const pending = chooseMove({
+      moves: [
+        { what: "a police helicopter", source: MoveSource.Reviewer, scope: "adds", delivered: false, attempts: 1 },
+      ],
+    });
+    assert.notEqual(pending.source, MoveSource.Pending, "a move that adds to the ask is never re-asked");
+
+    // Two rounds in a row where the reviewer proposes the helicopter: one card, no move.
+    const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const loop = {
+      ctx: {},
+      run: { runId: "apex" },
+      facet: { id: "race", title: "The race" },
+      spec: climbed(),
+      board: {},
+      moves: [] as Array<Record<string, unknown>>,
+      milestonesDone: new Set(["grid"]),
+      milestonesSetAside: new Set<string>(),
+      polishStreak: 0,
+      lastLiveness: null,
+      lastBigMove: helicopter,
+      surfacedBeyond: [] as string[],
+      policy: FACET_POLICY,
+      legacy: false,
+      hasTime: () => true,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void events.push({ type, payload }),
+    };
+    for (const iteration of [3, 4]) await chooseRoundMove(loop as never, { iteration } as never);
+    const cards = events.filter((e) => e.type === "autopilot_decision");
+    assert.equal(cards.length, 1, `one card across two rounds: ${JSON.stringify(events)}`);
+    assert.match(String(cards[0]!.payload.decision), /a police helicopter over the course/);
+    assert.match(String(cards[0]!.payload.decision), /outside what you asked/);
+    assert.equal(events.filter((e) => e.type === "facet_move").length, 0, "and no move");
+    assert.deepEqual(loop.moves, []);
+  });
+
+  it("MAP-5e. the liveness critic judges depth: a fix that needs something not in scope is kept apart, never the next move, and a critic that says nothing about scope reads as before", async () => {
+    const { normalizeLiveness, renderLiveness } = await import("../../src/harness-seed/loop/judge.ts");
+    const parsed = normalizeLiveness({
+      life: { score: 0, reason: "nothing moves", fix: "pedestrians and a helicopter", adds: true },
+      extent: {
+        score: 1,
+        reason: "the course ends at the barrier",
+        fix: "barriers and grandstands along the course",
+        adds: false,
+      },
+      wear: { score: 1, reason: "clean tarmac", fix: "skid marks in the braking zones" },
+      biggest: "life",
+    });
+    assert.deepEqual(
+      parsed.grow.map((p: { key: string }) => p.key),
+      ["extent"],
+      "the fix that adds is never a grow gap",
+    );
+    assert.deepEqual(
+      parsed.beyond.map((p: { key: string }) => p.key),
+      ["life"],
+    );
+    assert.equal(parsed.biggest, "extent", "the biggest is the deepest change inside the ask");
+    assert.match(
+      renderLiveness(parsed),
+      /life 0\/3 \(grow\) — nothing moves → pedestrians and a helicopter \(outside the ask/,
+    );
+    const legacy = normalizeLiveness({
+      life: { score: 0, reason: "nothing moves", fix: "pedestrians" },
+      extent: { score: 1, reason: "ends", fix: "grandstands" },
+      biggest: "life",
+    });
+    assert.deepEqual(
+      legacy.grow.map((p: { key: string }) => p.key),
+      ["life", "extent"],
+    );
+    assert.equal(legacy.biggest, "life");
+    assert.deepEqual(legacy.beyond, []);
+    assert.equal("adds" in legacy.principles[0]!, false, "a principle that says nothing about scope is what it was");
+  });
+
+  it("MAP-5f. the lead is never invited to promote a proposal beyond the ask, its card says what was cut, and a planner's move that adds is the user's decision", async () => {
+    const { iterationDigest } = await import("../../src/harness-seed/loop/director/digests.ts");
+    const { buildCard } = await import("../../src/harness-seed/loop/director/wake-prompts.ts");
+    const { nextMove } = await import("../../src/harness-seed/loop/replan.ts");
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { FACET_POLICY } = await import("../../src/harness-seed/loop/facet/policy.ts");
+    const digest = iterationDigest({
+      iteration: 2,
+      winner: "challenger",
+      bigMove: { what: "a police helicopter over the course", scope: "adds" },
+    } as never);
+    assert.equal(digest.ideas.length, 1);
+    assert.match(digest.ideas[0]!, /outside the ask/, "labelled as the user's decision, not the next rung");
+    const inside = iterationDigest({
+      iteration: 2,
+      winner: "challenger",
+      bigMove: { what: "rivals that draft" },
+    } as never);
+    assert.deepEqual(inside.ideas, ["reviewer: rivals that draft"], "a move inside the ask reads as before");
+
+    const now = Date.parse("2026-10-05T22:00:00Z");
+    const card = (cut?: string[]) =>
+      buildCard({
+        softDeadline: now + 60 * 60_000,
+        finalDeadline: now + 75 * 60_000,
+        card: {
+          runId: "apex",
+          project: "apex",
+          goal: "a street race",
+          direction: true,
+          plan: null,
+          ...(cut ? { cut } : {}),
+        },
+      } as never);
+    assert.match(card(["police pursuit", "open world"]), /\n- Cut — not this build: police pursuit; open world\n/);
+    assert.equal(card([]), card(), "nothing cut, no line: the card is what it was");
+
+    const run = { ...(await apexRun()), engine: "fake" } as Run;
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.complete": () => ({
+          message: {
+            content: JSON.stringify({ what: "a police pursuit system", why: "pressure", scope: "adds", check: null }),
+          },
+        }),
+      },
+    });
+    const proposed = await nextMove(recorder.ctx as never, {
+      run,
+      spec: { id: "race", title: "Race", checks: [] } as never,
+    });
+    assert.equal(proposed?.scope, "adds", "the planner's reply keeps its typed scope");
+    const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const loop = {
+      ctx: recorder.ctx,
+      run,
+      facet: { id: "race", title: "Race" },
+      spec: { id: "race", title: "Race", checks: [], cameras: [] },
+      board: { lit: { pass: true, weight: "identity" } },
+      moves: [] as Array<Record<string, unknown>>,
+      milestonesDone: new Set<string>(),
+      milestonesSetAside: new Set<string>(),
+      polishStreak: 0,
+      lastLiveness: null,
+      lastBigMove: null,
+      surfacedBeyond: [] as string[],
+      defectList: [],
+      policy: FACET_POLICY,
+      legacy: false,
+      hasTime: () => true,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void events.push({ type, payload }),
+    };
+    await chooseRoundMove(loop as never, { iteration: 2 } as never);
+    assert.deepEqual(loop.moves, [], "the planner's addition is not the round's move");
+    const cards = events.filter((e) => e.type === "autopilot_decision");
+    assert.equal(cards.length, 1);
+    assert.match(String(cards[0]!.payload.decision), /a police pursuit system.*outside what you asked/);
   });
 });

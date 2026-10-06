@@ -1867,6 +1867,51 @@ describe("code reviewer, mechanical half", () => {
     );
   });
 
+  /**
+   * One owner of the screen (Midnight Apex, 2026-10-05): the race part drew a pursuit meter of its
+   * own through the contract HUD while the HUD part owned the screen. A part that does not own the
+   * screen publishes its values; drawing them is the owner's call.
+   */
+  it("finds a part drawing on a screen another part owns, and says nothing when no part owns it", () => {
+    const meter = [
+      "+++ b/src/race/pursuit.js",
+      "@@ -1,0 +1,4 @@",
+      "+export const heat = { value: 0 };",
+      "+__studio.hud.bar('heat', { value: heat.value, anchor: 'top-right' });",
+      "+hud.text('wanted', 'WANTED');",
+      "+const label = hud.textLabel;",
+    ].join("\n");
+    const race = { id: "race", owns: ["src/race/"], checks: [], screenOwner: "hud" };
+    const found = mechanicalReview(meter, race).filter((v) => v.category === "screen-owner");
+    assert.deepEqual(
+      found.map((v) => v.line),
+      [2, 3],
+      `one finding per drawing line: ${found.map((v) => v.what).join(" | ")}`,
+    );
+    assert.match(found[0]!.what, /"hud" owns/);
+    assert.match(String(found[0]!.fix), /__studio\.state\(\)/);
+    const owner = { id: "hud", owns: ["src/race/"], checks: [], ownsScreen: true, screenOwner: "hud" };
+    assert.deepEqual(
+      mechanicalReview(meter, owner).filter((v) => v.category === "screen-owner"),
+      [],
+      "the owner draws",
+    );
+    const nobody = mechanicalReview(meter, { id: "race", owns: ["src/race/"], checks: [] });
+    assert.deepEqual(
+      nobody.filter((v) => v.category === "screen-owner"),
+      [],
+      "with no part owning the screen the rule is inert, as before",
+    );
+    const own = mechanicalReview(meter, race, { template: false });
+    assert.deepEqual(
+      own.filter((v) => v.category === "screen-owner"),
+      [],
+      "a game of its own draws however it already does",
+    );
+    const quiet = mechanicalReview("+++ b/src/race/pursuit.js\n@@ -1,0 +1,1 @@\n+export const heat = 1;\n", race);
+    assert.deepEqual(quiet, []);
+  });
+
   it("says the same thing to the model half of the review", () => {
     const rubric = readFileSync(pathMod.join(repoRoot, "src/harness-seed/judge/code-review.md"), "utf8");
     for (const global of ["__studioClock", "__studioDraw", "__studioCapture", "__studioGl", "__studioHook"])

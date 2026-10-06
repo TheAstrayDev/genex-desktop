@@ -1003,7 +1003,8 @@ function scoreboardSection(board: Scoreboard | null | undefined, comparison: Bri
 function livenessSection(liveness: string | null, critic: string, finishing = false): string[] {
   if (!liveness) return [];
   // A finishing worker builds nothing new: the critic's grow notes wait for the build stage.
-  const key = finishing ? FINISH_CRITIC_KEY : "grow = what to build next, polish = optional";
+  // "deepen", never "build": the critic's fixes deepen what the user asked for (loop/scope.ts).
+  const key = finishing ? FINISH_CRITIC_KEY : "grow = what to deepen next, polish = optional";
   return [
     critic === "screen"
       ? `## Why the screen does not read yet (the readability critic, 0–3 per principle; ${key})`

@@ -237,7 +237,11 @@ describe("the director's tools and brief", () => {
     assert.match(brief, /THE PLAYBOOK:\n# playbook\nlook first/);
     assert.match(brief, /RULES THAT NEVER MOVE:/);
     // Flipped (golden-goal night, 2026-10-02): one worker per area a player can name, the UI too.
-    assert.match(brief, /delegate with plan and worker_start: a worker per area a player can name, the UI and HUD too/);
+    // Flipped again (Midnight Apex, 2026-10-05): per area the ask names — "an area a player can
+    // name" grew a police pursuit out of a street race — and the pool is a ceiling, never a quota.
+    assert.match(brief, /delegate with plan and worker_start: a worker per area the ask names, the UI and HUD too/);
+    assert.match(brief, /CAPACITY: .*A ceiling, not a quota: start the fewest workers that cover independent files/);
+    assert.doesNotMatch(brief, /time lost/, "an idle window is not a loss: a system nobody asked for is");
     assert.match(brief, /Finish once required outcomes are verified; time is a ceiling/);
     assert.match(brief, /\.studio\/DIRECTOR\.md/);
     assert.ok(!brief.includes("YOU WERE RESUMED"));
@@ -847,6 +851,35 @@ describe("a worker's contract: done, compiled and dry-run", () => {
     assert.deepEqual(asked, [], "a typo is not a capacity problem: nothing was asked of the machine");
   });
 
+  /**
+   * One owner of the screen (Midnight Apex, 2026-10-05): the race part drew its own pursuit meter
+   * beside the HUD part's. The part reviewed as a screen owns it; a second one is refused by name.
+   */
+  it("makes the part reviewed as a screen the screen's one owner, and refuses a second while it runs", async () => {
+    const { startRefusal } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const start = DIRECTOR_TOOLS.find((t) => t.name === "worker_start")!;
+    assert.match(
+      String((start.parameters.properties as Record<string, { description?: string }>).critic?.description),
+      /screen makes it the one part that draws on the screen/,
+      "the director is told where it decides it",
+    );
+    const hud = compileWorkerSpec({ id: "hud", brief: "the HUD", critic: "screen" } as never, null);
+    assert.equal((hud.spec as { ownsScreen?: boolean }).ownsScreen, true);
+    const race = compileWorkerSpec({ id: "race", brief: "the race" } as never, null);
+    assert.equal("ownsScreen" in race.spec, false, "any other part's spec is what it was");
+    const night = {
+      ctx: { call: async () => null },
+      runningWorkers: () => [{ id: "hud", state: "running", spec: hud.spec }],
+      softDeadline: Date.now() + 60 * 60_000,
+      state: { finish: false, workers: new Map() },
+      priorWorkers: [],
+    };
+    const refusal = async (id: string, args: Record<string, unknown>) =>
+      String(await startRefusal(night as never, id, { id, brief: "x", ...args }));
+    assert.match(await refusal("menus", { critic: "screen" }), /"hud" already owns the screen/);
+    assert.doesNotMatch(await refusal("race", {}), /owns the screen/, "a part that draws nothing is not refused");
+  });
+
   it("turns a running worker to finishing with worker_steer stage=, and back to building with a move", async () => {
     const { handler } = await import("../../src/harness-seed/loop/director/tools.ts");
     const ladder = [{ id: "rain", what: "rain slicks the street" }];
@@ -1050,6 +1083,87 @@ describe("the night's plan, before anyone builds", () => {
         }) as unknown as { error: string }
       ).error,
       /at most 12/,
+    );
+  });
+
+  /**
+   * Midnight Apex (2026-10-05): the plan had no place to say what it left out or what it built
+   * beyond the ask, so a pursuit part the lead invented was frozen as required acceptance and
+   * the user never saw a question about it.
+   */
+  it("names what the plan cuts and what it added beyond the ask: cuts join the scope, each addition is one card for the user, and never scope without their own words", async () => {
+    const { setPlan } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const { createScope } = await import("../../src/harness-seed/loop/scope.ts");
+    const workers = JSON.stringify([
+      { id: "race", done: ["four rivals race one lap"] },
+      { id: "pursuit", done: ["a pursuit meter fills"], added: true },
+    ]);
+    const args = {
+      summary: "One race against four rivals.",
+      workers,
+      cut: "police\ntraffic",
+      added: '["a pursuit meter"]',
+    };
+    const compiled = compilePlan(args) as { plan: any };
+    assert.deepEqual(compiled.plan.cut, ["police", "traffic"]);
+    assert.deepEqual(compiled.plan.added, ["a pursuit meter"]);
+    assert.equal(compiled.plan.workers[1].added, true, "a part beyond the ask says so");
+    assert.equal("added" in compiled.plan.workers[0], false);
+    const bare = (compilePlan({ summary: "s", workers }) as { plan: any }).plan;
+    assert.equal("cut" in bare || "added" in bare, false, "a plan that names neither is what it was");
+
+    const said = "yes, keep the pursuit meter";
+    const decisions: Array<[string, string | undefined]> = [];
+    const night = (budgets: Record<string, unknown> = {}) => {
+      const run = {
+        runId: "apex",
+        project: "apex",
+        goal: "a street race",
+        budgets,
+        scope: createScope({ asked: ["a street race"], inScope: ["one race"], cut: ["open world"] }),
+      };
+      return {
+        run,
+        ctx: { call: async () => null },
+        resume: false,
+        waking: false,
+        softDeadline: Date.now() + 60 * 60_000,
+        state: { plan: null, goals: undefined, planReviewUntil: null, planSaidFrom: 0, planGo: false } as any,
+        journal: { director: {}, plan: {}, run: { ...run } } as any,
+        saveJournal: async () => {},
+        note: () => {},
+        appendRun: async () => {},
+        decision: async (text: string, plain?: string) => void decisions.push([text, plain]),
+        inbox: { steering: async () => [said] },
+      };
+    };
+    const lead = night();
+    await setPlan(lead as never, args);
+    assert.equal(decisions.length, 1, `one card per addition: ${JSON.stringify(decisions)}`);
+    assert.match(String(decisions[0]![1]), /a pursuit meter/);
+    assert.deepEqual(lead.run.scope.cut, ["open world", "police", "traffic"], "cuts only grow");
+    assert.deepEqual(lead.run.scope.added, ["a pursuit meter"], "waiting for the user's yes");
+    assert.ok(!lead.run.scope.inScope.includes("a pursuit meter"), "and not in scope by itself");
+    assert.deepEqual(lead.journal.run.scope, lead.run.scope, "the journal keeps it for a Resume");
+    await setPlan(lead as never, args);
+    assert.equal(decisions.length, 1, "a replan naming the same addition posts nothing new");
+    await setPlan(lead as never, { ...args, added: '["a helicopter"]', scope_instruction: "the user wants one" });
+    assert.ok(!lead.run.scope.inScope.includes("a helicopter"), "a steer the user never wrote widens nothing");
+    assert.equal(decisions.length, 2);
+    await setPlan(lead as never, { ...args, scope_instruction: said });
+    assert.ok(lead.run.scope.inScope.includes("a pursuit meter"), "their own words, quoted, widen it");
+    assert.ok(!lead.run.scope.added.includes("a pursuit meter"));
+    assert.equal(decisions.length, 2);
+
+    const goal = night({ completionPolicy: "goal" });
+    await setPlan(goal as never, args);
+    assert.deepEqual(
+      goal.state.goals.entries.map((entry: { id: string; required: boolean }) => [entry.id, entry.required]),
+      [
+        ["race", true],
+        ["pursuit", false],
+      ],
+      "an added part is an optional goal: it never holds the finish",
     );
   });
 

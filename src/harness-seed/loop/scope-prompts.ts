@@ -5,7 +5,7 @@
  * keeps at an agent-edited older vintage. A run without scope renders nothing, so an older run's
  * prompts stay byte-identical. A new module; it imports only from scope.ts, which is as new.
  */
-import { runScope } from "./scope.ts";
+import { runScope, type ScopeCarrier } from "./scope.ts";
 
 /** The words the scope is rendered with. */
 const WORDS = {
@@ -29,6 +29,21 @@ export const SCOPE_RULE =
 export const DIRECTOR_SCOPE_RULE =
   "Decide what to cut, not what to add. Work only inside SCOPE; anything else is a decision card the user can accept.";
 
+/** How a proposal says whether it stays inside the ask: the typed field every reader of it decides on. */
+export const PROPOSAL_SCOPE_RULE =
+  'Every proposal you name (bigMove, the move) carries "scope": "deepens" when it deepens what SCOPE names, "adds" when it needs something SCOPE does not name.';
+
+/** The liveness critic's half: a fix that adds is flagged on its principle, and `biggest` stays inside SCOPE. */
+export const LIVENESS_SCOPE_RULE =
+  'A principle whose fix needs something not in SCOPE sets "adds":true beside its score (false otherwise); `biggest` is the deepest change inside SCOPE, and a cut item is never a fix.';
+
+/** The scope with a judge's rule after it, for every agent that judges or proposes; '' for a run without scope. */
+export function judgeScopeLines(run: ScopeCarrier, rules: readonly string[] = []): string {
+  const lines = scopeLines(run);
+  if (!lines) return "";
+  return [lines, SCOPE_RULE, ...rules].join("\n");
+}
+
 /** One message of the ask as a list item; a message of several lines stays together, indented. */
 function askedItem(message: string): string {
   return `- ${message.split("\n").join("\n  ")}`;
@@ -38,7 +53,7 @@ function askedItem(message: string): string {
  * The scope block an agent reads beside the goal: the user's words verbatim, in scope, cut, added
  * beyond the ask, and the reference rule. '' for a run without scope.
  */
-export function scopeLines(run: { scope?: unknown } | null | undefined): string {
+export function scopeLines(run: ScopeCarrier): string {
   const scope = runScope(run);
   if (!scope) return "";
   return [

@@ -84,7 +84,16 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
         },
         workers: {
           type: "string",
-          description: `JSON array of the parts you hand out, 1–${MAX_PLAN_WORKERS}: [{"id":"plaza-light","title":"Plaza light","seam":"the plaza's light and sky","owns":"src/plaza.js","done":["dusk from every camera"],"minutes":45}]. multiplayer:true on a part needing Genex online play checks its host prerequisites first. worker_start takes the same id; dropping or adding a part is a new plan.`,
+          description: `JSON array of the parts you hand out, 1–${MAX_PLAN_WORKERS}: [{"id":"plaza-light","title":"Plaza light","seam":"the plaza's light and sky","owns":"src/plaza.js","done":["dusk from every camera"],"minutes":45}]. multiplayer:true on a part needing Genex online play checks its host prerequisites first. added:true on a part SCOPE does not name makes it optional. worker_start takes the same id; dropping or adding a part is a new plan.`,
+        },
+        cut: {
+          type: "string",
+          description: "What this run will not build, one per line or a JSON array; joins SCOPE's cut list.",
+        },
+        added: {
+          type: "string",
+          description:
+            "What this plan builds that SCOPE does not name, one per line or a JSON array: each is a card asking the user, never scope until they say so.",
         },
         base: {
           type: "string",
@@ -116,7 +125,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
   {
     name: DirectorTool.WorkerStart,
     description:
-      "Start a background builder with its own git worktree and hidden preview. loop (default): build, gather evidence, check, compare blindly, keep or roll back, until done passes or the budget ends; accepted builds are committed. single: one session committed without a judge; you assess it. Returns a worker id — use wait and worker_status. One area a player can name per worker, on files of its own. The workers run_status allows are a ceiling: start the fewest that cover independent files.",
+      "Start a background builder with its own git worktree and hidden preview. loop (default): build, gather evidence, check, compare blindly, keep or roll back, until done passes or the budget ends; accepted builds are committed. single: one session committed without a judge; you assess it. Returns a worker id — use wait and worker_status. One area the ask names per worker, on files of its own. The workers run_status allows are a ceiling: start the fewest that cover independent files.",
     parameters: {
       type: "object",
       properties: {
@@ -206,7 +215,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
         critic: {
           type: "string",
           description:
-            "Its per-round critic: screen for a UI or HUD part (readable, shows the game's state, every action answers on screen), place for a world a player stands in. Default: the kind's.",
+            "Its per-round critic: screen for a UI or HUD part (readable, shows the game's state, every action answers on screen), place for a world a player stands in. Default: the kind's. screen makes it the one part that draws on the screen.",
         },
         traits: {
           type: "string",

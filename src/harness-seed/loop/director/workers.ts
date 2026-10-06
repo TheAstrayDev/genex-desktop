@@ -27,6 +27,8 @@ import { normalizeScoutSetup } from "../scout.ts";
 import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
 import { FINISH_SINGLE_REFUSAL, FINISH_START_MOVES } from "../facet/stage-prompts.ts";
 import { isCommit } from "../shell.ts";
+import { addToScope, restoreScope, runScope, type RunScope } from "../scope.ts";
+import { linkScreenOwner, runningScreenOwner, SCREEN_CRITIC } from "../screen-owner.ts";
 import { CheckWeight, MAX_DONE, MAX_MILESTONES } from "../spec.ts";
 import { CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, clip } from "../text.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
@@ -368,16 +370,68 @@ async function planAcceptance(
   return null;
 }
 
+/** A card about something a plan builds beyond the user's ask: the record, and the sentence the user reads. */
+const MESSAGE_ADDED = {
+  text: (item: string) => `plan: added beyond the user's ask — ${item}`,
+  plain: (item: string) =>
+    `The plan adds ${item}, which is outside what you asked; say so to keep it, or say "cut it" to drop it`,
+} as const;
+
+/**
+ * The plan's cut and added lists against the run's scope (loop/scope.ts). Cuts only ever grow the
+ * scope's cut list. An addition joins the scope only when the plan quotes the user's own steer
+ * (`scope_instruction`, scope.ts `addToScope`); every other one waits on the scope as `added` and
+ * is put to the user once, as a card. Answers the additions to put to the user now. A run from
+ * before scope keeps no scope, but its additions are still asked about, once each.
+ */
+async function settlePlanScope(
+  night: Night,
+  plan: AnyRecord,
+  previous: AnyRecord | null,
+  args: AnyRecord,
+): Promise<string[]> {
+  const added: string[] = plan.added ?? [];
+  const scope = runScope(night.run);
+  const withCuts = scope ? scopeWith(scope, { cut: plan.cut ?? [] }) : undefined;
+  const next = withCuts ? await widenedByUser(night, withCuts, added, String(args.scope_instruction ?? "")) : undefined;
+  const asked = [...new Set<string>([...(previous?.addedAsked ?? []), ...(scope?.added ?? [])])];
+  const fresh = added.filter((item) => !asked.includes(item) && !next?.inScope.includes(item));
+  if (asked.length || fresh.length) plan.addedAsked = [...asked, ...fresh];
+  const kept = next ? scopeWith(next, { added: fresh }) : undefined;
+  if (kept && kept !== scope) {
+    night.run.scope = kept;
+    night.journal.run = { ...night.journal.run, scope: kept };
+  }
+  return fresh;
+}
+
+/** A scope with more cut or added items (each list only grows, capped as scope.ts caps it); the same scope when none. */
+function scopeWith(scope: RunScope, more: { cut?: string[]; added?: string[] }): RunScope {
+  const cut = more.cut ?? [];
+  const added = more.added ?? [];
+  if (!cut.length && !added.length) return scope;
+  return restoreScope({ ...scope, cut: [...scope.cut, ...cut], added: [...scope.added, ...added] }) ?? scope;
+}
+
+/** The plan's additions moved into scope, when the plan quotes the user's own steer (scope.ts `addToScope`). */
+async function widenedByUser(night: Night, scope: RunScope, added: string[], instruction: string): Promise<RunScope> {
+  if (!added.length || !instruction) return scope;
+  const steers = await night.inbox.steering(undefined, false).catch(() => []);
+  return addToScope(scope, added, instruction, steers) ?? scope;
+}
+
 export async function setPlan(night: Night, args: AnyRecord) {
   const { journal, saveJournal, state } = night;
   const compiled = compilePlan(args);
   if (compiled.error !== undefined) return compiled.error;
   const plan = compiled.plan;
   const first = !state.plan;
+  const previous = state.plan;
   // Outcomes this plan sets (a reopened build's first plan for the ask) are shown like a first plan's.
   const acceptanceKept = Boolean(state.goals);
   const scopeError = await planAcceptance(night, args, plan.workers);
   if (scopeError) return scopeError;
+  const additions = await settlePlanScope(night, plan, previous, args);
   state.plan = plan;
   if (plan.game) await declareGameKind(night, plan.game);
   journal.director.plan = plan;
@@ -386,6 +440,7 @@ export async function setPlan(night: Night, args: AnyRecord) {
     facets: plan.workers.map((w: AnyRecord) => ({ id: w.id, title: w.title, identity: w.done })),
   };
   await saveJournal();
+  for (const item of additions) await night.decision(MESSAGE_ADDED.text(item), MESSAGE_ADDED.plain(item));
   if (first) await openPlanReview(night);
   // A plan of several looping parts with a module contract: committed as docs/ARCHITECTURE.md.
   const contracted = await contractOnPlan(night);
@@ -590,6 +645,8 @@ export async function startRefusal(night: Night, id: string, args: AnyRecord) {
   if (stage.stage === FacetStage.Finish && workerModeOf(args) === WorkerMode.Single) return FINISH_SINGLE_REFUSAL;
   const seam = seamRefusal(night, id, args);
   if (seam) return seam;
+  const screen = screenOwnerRefusal(runningWorkers(), id, args);
+  if (screen) return screen;
   const cap = await ctx.call(HostMethod.PreviewCapacity, {}).catch(() => null);
   // The wake digest's room line reads the newest pool the studio gave (the user may change the
   // setting mid-run).
@@ -602,6 +659,17 @@ export async function startRefusal(night: Night, id: string, args: AnyRecord) {
   if (remaining < WORKER_FLOOR_MS)
     return `only ${minutes(remaining)} minutes left in your session — too little for a worker; finish instead`;
   return { pooled, remaining, replaces, policySpec };
+}
+
+/**
+ * One owner of the screen (loop/screen-owner.ts): a part reviewed as a screen owns it, so a second
+ * one is refused while the first runs — the same way two owners of the entry are.
+ */
+function screenOwnerRefusal(running: Worker[], id: string, args: AnyRecord): string | null {
+  if (String(args.critic ?? "").trim() !== SCREEN_CRITIC) return null;
+  const owner = runningScreenOwner(running);
+  if (!owner) return null;
+  return `worker "${owner}" already owns the screen (critic=screen) for this run: one part draws the HUD, menus and layout. Start "${id}" without critic=screen and have it expose its values, steer "${owner}" to draw them, or wait for "${owner}" to finish.`;
 }
 
 /** A JSON-array argument: null when absent, the array, or the sentence that says what is wrong. */
@@ -1009,6 +1077,8 @@ function compileContract(night: Night, worker: Worker, parsed: WorkerArgs, args:
   worker.spec = compiled.spec;
   // Live, not a snapshot: a worker started later is one this worker's judge can route to.
   state.facetSpecs.push(worker.spec);
+  // …and who owns the screen, both ways round (loop/screen-owner.ts).
+  linkScreenOwner(state.facetSpecs, worker.spec);
   if (compiled.unsatisfiable.length) {
     note(
       `worker ${id}: ${compiled.unsatisfiable.length} check(s) name paths ${shortSha(worker.from)} does not report — ${compiled.unsatisfiable.map((u) => `${u.id} (${u.missing.join(", ")})`).join("; ")}`,

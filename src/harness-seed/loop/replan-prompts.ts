@@ -1,6 +1,7 @@
 /** What the planner is told when a check cannot pass as written, and when a facet needs its next move. */
 import { renderChecks, type Check, type FacetSpec, type Milestone } from "./spec.ts";
 import { clip } from "./text.ts";
+import { judgeScopeLines, PROPOSAL_SCOPE_RULE } from "./scope-prompts.ts";
 import type { Run } from "../types/harness.d.ts";
 
 /** How much of a facet's intent a replan question quotes, and how much the next-move question does. */
@@ -71,10 +72,11 @@ export function replanUserPrompt({
 /** The planner's brief for the next structural move. */
 export const NEXT_MOVE_SYSTEM = [
   "You are the planner of an Autopilot run. One facet's identity checks now pass, and its builder must not spend the next iteration tuning what already exists.",
-  "Name the ONE structural move the next iteration must make: a change to what the game IS — its extent (three houses become the whole hamlet), a system that does not exist yet (doors that open, weather, a market), a mechanic, where the player goes next, what the screen tells them — sized so that one builder can land it in one iteration and a player would notice it at once.",
+  "Name the ONE structural move the next iteration must make: a change to what the game IS that deepens what SCOPE (the user's ask) names — its extent (three houses become the whole hamlet), a deeper layer of a system the ask already has, a mechanic, where the player goes next, what the screen tells them — sized so that one builder can land it in one iteration and a player would notice it at once. A system the ask does not name is not a move.",
   "Never a material, lighting, shadow or parameter tweak, and never something the ledger already lists: the defect ledger covers polish. Do not repeat a move already delivered. Prefer the move that carries the facet's intent furthest toward the game goal.",
   "If the move can be measured, write a check in the same JSON shape the facet's checks use (scene/probe/demo/pixel) that passes once the move is in; else null.",
-  'Reply with JSON only: {"what":"one or two sentences — the move","why":"one sentence","check":{…}|null}',
+  '`scope` is "deepens", or "adds" when the move needs something SCOPE does not name — then it goes to the user as a question, not to the builder.',
+  'Reply with JSON only: {"what":"one or two sentences — the move","why":"one sentence","scope":"deepens"|"adds","check":{…}|null}',
 ].join("\n");
 
 /** The builder's own "known gaps" section of its notes, if it wrote one. */
@@ -108,6 +110,7 @@ export function nextMoveUserPrompt({
   const knownGaps = knownGapsOf(notes);
   return [
     `GAME GOAL: ${run.goal}`,
+    judgeScopeLines(run, [PROPOSAL_SCOPE_RULE]),
     run.reference?.name ? `REFERENCE / DIRECTION: ${run.reference.name}` : "",
     `FACET: ${spec.title} (${spec.id}) — intent: ${clip(spec.intent, MOVE_INTENT_CHARS)}`,
     spec.identity?.length ? `IDENTITY FEATURES: ${spec.identity.join(" > ")}` : "",

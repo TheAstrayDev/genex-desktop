@@ -37,6 +37,8 @@ import { parseModuleContract, singlePart } from "./module-contract.ts";
 import { MAX_LEDGER, MAX_PLAN_WORKERS, PLAN_HOLD_SLICE_MS, SILENT_ROUND_MIN } from "./budgets.ts";
 import { SECOND_MS } from "../time.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
+import { scopeItems } from "../scope.ts";
+import { SCREEN_CRITIC } from "../screen-owner.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { Check, FacetSpec } from "../spec.ts";
@@ -228,6 +230,8 @@ export interface PlanPart {
   owns: string[];
   done: string[];
   minutes: number | null;
+  /** A part beyond what the user asked for (scope.ts): in goal mode an optional goal, never required. */
+  added?: boolean;
 }
 
 /** A field that may be a JSON array or a string of entries, as trimmed, non-empty strings. */
@@ -275,6 +279,7 @@ function planPart(entry: unknown, id: string): PlanPart {
     ...(raw.multiplayer === true ? { multiplayer: true } : {}),
     ...(singlePart(raw) ? { single: true } : {}),
     minutes: Math.round(num(raw.minutes, 0)) || null,
+    ...(raw.added === true ? { added: true } : {}),
   };
 }
 
@@ -322,6 +327,8 @@ export function compilePlan({
   kind = "",
   play_script = null,
   contract = null,
+  cut = null,
+  added = null,
 }: {
   summary?: string;
   workers?: unknown;
@@ -331,6 +338,10 @@ export function compilePlan({
   play_script?: unknown;
   /** The module contract (module-contract.ts): who owns which module and what it exposes. */
   contract?: unknown;
+  /** What this run will not build (scope.ts): joins the run's cut list. */
+  cut?: unknown;
+  /** What the plan builds beyond the ask: one decision card each, never scope by itself. */
+  added?: unknown;
 } = {}): { plan: AnyRecord; error?: undefined } | { error: string; plan?: undefined } {
   const text = String(summary ?? "").trim();
   if (!text)
@@ -344,6 +355,9 @@ export function compilePlan({
     named.parts.map((part) => part.id),
   );
   if (modules.problem !== undefined) return { error: contractRefusalWords(modules.problem) };
+  // Capped like every scope list (scope.ts `scopeItems`); a plan that names neither is what it was.
+  const cutItems = scopeItems(cut);
+  const addedItems = scopeItems(added);
   return {
     plan: {
       summary: text.slice(0, PLAN_SUMMARY),
@@ -354,6 +368,8 @@ export function compilePlan({
       risks: lines(risks).slice(0, PLAN_RISKS),
       game: declared.game,
       ...(modules.contract ? { contract: modules.contract } : {}),
+      ...(cutItems.length ? { cut: cutItems } : {}),
+      ...(addedItems.length ? { added: addedItems } : {}),
     },
   };
 }
@@ -609,6 +625,16 @@ function withDeclaredGame<S extends FacetSpec>(
   return withHarnessChecks(spec, { ownsMain, game: normalizeGameTraits(declared), screen, keepsFrontEnd });
 }
 
+/**
+ * The part's own critic, when the director named one. The part reviewed as a screen owns it
+ * (loop/screen-owner.ts): every other part publishes its values and never draws them.
+ */
+function withCritic(spec: FacetSpec, critic: string | null): void {
+  if (!critic) return;
+  spec.critic = critic;
+  if (critic === SCREEN_CRITIC) spec.ownsScreen = true;
+}
+
 /** What the dry run could not do when nothing in this run has looked at the fork point yet. */
 function notVerifiedWords(base: AnyRecord | null, forkedFrom: string | null): string | null {
   if (base) return null;
@@ -675,6 +701,7 @@ export function compileWorkerSpec(
   });
   spec = validated.spec ?? spec;
   spec.setup = setup;
+  withCritic(spec, critic);
   // Who owns the move (M3.3). A director that wrote a ladder owns it: the harness hands the
   // worker the next unclimbed rung and never invents one of its own — the planner's "the ONE
   // structural move" and the liveness critic's grow gaps are exactly what once overruled a

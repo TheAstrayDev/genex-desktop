@@ -74,6 +74,7 @@ import {
 import { cutShortWake, midTurnUserSays } from "./live-prompts.ts";
 import { artDirectionBlock, ART_SKIPPED } from "./art-direction-prompts.ts";
 import { workingGoal } from "../goal-prompts.ts";
+import { runScope } from "../scope.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { DelegateResult } from "../../types/host-api.d.ts";
 import type { RestoredWake } from "./journal.ts";
@@ -590,6 +591,8 @@ function workersLimitFacts(state: NightState, now: number): WorkersLimitFacts | 
 /** The run, its kind and its plan, for the build card. */
 function cardFacts(night: Night): CardFacts {
   const { run, state } = night;
+  // What the run will not build rides on the card beside the clipped goal (loop/scope.ts).
+  const cut = runScope(run)?.cut ?? [];
   return {
     runId: run.runId,
     project: run.project,
@@ -599,6 +602,7 @@ function cardFacts(night: Night): CardFacts {
       ? { summary: String(state.plan.summary ?? ""), parts: (state.plan.workers ?? []).map((w: AnyRecord) => w.id) }
       : null,
     lead: Boolean(night.lead),
+    ...(cut.length ? { cut } : {}),
   };
 }
 

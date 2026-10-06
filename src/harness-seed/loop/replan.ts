@@ -20,6 +20,7 @@ import { EngineFailure } from "./outage.ts";
 import { HostMethod } from "./host-methods.ts";
 import { clip, CLIP_BRIEF, CLIP_QUOTE, CLIP_REASON } from "./text.ts";
 import { CheckOrigin, normalizeCheck, validateFacetSpec, type Check } from "./spec.ts";
+import { MoveScope } from "./scope.ts";
 import {
   NEXT_MOVE_SYSTEM,
   nextMoveUserPrompt,
@@ -317,7 +318,7 @@ export async function nextMove(
     counts?: unknown;
     cameras?: string[];
   },
-): Promise<{ what: string; why: string; check: Check | null } | null> {
+): Promise<{ what: string; why: string; check: Check | null; scope?: MoveScope } | null> {
   let raw: AnyRecord;
   try {
     const user = nextMoveUserPrompt({ run, spec, defects, notes, moves, counts, cameras });
@@ -332,6 +333,8 @@ export async function nextMove(
     what,
     why: typeof raw?.why === "string" ? raw.why.trim().slice(0, CLIP_REASON) : "",
     check: moveCheck(spec, raw.check),
+    // Typed, never read from the move's words: "adds" is the user's decision (facet/phases/plan.ts).
+    ...(raw.scope === MoveScope.Adds ? { scope: MoveScope.Adds } : {}),
   };
 }
 

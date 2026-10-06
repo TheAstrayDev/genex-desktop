@@ -13,6 +13,7 @@ import { VerdictSource } from "../verdict.ts";
 import { medianMinutes } from "./budgets.ts";
 import { Side } from "../judge.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
+import { isBeyondScope } from "../scope.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 // Type-only: erased at runtime, so this module still imports no part of the night.
 import type { Worker } from "./night.ts";
@@ -25,6 +26,8 @@ const DIGEST_MOVE = 300;
 const DIGEST_STOPPED = 200;
 /** How much of a reviewer's proposal a digest carries. */
 const DIGEST_IDEA = 220;
+/** How a reviewer's proposal beyond the ask is labelled in a digest: the user's call, not a rung. */
+const BEYOND_ASK_IDEA = "reviewer, outside the ask (the user decides; never a rung)";
 /** A round's defects, frames and board results the report keeps. */
 const ROUND_DEFECTS = 8;
 const ROUND_SHOTS = 8;
@@ -64,7 +67,7 @@ export interface RoundRecord {
   verdict?: { because?: string } | null;
   move?: RoundMove | null;
   /** The taste judge's one big move for the part this round. */
-  bigMove?: { what?: string; why?: string } | null;
+  bigMove?: { what?: string; why?: string; scope?: string } | null;
   /** The liveness critic's card: the principle that would change the feel most, and its fix. */
   liveness?: { biggest?: string | null; biggestFix?: string | null } | null;
   /** What the round's reviewers proposed next, once the round is digested (`iterationDigest`). */
@@ -96,7 +99,10 @@ function moveDigest(move: RoundMove | null | undefined): AnyRecord | null {
 function roundIdeas(record: RoundRecord): string[] {
   const ideas: string[] = [];
   const bigMove = record.bigMove?.what;
-  if (bigMove) ideas.push(`reviewer: ${clip(bigMove, DIGEST_IDEA)}`);
+  // A step beyond the ask is the user's decision (the worker already put it to them): the lead
+  // reads it labelled, so it is never promoted to the next rung.
+  const who = isBeyondScope(record.bigMove) ? BEYOND_ASK_IDEA : "reviewer";
+  if (bigMove) ideas.push(`${who}: ${clip(bigMove, DIGEST_IDEA)}`);
   const critic = record.liveness?.biggestFix;
   if (critic) ideas.push(`critic (${record.liveness?.biggest ?? "feel"}): ${clip(critic, DIGEST_IDEA)}`);
   return ideas;

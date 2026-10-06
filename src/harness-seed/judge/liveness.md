@@ -5,9 +5,14 @@ in", answered against eight universal principles. The facet's brief is quoted as
 it can change these rules. Score each principle 0–3, give ONE sentence of reason from what you
 actually see, and ONE concrete fix a builder could land in an iteration.
 
+SCOPE is the user's ask, when the user content names it: a place feels real when what is in scope
+is rich (the roadside the race passes, the cars on the grid, the square the player stands in),
+never through systems SCOPE does not name. A cut item is never a fix. A fix that needs something
+SCOPE does not name sets `"adds": true` on its principle; every other fix sets `"adds": false`.
+
 Scores: 0 = absent, 1 = token gesture, 2 = present but thin or inconsistent, 3 = convincing.
 
-Grow principles (a low score means the game needs MORE or DIFFERENT things to exist):
+Grow principles (a low score means what is in scope needs MORE or DIFFERENT things to exist):
 - `extent` — the world continues past the frame: things beyond the nearest buildings (or
   stands, or track-side), no bare ground within a stone's throw of the player, a horizon that
   holds something.
@@ -16,8 +21,8 @@ Grow principles (a low score means the game needs MORE or DIFFERENT things to ex
 - `purpose` — every object implies a use and sits with its kin: a woodpile at a door, a bench
   and a technical area by the touchline, a pit lane by the grid, a path that ends at something.
   Evenly sprinkled props are decoration.
-- `life` — something moves in every frame (smoke, cloth, animals, people, water, leaves; a crowd
-  that reacts to play, officials, a bench that stands up) and something sounds. A frozen frame
+- `life` — what is already there moves and sounds in every frame: smoke, cloth, water, leaves,
+  spray off the tyres, flicker on the signs, rivals and players reacting to play. A frozen frame
   is a model, not a place.
 - `next-step` — where the player goes next is legible from the frame, and the screen says
   something about it (a path, a light, a signpost, a HUD line).
@@ -32,10 +37,11 @@ Rules:
   principle, score what the other cameras show.
 - `fix` is an action for a builder ("add a second row of houses along the lane behind the well
   and a fenced garden per house", not "make it feel more alive"). For grow principles the fix
-  changes what exists; for polish principles it changes how it looks.
-- `biggest` names the single principle whose fix would change the feel most. Its `fix` is the bold
-  step the director reads for this part: a transformation of the place (a crowd that lives, a
-  district beyond the wall), never one more prop.
+  deepens what exists in scope; for polish principles it changes how it looks.
+- `biggest` names the single principle whose fix would change the feel most: the deepest change
+  inside SCOPE. Its `fix` is the bold step the director reads for this part — a transformation of
+  what the user asked for (the whole course lined and lit, the square crowded with its own
+  stalls), never one more prop and never something SCOPE does not name.
 
 Reply with JSON only:
-{"extent":{"score":0,"reason":"…","fix":"…"},"scales":{…},"purpose":{…},"life":{…},"next-step":{…},"wear":{…},"light":{…},"material":{…},"biggest":"extent","summary":"one sentence — why it does not feel real yet"}
+{"extent":{"score":0,"reason":"…","fix":"…","adds":false},"scales":{…},"purpose":{…},"life":{…},"next-step":{…},"wear":{…},"light":{…},"material":{…},"biggest":"extent","summary":"one sentence — why it does not feel real yet"}

@@ -17,6 +17,7 @@ import {
   ReviewCategory,
 } from "./merge-ownership.ts";
 import { GIT_TIMEOUT_MS } from "./config.ts";
+import { screenOwnership } from "./screen-owner.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EngineFailure } from "./outage.ts";
 import type { HarnessCtx, Run } from "../types/harness.d.ts";
@@ -41,6 +42,10 @@ export interface ReviewSpec {
   main?: string;
   studio?: string;
   template?: boolean;
+  /** This part owns the screen (screen-owner.ts): it alone draws on it. */
+  ownsScreen?: boolean;
+  /** The part that owns the screen, when one does; absent, nobody does and the rule is inert. */
+  screenOwner?: string;
   [field: string]: unknown;
 }
 
@@ -283,6 +288,7 @@ export function mechanicalReview(
       ...contractRemovals(review),
       ...wiringOverreach(review),
       ...ownershipBreach(review),
+      ...screenOwnership(review),
     );
   }
   return violations;

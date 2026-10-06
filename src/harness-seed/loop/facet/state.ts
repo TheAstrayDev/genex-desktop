@@ -183,6 +183,11 @@ export interface ResumableState {
    * director's ladder is climbed, and what the director reads about this part.
    */
   lastBigMove: AnyRecord | null;
+  /**
+   * The proposals beyond what the user asked for (scope.ts `isBeyondScope`) this worker has already
+   * put to the user as a decision card, by their `what`: each is asked once, never built.
+   */
+  surfacedBeyond: string[];
   /** The judge's polish notes on the accepted build: optional, never a round's whole work. */
   polishList: string[];
   /** The judge's biggest gap and how many judged builds in a row it has stood: { text, count, checkId, losses }. */
@@ -295,6 +300,7 @@ export const RESUMABLE_FIELDS = {
   polishStreak: Carry.Value,
   lastLiveness: Carry.Value,
   lastBigMove: Carry.Value,
+  surfacedBeyond: Carry.List,
   polishList: Carry.Value,
   gapStreak: Carry.Value,
   emaBuildMs: Carry.Value,
@@ -348,6 +354,7 @@ function freshResumable(facet: AnyRecord, initialDefects: unknown): ResumableSta
     polishStreak: 0,
     lastLiveness: null,
     lastBigMove: null,
+    surfacedBeyond: [],
     polishList: [],
     gapStreak: null,
     emaBuildMs: null,

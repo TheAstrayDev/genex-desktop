@@ -19,6 +19,7 @@ import { DIRECTOR_TOOLS } from "./tool-specs.ts";
 import { WAKE_BRIEF, wakeTools } from "./wake-prompts.ts";
 import { DirectorLoop } from "./wake-schedule.ts";
 import { workingGoal } from "../goal-prompts.ts";
+import { DIRECTOR_SCOPE_RULE, scopeLines } from "../scope-prompts.ts";
 import type { AnyRecord, Run } from "../../types/harness.d.ts";
 // Type-only: erased at runtime, so this module still imports no part of the night.
 import type { Worker } from "./night.ts";
@@ -28,6 +29,14 @@ import type { Worker } from "./night.ts";
  * seats one only when every part it depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
+
+/**
+ * The pool is a ceiling, not a quota (D8): the fewest workers that cover independent files. It used
+ * to call an idle window time lost, and Midnight Apex grew a police pursuit to fill one; the wake
+ * digest's room line says where more goes (a deeper layer of an in-scope area). Short, because the
+ * brief's own words are bounded (director-wake P5).
+ */
+const CAPACITY_RULE = "A ceiling, not a quota: start the fewest workers that cover independent files.";
 
 /** A brief's lines, with the ones a condition left empty taken out. */
 const joinLines = (lines: ReadonlyArray<string | null | undefined>): string =>
@@ -58,6 +67,7 @@ export function contractBrief({
     `You are making the game "${projectLabel}" judgeable for run ${run.runId}, in an isolated copy of it (this folder). This is your only job: nothing in this game can be looked at, checked or compared until its page loads the studio contract.`,
     ``,
     `GAME GOAL (context — not this run's work): ${workingGoal(run)}`,
+    scopeLines(run),
     ``,
     `THIS GAME HAS ITS OWN SHAPE — it is not the studio's template. Its entry is ${entryMain}${shape?.build ? `, its page is built with \`${shape.build}\`` : ""} and the studio serves ${shape?.entry ?? "index.html"}. Keep all of it: no second entry, do not replace index.html, do not rewrite the game, do not restyle or "clean up" anything.`,
     ``,
@@ -199,7 +209,9 @@ function rulesThatNeverMove(run: Run, loop: DirectorLoop, leads: boolean): strin
     `- Then say the plan: \`plan\` — what this run is for and the parts you mean to hand out, in the user's own chat. worker_start refuses until you have called it, so the user can read the plan. Say what kind of game this is in the same call — kind= one of ${KIND_NAMES.join(", ")} — because the harness drives that kind's controls before every judgement and puts only the checks it can pass on the board; a run that declares no kind gets no HUD rule, no look check and no movement check.${run.game?.kind ? ` THIS GAME ALREADY SAYS WHAT IT IS: its studio.json declares a ${run.game.kind} game, and this run is already being judged as one — pass that kind again unless what you saw in this run says otherwise.` : ""}${planReviewWords(run, loop)}`,
     leads
       ? LEAD_BRIEF.delegate
-      : `- After the starting point, delegate with plan and worker_start: a worker per area a player can name, the UI and HUD too, on its own files. Handle foundations, integration and small repairs yourself. If capacity or shared ownership blocks delegation, note why and keep improving and playtesting.`,
+      : `- After the starting point, delegate with plan and worker_start: a worker per area the ask names, the UI and HUD too, on its own files. Handle foundations, integration and small repairs yourself. If capacity or shared ownership blocks delegation, note why and keep improving and playtesting.`,
+    // A run from before scope reads its old rules: the rule names a SCOPE its brief has not got.
+    scopeLines(run) ? `- ${DIRECTOR_SCOPE_RULE}` : "",
     `- First playable: prioritize a small complete playable loop and integrate its healthy revision before broad atmosphere or asset polish. Continue judging normally; a preview is not acceptance or landing.`,
     `- Asset truth: run_status.assets lists generated originals and current workspace copies. Read it before answering asset questions. Preserve delivered local files; integrate checkpoints them through the host. Never move them to /tmp or swap in remote URLs: assets live in the game folder. State generated-but-unused assets and procedural fallbacks explicitly in completion reports.`,
     `- Completion reporting: distinguish delivered changes from passed, failed and unverified checks. The Studio outcome card counts integrations separately from evaluated attempts; never call all requested features verified merely because the structural board passed.`,
@@ -242,13 +254,14 @@ export function directorBrief({
     openingLine(run, leads),
     ``,
     `GAME GOAL: ${workingGoal(run)}`,
+    scopeLines(run),
     referenceLine(run),
     shapeLine(ownShape, shape),
     requestedStateLine(run.setup),
     ``,
     `TIME: ${minutes(finalDeadline - Date.now())} minutes in all. Your session ends at ${new Date(softDeadline).toISOString().slice(11, 16)} UTC (${minutes(softDeadline - Date.now())} minutes from now); the last ${minutes(finalDeadline - softDeadline)} minutes are reserved for wrapping up. ${durationCommission(run) ? "The selected duration is working time; finish in wrap-up." : "Finish once required outcomes are verified; time is a ceiling. Report blockers instead of optional polish."}`,
     whereLine({ gameFolder: lead?.gameFolder ?? null, integrationWorktree, baseCommit }),
-    `CAPACITY: ${pool}. A ceiling, not a quota: an idle window while an area waits is time lost.`,
+    `CAPACITY: ${pool}. ${CAPACITY_RULE}`,
     nestedLine(nestedRepos, leads),
     contractLine(contract, shape, leads),
     unobservedStartLine(startObserved, startingPoint),
@@ -383,6 +396,7 @@ export function singleWorkerBrief({
     `You are a BUILDER for run ${run.runId} on the game "${run.project}", working in an isolated copy of the game (this folder). The run's director wrote your brief; build exactly that, then stop.`,
     ``,
     `GAME GOAL (context): ${workingGoal(run)}`,
+    scopeLines(run),
     ``,
     `YOUR BRIEF FROM THE DIRECTOR — ${worker.title}:`,
     worker.brief,
@@ -457,5 +471,5 @@ export function limitResumePrompt(waitedMinutes: number): string {
 
 /** What the director's session is told when its turn ended with working time left in a timed build. */
 export function continuationPrompt(minutesLeft: number): string {
-  return `The timed build still has ${minutesLeft} working minutes. Your previous turn ended, but the build is still running. Call run_status and read pending user instructions. Plan and start a worker for the most valuable unfinished feature or verification gap; inspect, integrate and show progress. Continue improving within the original goal. Do not finish or wait out the clock.`;
+  return `The timed build still has ${minutesLeft} working minutes. Your previous turn ended, but the build is still running. Call run_status and read pending user instructions. Plan and start a worker for the most valuable unfinished in-scope feature or a deeper layer of one, or a verification gap; inspect, integrate and show progress. Continue improving within the original goal. Do not finish or wait out the clock.`;
 }

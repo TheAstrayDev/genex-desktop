@@ -7,6 +7,7 @@ import { VerdictSource } from "../verdict.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import { FACET_POLICY, MAX_STUCK_ANSWERS } from "./policy.ts";
 import { CLIP_QUOTE } from "../text.ts";
+import { isBeyondScope } from "../scope.ts";
 import type { FacetPolicy } from "./policy.ts";
 
 /**
@@ -324,6 +325,22 @@ export function movesThisRound(
   return entries.length > 0 && !entries.some((e) => e.weight === CheckWeight.Identity && e.pass === false);
 }
 
+/** What `chooseMove` decides: where the move comes from, the move it names, and whether missing it can undo the round. */
+export interface MoveChoice {
+  source: MoveSource;
+  mandatory: boolean;
+  /** The ladder's next rung (`milestone`). */
+  milestone?: AnyRecord;
+  /** A named move still open (`pending`). */
+  pending?: AnyRecord;
+  /** The reviewer's big move (`reviewer`). */
+  bigMove?: AnyRecord;
+  /** The critic's worst grow gap (`critic`). */
+  gap?: AnyRecord;
+  /** A reviewer's proposal beyond the ask (scope.ts `isBeyondScope`): the user's decision, never the move. */
+  beyond?: AnyRecord;
+}
+
 /**
  * Where this iteration's move comes from, and whether missing it can undo the round (M3.3).
  * Pure: the caller seeds the move's check, counts the attempt, pushes a new move and asks the
@@ -363,20 +380,24 @@ export function chooseMove({
   lastLiveness?: { grow?: AnyRecord[] } | null;
   lastBigMove?: AnyRecord | null;
   policy?: FacetPolicy;
-} = {}) {
+} = {}): MoveChoice {
+  // A reviewer's proposal beyond what the user asked for (scope.ts `isBeyondScope`) is never a
+  // move: it rides out as `beyond`, for the round to ask the user about, whatever the move is.
+  const fresh = freshBigMove(moves, lastBigMove);
+  const beyond: Pick<MoveChoice, "beyond"> = fresh && isBeyondScope(fresh) ? { beyond: fresh } : {};
   const next = nextRung(spec?.milestones ?? [], new Set([...milestonesDone, ...setAside]));
-  if (next) return { source: MoveSource.Milestone, milestone: next, mandatory: true };
+  if (next) return { source: MoveSource.Milestone, milestone: next, mandatory: true, ...beyond };
   // Past a director's ladder only the reviewer's move is the harness's to give, and as guidance.
   const directed = spec?.moveOwner === DIRECTOR_LADDER;
   const mandatory = !directed && polishStreak >= policy.polishStreakEscalate;
   const pending = [...moves].reverse().find((m) => isOpenMove(m, policy) && (!directed || isReviewers(m)));
-  if (pending) return { source: MoveSource.Pending, pending, mandatory };
-  const bigMove = freshBigMove(moves, lastBigMove);
+  if (pending) return { source: MoveSource.Pending, pending, mandatory, ...beyond };
+  const bigMove = fresh && !isBeyondScope(fresh) ? fresh : null;
   if (bigMove) return { source: MoveSource.Reviewer, bigMove, mandatory };
-  if (directed) return { source: MoveSource.None, mandatory: false };
+  if (directed) return { source: MoveSource.None, mandatory: false, ...beyond };
   const gap = (lastLiveness?.grow ?? []).find((g) => !moves.some((m) => m.what === g.fix));
-  if (gap) return { source: MoveSource.Critic, gap, mandatory };
-  return { source: MoveSource.Planner, mandatory };
+  if (gap) return { source: MoveSource.Critic, gap, mandatory, ...beyond };
+  return { source: MoveSource.Planner, mandatory, ...beyond };
 }
 
 /** The ladder's next rung: one the director steered in first, else the first not yet passed. */
@@ -401,7 +422,7 @@ function freshBigMove(moves: readonly AnyRecord[], lastBigMove: AnyRecord | null
 /** A move the planner, the reviewer or the critic named that is not delivered yet and still has attempts left. */
 function isOpenMove(move: AnyRecord, policy: FacetPolicy): boolean {
   const named = NAMED_MOVE_SOURCES.includes(move.source);
-  return named && !move.delivered && (move.attempts ?? 1) < policy.moveAttempts;
+  return named && !move.delivered && !isBeyondScope(move) && (move.attempts ?? 1) < policy.moveAttempts;
 }
 
 /**

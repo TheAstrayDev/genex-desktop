@@ -7,6 +7,7 @@ import { CLIP_QUOTE } from "../text.ts";
 import { DEFAULT_CAMERA } from "../cameras.ts";
 import { FacetStage, moveEscalated, stageOf } from "./stage.ts";
 import { FINISH_FIX_ASK, FINISH_PROMPT_LINE, finishLossEscalate } from "./stage-prompts.ts";
+import { scopeLines } from "../scope-prompts.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** Reference stills into the first brief, and pair images later, at most. */
@@ -479,10 +480,13 @@ function kindLine(game: AnyRecord | null): string {
 /** The opening's head: who the builder is, the goal, the facet, and the contract when there is no brief. */
 function openingHead(p: PromptInput): string[] {
   const { run, spec: facet, pointsAtBrief } = p;
+  const scope = scopeLines(run);
   return [
     `You are building ONE FACET of a game inside Autopilot run ${run.runId}, iteration ${p.iteration}.`,
     ``,
     `GAME GOAL: ${run.goal}`,
+    // What the user asked for, in their words, and what is cut (loop/scope.ts); nothing for a run without it.
+    ...(scope ? [scope] : []),
     `PROJECT: ${run.project}`,
     // A game that declares no kind says nothing here.
     kindLine(p.game),

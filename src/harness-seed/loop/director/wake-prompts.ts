@@ -75,6 +75,8 @@ export interface CardFacts {
   /** A duration commission spends its working time; goal commissions finish when verified. */
   direction: boolean;
   plan: { summary: string; parts: string[] } | null;
+  /** What the run will not build (loop/scope.ts `cut`): absent or empty, the card has no such line. */
+  cut?: string[];
   /**
    * The lead writes nothing (one session, `night.lead`): its card says so. Absent — a director with
    * its own hands, such as a kept director.ts from before one session drives — it keeps its memory file.
@@ -258,7 +260,7 @@ function roomLine(room: WorkerRoom | null | undefined): string {
   if (!room) return "";
   const free = Math.max(0, room.allowed - room.running);
   const more = free
-    ? ` — room for ${free} more: start the next area that has unbuilt work, or a deeper layer of one`
+    ? ` — room for ${free} more: a deeper layer of an in-scope area, or the next one the ask names with unbuilt work`
     : "";
   return `- workers: ${room.running} running, up to ${room.allowed} at once (the user's Maximum concurrent workers)${more}`;
 }
@@ -311,6 +313,8 @@ export function buildCard({ card, softDeadline, finalDeadline }: DigestFacts): s
   return [
     "BUILD CARD:",
     `- Run ${card.runId} on "${card.project}": ${clip(card.goal, GOAL_CHARS)}`,
+    // The goal is clipped here; what the run will not build is not (loop/scope.ts `cut`).
+    ...(card.cut?.length ? [`- Cut — not this build: ${card.cut.join("; ")}`] : []),
     card.direction
       ? "- An explicit duration commission: spend the working time building, testing and improving; finish in the wrap-up, or when the user asks."
       : "- Finish when the required goal is verified and integrated. Remaining time is a safety ceiling, not a target. If a required prerequisite is blocked, preserve progress and report it; do not continue optional polish.",
