@@ -939,7 +939,8 @@ describe("harness incidents", () => {
       2,
       "outside the block nothing is touched",
     );
-    assert.equal(verifyWiringMerge("  });
+    assert.equal(verifyWiringMerge("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> theirs").ok, false);
+  });
 
   it("3. D1 circuit breaker: two unjudgeable builds with one cause stop the facet; there is no third build", async () => {
     const rig = await startRig();
@@ -9528,7 +9529,6 @@ describe("ownership after a merge (Midnight Apex)", () => {
   });
 });
 
-<<<<<<< HEAD
 describe("a racing build judged during its countdown (Midnight Apex, 2026-10-05)", () => {
   it("NFS-1. a racing build judged during its countdown: the drive waits for flow.playing", async () => {
     const rig = await startRig();
@@ -9600,6 +9600,9 @@ describe("a racing build judged during its countdown (Midnight Apex, 2026-10-05)
       preview.stateOpts.some((options) => options?.keep?.includes("race.lap")),
       "the state the board reads is kept whole",
     );
+  });
+});
+
 /**
  * Midnight Apex (2026-10-05): the user asked for "a hyper-realistic NFS-inspired racing game"; the
  * Loop chat launched with a goal that added police, traffic and a pursuit meter, and from then on that

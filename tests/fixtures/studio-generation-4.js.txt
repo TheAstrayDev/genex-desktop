@@ -1,5 +1,5 @@
 /**
- * The studio contract — PLAN.md §7, v2 (HARNESS-REWORK.md §4.1), attachable since M4.2a.
+ * The studio contract — generation 4 (a copy of the M4 template, kept as a test fixture), attachable since M4.2a.
  *
  * Games are built so the critic can *judge* them: deterministic runs, exposed state, named
  * camera angles, fixed-timestep stepping — and, since v2, an inspectable scene graph. The
