@@ -606,6 +606,23 @@ describe("the lead's judge ship=yes (director/tools.ts)", () => {
     const finisher = night.state.workers.get("track-polish");
     assert.ok(finisher.spec.checks.some((c: Record<string, unknown>) => /road texture/.test(String(c.defect))));
     assert.ok(!night.state.ledger.some((d: Record<string, unknown>) => d.owner === "track"));
+  it("AD-4c. a worker started for a part under another id (worker_start goal=<part>) takes that part's ship defects, as the contract gate reads its part", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    night.state.workers.set("hud-gauges", loopWorker("hud-gauges", { goal: "hud" }));
+    // A worker whose own id is a plan part builds that part, whatever goal it advances.
+    night.state.workers.set("track", loopWorker("track", { goal: "hud", state: "done" }));
+    await night.judge({ target: "integration", ship: "yes" });
+    const gauges = night.state.workers.get("hud-gauges");
+    assert.ok(
+      gauges.spec.checks.some((c: Record<string, unknown>) => /speed digits/.test(String(c.defect))),
+      "the running worker whose goal is the hud part takes its defect",
+    );
+    assert.deepEqual(
+      night.state.ledger.map((d: Record<string, unknown>) => d.owner).sort(),
+      ["integration", "track"],
+      "the hud defect is not shelved as nobody's work",
+    );
   });
 
   it("AD-10. judge ship=yes looks at one build alone: with a start picture it makes no blind call and leaves no pick, and ship=yes against a build is refused in one line", async () => {

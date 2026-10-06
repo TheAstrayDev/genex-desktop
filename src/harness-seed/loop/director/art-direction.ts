@@ -27,6 +27,7 @@ import { MINUTE_MS, SECOND_MS } from "../time.ts";
 import { Against } from "../verdict.ts";
 import * as budgetParts from "./budgets.ts";
 import { goalCommission } from "./commission.ts";
+import * as contractParts from "./module-contract.ts";
 import * as ruleParts from "./rules.ts";
 import { list, slug } from "./args.ts";
 import { contractAloneOnStart } from "./contract-gate.ts";
@@ -110,11 +111,27 @@ const takesShipDefects = (worker: Worker | undefined): worker is Worker & { spec
   Boolean(worker && isRunning(worker) && worker.mode === WorkerMode.Loop && worker.spec);
 
 /**
- * The worker that owns `part` now: the running loop worker of that id, or the running one that
- * replaced it (`worker_start replaces=`, followed through each replacement by its typed field);
- * else the part's own worker, finished or not, or none.
+ * The plan part a worker builds, as the contract gate reads it (module-contract.ts
+ * `partOfWorker`): its own id, else the worker it restarts, else the goal it advances — whichever
+ * is a part of the plan. A kept older module-contract.ts without it reads the goal alone.
  */
-function ownerOf(workers: ReadonlyMap<string, Worker>, part: string | null): Worker | undefined {
+function planPartOf(plan: AnyRecord | null | undefined, worker: Worker): string | null {
+  const partOf = (contractParts as { partOfWorker?: typeof contractParts.partOfWorker }).partOfWorker;
+  if (typeof partOf === "function") return partOf(plan, [worker.id, worker.replaces, worker.goal]);
+  return worker.goal ?? null;
+}
+
+/**
+ * The worker that owns `part` now: the running loop worker of that id, or the running one that
+ * replaced it (`worker_start replaces=`, followed through each replacement by its typed field) or
+ * was started for it under another id (`goal=`, the plan part the contract gate gives it); else
+ * the part's own worker, finished or not, or none.
+ */
+function ownerOf(
+  workers: ReadonlyMap<string, Worker>,
+  part: string | null,
+  plan?: AnyRecord | null,
+): Worker | undefined {
   if (!part) return undefined;
   const own = workers.get(part);
   if (takesShipDefects(own)) return own;
@@ -126,7 +143,8 @@ function ownerOf(workers: ReadonlyMap<string, Worker>, part: string | null): Wor
     }
     return false;
   };
-  return [...workers.values()].find((worker) => takesShipDefects(worker) && replacesPart(worker)) ?? own;
+  const buildsPart = (worker: Worker): boolean => replacesPart(worker) || planPartOf(plan, worker) === part;
+  return [...workers.values()].find((worker) => takesShipDefects(worker) && buildsPart(worker)) ?? own;
 }
 
 /**
@@ -164,13 +182,14 @@ function shipCheck(board: { checks: AnyRecord[] }, defect: ShipDefect): Check {
 export function shipDefectsToChecks(
   review: Pick<ShipReview, "defects">,
   workers: ReadonlyMap<string, Worker>,
+  plan?: AnyRecord | null,
 ): ShipRoute[] {
   const boards = new Map<string, { checks: AnyRecord[] }>();
   const boardOf = (part: string | null): { checks: AnyRecord[] } => {
     const key = part ?? "";
     const known = boards.get(key);
     if (known) return known;
-    const worker = ownerOf(workers, part);
+    const worker = ownerOf(workers, part, plan);
     const board = { checks: [...(takesShipDefects(worker) ? (worker.spec.checks ?? []) : [])] };
     boards.set(key, board);
     return board;
@@ -222,9 +241,9 @@ function onBoard(night: Night, worker: Worker & { spec: AnyRecord }, route: Ship
  */
 export function routeShipDefects(night: Night, review: Pick<ShipReview, "defects">): ShipRoute[] {
   const { note, state } = night;
-  const routes = shipDefectsToChecks(review, state.workers);
+  const routes = shipDefectsToChecks(review, state.workers, state.plan);
   for (const route of routes) {
-    const worker = ownerOf(state.workers, route.part);
+    const worker = ownerOf(state.workers, route.part, state.plan);
     if (takesShipDefects(worker)) {
       onBoard(night, worker, route);
       continue;
