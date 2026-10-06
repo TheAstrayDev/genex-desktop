@@ -555,12 +555,18 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
   });
 
   it("P7b. a goal build's card and brief say the art director's blocker and visible defects are required finishing, never optional polish, and its nits stay optional", () => {
-    const goal = wakeDigest(facts({ card: { ...facts().card, direction: false } }));
+    const goal = wakeDigest(facts({ card: { ...facts().card, direction: false, goalCommission: true } }));
     const card = goal.slice(goal.indexOf("BUILD CARD")).split("\n\n")[0]!;
     assert.match(card, /do not continue optional polish/, "optional polish is still not the goal build's work");
     assert.match(card, /art director's blocker and visible defects[^\n]*not optional polish/);
     assert.match(card, /nits stay optional/);
     assert.ok(card.split("\n").length <= CARD_MAX_LINES, `the card is ${card.split("\n").length} lines`);
+    // A legacy run that is neither a goal nor a duration commission has no finish the art director
+    // turns back: its card, like its brief, says nothing of the art director's defects.
+    const legacy = wakeDigest(facts({ card: { ...facts().card, direction: false } }));
+    const legacyCard = legacy.slice(legacy.indexOf("BUILD CARD")).split("\n\n")[0]!;
+    assert.match(legacyCard, /do not continue optional polish/);
+    assert.doesNotMatch(legacyCard, /art director/, "only a goal commission's card names the art director's defects");
 
     const now = Date.now();
     const brief = directorBrief({

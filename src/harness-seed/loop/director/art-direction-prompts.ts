@@ -32,10 +32,11 @@ export interface ShipSteerFacts {
   defect: string;
   /** The question's id on the worker's board. */
   checkId: string;
-  severity: string;
+  /** How much it matters: a nit is optional polish; a blocker or visible defect is the work. */
+  severity: DefectSeverity;
   /** The review's verdict: ship, not ship, or none read. */
   ship: boolean | null;
-  /** The worker finishes its part (`stage=finish`): the defects are its round's work, not beside a move. */
+  /** The worker finishes its part (`stage=finish`), or the night is past its finish mark: the defects are its round's work, not beside a move. */
   finishing: boolean;
 }
 

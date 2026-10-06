@@ -1200,7 +1200,7 @@ describe("a build paused before the contract gate shipped, resumed (review)", ()
     const { repo, head, saved } = await preUpgrade();
     const night = resumedOver(repo, head, saved);
     night.state.plan = compilePlan(planArgs()).plan!;
-    assert.match(String(await contractOnPlan(night as never)), /docs\/ARCHITECTURE\.md/);
+    assert.match(String(await contractOnPlan(night as never)), /docs\/MODULE-CONTRACT\.md/);
     const args = { id: "city" };
     const gate = await contractAtFork(night as never, { id: "city", args, mode: WorkerMode.Loop, commit: head });
     assert.match(String(gate.refusal), /does not contain the module contract/);

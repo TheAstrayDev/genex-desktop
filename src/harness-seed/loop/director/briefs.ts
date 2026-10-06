@@ -26,8 +26,9 @@ import type { AnyRecord, Run } from "../../types/harness.d.ts";
 import type { Worker } from "./night.ts";
 
 /**
- * This part serves a lead that is its chat's own session and writes nothing (one session): a night
- * seats one only when every part it depends on says so (lead-session.ts `servesLead`).
+ * This part serves a lead that is its chat's own session (one session): it builds in the integration
+ * worktree by its full path and keeps no memory file. A night seats one only when every part it
+ * depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
 
@@ -110,7 +111,8 @@ export interface DirectorBriefFacts {
   loop?: DirectorLoop;
   /**
    * A lead that is its chat's own session (one session): where it sits. It reads the lines written
-   * for a lead that writes nothing; absent, a director with its own hands in `integrationWorktree`.
+   * for a lead, which builds in the integration worktree by its full path; absent, a director whose
+   * cwd is `integrationWorktree`.
    */
   lead?: { gameFolder: string } | null;
 }
@@ -200,8 +202,8 @@ function userSaysWords(loop: DirectorLoop): string {
 
 /**
  * The rules that never move, with what this run already knows about its kind and its plan review.
- * A lead that writes nothing (`leads`) hands every change to a worker and keeps no memory file:
- * the journal and its digests carry the night.
+ * A lead (`leads`) does the foundations itself in the integration worktree, hands each part to a
+ * worker and keeps no memory file: the journal and its digests carry the night.
  */
 function rulesThatNeverMove(run: Run, loop: DirectorLoop, leads: boolean): string[] {
   return [

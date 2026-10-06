@@ -41,8 +41,9 @@ import type { Night, Worker } from "./night.ts";
 import type { ShelvedDefect } from "./rules.ts";
 
 /**
- * This part serves a lead that is its chat's own session and writes nothing (one session): a night
- * seats one only when every part it depends on says so (lead-session.ts `servesLead`).
+ * This part serves a lead that is its chat's own session (one session): it builds in the integration
+ * worktree by its full path and keeps no memory file. A night seats one only when every part it
+ * depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
 
@@ -180,6 +181,21 @@ function shipCheck(board: { checks: AnyRecord[] }, defect: ShipDefect): Check {
 const isShipCheck = (check: AnyRecord): boolean => check?.askedBy === ART_DIRECTOR;
 
 /**
+ * Nights whose finish look has begun: the finish mark's own pass, or a goal build's finish gate
+ * (`artDirectionPass`). Its defects reach owners the lead has not flipped to `stage=finish` yet.
+ */
+const finishLooked = new WeakSet<Night>();
+
+/**
+ * Is the night past its finish mark: its finish look has begun, or a wake said the mark (the
+ * journal keeps that across a Resume, wake.ts `journalWake`)? From there every owner of a ship
+ * defect is told as a finisher, so no steer puts a move ahead of finishing what exists.
+ */
+function pastFinishMark(night: Night): boolean {
+  return finishLooked.has(night) || night.journal?.director?.wake?.finishMarkSaid === true;
+}
+
+/**
  * Take the art director's earlier questions off every running board the newest review does not
  * ask again, so a re-review swaps its set instead of adding to it: a re-review rewords the same
  * defect, and each reworded copy was one more identity question to answer before the part is done
@@ -243,7 +259,8 @@ function shelve(ledger: ShelvedDefect[], defect: { text: string; owner: string }
 
 /**
  * Put a ship question on a running worker's board and tell it — in words that follow the review's
- * verdict (`ship`) and the defect's severity — rules.ts's board when it has one, its router otherwise.
+ * verdict (`ship`), the defect's severity and the worker's stage (a finisher's, or anyone's past the
+ * finish mark) — rules.ts's board when it has one, its router otherwise.
  */
 function onBoard(
   night: Night,
@@ -267,7 +284,7 @@ function onBoard(
       checkId: route.check.id,
       severity: route.defect.severity,
       ship,
-      finishing: isFinishing(worker.spec),
+      finishing: isFinishing(worker.spec) || pastFinishMark(night),
     }),
   );
   note(
@@ -419,11 +436,13 @@ export function finishMarkAt(night: Night): number | null {
  * and nothing says it does not load, the art director judges it (`judge ship=yes`, through the
  * studio's window when every other is taken, done by `ART_DIRECTION_JUDGE_MS`) and its defects go
  * to their owners. `how` lets the same look answer the close's own question (the finish gate).
- * Answers the review, or why there was none.
+ * From this look on the night is past its finish mark (`pastFinishMark`). Answers the review, or
+ * why there was none.
  */
 export async function artDirectionPass(night: Night, how: ArtDirectionAsk = {}): Promise<ArtDirection> {
   const { ctx, note, state } = night;
   const { ask = {}, final = false, judgeMs = ART_DIRECTION_JUDGE_MS } = how;
+  finishLooked.add(night);
   const head = (await night.syncHead().catch(() => null)) ?? state.integrationHead;
   if (ctx.cancelled) return { head, review: null, skipped: ART_SKIPPED.stopped };
   if (!movedBeyondStart(night, head)) return { head, review: null, skipped: ART_SKIPPED.nothingNew };

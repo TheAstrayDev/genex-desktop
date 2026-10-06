@@ -1,6 +1,6 @@
 import { estimateTokens } from "../prompt.ts";
 import { reviewProgress } from "./progress.ts";
-import { durationCommission } from "./commission.ts";
+import { durationCommission, goalCommission } from "./commission.ts";
 /**
  * The director's wake loop. The lead ends its turn after every decision; between turns nothing
  * of it runs; the studio wakes the SAME session with a digest when something happens — the user
@@ -85,8 +85,9 @@ import type { CardFacts, DigestFacts, DigestWorker, WorkerRoom, WorkersLimitFact
 import type { TurnFacts, TurnVerdict, Wake, WakeReason, WakeView } from "./wake-schedule.ts";
 
 /**
- * This part serves a lead that is its chat's own session and writes nothing (one session): a night
- * seats one only when every part it depends on says so (lead-session.ts `servesLead`).
+ * This part serves a lead that is its chat's own session (one session): it builds in the integration
+ * worktree by its full path and keeps no memory file. A night seats one only when every part it
+ * depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
 
@@ -616,6 +617,7 @@ function cardFacts(night: Night, finishing = false): CardFacts {
     lead: Boolean(night.lead),
     ...(cut.length ? { cut } : {}),
     ...(finishing ? { finishing } : {}),
+    ...(goalCommission(run) ? { goalCommission: true } : {}),
   };
 }
 
@@ -651,7 +653,8 @@ function digestFacts(
     finishRequested: wake.finishSaid,
     finishMarkAt: finishMarkView(night, wake, said.now),
     ...(wake.finishMarkSaid ? { finishMarkPassed: true } : {}),
-    card: cardFacts(night, wake.finishMarkSaid),
+    // Only a timed build's card changes at the mark: a goal build's is not sent again for it.
+    card: cardFacts(night, wake.finishMarkSaid && isDirection(night)),
   };
 }
 

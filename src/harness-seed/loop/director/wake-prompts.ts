@@ -18,8 +18,9 @@ import type { LiveToolSpec } from "../../types/host-api.d.ts";
 import type { WakeReason } from "./wake-schedule.ts";
 
 /**
- * This part serves a lead that is its chat's own session and writes nothing (one session): a night
- * seats one only when every part it depends on says so (lead-session.ts `servesLead`).
+ * This part serves a lead that is its chat's own session (one session): it builds in the integration
+ * worktree by its full path and keeps no memory file. A night seats one only when every part it
+ * depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
 
@@ -62,7 +63,7 @@ export interface DigestWorker {
   /** What its reviewers propose for the part next: the judge's big move, the critic's biggest fix. */
   ideas?: string[];
   /** Its stage when it finishes its part (facet/stage.ts): absent, it builds. */
-  stage?: string;
+  stage?: FacetStage;
 }
 
 /** How many workers run, and how many the machine allows at once (the user's Maximum concurrent workers). */
@@ -82,12 +83,19 @@ export interface CardFacts {
   /** What the run will not build (loop/scope.ts `cut`): absent or empty, the card has no such line. */
   cut?: string[];
   /**
-   * The lead writes nothing (one session, `night.lead`): its card says so. Absent — a director with
-   * its own hands, such as a kept director.ts from before one session drives — it keeps its memory file.
+   * The lead is its chat's own session (one session, `night.lead`): it builds in the integration
+   * worktree by its full path and keeps no memory file, and its card says so. Absent — a director
+   * whose cwd is that worktree, such as a kept director.ts from before one session drives — it keeps
+   * its memory file.
    */
   lead?: boolean;
   /** The build is past its finish mark (a wake said it): the card names the finish stage. Absent: not yet. */
   finishing?: boolean;
+  /**
+   * A goal commission (commission.ts `goalCommission`): the art director turns its first finish
+   * back with its defects, so its card says they are not optional polish. Absent: any other run.
+   */
+  goalCommission?: boolean;
 }
 
 /** The workers' engine's limit, as the digest names it. */
@@ -336,12 +344,17 @@ const TIMED_RULE = {
     "- An explicit duration commission in its finish stage: no new parts or systems — the owners finish theirs (stage=finish), integrate, judge ship=yes; finish in the wrap-up, or when the user asks.",
 } as const;
 
-/** A goal build's completion rule: optional polish is not its work, and the art director's defects are not optional polish. */
-const GOAL_RULE = `- Finish when the required goal is verified and integrated. Remaining time is a safety ceiling, not a target. If a required prerequisite is blocked, preserve progress and report it; do not continue optional polish. ${SHIP_DEFECTS_NOT_POLISH}`;
+/** A build's completion rule when it is not a duration commission: optional polish is not its work. */
+const GOAL_RULE =
+  "- Finish when the required goal is verified and integrated. Remaining time is a safety ceiling, not a target. If a required prerequisite is blocked, preserve progress and report it; do not continue optional polish.";
 
-/** The card's completion rule: a goal build's, or a timed build's for the stage it is in. */
+/**
+ * The card's completion rule: a goal build's — and a goal commission's, whose finish the art
+ * director turns back with its defects, says those are not optional polish — or a timed build's
+ * for the stage it is in.
+ */
 function completionRule({ card, finishMarkPassed }: DigestFacts): string {
-  if (!card.direction) return GOAL_RULE;
+  if (!card.direction) return card.goalCommission === true ? `${GOAL_RULE} ${SHIP_DEFECTS_NOT_POLISH}` : GOAL_RULE;
   // The digest's own fact too: a caller that stamps no `finishing` on the card still reads the finish stage.
   return card.finishing === true || finishMarkPassed === true ? TIMED_RULE.finishing : TIMED_RULE.building;
 }
@@ -556,13 +569,13 @@ const WAKE_TOOL_SWAPS = new Map<string, readonly [string, string]>([
   ],
 ]);
 
-/** …and the ones a lead that writes nothing reads besides (one session, lead-session.ts): a merge conflict goes to a worker. */
+/** …and the ones a lead reads besides (one session, lead-session.ts): a merge conflict goes to a worker. */
 const LEAD_TOOL_SWAPS = new Map<string, readonly [string, string]>([[DirectorTool.Integrate, LEAD_INTEGRATE_SWAP]]);
 
 /**
  * The run tools a waking lead is offered: no `wait`, and descriptions that say to end the turn —
- * and, for a lead that writes nothing (`lead`), that a conflict goes to a worker. A director with
- * its own hands on the wake loop (a kept director.ts from before one session) resolves it itself.
+ * and, for a lead (`lead`), that a conflict goes to a worker. A director whose cwd is the
+ * integration worktree on the wake loop (a kept director.ts from before one session) resolves it itself.
  */
 export function wakeTools(tools: readonly LiveToolSpec[], { lead = false }: { lead?: boolean } = {}): LiveToolSpec[] {
   return tools

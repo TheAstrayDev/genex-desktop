@@ -606,12 +606,13 @@ stage=finish` on each owner, integrate, `judge ship=yes` again. Every later wake
 time line says the build is past the mark, the room for workers offers only finish workers, the
 idle question asks to finish what exists instead of a next feature, no worker line shows its
 reviewers' next big step (a finishing worker's never does, and its line says `stage finish`), and a
-timed build's card says its finish stage. A goal build's card and brief say the art director's
+timed build's card says its finish stage. A goal commission's card and brief say the art director's
 blocker and visible defects are required finishing, not the optional polish it skips. Each defect on the integration
 branch becomes a director-origin vision check on its running owner's board (the part's worker, or
 the running worker that replaced it; its fix is a strong flip), and its owner is told in words that
 follow the verdict and severity (a nit is optional polish; a blocker or visible defect must be gone
-before the part is done, beside a building worker's move), or a ledger line under its finished
+before the part is done, beside a building worker's move; from the finish look on every owner is
+told as a finisher), or a ledger line under its finished
 part or the lead. A loop worker started on that part later (its id, `replaces` chain or goal) takes
 the part's ledger lines onto its board the same way, so a finish worker ends only once each
 blocker or visible defect is gone. A review with a verdict replaces the earlier reviews' questions
