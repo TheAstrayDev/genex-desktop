@@ -222,6 +222,7 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
       CLAUDE_CONFIG_DIR: "/claude/home",
       CODEX_HOME: "/codex/home",
       OPENAI_BASE_URL: "https://proxy.example",
+      OPENCODE_CONFIG: "/opencode/config.json",
       SSH_AUTH_SOCK: "/tmp/agent.sock",
       ...FOREIGN,
     };
@@ -248,6 +249,7 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
         request: { base: "contractor", vendor: "claude", keep: ["CLAUDE_CODE_OAUTH_TOKEN"] },
         keeps: ["PATH", "HOME", "HARMLESS_FLAG", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR"],
         drops: [
+          "OPENCODE_CONFIG",
           "ANTHROPIC_API_KEY",
           "ANTHROPIC_AUTH_TOKEN",
           "CODEX_HOME",
@@ -269,6 +271,7 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
         request: { base: "contractor", vendor: "codex", set: { CODEX_HOME: "/studio/codex" } },
         keeps: ["PATH", "HOME", "HARMLESS_FLAG", "CODEX_HOME", "OPENAI_BASE_URL"],
         drops: [
+          "OPENCODE_CONFIG",
           "OPENAI_API_KEY",
           "CODEX_API_KEY",
           "CODEX_ACCESS_TOKEN",
@@ -279,6 +282,30 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
           "GITHUB_TOKEN",
           "SSH_AUTH_SOCK",
         ],
+      },
+      {
+        // OpenCode signs in to many providers through its own store; it gets neither subscription
+        // CLI's variables, nor any metered key the shell exports.
+        name: "opencode contractor",
+        request: { base: "contractor", vendor: "opencode", set: { OPENCODE_DISABLE_AUTOUPDATE: "1" } },
+        keeps: ["PATH", "HOME", "HARMLESS_FLAG", "OPENCODE_CONFIG", "OPENCODE_DISABLE_AUTOUPDATE"],
+        drops: [
+          "CLAUDE_CODE_OAUTH_TOKEN",
+          "CLAUDE_CONFIG_DIR",
+          "CODEX_HOME",
+          "OPENAI_BASE_URL",
+          "OPENAI_API_KEY",
+          "ANTHROPIC_API_KEY",
+          "GENEX_TOKEN",
+          "GITHUB_TOKEN",
+          "SSH_AUTH_SOCK",
+        ],
+      },
+      {
+        name: "a tool of no vendor",
+        request: { base: "contractor", vendor: "none" },
+        keeps: ["PATH", "HOME", "HARMLESS_FLAG"],
+        drops: ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "OPENAI_BASE_URL", "OPENCODE_CONFIG", "SSH_AUTH_SOCK"],
       },
     ];
     for (const row of rows) {
@@ -545,25 +572,29 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
     // Absolute on this platform: `/Users/me` on macOS and Linux, `<drive>:\Users\me` on Windows.
     const at = (...parts: string[]) => path.resolve(path.sep, ...parts);
     const home = at("Users", "me");
-    assert.deepEqual(credentialHomes([], {}, home), [at("Users", "me", ".codex"), at("Users", "me", ".claude")]);
+    // Flipped (OpenCode): OpenCode's sign-in store joins the list, so no other agent reads it.
+    const defaults = [
+      at("Users", "me", ".codex"),
+      at("Users", "me", ".claude"),
+      at("Users", "me", ".local", "share", "opencode"),
+    ];
+    assert.deepEqual(credentialHomes([], {}, home), defaults);
     assert.deepEqual(
       credentialHomes(
         [at("login", "claude"), null, undefined, "relative/path", at("Users", "me", ".codex")],
-        { CODEX_HOME: at("env", "codex"), CLAUDE_CONFIG_DIR: `${at("env", "claude")}${path.sep}` },
+        {
+          CODEX_HOME: at("env", "codex"),
+          CLAUDE_CONFIG_DIR: `${at("env", "claude")}${path.sep}`,
+          XDG_DATA_HOME: at("env", "data"),
+        },
         home,
       ),
-      [
-        at("Users", "me", ".codex"),
-        at("Users", "me", ".claude"),
-        at("env", "codex"),
-        at("env", "claude"),
-        at("login", "claude"),
-      ],
+      [...defaults, at("env", "codex"), at("env", "claude"), at("env", "data", "opencode"), at("login", "claude")],
     );
     assert.deepEqual(
-      credentialHomes([at("Users"), at(), home], { CODEX_HOME: home }, home),
-      [at("Users", "me", ".codex"), at("Users", "me", ".claude")],
-      "never the home folder, its ancestors or the root",
+      credentialHomes([at("Users"), at(), home], { CODEX_HOME: home, XDG_DATA_HOME: "relative" }, home),
+      defaults,
+      "never the home folder, its ancestors, the root or a relative data folder",
     );
   });
 });

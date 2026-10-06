@@ -27,8 +27,9 @@ export type { EngineAccount, EngineStatus, EngineStatusCode } from "../../shared
  *    with its own subscription login (D8 — we never see or store a token), and each translates
  *    its own event stream into the one vocabulary the studio's log speaks.
  *
- * Direct API keys are deliberately not surfaced in v1; the code path is the same as Ollama's
- * (pi-ai provider + auth), so enabling them later is configuration, not architecture.
+ * The one API key the studio holds is OpenRouter's, a direct engine on the same pi-ai path as
+ * Ollama's: the key is pasted in Settings, kept in the OS secret store, and never leaves main.
+ * OpenCode is a third delegated harness, which keeps its own sign-ins in its own store.
  */
 import type { Message } from "../types.ts";
 import type {
@@ -506,6 +507,8 @@ export function classifyHttpFailure(engine: string, status: number, body: string
   if (status === 401 || status === 403) {
     return new EngineError(EngineFailureKind.Auth, engine, `not authorised: ${excerpt}`);
   }
+  // A metered account out of credits: waiting in the run never refills it.
+  if (status === 402) return new EngineError(EngineFailureKind.UsageLimit, engine, `out of credits: ${excerpt}`);
   if (status >= 500)
     return new EngineError(EngineFailureKind.Unavailable, engine, `engine error ${status}: ${excerpt}`);
   return new EngineError(EngineFailureKind.Other, engine, `HTTP ${status}: ${excerpt}`);

@@ -1584,6 +1584,23 @@ describe("engine registry & fallback policy", () => {
     );
   });
 
+  it("never moves work onto a metered API the person did not pick: no fallback, no first ready engine", async () => {
+    const registry = new EngineRegistry();
+    registry.register(engine("openrouter", "direct", "ready"));
+    registry.register(engine("opencode", "delegated", "ready"));
+    registry.register(engine("claude-code", "delegated", "ready"));
+    registry.register(engine("ollama", "direct", "ready"));
+    registry.setPreferredOrder(["openrouter", "opencode", "claude-code", "ollama"]);
+    assert.deepEqual(await registry.fallbackFor("claude-code", { kind: "rate_limit" }), ["ollama"]);
+    assert.deepEqual(await registry.fallbackFor("ollama", { kind: "unavailable" }, { tools: true }), []);
+    assert.deepEqual(await registry.fallbackFor("ollama", { kind: "unavailable" }), ["claude-code"]);
+    assert.deepEqual(await registry.fallbackFor("openrouter", { kind: "unavailable" }), ["claude-code", "ollama"]);
+    assert.equal((await registry.firstReady())?.id, "claude-code");
+    assert.equal((await registry.firstReady("direct"))?.id, "ollama");
+    // The person's own pick still reaches it: the registry holds it like any other engine.
+    assert.equal(registry.get("openrouter").id, "openrouter");
+  });
+
   it("describes engines for the picker, including unavailable ones", async () => {
     const registry = new EngineRegistry();
     registry.register(engine("ollama", "direct", "ready"));

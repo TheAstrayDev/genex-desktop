@@ -16,7 +16,14 @@ import {
 } from "../../src/renderer/subscription-auth.ts";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import * as roles from "../../src/shared/model-roles.ts";
-import { PROVIDERS, SUBSCRIPTION_ENGINES, loginKind, providerInfo } from "../../src/shared/providers.ts";
+import {
+  PROVIDERS,
+  SUBSCRIPTION_ENGINES,
+  isLocalEngine,
+  isMetered,
+  loginKind,
+  providerInfo,
+} from "../../src/shared/providers.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
 import type { Engine } from "../../src/substrate/engines/types.ts";
 
@@ -67,9 +74,31 @@ describe("provider table", () => {
     assert.equal(loginKind("claude-code"), "terminal");
     assert.equal(loginKind("codex"), "console");
     assert.equal(loginKind("ollama"), "none");
+    assert.equal(loginKind("opencode"), "cli", "OpenCode runs its own sign-in in the terminal");
+    assert.equal(loginKind("openrouter"), "none", "OpenRouter's key is pasted in Settings");
     assert.equal(loginKind("gemini-cli"), "none");
     assert.equal(providerInfo("gemini-cli"), undefined);
     assert.equal(providerInfo("constructor"), undefined);
+  });
+
+  it("says who pays for each provider, and never calls an unknown engine local or metered", () => {
+    const table = Object.fromEntries(PROVIDERS.map((provider) => [provider.id, provider.billing]));
+    assert.deepEqual(table, {
+      "claude-code": "subscription",
+      codex: "subscription",
+      bonsai: "local",
+      ollama: "local",
+      opencode: "metered",
+      openrouter: "metered",
+    });
+    for (const id of ["openrouter", "opencode"]) assert.equal(isMetered(id), true, id);
+    for (const id of ["bonsai", "ollama"]) assert.equal(isLocalEngine(id), true, id);
+    for (const id of ["claude-code", "codex", "gemini-cli", "constructor", null, undefined]) {
+      assert.equal(isMetered(id), false, String(id));
+      assert.equal(isLocalEngine(id), false, String(id));
+    }
+    for (const provider of PROVIDERS)
+      assert.equal(provider.billing === "subscription", provider.subscription, provider.id);
   });
 
   it("is served on each engine descriptor; an unlisted engine carries none", async () => {
