@@ -64,6 +64,7 @@ import {
   withCraftChecks,
 } from "../../src/harness-seed/loop/library.ts";
 import { mechanicalReview, parseDiff } from "../../src/harness-seed/loop/review.ts";
+import { CheckLintCode, lintCheck } from "../../src/harness-seed/loop/check-lint.ts";
 import type { Check } from "../../src/harness-seed/loop/spec.ts";
 import { askVisionBoard, cameraSubset, normalizeLiveness, selectShots } from "../../src/harness-seed/loop/judge.ts";
 import { parseRecipeMarkdown, spikeCandidates } from "../../src/harness-seed/loop/spike.ts";
@@ -494,6 +495,95 @@ describe("facet specs", () => {
     const result = validateFacetSpec(spec, { cameras: ["default"] as never });
     assert.match(result.problems.join("\n"), /3 of 4 checks are vision/);
     assert.match(String(result.spec.checks[3].note), /camX.*not registered/);
+    // A screen part (critic "screen": the UI or HUD) is judged by eye: its looks are the work,
+    // and a mechanical majority there only buys counts of what it draws.
+    const screen = validateFacetSpec({ ...spec, critic: "screen" }, { cameras: ["default"] as never });
+    assert.doesNotMatch(screen.problems.join("\n"), /checks are vision/);
+    assert.equal(screen.spec.checks.length, 4);
+    const place = validateFacetSpec({ ...spec, critic: "place" }, { cameras: ["default"] as never });
+    assert.match(place.problems.join("\n"), /3 of 4 checks are vision/);
+  });
+
+  it("a floor on how much the build draws is refused at validation, a budget or an existence check is not", () => {
+    const refused = [
+      { id: "hud-rich", kind: "probe", expr: "len(hud.items) >= 60" },
+      { id: "hud-rich-aliased", kind: "probe", expr: "len(state.hud.items) > 59" },
+      { id: "hud-rich-mirrored", kind: "probe", expr: "60 <= len(hud.items)" },
+      { id: "busy-frame", kind: "probe", expr: "__render.drawCalls >= 500" },
+      { id: "hud-band", kind: "probe", expr: "len(hud.items) in [60, 999]" },
+      { id: "hud-count", kind: "probe", expr: "hud.count > 12 && player.speed > 1" },
+      { id: "tri-floor", kind: "probe", expr: "triangles >= 100000" },
+      { id: "grew-hud", kind: "probe", expr: "delta('hud.count') >= 5" },
+    ];
+    const kept = [
+      { id: "hud-there", kind: "probe", expr: "len(hud.items) >= 1" },
+      { id: "draw-budget", kind: "probe", expr: "__render.drawCalls <= 1000 && __render.triangles <= 400000" },
+      { id: "draws", kind: "probe", expr: "__render.drawCalls > 0" },
+      { id: "fired", kind: "probe", expr: "delta('actions.primary') >= 1" },
+      { id: "enemies", kind: "probe", expr: "len(enemies) >= 5" },
+      { id: "budget-mirrored", kind: "probe", expr: "1000 >= drawCalls" },
+    ];
+    const spec = normalizeFacetSpec({ id: "hud", intent: "a HUD", checks: [...refused, ...kept] });
+    const result = validateFacetSpec(spec);
+    assert.deepEqual(
+      result.spec.checks.map((c: { id: string }) => c.id),
+      kept.map((c) => c.id),
+    );
+    assert.equal(result.problems.length, refused.length, result.problems.join("\n"));
+    for (const problem of result.problems)
+      assert.match(problem, /a floor on how much the build draws measures the implementation/);
+  });
+
+  it("reads the floor from the expression's shape, whichever way it is written, and only on draw quantities", () => {
+    const table: Array<[Record<string, unknown>, string | null]> = [
+      [{ kind: "probe", expr: "!(len(hud.items) < 60)" }, "hud.items"],
+      [{ kind: "probe", expr: "!(len(hud.items) > 60)" }, null],
+      [{ kind: "probe", expr: "len(hud.items) == 60" }, "hud.items"],
+      [{ kind: "probe", expr: "len(hud.items) == 1" }, null],
+      [{ kind: "probe", expr: "len(hud.items) != 0" }, null],
+      [{ kind: "probe", expr: "abs(delta('state.__render.triangles')) > 10" }, "__render.triangles"],
+      [{ kind: "probe", expr: "early.hud.count >= 4" }, "hud.count"],
+      [{ kind: "probe", expr: "player.speed > 1 || vertices > 2" }, "vertices"],
+      [{ kind: "probe", expr: "hud.count > -5" }, null],
+      [{ kind: "probe", expr: "hud.count > other.count" }, null],
+      [{ kind: "metric", expr: "__render.drawCalls", goal: "max" }, "__render.drawCalls"],
+      [{ kind: "metric", expr: "__render.drawCalls", goal: "min" }, null],
+      [{ kind: "demo", name: "lap", expr: "hud.count >= 8" }, "hud.count"],
+      [{ kind: "demo", name: "lap", expr: "ok" }, null],
+      [{ kind: "scene", js: "hud().items.length >= 60" }, null],
+      [{ kind: "vision", ask: "Are there at least 60 HUD items?" }, null],
+      [{ kind: "probe", expr: "len(hud.items) >=" }, null],
+      [{ kind: "probe", expr: 60 }, null],
+    ];
+    for (const [check, quantity] of table) {
+      const finding = lintCheck(check);
+      assert.equal(finding?.quantity ?? null, quantity, JSON.stringify(check));
+      if (finding) assert.equal(finding.code, CheckLintCode.DrawCountFloor);
+    }
+    assert.equal(lintCheck(null), null);
+    assert.equal(lintCheck(undefined), null);
+  });
+
+  it("a catalogue that learned a floor on what the build draws stops offering it and stops counting it", () => {
+    const catalogue = {
+      version: 2,
+      checks: {
+        "hud-rich": { kind: "probe", expr: "len(hud.items) >= 60", origin: "director", uses: 5, passes: 5 },
+        "draw-budget": { kind: "probe", expr: "__render.drawCalls <= 1000", origin: "director", uses: 2, passes: 2 },
+      } as Record<string, Record<string, unknown>>,
+    };
+    const planner = renderCatalogueForPlanner(catalogue);
+    assert.doesNotMatch(planner, /hud-rich/);
+    assert.match(planner, /draw-budget/);
+    const spec = {
+      checks: [
+        { id: "hud-rich", kind: "probe", expr: "len(hud.items) >= 60", weight: "normal" },
+        { id: "draw-budget", kind: "probe", expr: "__render.drawCalls <= 1000", weight: "normal" },
+      ],
+    };
+    recordCatalogueOutcomes(catalogue, spec as never, { "hud-rich": { pass: true }, "draw-budget": { pass: true } });
+    assert.equal(catalogue.checks["hud-rich"]!.uses, 5);
+    assert.equal(catalogue.checks["draw-budget"]!.uses, 3);
   });
 
   it("the catalogue records uses and passes, renders for the planner, and never duplicates an id", () => {
@@ -570,9 +660,12 @@ describe("the board a game actually carries", () => {
       { ownsMain: true, game: { kind: "first-person" } as never },
     ).checks;
     assert.deepEqual(firstPerson.map((c: { id: string }) => c.id).sort(), [
+      "hud-coverage",
+      "hud-overlap",
       "keys-move-player",
       "look-turns-camera",
       "no-dom-ui",
+      "reaches-play",
       "single-hud",
     ]);
 
@@ -582,10 +675,47 @@ describe("the board a game actually carries", () => {
       { id: "f", checks: [] as Check[] },
       { ownsMain: true, game: { kind: "top-down" } as never },
     ).checks as { id: string; expr?: string }[];
-    assert.deepEqual(topDown.map((c) => c.id).sort(), ["keys-move-player", "no-dom-ui", "single-hud"]);
+    assert.deepEqual(topDown.map((c) => c.id).sort(), [
+      "hud-coverage",
+      "hud-overlap",
+      "keys-move-player",
+      "no-dom-ui",
+      "reaches-play",
+      "single-hud",
+    ]);
     const move = topDown.find((c) => c.id === "keys-move-player");
     assert.match(String(move!.expr), /player\.y/);
     assert.doesNotMatch(String(move!.expr), /player\.yaw/);
+    assert.equal(topDown.find((c) => c.id === "hud-coverage")!.expr, "hud.coverage <= 0.22");
+
+    // The HUD's share of the frame is the kind's: a racer's dashboard may take more of it than
+    // a first-person crosshair and ammo count.
+    const racing = withHarnessChecks(
+      { id: "f", checks: [] as Check[] },
+      { ownsMain: true, game: { kind: "racing" } as never },
+    ).checks as { id: string; expr?: string; needs?: string[]; weight: string }[];
+    assert.deepEqual(racing.map((c) => c.id).sort(), [
+      "hud-coverage",
+      "hud-overlap",
+      "keys-move-player",
+      "no-dom-ui",
+      "reaches-play",
+      "single-hud",
+    ]);
+    const coverage = racing.find((c) => c.id === "hud-coverage")!;
+    assert.equal(coverage.expr, "hud.coverage <= 0.18");
+    assert.deepEqual(coverage.needs, ["hud.coverage"]);
+    assert.equal(coverage.weight, "normal");
+    const firstPersonCoverage = (firstPerson as { id: string; expr?: string }[]).find((c) => c.id === "hud-coverage");
+    assert.equal(firstPersonCoverage?.expr, "hud.coverage <= 0.12");
+    // A part that does not own main still carries the screen checks, never the play check.
+    const part = withHarnessChecks({ id: "f", checks: [] }, { game: { kind: "racing" } as never }).checks;
+    assert.deepEqual(part.map((c: { id: string }) => c.id).sort(), [
+      "hud-coverage",
+      "hud-overlap",
+      "no-dom-ui",
+      "single-hud",
+    ]);
   });
 
   it("offers the planner what a sibling family learned, and tells it the truth about its own board", () => {
@@ -618,7 +748,7 @@ describe("the board a game actually carries", () => {
     assert.match(racer, /lap-time-drops/);
     assert.match(
       racer,
-      /Already on this game's board \(harness-owned, do not re-declare\): no-dom-ui, single-hud, keys-move-player\./,
+      /Already on this game's board \(harness-owned, do not re-declare\): no-dom-ui, single-hud, hud-coverage, hud-overlap, keys-move-player, reaches-play\./,
     );
     // Two families have recorded it: it has stopped being one genre's opinion.
     catalogue.checks["lap-time-drops"].kinds = ["racing", "static-board"];

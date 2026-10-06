@@ -15,6 +15,8 @@
 import { readFile, writeFile, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { dryRunChecks, parseExpr } from "./checks.ts";
+import { lintCheck } from "./check-lint.ts";
+import { DEFAULT_HUD_BUDGET, hudBudgetFor } from "./hud-budget.ts";
 import { criticFor, inputProbesFor, isGameKind, normalizeGameTraits, wantsEyeCameras } from "./kinds.ts";
 import { isRecord } from "./json.ts";
 import { hasText } from "./text.ts";
@@ -55,6 +57,8 @@ const MAX_OWNS = 12;
 const FACET_TITLE_CHARS = 80;
 /** A board this big or bigger may not be mostly vision checks. */
 const MIN_BOARD_FOR_VISION_RULE = 4;
+/** The critic (judge.ts CRITIC_PRINCIPLES) a UI or HUD part is reviewed by: its board may be mostly vision. */
+const SCREEN_CRITIC = "screen";
 /** How many of the keys a build reports an unsatisfiable check's note names. */
 const STATE_KEYS_NAMED = 8;
 /** How many catalogue entries the planner is shown per group, and what an entry keeps of its runs and genres. */
@@ -267,7 +271,7 @@ const CHECK_GRAMMAR: Record<string, { shape: string; says: string; more?: string
   },
   probe: {
     shape: `{"kind":"probe","expr":"delta('player.x') != 0 || delta('player.z') != 0","needs":["player.x","player.z"]}`,
-    says: "over `__studio.state()` with dotted paths (bare, or under `state.`), early.<path>, delta(path), abs, min, max, len, has.",
+    says: "over `__studio.state()` with dotted paths (bare, or under `state.`), early.<path>, delta(path), abs, min, max, len, has; bound how much is drawn only from above.",
     more: [
       "`needs` names up to four dotted paths the check cannot be judged without: a state that",
       "lacks one reports the check unmeasured instead of failing a game that never had it.",
@@ -281,7 +285,7 @@ const CHECK_GRAMMAR: Record<string, { shape: string; says: string; more?: string
   },
   vision: {
     shape: `{"kind":"vision","camera":"camBridge","crop":[0.2,0.55,0.8,1.0],"ask":"Is the bridge's inverted silhouette recognisable in the water?"}`,
-    says: 'ONE yes/no question about ONE crop, answered from the pixels; "expect":"no" flips it. The minority of any board.',
+    says: 'ONE yes/no question about ONE crop, answered from the pixels; "expect":"no" flips it. Ask what a player can see or read, never the technique that draws it. The minority of any board.',
   },
   play: {
     shape: `{"kind":"play","ask":"Could you find the bench and sit on it?"}`,
@@ -734,11 +738,20 @@ function badExpression(check: Check, where: string): string | null {
   }
 }
 
-/** Why a check cannot be used at all, or null for a sound one. */
+/** A check that measures how much the build draws instead of what a player gets (loop/check-lint.ts). */
+function measuresTheDrawing(check: Check, where: string): string | null {
+  const finding = lintCheck(check);
+  return finding ? `${where}: ${finding.message}` : null;
+}
+
+/**
+ * Why a check cannot be used at all, or null for a sound one. Validation only: a board already
+ * running is scored on the checks it was started with, whatever this says about them now.
+ */
 function checkProblem(specId: string, check: Check): string | null {
   const where = `facet ${specId} check ${check.id}`;
   if (!CHECK_KINDS.includes(check.kind)) return `${where}: unknown kind "${check.kind}" (use ${CHECK_KINDS.join("/")})`;
-  return missingField(check, where) ?? badExpression(check, where);
+  return missingField(check, where) ?? badExpression(check, where) ?? measuresTheDrawing(check, where);
 }
 
 /** Add a sentence to a check's note, after whatever it already says. */
@@ -784,8 +797,13 @@ function validateMilestones(spec: SpecToValidate, context: ValidationContext, pr
   return milestones;
 }
 
-/** A board that is mostly vision checks cannot be measured; the problem the planner is told. */
-function visionHeavy(specId: string, kept: readonly Check[]): string | null {
+/**
+ * A board that is mostly vision checks cannot be measured; the problem the planner is told. A
+ * screen part (`critic: "screen"`, the UI or HUD) is exempt: its looks are its work, and a
+ * mechanical majority there only buys counts of what it draws.
+ */
+function visionHeavy(specId: string, kept: readonly Check[], critic: unknown = null): string | null {
+  if (critic === SCREEN_CRITIC) return null;
   const visionCount = kept.filter((c) => c.kind === CheckKind.Vision).length;
   if (kept.length < MIN_BOARD_FOR_VISION_RULE || visionCount <= kept.length / 2) return null;
   return `facet ${specId}: ${visionCount} of ${kept.length} checks are vision — make the majority scene/pixel/probe/demo`;
@@ -829,7 +847,7 @@ export function validateFacetSpec<S extends SpecToValidate>(
     kept.push(check);
   }
   if ((spec.checks ?? []).length > 0 && kept.length === 0) problems.push(`facet ${spec.id}: every check was unusable`);
-  const heavy = visionHeavy(spec.id, kept);
+  const heavy = visionHeavy(spec.id, kept, spec.critic);
   if (heavy) problems.push(heavy);
   const { unsatisfiable, stateKeys } = dryRunChecks(kept, { state, demoStates });
   noteUnsatisfiable(kept, unsatisfiable, stateKeys);
@@ -912,7 +930,46 @@ export const HARNESS_CHECKS: Record<string, AnyRecord & { expr?: string; note: s
     needs: ["player.x", "player.z"],
     note: "harness-owned: after the scripted W/A hold player().x or .z changed — the key path from ctx.keys to the controller works",
   },
+  // The HUD's own measurements (template hud.js generation 2): what a player notices about a HUD
+  // is how much of the view it takes and whether its pieces run into each other — never how many
+  // pieces it is drawn from. `needs` keeps an older HUD that measures nothing unmeasured, not
+  // failed. The budget is the declared kind's (loop/hud-budget.ts); withHarnessChecks fills it in.
+  "hud-coverage": {
+    kind: CheckKind.Probe,
+    weight: CheckWeight.Normal,
+    origin: CheckOrigin.Harness,
+    expr: `hud.coverage <= ${DEFAULT_HUD_BUDGET}`,
+    needs: ["hud.coverage"],
+    note: "harness-owned: the HUD covers at most its kind's share of the frame — keep the middle of the view for the game",
+  },
+  "hud-overlap": {
+    kind: CheckKind.Probe,
+    weight: CheckWeight.Normal,
+    origin: CheckOrigin.Harness,
+    expr: "len(hud.overlaps) == 0",
+    needs: ["hud.overlaps"],
+    note: "harness-owned: no two HUD items run into each other",
+  },
+  // A game with a front-end (title → start → countdown) declares `config.flow()`; the evidence
+  // pass begins it, and this asks whether that put the game into play. A game that reports no
+  // flow is unmeasured: undeclared games are not held to a menu they never had.
+  "reaches-play": {
+    kind: CheckKind.Probe,
+    weight: CheckWeight.Identity,
+    origin: CheckOrigin.Harness,
+    expr: "flow.playing == true",
+    needs: ["flow.playing"],
+    note: "harness-owned: after begin the game is in play (state().flow.playing) — the front-end hands the player the controls",
+  },
 };
+
+/** The `hud-coverage` body for a HUD whose kind allows `budget` of the frame. */
+function hudCoverage(budget: number): AnyRecord {
+  return {
+    expr: `hud.coverage <= ${budget}`,
+    note: `harness-owned: the HUD covers at most ${Math.round(budget * 100)}% of the frame — keep the middle of the view for the game`,
+  };
+}
 
 /**
  * One input probe as `{ expr, note }`, from whatever `inputProbesFor` answered: a kind may
@@ -947,10 +1004,10 @@ function deltaPathsIn(expr: unknown): string[] {
 
 /**
  * The harness-owned checks a facet carries, conditional on what the plan says the game IS:
- * the screen checks on every facet of a game with a HUD (any facet can paint a second one),
- * the input checks on the facet that owns main.js and on the integration facet (they own the
- * player) when the game is mouse-looked / keyboard-moved. Existing ids are replaced by the
- * harness definition, never duplicated.
+ * the screen checks on every facet of a game with a HUD (any facet can paint a second one, or
+ * crowd the frame), the input checks on the facet that owns main.js and on the integration
+ * facet (they own the player) when the game is mouse-looked / keyboard-moved, and with them
+ * `reaches-play`. Existing ids are replaced by the harness definition, never duplicated.
  *
  * Every trait is off until something declares it (loop/kinds.ts), so a game nobody described
  * carries no harness check at all: the four checks describe the template's screen and the
@@ -972,14 +1029,17 @@ export function withHarnessChecks<S extends { checks?: Check[] }>(
   const probes = inputProbesFor(game) ?? {};
   // `screen: false` — a game the user brought with its own UI (DOM menus, its own HUD) keeps
   // it; the one-screen checks describe the template's screen, not this game's.
+  const driven = traits.keyboardMove || traits.mouseLook;
   const wanted = [
-    ...(screen && traits.hud ? ["no-dom-ui", "single-hud"] : []),
+    ...(screen && traits.hud ? ["no-dom-ui", "single-hud", "hud-coverage", "hud-overlap"] : []),
     ...(owner && traits.mouseLook ? ["look-turns-camera"] : []),
     ...(owner && traits.keyboardMove ? ["keys-move-player"] : []),
+    ...(owner && driven ? ["reaches-play"] : []),
   ];
   const overrides: Record<string, AnyRecord> = {
     "look-turns-camera": inputProbe(probes.look, "look-turns-camera"),
     "keys-move-player": inputProbe(probes.move, "keys-move-player"),
+    "hud-coverage": hudCoverage(hudBudgetFor(traits) ?? DEFAULT_HUD_BUDGET),
   };
   const checks = (spec.checks ?? []).filter((c) => !wanted.includes(c.id));
   for (const id of wanted)
@@ -1186,7 +1246,8 @@ export function catalogueEntryEarned(entry: CatalogueEntry): boolean {
  * check declared — so the planner selects a whole group from the goal; the rest are the general
  * list. Only entries that earned it (see catalogueEntryEarned) are shown, so seed content can
  * be displaced by what the runs learned. Harness-owned checks are listed as already on the
- * board, so the planner does not re-invent them.
+ * board, so the planner does not re-invent them. An entry the lint refuses (a floor on how much
+ * the build draws, learned before the lint existed) is never offered again.
  */
 export function renderCatalogueForPlanner(
   catalogue: Pick<Catalogue, "checks"> | null | undefined,
@@ -1201,7 +1262,7 @@ export function renderCatalogueForPlanner(
     : (options ?? {});
   const wantedFamily = kindFamily(game?.kind ?? null);
   const all = Object.entries(catalogue?.checks ?? {}).filter(
-    ([id, c]) => !HARNESS_CHECKS[id] && catalogueEntryEarned(c) && forFamily(c, wantedFamily),
+    ([id, c]) => !HARNESS_CHECKS[id] && catalogueEntryEarned(c) && forFamily(c, wantedFamily) && !lintCheck(c),
   );
   const general = all
     .filter(([, c]) => groupsOf(c).length === 0)
@@ -1287,7 +1348,9 @@ function ridingLine(game: AnyRecord | null, screen: boolean): string {
     return `No harness-owned checks ride on this game's board — declare hud, mouseLook or keyboardMove in game if it has them.`;
   const screenRides = riding.includes("no-dom-ui") || riding.includes("single-hud");
   const inputRides = riding.includes("look-turns-camera") || riding.includes("keys-move-player");
-  return `Already on this game's board (harness-owned, do not re-declare): ${riding.join(", ")}.${screenRides ? " Every visible element is drawn into the canvas — no DOM UI, one HUD." : ""}${inputRides ? " The input checks ride on the facet that owns main." : ""}`;
+  const budget = hudBudgetFor(game);
+  const hudRides = riding.includes("hud-coverage") && budget !== null;
+  return `Already on this game's board (harness-owned, do not re-declare): ${riding.join(", ")}.${screenRides ? " Every visible element is drawn into the canvas — no DOM UI, one HUD." : ""}${hudRides ? ` The HUD covers at most ${Math.round(budget * 100)}% of the frame and its items do not overlap.` : ""}${inputRides ? " The input checks and reaches-play ride on the facet that owns main." : ""}`;
 }
 
 /**
@@ -1340,10 +1403,11 @@ function declaredKindOf(kind: string | { kind?: string } | null): string | null 
  * check copied onto a board belongs to its recipe, which is credited and blamed by its own
  * outcome gate, and a copy trickling back into checks.json would ship two definitions of one id.
  * A planner that hand-writes a craft id still enters as its own opinion — at that point it is
- * that plan's, not the seed's.
+ * that plan's, not the seed's. A floor on how much the build draws (loop/check-lint.ts) is not
+ * counted either: a board started before the lint still scores it, but a pass there taught nothing.
  */
 const theCatalogues = (check: Check): boolean =>
-  check.origin !== CheckOrigin.Harness && check.origin !== CheckOrigin.Craft && !check.fromRecipe;
+  check.origin !== CheckOrigin.Harness && check.origin !== CheckOrigin.Craft && !check.fromRecipe && !lintCheck(check);
 
 /** The fields of a check the catalogue keeps as its definition. */
 const CATALOGUED_FIELDS = [

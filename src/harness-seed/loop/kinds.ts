@@ -58,6 +58,11 @@ export interface GameKind {
    * cameras: a racer photographed after thirty seconds of coasting is a parked car.
    */
   cruise?: string[];
+  /**
+   * The share of the frame a HUD of this kind may cover (`hud-coverage`, loop/hud-budget.ts):
+   * only kinds with a HUD carry one.
+   */
+  hudBudget?: number;
 }
 
 /**
@@ -143,6 +148,7 @@ export const GAME_KINDS: Record<string, GameKind> = {
     eyes: true,
     critic: "place",
     script: CONTROL_EXERCISE,
+    hudBudget: 0.12,
   },
   "third-person": {
     says: "a third-person game — a camera behind a character the player steers",
@@ -152,6 +158,7 @@ export const GAME_KINDS: Record<string, GameKind> = {
     eyes: true,
     critic: "place",
     script: CONTROL_EXERCISE,
+    hudBudget: 0.14,
   },
   "top-down": {
     says: "a top-down game — the camera looks down on a world the player moves through",
@@ -163,6 +170,7 @@ export const GAME_KINDS: Record<string, GameKind> = {
     eyes: false,
     critic: "place",
     script: KEYS_EXERCISE,
+    hudBudget: 0.22,
   },
   "side-2d": {
     says: "a side-on game — one plane, seen from the side",
@@ -182,6 +190,7 @@ export const GAME_KINDS: Record<string, GameKind> = {
     critic: "place",
     script: RACING_EXERCISE,
     cruise: THROTTLE,
+    hudBudget: 0.18,
   },
   flight: {
     says: "a flight game — a craft the player pitches and turns through open space",
@@ -192,6 +201,7 @@ export const GAME_KINDS: Record<string, GameKind> = {
     critic: "place",
     script: FLIGHT_EXERCISE,
     cruise: THROTTLE,
+    hudBudget: 0.18,
   },
   "static-board": {
     says: "a board game on one screen — pieces on a board, not a world a player walks through",

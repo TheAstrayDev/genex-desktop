@@ -594,6 +594,43 @@ describe("the kind a game declares, and what the harness assumes without one", (
   });
 });
 
+describe("the harness's own checks on the result a player gets", () => {
+  const harnessCheck = (id: string, options: Record<string, unknown>): Check | undefined =>
+    withHarnessChecks({ id: "f", checks: [] as Check[], cameras: [] }, options as never).checks.find(
+      (check: { id: string }) => check.id === id,
+    );
+
+  it("reaches-play: the game is in play after begin, and a game that reports no flow is not failed for it", () => {
+    const check = harnessCheck("reaches-play", { ownsMain: true, game: { kind: "racing" } });
+    assert.ok(check, "a keyboard-moved game's main owner carries reaches-play");
+    assert.equal(check.weight, "identity");
+    assert.equal(evaluateProbeCheck(check, { state: { flow: { phase: "play", playing: true } } }).pass, true);
+    assert.equal(evaluateProbeCheck(check, { state: { flow: { phase: "countdown", playing: false } } }).pass, false);
+    const undeclared = evaluateProbeCheck(check, { state: { player: { x: 1 } } });
+    assert.equal(undeclared.pass, null);
+    assert.equal(undeclared.unavailable, true);
+    // The integration facet owns the player too; any other part does not carry it.
+    assert.ok(harnessCheck("reaches-play", { role: "integration", game: { kind: "first-person" } }));
+    assert.equal(harnessCheck("reaches-play", { ownsMain: false, game: { kind: "first-person" } }), undefined);
+    // A game with no keys and no mouse look has no "play" the harness drives into.
+    assert.equal(harnessCheck("reaches-play", { ownsMain: true, game: { kind: "static-board" } }), undefined);
+  });
+
+  it("hud-coverage and hud-overlap read the HUD's own measurements, unmeasured on a HUD that takes none", () => {
+    const coverage = harnessCheck("hud-coverage", { ownsMain: false, game: { kind: "racing" } });
+    const overlap = harnessCheck("hud-overlap", { ownsMain: false, game: { kind: "racing" } });
+    assert.ok(coverage && overlap);
+    assert.equal(coverage.weight, "normal");
+    assert.equal(evaluateProbeCheck(coverage, { state: { hud: { coverage: 0.35, overlaps: [] } } }).pass, false);
+    assert.equal(evaluateProbeCheck(coverage, { state: { hud: { coverage: 0.1, overlaps: [] } } }).pass, true);
+    assert.equal(evaluateProbeCheck(coverage, { state: { hud: { items: ["speed"] } } }).pass, null);
+    assert.equal(evaluateProbeCheck(overlap, { state: { hud: { coverage: 0.1, overlaps: [] } } }).pass, true);
+    const crowded = { state: { hud: { coverage: 0.1, overlaps: [["speedo", "radar"]] } } };
+    assert.equal(evaluateProbeCheck(overlap, crowded).pass, false);
+    assert.equal(evaluateProbeCheck(overlap, { state: { hud: { items: ["speed"] } } }).pass, null);
+  });
+});
+
 describe("a check that says what it needs, and a page that cannot answer yet", () => {
   it("is unmeasured when the build reports no such path, in either scope", () => {
     const check = {

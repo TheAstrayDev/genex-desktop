@@ -61,5 +61,28 @@ describe("the HUD fact line", () => {
     });
     const asked = JSON.stringify(recorder.paramsOf("engine.complete")[0]?.messages);
     assert.equal(asked.split("HUD: covers 35% of the frame").length - 1, 1, "one line, for the build that measured");
+    assert.doesNotMatch(asked, /budget \d+%/, "a game that declared no kind is given no budget");
+  });
+
+  it("names the declared kind's budget, the same one hud-coverage holds the builder to", async () => {
+    const recorder = ctxRecorder({
+      handlers: { "engine.complete": () => ({ message: { content: '{"pick":"A"}' } }) },
+    });
+    const run: Run = {
+      runId: "hud-budget",
+      project: "fixture",
+      goal: "a racer",
+      reference: { name: "fixture", shots: [] },
+      budgets: { wallClockMs: 1000 },
+      game: { kind: "racing" },
+    };
+    await blindCompare(recorder.ctx, {
+      run,
+      challenger: { state: { hud: { coverage: 0.35, count: 12, overlaps: [] } } },
+      incumbentEvidence: { state: { hud: { coverage: 0.1, count: 12, overlaps: [] } } },
+    });
+    const asked = JSON.stringify(recorder.paramsOf("engine.complete")[0]?.messages);
+    assert.match(asked, /HUD: covers 35% of the frame \(budget 18%\)/);
+    assert.match(asked, /HUD: covers 10% of the frame \(budget 18%\)/);
   });
 });

@@ -656,6 +656,43 @@ describe("a worker's contract: done, compiled and dry-run", () => {
     assert.equal(blind.spec.checks.length, 2);
   });
 
+  it("refuses a floor on how much the build draws, and lets a screen part's board be judged by eye", () => {
+    // Midnight Apex: `hud-rich: len(hud.items) >= 60` rewarded a HUD drawn from 3,000 rectangles.
+    const compiled = compileWorkerSpec(
+      {
+        id: "hud",
+        brief: "a dashboard you read at a glance",
+        checks: [
+          { id: "hud-rich", kind: "probe", expr: "len(hud.items) >= 60" },
+          { id: "draw-budget", kind: "probe", expr: "__render.drawCalls <= 1000" },
+        ],
+      } as never,
+      base as never,
+    );
+    assert.equal(compiled.problems.length, 1, compiled.problems.join("\n"));
+    assert.match(compiled.problems[0]!, /hud-rich: a floor on how much the build draws/);
+    assert.equal(
+      checksOf(compiled.spec).some((c) => c.id === "hud-rich"),
+      false,
+    );
+    assert.ok(checkNamed(compiled.spec, "draw-budget"));
+
+    const looks = [
+      { id: "speed-readable", kind: "vision", camera: "default", ask: "Can you read the speed at a glance?" },
+      { id: "corners-clear", kind: "vision", camera: "default", ask: "Is the middle of the road clear of panels?" },
+      { id: "lap-readable", kind: "vision", camera: "default", ask: "Can you read the lap?" },
+      { id: "lit", kind: "pixel", camera: "default", expr: "litFraction > 0.1" },
+    ];
+    const screen = compileWorkerSpec(
+      { id: "hud", brief: "a dashboard", checks: looks, critic: "screen" } as never,
+      base as never,
+    );
+    assert.deepEqual(screen.problems, []);
+    assert.equal(screen.spec.critic, "screen");
+    const place = compileWorkerSpec({ id: "street", brief: "a street", checks: looks } as never, base as never);
+    assert.match(place.problems.join("\n"), /3 of 4 checks are vision/);
+  });
+
   it("finishes a worker on the checks it was given, not on the ones the judge grew", () => {
     const board = toScoreboard([
       { id: "speed-kept", kind: "probe", weight: "identity", pass: true },

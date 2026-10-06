@@ -643,6 +643,8 @@ export function compileWorkerSpec(
   spec = withDeclaredGame(spec, { kind, traits, ownsMain, screen });
   const expr = setupVerifyExpr(setup?.verify);
   if (expr) spec = withRequestedStateCheck(spec, { expr, note: setup?.note ?? "" });
+  // Before validation: a screen part's board may be mostly vision (spec.ts visionHeavy).
+  if (critic) spec.critic = critic;
   const validated = validateFacetSpec(spec, {
     state: base?.state ?? null,
     demoStates: base?.demoStates ?? null,
@@ -651,7 +653,6 @@ export function compileWorkerSpec(
   });
   spec = validated.spec ?? spec;
   spec.setup = setup;
-  if (critic) spec.critic = critic;
   // Who owns the move (M3.3). A director that wrote a ladder owns it: the harness hands the
   // worker the next unclimbed rung and never invents one of its own — the planner's "the ONE
   // structural move" and the liveness critic's grow gaps are exactly what once overruled a

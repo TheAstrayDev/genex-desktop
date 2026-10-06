@@ -58,8 +58,9 @@ Rules that never change:
   has a HUD, mouse look and keyboard movement; add the booleans `hud`, `mouseLook`,
   `keyboardMove` beside it ONLY where this game differs from its kind, and remember that `false`
   is a declaration too — it takes that check off every board. The harness adds its own checks
-  only for what is declared: `no-dom-ui` + `single-hud` when there is a HUD, `look-turns-camera`
-  when the mouse looks, `keys-move-player` when keys move. Do not re-declare those ids. All UI goes through `__studio.hud`
+  only for what is declared: `no-dom-ui`, `single-hud`, `hud-coverage` (the kind's share of the
+  frame) and `hud-overlap` when there is a HUD, `look-turns-camera` when the mouse looks,
+  `keys-move-player` when keys move, `reaches-play` with either. Do not re-declare those ids. All UI goes through `__studio.hud`
   (drawn into the canvas: text, bars, arcs, paths, images, panels and fonts, anchored in frame
   fractions; the middle of the view stays the game's, and the harness measures the HUD's coverage
   and overlap); all input comes from `ctx.keys` / `ctx.look` / `ctx.wheel`. A name or
