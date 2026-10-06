@@ -17,7 +17,8 @@ import { blindCompare } from "../../src/harness-seed/loop/judge.ts";
 import { createScope } from "../../src/harness-seed/loop/scope.ts";
 import { CheckOrigin, CheckWeight } from "../../src/harness-seed/loop/spec.ts";
 import { strongFlips } from "../../src/harness-seed/loop/facet/rules.ts";
-import { FacetStage } from "../../src/harness-seed/loop/facet/stage.ts";
+import { FacetStage, finishDone } from "../../src/harness-seed/loop/facet/stage.ts";
+import { summarizeScoreboard } from "../../src/harness-seed/loop/checks.ts";
 import { DefectSeverity, SHIP_REVIEW_IMAGES, SHIP_VIEW, shipReview } from "../../src/harness-seed/loop/ship-review.ts";
 import * as nightFunctions from "../../src/harness-seed/loop/director/night.ts";
 import * as toolFunctions from "../../src/harness-seed/loop/director/tools.ts";
@@ -514,6 +515,97 @@ describe("the lead's judge ship=yes (director/tools.ts)", () => {
       !night.state.ledger.some((d: Record<string, unknown>) => d.owner === "track"),
       "and it is not left on the ledger",
     );
+  });
+
+  /**
+   * A night whose track part finished before the finish mark: the art director's look shelves the
+   * track's defect on the ledger, and the lead starts a finish worker on the part as the rule says.
+   */
+  async function finishedTrackNight() {
+    const host = fakeHost();
+    // worker_start budgets from the wall clock: the night's working time is around it.
+    const now = Date.now();
+    const { night } = fakeNight(host, {
+      clock: { started: now, softDeadline: now + 4 * HOUR_MS, finalDeadline: now + 4 * HOUR_MS + 15 * MINUTE_MS },
+      answers: {
+        [HostMethod.EngineComplete]: replying(SHIP_NO),
+        [HostMethod.SnapshotWorktree]: (params: Record<string, any>) => ({ path: `/runs/run_ad/${params.name}` }),
+        [HostMethod.ThreadCreate]: "t-finish",
+        [HostMethod.PreviewCapacity]: { headless: true, max: 12, free: 12, inUse: 0 },
+        [HostMethod.PreviewAcquire]: { handle: "h" },
+      },
+    });
+    // One looping part, so no module contract stands between the lead and its finish worker.
+    night.state.plan = { summary: "A night race.", workers: [{ ...PARTS[0], single: true }, PARTS[1]] };
+    night.state.workers.set("track", loopWorker("track", { state: "done", endedAt: T0 + HOUR_MS }));
+    await night.judge({ target: "integration", ship: "yes" });
+    assert.ok(
+      night.state.ledger.some((d: Record<string, unknown>) => d.owner === "track"),
+      "nobody runs the track: its defect waits on the ledger",
+    );
+    night.runWorker = async () => {};
+    night.startMonitor = () => {};
+    return night;
+  }
+
+  /** `worker_start` for a loop worker that finishes, as the finish mark's rule asks for it. */
+  const startFinisher = async (night: any, args: Record<string, unknown>) =>
+    JSON.parse(
+      String(
+        await night.startWorker({
+          mode: "loop",
+          stage: "finish",
+          owns: "src/track.js",
+          from: "integration",
+          brief: "Finish the track",
+          ...args,
+        }),
+      ),
+    );
+
+  it("AD-4c. a finished part's shelved ship defect goes on the board of the finish worker started on it (replaces=<its id>), off the ledger, and its finish waits for the fix", async () => {
+    const night = await finishedTrackNight();
+    const started = await startFinisher(night, { id: "track-finish", replaces: "track" });
+    assert.equal(started.started, "track-finish", JSON.stringify(started));
+
+    const finisher = night.state.workers.get("track-finish");
+    const ship = finisher.spec.checks.find((c: Record<string, unknown>) => /road texture/.test(String(c.defect)));
+    assert.ok(ship, "the finisher is asked about the art director's defect in its part");
+    assert.equal(ship.origin, CheckOrigin.Director);
+    assert.equal(ship.weight, CheckWeight.Identity, "a visible defect decides whether the part is done");
+    assert.equal(ship.camera, "chase", "asked on the camera the art director saw it through");
+    assert.ok(
+      finisher.steering.some((line: string) => /road texture/.test(line)),
+      "and the finisher is told",
+    );
+    assert.ok(
+      !night.state.ledger.some((d: Record<string, unknown>) => d.owner === "track"),
+      "the ledger no longer says nobody is building it",
+    );
+    assert.ok(
+      night.state.ledger.some((d: Record<string, unknown>) => d.owner === "integration"),
+      "the lead's own defect stays the lead's",
+    );
+
+    // A round the judge prefers ends a finisher only once the defect is gone.
+    const board = (shipPass: boolean) =>
+      Object.fromEntries(
+        finisher.spec.checks.map((c: Record<string, unknown>) => [
+          c.id,
+          { id: c.id, kind: c.kind, weight: c.weight, pass: c.id === ship.id ? shipPass : true },
+        ]),
+      );
+    assert.equal(finishDone({ won: true, summary: summarizeScoreboard(board(false), finisher.spec) }), null);
+    assert.ok(finishDone({ won: true, summary: summarizeScoreboard(board(true), finisher.spec) }));
+  });
+
+  it("AD-4d. a finish worker that names the part by its goal, not replaces=, takes the part's shelved defects too", async () => {
+    const night = await finishedTrackNight();
+    const started = await startFinisher(night, { id: "track-polish", goal: "track" });
+    assert.equal(started.started, "track-polish", JSON.stringify(started));
+    const finisher = night.state.workers.get("track-polish");
+    assert.ok(finisher.spec.checks.some((c: Record<string, unknown>) => /road texture/.test(String(c.defect))));
+    assert.ok(!night.state.ledger.some((d: Record<string, unknown>) => d.owner === "track"));
   });
 
   it("AD-10. judge ship=yes looks at one build alone: with a start picture it makes no blind call and leaves no pick, and ship=yes against a build is refused in one line", async () => {

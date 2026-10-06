@@ -329,7 +329,13 @@ type ArtDirectionParts = Partial<
   BoundModule<
     Pick<
       typeof artDirectionFunctions,
-      "artDirectionPass" | "finishMarkAt" | "shipOwed" | "shipFinishGate" | "shipReport" | "shipReviewOn"
+      | "artDirectionPass"
+      | "finishMarkAt"
+      | "shipOwed"
+      | "shipFinishGate"
+      | "shipReport"
+      | "shipReviewOn"
+      | "takeShelvedShipDefects"
     >
   >
 >;

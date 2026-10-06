@@ -601,7 +601,9 @@ lead is woken with the defects by part and the rule from there: no new parts, `w
 stage=finish` on each owner, integrate, `judge ship=yes` again. Each defect on the integration
 branch becomes a director-origin vision check on its running owner's board (the part's worker, or
 the running worker that replaced it; its fix is a strong flip), or a ledger line under its finished
-part or the lead. One look is one judge verdict record, asking the ship question. `state.lastShip` is journaled and
+part or the lead. A loop worker started on that part later (its id, `replaces` chain or goal) takes
+the part's ledger lines onto its board the same way, so a finish worker ends only once each
+blocker or visible defect is gone. One look is one judge verdict record, asking the ship question. `state.lastShip` is journaled and
 restored on a Resume; `report.shipReview` and the `finish` answer say whether the art director
 would ship the head the close stood on and how many defects are left. It never vetoes a landing.
 When the lead names no cameras, a blind judge shows every view both builds have, cut alike.

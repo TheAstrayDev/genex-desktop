@@ -1374,6 +1374,8 @@ export async function startWorker(night: Night, args: AnyRecord) {
   if (typeof worker === "string") return worker;
   worker.goal = goal;
   compileContract(night, worker, parsed, args);
+  // A part the art director found defects in while nobody ran it: they are this worker's questions now.
+  night.takeShelvedShipDefects?.(worker);
   for (const warning of policySpec.warnings) note(`worker ${id}: policy ${warning}`);
   await announceWorker(night, worker, { budgetMs, replaces, roundWarning });
   await chargeGoalAttempt(night, goal);

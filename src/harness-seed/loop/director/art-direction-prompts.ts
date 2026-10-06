@@ -16,7 +16,7 @@ export const NO_PART = "no part — yours";
 
 /** The rule from the finish mark on, as the lead reads it. */
 export const FINISH_MARK_RULE =
-  "From here no new parts or systems: finish what exists. worker_steer stage=finish on each running owner of a part with defects (or, for a finished part, worker_start stage=finish replaces=<its id> owns=<its files> from=integration); a finish round may win on polish. Integrate, then judge ship=yes again.";
+  "From here no new parts or systems: finish what exists. worker_steer stage=finish on each running owner of a part with defects (or, for a finished part, worker_start stage=finish replaces=<its id> owns=<its files> from=integration, which takes that part's defects on its board); a finish round may win on polish. Integrate, then judge ship=yes again.";
 
 /** What to do next when the art director would ship the build. */
 const SHIP_YES_NEXT =

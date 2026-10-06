@@ -28,7 +28,7 @@ import { Against } from "../verdict.ts";
 import * as budgetParts from "./budgets.ts";
 import { goalCommission } from "./commission.ts";
 import * as ruleParts from "./rules.ts";
-import { list } from "./args.ts";
+import { list, slug } from "./args.ts";
 import { contractAloneOnStart } from "./contract-gate.ts";
 import { ART_SKIPPED, shipFinishRefusal, shipGateSkipped } from "./art-direction-prompts.ts";
 import { BuildTarget } from "./night.ts";
@@ -237,6 +237,63 @@ export function routeShipDefects(night: Night, review: Pick<ShipReview, "defects
     );
   }
   return routes;
+}
+
+/**
+ * The plan part a worker starting now builds: its own id, a worker it replaces (followed through
+ * each replacement by its typed field), else its goal — whichever the plan names first.
+ */
+function partStartedOn(night: Night, worker: Worker): string | null {
+  const { plan, workers } = night.state;
+  const parts = new Set(shipParts(plan).map((part) => part.id));
+  const replaced: string[] = [];
+  let next = worker.replaces;
+  for (let depth = 0; next && depth < MAX_REPLACEMENTS; depth++) {
+    replaced.push(next);
+    next = workers.get(next)?.replaces ?? null;
+  }
+  return [worker.id, ...replaced, slug(worker.goal)].find((id) => parts.has(id)) ?? null;
+}
+
+/**
+ * A shelved defect as the art director named it: its last look's defect with the same words for
+ * that part (severity and camera kept), else a visible one on the default camera — a defect the
+ * art director named and nobody fixed is one a player notices until a look says it is gone.
+ */
+function shelvedShipDefect(night: Night, part: string, text: string): ShipDefect {
+  const named = (night.state.lastShip?.defects ?? []).find(
+    (defect) => defect.part === part && clip(defect.what, CLIP_REASON) === text,
+  );
+  return named ?? { what: text, camera: null, part, severity: DefectSeverity.Visible };
+}
+
+/** Is a ship question with these words on the worker's board now? */
+const onItsBoard = (worker: Worker & { spec: AnyRecord }, check: Check): boolean =>
+  (worker.spec.checks ?? []).some((c: AnyRecord) => c.defect === check.defect);
+
+/**
+ * A loop worker starting on a part (`worker_start`, its id, `replaces` or goal naming the plan
+ * part) takes the art director's defects shelved under that part while nobody ran it: each goes on
+ * its board as the director's own question, as a running owner's would (so a finish worker's
+ * round ends only once a blocker or visible defect is gone), and leaves the ledger. Answers the
+ * routes it took.
+ */
+export function takeShelvedShipDefects(night: Night, worker: Worker): ShipRoute[] {
+  const { ledger } = night.state;
+  if (!takesShipDefects(worker)) return [];
+  const part = partStartedOn(night, worker);
+  if (!part) return [];
+  const shelved = ledger.filter((entry) => entry.from === ART_DIRECTOR && entry.owner === part);
+  const taken: ShipRoute[] = [];
+  for (const entry of shelved) {
+    const defect = shelvedShipDefect(night, part, entry.text);
+    const route = { part, defect, check: shipCheck({ checks: worker.spec.checks ?? [] }, defect) };
+    onBoard(night, worker, route);
+    if (!onItsBoard(worker, route.check)) continue;
+    ledger.splice(ledger.indexOf(entry), 1);
+    taken.push(route);
+  }
+  return taken;
 }
 
 /** Has the integration branch anything beyond the run's starting point at `head`? */
