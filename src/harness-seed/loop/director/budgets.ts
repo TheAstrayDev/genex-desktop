@@ -36,6 +36,8 @@ export const MAX_WAIT_S = 240;
 export const MAX_WORKERS = 12;
 /** A worker window needs at least this much free memory to open (a big game's window is over a gigabyte). */
 export const MIN_FREE_MB = 1_024;
+/** A running worker's round needs less (loop/facet/admission.ts waits for it at the round's boundary). */
+export { ROUND_MIN_FREE_MB } from "../facet/admission.ts";
 /** The longest the studio goes without looking at a running loop worker. */
 export const MONITOR_TICK_MS = 3 * MINUTE_MS;
 /** Looks it takes over a worker's whole budget, so a short worker is looked at oftener. */

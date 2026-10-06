@@ -122,8 +122,15 @@ async function delegateTurn(
   });
 }
 
-/** What the builder's own capture tool photographs: this worktree, in the facet's setup. */
-function selfCapture({ facet, facetSetup, handle, run }: FacetLoop, round: FacetRound, worktree: string): AnyRecord {
+/** What the builder's own capture tool photographs: this worktree, in the facet's setup, through the facet's own cameras. */
+function selfCapture(
+  { facet, facetSetup, handle, run, spec }: FacetLoop,
+  round: FacetRound,
+  worktree: string,
+): AnyRecord {
+  // Its own cameras, not every one the game registers: a capture a worker does not narrow
+  // shoots what its part is judged through, and a big game registers many more.
+  const cameras = (spec?.cameras ?? []).filter((camera: unknown) => typeof camera === "string" && camera);
   return {
     project: run.project,
     root: worktree,
@@ -132,6 +139,7 @@ function selfCapture({ facet, facetSetup, handle, run }: FacetLoop, round: Facet
     iteration: round.iteration,
     ...(handle ? { handle } : {}),
     ...(facetSetup ? { setup: facetSetup } : {}),
+    ...(cameras.length ? { cameras } : {}),
     label: facet.title ?? facet.id,
   };
 }

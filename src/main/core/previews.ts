@@ -44,7 +44,7 @@ import { iterationDir, safePathSegment } from "./run-shots.ts";
 import { readyNote, servedKey, strayPage } from "./page-report.ts";
 import type { SessionPort } from "./session-port.ts";
 import { serial } from "./serial.ts";
-import { isInside, samePath } from "../../substrate/paths.ts";
+import { isInside, samePath, toPosixRelative } from "../../substrate/paths.ts";
 import { isEffectivelyBlack } from "../../substrate/pixel-stats.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
@@ -110,6 +110,15 @@ const STAND_IN_IDLE_MS = 2 * MINUTE_MS;
 /** Errors the user reads when a build cannot be shown or landed, and why a reference is no still. */
 const MESSAGE = {
   noPreview: "no preview is attached (headless mode)",
+  benchRefused: (page: string, why: string) =>
+    `capture did not load the bench page "${page}": ${why}. Nothing was loaded. A bench page is a .html file inside this workspace, such as bench/<part>.html.`,
+  benchUnnamed: "no page was named",
+  benchNotHtml: "it is not a .html page",
+  benchOutside: "it is outside this workspace",
+  benchMissing: "there is no such file",
+  benchCaptured: (entry: string, workspace: string) => `Captured the bench page ${entry} (workspace ${workspace}):`,
+  benchAfter:
+    "Read the image files above to actually look at them. The window shows the bench page now: the computer tool loads your game again on its next action. Capture the game itself before you finish.",
   profilingNeedsStage: "profiling requires a stage preview",
   previewChanged: "The selected preview changed while this build was preparing. Open the build again when ready.",
   noGameInSnapshot: "that snapshot has no game to play",
@@ -145,6 +154,88 @@ interface SkippedStill {
 function renderedCamera(state: unknown): string | null {
   const camera = (state as { camera?: unknown } | null)?.camera;
   return typeof camera === "string" ? camera : null;
+}
+
+/** The only kind of page a bench capture loads. */
+const BENCH_EXTENSION = ".html";
+
+/**
+ * A bench page a capture may load in place of the game, checked by its real path: an existing
+ * `.html` file inside the workspace, never a link out of it. Answers the served entry relative to
+ * the workspace, or the sentence that refuses it; a refused page is never loaded.
+ */
+async function benchEntry(root: string, page: string): Promise<{ entry: string } | { refusal: string }> {
+  const refuse = (why: string) => ({ refusal: MESSAGE.benchRefused(page, why) });
+  const named = page.trim();
+  if (!named) return refuse(MESSAGE.benchUnnamed);
+  if (path.extname(named).toLowerCase() !== BENCH_EXTENSION) return refuse(MESSAGE.benchNotHtml);
+  const realRoot = await realpath(root).catch(() => null);
+  if (!realRoot || path.isAbsolute(named) || !isInside(realRoot, path.resolve(realRoot, named)))
+    return refuse(MESSAGE.benchOutside);
+  const real = await realpath(path.resolve(realRoot, named)).catch(() => null);
+  if (!real) return refuse(MESSAGE.benchMissing);
+  if (!isInside(realRoot, real) || samePath(realRoot, real)) return refuse(MESSAGE.benchOutside);
+  if (path.extname(real).toLowerCase() !== BENCH_EXTENSION) return refuse(MESSAGE.benchNotHtml);
+  const file = await stat(real).catch(() => null);
+  if (!file?.isFile()) return refuse(MESSAGE.benchMissing);
+  return { entry: toPosixRelative(path.relative(realRoot, real)) };
+}
+
+/** Whose screen a capture's frames land on: the session's window, labelled for the worker. */
+function captureScreen(
+  sc: NonNullable<DelegateRequest["selfCapture"]>,
+  session: SessionPort,
+  role: AgentScreen["role"],
+): AgentScreen {
+  return {
+    handle: session.handle() ?? LIVE_HANDLE,
+    label: sc.label ?? sc.facetId ?? sc.project,
+    project: sc.project,
+    runId: sc.runId ?? null,
+    facetId: sc.facetId ?? null,
+    role,
+  };
+}
+
+/**
+ * The cameras one capture shoots. Unasked, a worker's capture shoots its own part's cameras (the
+ * grant's), not every one the game registers; a bench page shoots its default view.
+ */
+function camerasForShot(
+  sc: NonNullable<DelegateRequest["selfCapture"]>,
+  bench: { entry: string } | null,
+  asked: string | undefined,
+  known: readonly string[],
+): string[] {
+  if (bench) return camerasToCapture(asked, []);
+  const own = sc.cameras?.length ? sc.cameras.join(",") : undefined;
+  return camerasToCapture(asked ?? own, known);
+}
+
+/** The capture tool's answer: what was shot, the console's errors, the load's note and what the window shows now. */
+function captureAnswer({
+  bench,
+  root,
+  lines,
+  errors,
+  setupNote,
+}: {
+  bench: { entry: string } | null;
+  root: string;
+  lines: readonly string[];
+  errors: Parameters<typeof consoleErrorsLine>[0];
+  setupNote: string | null;
+}): string {
+  const workspace = path.basename(root);
+  return [
+    bench ? MESSAGE.benchCaptured(bench.entry, workspace) : `Captured your CURRENT build (workspace ${workspace}):`,
+    ...lines,
+    consoleErrorsLine(errors),
+    ...(setupNote ? [`note: ${setupNote}`] : []),
+    bench
+      ? MESSAGE.benchAfter
+      : "Read the image files above to actually look at them. The window keeps running this build — the computer tool continues from here.",
+  ].join("\n");
 }
 
 /** The cameras a capture photographs: the ones asked for, else the page's own, else `default`. */
@@ -645,8 +736,10 @@ export class PreviewService {
   ): NonNullable<DelegateRequest["onCapture"]> {
     let sequence = 0;
     let sequenceSeeded = false;
-    const label = sc.label ?? sc.facetId ?? sc.project;
-    return async ({ cameras } = {}) => {
+    return async ({ cameras, page } = {}) => {
+      // A bench page is checked before anything is touched: a refused one loads nothing.
+      const bench = page === undefined ? null : await benchEntry(currentRoot(), String(page));
+      if (bench && "refusal" in bench) return bench.refusal;
       const outDir = iterationDir(outBase, sc.iteration);
       await ensureDir(outDir);
       // The counter continues from what is already on disk, so a review-fix turn (a second
@@ -656,44 +749,45 @@ export class PreviewService {
         sequence = Math.max(sequence, await lastCaptureNumber(outDir));
       }
       const call = ++sequence;
-      // The session's window: a capture is a fresh load of the workspace (edits included)
-      // through the served entry — a game with its own build is built first — then the
-      // setup script, then the shots. The window stays loaded for the computer tool after.
       const port = await session.get();
-      const target = currentRoot();
-      const loaded = await this.loadServed(port, sc.project, target, sc.entry);
-      if (loaded.problem) {
-        session.loaded = null;
+      const loaded = await this.#loadForCapture(port, sc, session, { target: currentRoot(), bench });
+      if ("problem" in loaded)
         return `your build failed to load: ${loaded.problem} — fix that before polishing anything.`;
-      }
-      const applied = await this.applySetup(port, sc.setup);
-      // A page the studio never heard report itself ready is still photographed — the frames
-      // just come with the sentence that says what they are worth.
-      const setupNote = [loaded.note, applied].filter(Boolean).join("; ") || null;
-      session.loaded = { root: target, at: Date.now() };
-      const screen: AgentScreen = {
-        handle: session.handle() ?? LIVE_HANDLE,
-        label,
-        project: sc.project,
-        runId: sc.runId ?? null,
-        facetId: sc.facetId ?? null,
-        role,
-      };
+      const screen = captureScreen(sc, session, role);
       this.openScreen(screen);
       const registered = await port.studioCall("cameras").catch(() => null);
       const known = Array.isArray(registered) ? registered.map(String) : [];
       const lines: string[] = [];
-      for (const camera of camerasToCapture(cameras, known))
+      for (const camera of camerasForShot(sc, bench, cameras, known))
         lines.push(await this.#captureCamera(port, screen, { outDir, call, camera, known }));
       const errors = port.consoleEntries(0).filter((entry) => entry.level === "error");
-      return [
-        `Captured your CURRENT build (workspace ${path.basename(root)}):`,
-        ...lines,
-        consoleErrorsLine(errors),
-        ...(setupNote ? [`note: ${setupNote}`] : []),
-        "Read the image files above to actually look at them. The window keeps running this build — the computer tool continues from here.",
-      ].join("\n");
+      return captureAnswer({ bench, root, lines, errors, setupNote: loaded.setupNote });
     };
+  }
+
+  /**
+   * The session's window for a capture: a fresh load of the workspace (edits included) through
+   * the served entry — a game with its own build is built first — then the setup script. A bench
+   * page loads through the same served root and skips the setup: it mounts one module, and the
+   * game's script has nothing there to replay. The window stays loaded for the computer tool
+   * after a capture of the build; after a bench page the computer tool loads the game again.
+   */
+  async #loadForCapture(
+    port: PreviewPort,
+    sc: NonNullable<DelegateRequest["selfCapture"]>,
+    session: SessionPort,
+    { target, bench }: { target: string; bench: { entry: string } | null },
+  ): Promise<{ problem: string } | { setupNote: string | null }> {
+    const loaded = await this.loadServed(port, sc.project, target, bench?.entry ?? sc.entry);
+    if (loaded.problem) {
+      session.loaded = null;
+      return { problem: loaded.problem };
+    }
+    const applied = bench ? null : await this.applySetup(port, sc.setup);
+    session.loaded = bench ? null : { root: target, at: Date.now() };
+    // A page the studio never heard report itself ready is still photographed — the frames
+    // just come with the sentence that says what they are worth.
+    return { setupNote: [loaded.note, applied].filter(Boolean).join("; ") || null };
   }
 
   /** One camera's frame of a capture, saved beside the facet's others; its line of the answer. */

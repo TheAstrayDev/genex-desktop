@@ -4,6 +4,7 @@
   "tags": ["breath", "puff", "smoke", "sprite", "first-person", "fp", "centimetre", "frame", "coverage", "ember"],
   "checkClass": "fx",
   "kind": "craft",
+  "kinds": ["first-person"],
   "pack": "fps",
   "note": "Breath and smoke in front of the lens are centimetre-sized, low-opacity sprites; a world-sized one is an enormous white blob.",
   "intent": "Anything spawned in front of a first-person camera is centimetres from the lens, so a sprite sized for the world fills the screen as one enormous white blob — that single mistake survived five verdicts over run_mthlnp75kmex. Spawn a puff 0.4–0.6 units ahead of the camera as 5–15 sprites of 0.02–0.08 world units, opacity ≤ 0.35, each shrinking as it fades over 2–3 s while drifting up and away; never one big sprite that grows. Verify from the default first-person camera during the effect: if the puff covers more than ~10% of the frame it is a blob, not breath. Rituals are player-triggered and visible both ways — the cigarette raises on the key press (never auto-lit at boot), the ember brightens per drag, the seated camera shows a composed view of the facing block’s lit windows.",

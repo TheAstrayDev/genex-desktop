@@ -1,7 +1,7 @@
 /** The round's gate and opening, continuous integration, and the re-baseline it may call for. */
 import { gatherEvidence } from "../../evidence.ts";
 import { isMeasured, runDeterministicChecks, toScoreboard } from "../../checks.ts";
-import { demosNamedByChecks } from "../../spec.ts";
+import { CheckKind, demosNamedByChecks } from "../../spec.ts";
 import { statePathsNamedByChecks } from "../../state-shape.ts";
 import { resolveByOwnership } from "../../merge-ownership.ts";
 import { isCommit } from "../../shell.ts";
@@ -20,6 +20,8 @@ import { RoundFlow } from "../flow.ts";
 import { stopSignal, tooLateToStart } from "../rules.ts";
 import { MOTION_FRAMES } from "../policy.ts";
 import { roundFields } from "../record.ts";
+import { admitRound } from "../admission.ts";
+import type { Check } from "../../spec.ts";
 
 /** The round's gate — a stop, the clock, a round that would not fit, fair share — and its opening: the status, the event, the user's steering. */
 export async function openRound(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
@@ -28,6 +30,8 @@ export async function openRound(loop: FacetLoop, round: FacetRound): Promise<Rou
     stopWith(result, StopCode.UserStop, "stopped by the user");
     return RoundFlow.Stop;
   }
+  // Memory first: a machine short of it waits here, and the gates below then see the clock it cost.
+  await admitRound(loop, round.iteration);
   round.finishing = stopSignal(await finishRequested(loop.iterationsThisRound));
   if (round.finishing) {
     stopWith(result, StopCode.FinishRequested, round.finishing.reason);
@@ -186,6 +190,24 @@ export async function rebaselineIncumbent(loop: FacetLoop, round: FacetRound): P
   }
 }
 
+/** A scene or probe check whose JS calls the page's `audio()` helper: what the audio probe is for. */
+const READS_AUDIO = /\baudio\s*\(/;
+
+/**
+ * What a re-look over the merged incumbent records beyond the frames: the motion strip only for a
+ * facet judged on play or a demo, the audio probe only for a check that reads audio. Every
+ * re-baseline used to drive a strip and probe the sound whatever the board measured, and the
+ * re-score reads only the board's checks, so leaving out what none of them reads changes no verdict.
+ */
+function mergedLookExtras(checks: readonly Check[]): { motion: number; audio: boolean } {
+  const moving = checks.some((check) => check.kind === CheckKind.Play || check.kind === CheckKind.Demo);
+  const hearing = checks.some((check) => READS_AUDIO.test(String(check.js ?? "")));
+  return {
+    motion: moving || demosNamedByChecks(checks).length > 0 ? MOTION_FRAMES : 0,
+    audio: hearing,
+  };
+}
+
 /** One evidence pass over the merged incumbent, and its measured checks laid over the board. */
 async function lookAtMergedIncumbent(loop: FacetLoop, round: FacetRound, worktree: string): Promise<void> {
   const { appendRun, ctx, facet, facetSetup, handle, references, run, seed, spec } = loop;
@@ -198,8 +220,7 @@ async function lookAtMergedIncumbent(loop: FacetLoop, round: FacetRound, worktre
     labelPrefix: `facet_${facet.id}/iter_${round.iterationId}/merged-incumbent`,
     cameras: spec.cameras,
     eyes: true,
-    motion: MOTION_FRAMES,
-    audio: true,
+    ...mergedLookExtras(spec.checks),
     requiredDemos: demosNamedByChecks(spec.checks),
     keepPaths: statePathsNamedByChecks(spec.checks),
     setup: facetSetup,

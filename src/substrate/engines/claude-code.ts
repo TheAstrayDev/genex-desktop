@@ -2051,10 +2051,16 @@ function captureTool(kit: McpKit, onCapture: NonNullable<DelegateRequest["onCapt
   return tool(
     StudioTool.Capture,
     CLAUDE_CAPTURE_TOOL.description,
-    { cameras: z.string().optional().describe(CLAUDE_CAPTURE_TOOL.cameras) },
-    async (args: { cameras?: string }) => {
+    {
+      cameras: z.string().optional().describe(CLAUDE_CAPTURE_TOOL.cameras),
+      page: z.string().optional().describe(CLAUDE_CAPTURE_TOOL.page),
+    },
+    async (args: { cameras?: string; page?: string }) => {
       try {
-        const text = await onCapture({ ...(args?.cameras ? { cameras: String(args.cameras) } : {}) });
+        const text = await onCapture({
+          ...(args?.cameras ? { cameras: String(args.cameras) } : {}),
+          ...(args?.page !== undefined ? { page: String(args.page) } : {}),
+        });
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         // The tool reports failure as a result marked failed — a thrown capture must not end the build.

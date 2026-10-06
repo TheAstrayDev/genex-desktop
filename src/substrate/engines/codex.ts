@@ -1074,7 +1074,10 @@ export class CodexEngine implements Engine {
       return CHECKPOINT_TOOL.reply;
     }
     if (name === StudioTool.Capture && request.onCapture) {
-      return request.onCapture({ ...(args.cameras ? { cameras: String(args.cameras) } : {}) });
+      return request.onCapture({
+        ...(args.cameras ? { cameras: String(args.cameras) } : {}),
+        ...(args.page !== undefined ? { page: String(args.page) } : {}),
+      });
     }
 
     if (request.onLiveTool && (request.liveTools ?? []).some((tool) => tool.name === name)) {
@@ -1920,7 +1923,10 @@ export function bridgeTools(request: DelegateRequest): BridgeTool[] {
       description: CODEX_CAPTURE_TOOL.description,
       parameters: {
         type: "object",
-        properties: { cameras: { type: "string", description: CODEX_CAPTURE_TOOL.cameras } },
+        properties: {
+          cameras: { type: "string", description: CODEX_CAPTURE_TOOL.cameras },
+          page: { type: "string", description: CODEX_CAPTURE_TOOL.page },
+        },
       },
     });
   }

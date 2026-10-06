@@ -67,6 +67,7 @@ export const RunEvent = {
   FacetIteration: "facet_iteration",
   FacetLessons: "facet_lessons",
   FacetLiveness: "facet_liveness",
+  FacetMachinePressure: "facet_machine_pressure",
   FacetMove: "facet_move",
   FacetObservationOutage: "facet_observation_outage",
   FacetPartialEvaluated: "facet_partial_evaluated",

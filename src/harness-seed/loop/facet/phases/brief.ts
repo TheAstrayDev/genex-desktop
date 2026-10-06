@@ -1,12 +1,20 @@
 /** The brief (`.studio/BRIEF.md` in the worktree) and the prompt that points at it. */
 import { renderLiveness } from "../../judge.ts";
-import { checksFromDefects, recipesForChecks, renderBrief, writeWorktreeBrief } from "../../library.ts";
+import {
+  CRAFT_ADOPT_SCORE,
+  checksFromDefects,
+  recipesForChecks,
+  writeWorktreeBrief,
+  writeWorktreeFile,
+} from "../../library.ts";
+import { RECIPES_FILE, RECIPES_FILE_PATH, renderRecipesFile } from "../../brief-budget.ts";
 import type { AnyRecord } from "../../../types/harness.d.ts";
 import type { FacetLoop, FacetRound } from "../state.ts";
 import type { RoundFlow } from "../flow.ts";
 import { pinFixRecipe } from "../rules.ts";
-import { briefWithMovedSections, facetPrompt, promptImagesFor } from "../prompt.ts";
+import { facetPrompt, promptImagesFor } from "../prompt.ts";
 import { roundStage } from "../stage.ts";
+import { fitBrief } from "../brief-fit.ts";
 
 /** A template game's entry module, when the shape names none. */
 const DEFAULT_ENTRY = "src/main.js";
@@ -16,15 +24,15 @@ export async function writeBrief(loop: FacetLoop, round: FacetRound): Promise<Ro
   const { baseShots, delegated, ownShape, ownsMain, run, shape, spec, workdir } = loop;
   // ── the brief: `.studio/BRIEF.md` in the worktree, plus the prompt that points at it ──
   pickRecipes(loop, round);
-  round.briefText = renderBrief(briefInput(loop, round));
-  // The four sections the prompt no longer renders for a delegated engine (M4.8b) live here.
-  round.brief = briefWithMovedSections(round.briefText, {
-    spec,
-    ownsMain,
-    ownShape,
-    entryMain: shape?.main ?? DEFAULT_ENTRY,
-    build: shape?.build ?? null,
-  });
+  const recipesFile = await writeRecipesFile(loop, round);
+  // The four sections the prompt no longer renders for a delegated engine (M4.8b) live here, and
+  // the whole of it stays within BRIEF_MAX_CHARS (loop/brief-budget.ts).
+  const fitted = fitBrief(
+    { ...briefInput(loop, round), recipesFile },
+    { spec, ownsMain, ownShape, entryMain: shape?.main ?? DEFAULT_ENTRY, build: shape?.build ?? null },
+  );
+  round.briefText = fitted.briefText;
+  round.brief = fitted.brief;
   round.briefFile = workdir ? await writeWorktreeBrief(workdir, round.brief).catch(() => null) : null;
   round.acceptedShots = (loop.incumbentEvidence?.shots ?? []).map((shot: AnyRecord) => shot.path).filter(Boolean);
   // Stills into the prompt (WP3d): every reference still plus the base build's frames on the
@@ -48,12 +56,28 @@ export async function writeBrief(loop: FacetLoop, round: FacetRound): Promise<Ro
 }
 
 /**
+ * `.studio/RECIPES.md` beside the brief: the retrieved recipes whole, so BRIEF.md names them and
+ * points there. Only for a delegated builder, which reads files; a direct engine gets the brief
+ * inline and keeps the sketches in it. Null when nothing was written, and the brief then keeps them.
+ */
+async function writeRecipesFile(loop: FacetLoop, round: FacetRound): Promise<string | null> {
+  const { delegated, workdir } = loop;
+  if (!delegated || !workdir || !round.injectedWithFix.length) return null;
+  const written = await writeWorktreeFile(workdir, RECIPES_FILE, renderRecipesFile(round.injectedWithFix)).catch(
+    () => null,
+  );
+  return written ? RECIPES_FILE_PATH : null;
+}
+
+/**
  * The recipes the brief injects: retrieved for the failing and unscored checks and, beside
  * retrieval by check id, from prose — the fix's own sentence pulls its recipe into "Recipes
- * that apply", which is where THE FIX's line says it is.
+ * that apply", which is where THE FIX's line says it is. Only recipes for this kind of game, and
+ * only a real overlap (CRAFT_ADOPT_SCORE) unless it is the recipe's own check; the unscored
+ * checks of a first round take exact matches only, since nothing has failed them yet.
  */
 function pickRecipes(loop: FacetLoop, round: FacetRound): void {
-  const { run, spec } = loop;
+  const { game, run, spec } = loop;
   round.failingChecks = Object.values(loop.board)
     .filter((e) => e.pass === false)
     .map((e) => spec.checks.find((c) => c.id === e.id) ?? e);
@@ -63,7 +87,12 @@ function pickRecipes(loop: FacetLoop, round: FacetRound): void {
     loop.recipes,
     [...round.failingChecks, ...round.unscored, ...round.fixDefects],
     undefined,
-    { project: run.project },
+    {
+      project: run.project,
+      kind: typeof game?.kind === "string" ? game.kind : null,
+      minScore: CRAFT_ADOPT_SCORE,
+      exactOnly: round.unscored.map((check: { id: string }) => check.id),
+    },
   );
   round.injectedWithFix = pinFixRecipe(round.injected, loop.currentFix, round.fixDefects[0]?.id ?? null);
 }

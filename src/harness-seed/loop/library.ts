@@ -30,9 +30,19 @@ import {
 import { renderScoreboard } from "./checks.ts";
 import { nearestReference } from "./style.ts";
 import { facetNotes } from "./repo.ts";
-import { gameLine } from "./kinds.ts";
+import { gameLine, KIND_NAMES } from "./kinds.ts";
 import { roleEngine, RoleKey, toolCall } from "./model-roles.ts";
 import { clip, CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, sharesStem } from "./text.ts";
+import { clipTailWords, clipWords } from "./word-clip.ts";
+import {
+  BRIEF_INTEGRATION_CHARS,
+  BRIEF_LIVENESS_CHARS,
+  BRIEF_MAX_CHARS,
+  BriefCut,
+  fitWithin,
+  RECIPE_INTENT_CHARS,
+  REVIEW_VIOLATIONS_SHOWN,
+} from "./brief-budget.ts";
 import { isRecord } from "./json.ts";
 import { lessonLine, MAX_CONTRACT_LESSONS, renderContractLessons } from "./contract-lessons.ts";
 import { RECIPE_ID_CHARS } from "./config.ts";
@@ -108,6 +118,8 @@ export interface Recipe {
   status: string;
   origin: string;
   scope: string;
+  /** The game kinds (loop/kinds.ts) this recipe is for; none means every kind. */
+  kinds?: string[];
   project?: string;
   retiredBecause?: string;
   file?: string;
@@ -155,6 +167,9 @@ export async function saveContractLessons(
 
 /** The file for a list of lessons; staged changes to it are bounded edits (loop/contract-lessons.ts). */
 export { renderContractLessons };
+
+/** BRIEF.md's ceiling, moved sections included (loop/brief-budget.ts). */
+export { BRIEF_MAX_CHARS } from "./brief-budget.ts";
 
 /** Where a recipe stands: new, proven by its wins, or retired by its losses. Libraries keep it: never rename a value. */
 export const RecipeStatus = {
@@ -221,7 +236,22 @@ export function normalizeRecipe(raw: AnyRecord | null | undefined): Recipe | nul
     stats: recipeStats(raw.stats),
     status: RECIPE_STATUS.includes(raw.status) ? raw.status : RecipeStatus.Candidate,
     ...recipeProvenance(raw),
+    ...recipeKinds(raw.kinds),
   };
+}
+
+/** The game kinds a recipe names, known ones only; none (or none known) leaves the field out: every kind. */
+function recipeKinds(raw: unknown): Pick<Recipe, "kinds"> {
+  if (!Array.isArray(raw)) return {};
+  const kinds = [
+    ...new Set(raw.map((kind: unknown) => String(kind).trim()).filter((kind) => KIND_NAMES.includes(kind))),
+  ];
+  return kinds.length ? { kinds } : {};
+}
+
+/** A recipe written for other kinds of game than this one (a first-person viewmodel in a racer). */
+function fitsOtherKinds(recipe: Recipe, kind: string | null | undefined): boolean {
+  return Boolean(kind) && Boolean(recipe.kinds?.length) && !recipe.kinds?.includes(String(kind));
 }
 
 /** A recipe's tags: lower-cased, trimmed, deduplicated. */
@@ -331,11 +361,13 @@ export function recipeMatchesCheck(recipe: Recipe, check: CheckWords | null | un
 export function scoreRecipe(
   recipe: Recipe,
   check: CheckWords | null | undefined,
-  { project = null }: { project?: string | null } = {},
+  { project = null, kind = null }: { project?: string | null; kind?: string | null } = {},
 ): number {
   if (recipe.status === RecipeStatus.Retired) return 0;
   const exact = recipeMatchesCheck(recipe, check);
   if (belongsElsewhere(recipe, project) && !exact) return 0;
+  // A recipe for other kinds of game reaches this one only on its own check.
+  if (fitsOtherKinds(recipe, kind) && !exact) return 0;
   const words = new Set(checkTokens(check));
   const bag = new Set(
     [
@@ -363,6 +395,16 @@ export function scoreRecipe(
   return overlap * promotion * Math.max(0.5, record);
 }
 
+/** How retrieval narrows: this game's project and kind, the score a word overlap must reach, and the checks only an exact recipe may answer. */
+export interface RetrievalOptions {
+  project?: string | null;
+  kind?: string | null;
+  /** The least score a hit that is not the recipe's own check needs (CRAFT_ADOPT_SCORE in a brief). */
+  minScore?: number;
+  /** Checks answered by exact matches only: nothing has failed them yet, so two words in common are no reason. */
+  exactOnly?: readonly string[];
+}
+
 /**
  * The few recipes worth a failing check's attention, with which checks each one serves.
  * `primaryCheckId` is the check the recipe was retrieved for most strongly — the only check
@@ -372,12 +414,12 @@ export function recipesForChecks(
   recipes: readonly Recipe[] | null | undefined,
   failingChecks: readonly (CheckWords & { id: string })[] | null | undefined,
   limit = MAX_RECIPES_PER_BRIEF,
-  { project = null }: { project?: string | null } = {},
+  options: RetrievalOptions = {},
 ): RecipeHit[] {
   const scored = new Map<string, RecipeHit>();
   for (const check of failingChecks ?? []) {
     for (const recipe of recipes ?? []) {
-      const score = scoreRecipe(recipe, check, { project });
+      const score = retrievalScore(recipe, check, options);
       if (score <= 0) continue;
       const entry = scored.get(recipe.id) ?? { recipe, score: 0, checkIds: [], primaryCheckId: check.id };
       if (score > entry.score) {
@@ -389,6 +431,18 @@ export function recipesForChecks(
     }
   }
   return [...scored.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/** A recipe's score for one check under the retrieval's narrowing; 0 when it does not make the cut. */
+function retrievalScore(
+  recipe: Recipe,
+  check: CheckWords & { id: string },
+  { project = null, kind = null, minScore = 0, exactOnly = [] }: RetrievalOptions,
+): number {
+  const score = scoreRecipe(recipe, check, { project, kind });
+  if (score <= 0 || recipeMatchesCheck(recipe, check)) return score;
+  const weak = exactOnly.includes(check.id) || score < minScore;
+  return weak ? 0 : score;
 }
 
 /**
@@ -723,6 +777,10 @@ export interface BriefOptions {
   game?: AnyRecord | null;
   /** The worker's stage (facet/stage.ts): "finish" makes polish the work; anything else is the build stage. */
   stage?: string | null;
+  /** The brief's ceiling (loop/brief-budget.ts); the lowest sections leave first when it is over. */
+  maxChars?: number;
+  /** Where the retrieved recipes are written whole (`.studio/RECIPES.md`): the brief then points there for every sketch but the fix's. */
+  recipesFile?: string | null;
 }
 
 /** Per-camera style distance to the stills, now and the round before. */
@@ -733,64 +791,80 @@ export interface StyleForBrief {
   pairs?: Array<{ camera?: string; path?: string }>;
 }
 
-export function renderBrief({
-  run,
-  spec,
-  iteration,
-  board,
-  comparison,
-  attempts = [],
-  recipes = [],
-  spike = null,
-  steering = [],
-  review = null,
-  integration = null,
-  resumed = false,
-  defects = [],
-  polish = [],
-  /** `{ shots, references, previous }` — per-camera style distance to the stills (WP4e). */
-  style = null,
-  /** The builder's own `HARNESS:` flags acknowledged by the loop. */
-  flags = [],
-  lessons = [],
-  /** What earlier nights on THIS game cost (loop/ledger.ts) — already one sentence each. */
-  gameLessons = [],
-  /** This iteration's structural move: `{ what, why?, milestoneId?, check?, mandatory?, ladder?, polishStreak?, escalated? }`. */
-  move = null,
-  /** The liveness critic's last card, already rendered to lines (judge.ts renderLiveness). */
-  liveness = null,
-  /** THE FIX: a biggest gap the judge repeated — `{ what, checkId?, streak, mandatory, recipe? }`; `recipe` is the craft recipe retrieved for the defect sentence. */
-  fix = null,
-  /** false for a game the user brought with its own UI and input handling — the one-screen rule is the template's, not this game's. */
-  screen = true,
-  /** Which critic asked the liveness question — "place" (a world you stand in) or "screen" (a board, a puzzle, a builder). */
-  critic = "place",
-  /** false for a game the user brought: the determinism, one-input-path and Blender rules are the studio template's craft law, not this game's (M4.6). */
-  template = true,
-  /** The night's declared game — kind, traits and play script (loop/kinds.ts). Its one line heads the brief the way it heads every judge call. */
-  game = null,
-  /** "finish" for a worker finishing what exists: THE FINISH replaces THE MOVE, and the polish list is the work. */
-  stage = null,
-}: BriefOptions): string {
+/**
+ * BRIEF.md, within `maxChars` (BRIEF_MAX_CHARS): the lessons, the style distances, the earlier
+ * rounds' diff stats, the recipes' sketches and the optional polish leave in that order when it is
+ * over (loop/brief-budget.ts). The goal, the steering, the move or the finish, THE FIX, the checks
+ * and the rules are always there.
+ */
+export function renderBrief(options: BriefOptions): string {
+  return fitWithin(options.maxChars ?? BRIEF_MAX_CHARS, (cuts) => renderBriefSections(options, cuts));
+}
+
+/** Every section of the brief, without the ones `cuts` takes out. */
+function renderBriefSections(
+  {
+    run,
+    spec,
+    iteration,
+    board,
+    comparison,
+    attempts = [],
+    recipes = [],
+    spike = null,
+    steering = [],
+    review = null,
+    integration = null,
+    resumed = false,
+    defects = [],
+    polish = [],
+    /** `{ shots, references, previous }` — per-camera style distance to the stills (WP4e). */
+    style = null,
+    /** The builder's own `HARNESS:` flags acknowledged by the loop. */
+    flags = [],
+    lessons = [],
+    /** What earlier nights on THIS game cost (loop/ledger.ts) — already one sentence each. */
+    gameLessons = [],
+    /** This iteration's structural move: `{ what, why?, milestoneId?, check?, mandatory?, ladder?, polishStreak?, escalated? }`. */
+    move = null,
+    /** The liveness critic's last card, already rendered to lines (judge.ts renderLiveness). */
+    liveness = null,
+    /** THE FIX: a biggest gap the judge repeated — `{ what, checkId?, streak, mandatory, recipe? }`; `recipe` is the craft recipe retrieved for the defect sentence. */
+    fix = null,
+    /** false for a game the user brought with its own UI and input handling — the one-screen rule is the template's, not this game's. */
+    screen = true,
+    /** Which critic asked the liveness question — "place" (a world you stand in) or "screen" (a board, a puzzle, a builder). */
+    critic = "place",
+    /** false for a game the user brought: the determinism, one-input-path and Blender rules are the studio template's craft law, not this game's (M4.6). */
+    template = true,
+    /** The night's declared game — kind, traits and play script (loop/kinds.ts). Its one line heads the brief the way it heads every judge call. */
+    game = null,
+    /** "finish" for a worker finishing what exists: THE FINISH replaces THE MOVE, and the polish list is the work. */
+    stage = null,
+    recipesFile = null,
+  }: BriefOptions,
+  cuts: ReadonlySet<BriefCut>,
+): string {
   const finishing = stageOf({ stage }) === FacetStage.Finish;
+  const recipeShape = { file: recipesFile, pinned: fix?.recipe?.id ?? null, bodies: !cuts.has(BriefCut.RecipeBodies) };
   const lines = [
     ...briefHeader(run, spec, iteration, game),
     ...steeringSection(steering),
     ...(finishing ? finishSection(polish) : moveSection(move)),
     ...fixSection(fix, template, finishing),
     ...scoreboardSection(board, comparison),
-    ...(integration ? [`## Integration`, integration, ``] : []),
+    ...(integration ? [`## Integration`, clipWords(integration, BRIEF_INTEGRATION_CHARS), ``] : []),
     ...livenessSection(liveness, critic, finishing),
-    ...styleSection(style),
+    ...(cuts.has(BriefCut.Style) ? [] : styleSection(style)),
     ...flagsSection(flags),
     ...defectsSection(defects, move),
-    ...(finishing ? [] : polishSection(polish)),
+    ...(finishing || cuts.has(BriefCut.Polish) ? [] : polishSection(polish)),
     ...reviewSection(review),
     ...(spike ? [`## Spike result`, spike, ``] : []),
-    ...attemptsSection(attempts),
-    ...recipesSection(recipes),
+    ...attemptsSection(attempts, !cuts.has(BriefCut.DiffStats)),
+    ...recipesSection(recipes, recipeShape),
     ...briefRules(run, spec, { screen, template, resumed }),
-    ...lessonsSections(gameLessons, lessons),
+    ...(cuts.has(BriefCut.Lessons) ? [] : lessonsSections(gameLessons, lessons)),
   ];
   return lines
     .filter((line) => line !== undefined && line !== null)
@@ -933,7 +1007,7 @@ function livenessSection(liveness: string | null, critic: string, finishing = fa
     critic === "screen"
       ? `## Why the screen does not read yet (the readability critic, 0–3 per principle; ${key})`
       : `## Why it does not feel like a real place yet (the liveness critic, 0–3 per principle; ${key})`,
-    liveness,
+    clipWords(liveness, BRIEF_LIVENESS_CHARS),
     ``,
   ];
 }
@@ -982,14 +1056,17 @@ function polishSection(polish: readonly string[]): string[] {
   ];
 }
 
-/** What the code review flagged. */
+/** What the code review flagged: the first few, and how many more there are. */
 function reviewSection(review: BriefOptions["review"]): string[] {
-  if (!review?.violations?.length) return [];
+  const violations = review?.violations ?? [];
+  if (!violations.length) return [];
+  const more = violations.length - REVIEW_VIOLATIONS_SHOWN;
   return [
     `## Code review flagged (fix these first)`,
-    ...review.violations.map(
-      (v) => `- ${v.file}${v.line ? `:${v.line}` : ""} — ${v.what}${v.fix ? ` → ${v.fix}` : ""}`,
-    ),
+    ...violations
+      .slice(0, REVIEW_VIOLATIONS_SHOWN)
+      .map((v) => `- ${v.file}${v.line ? `:${v.line}` : ""} — ${v.what}${v.fix ? ` → ${v.fix}` : ""}`),
+    ...(more > 0 ? [`- (+${more} more)`] : []),
     ``,
   ];
 }
@@ -999,23 +1076,23 @@ function reviewSection(review: BriefOptions["review"]): string[] {
  * to be filed under "Attempts that lost — do not repeat them", accepted ones too, which told a
  * builder not to repeat the work it had just been kept for.
  */
-function attemptsSection(attempts: readonly AnyRecord[]): string[] {
+function attemptsSection(attempts: readonly AnyRecord[], diffStats = true): string[] {
   if (!attempts.length) return [];
   const lines = [`## Earlier rounds (build on what was kept; do not repeat what lost)`];
-  for (const attempt of attempts.slice(-EARLIER_ROUNDS_SHOWN)) lines.push(...attemptLines(attempt));
+  for (const attempt of attempts.slice(-EARLIER_ROUNDS_SHOWN)) lines.push(...attemptLines(attempt, diffStats));
   lines.push(``);
   return lines;
 }
 
-/** One earlier round: kept or lost, its line, its diff stat and its notes. */
-function attemptLines(attempt: AnyRecord): string[] {
+/** One earlier round: kept or lost, its line, its diff stat (unless the budget took them) and its newest notes. */
+function attemptLines(attempt: AnyRecord, diffStats = true): string[] {
   const flipped = (attempt.flips ?? []).join(", ") || "nothing";
   const regressed = (attempt.regressions ?? []).join(", ") || "nothing";
   const fate = attempt.won ? "kept" : "lost";
   const lines = [
     `- iteration ${attempt.iteration}, ${fate} — its code is on ${attempt.branch ?? "n/a"}: flipped [${flipped}], regressed [${regressed}]${attempt.why ? ` — ${attempt.why}` : ""}`,
   ];
-  if (attempt.diffStat)
+  if (diffStats && attempt.diffStat)
     lines.push(
       "  ```",
       ...String(attempt.diffStat)
@@ -1025,22 +1102,46 @@ function attemptLines(attempt: AnyRecord): string[] {
         .map((l) => `  ${l}`),
       "  ```",
     );
-  if (attempt.notes) lines.push(`  notes: ${String(attempt.notes).slice(0, CLIP_BRIEF)}`);
+  // The notes file appends, so its end is the newest: that is what the next builder reads.
+  if (attempt.notes) lines.push(`  notes: ${clipTailWords(attempt.notes, CLIP_BRIEF)}`);
   return lines;
 }
 
+/** How the recipes render: the file their bodies were written to, the fix's own recipe, and whether bodies fit at all. */
+interface RecipeShape {
+  file: string | null;
+  pinned: string | null;
+  bodies: boolean;
+}
+
 /** The recipes retrieved for what is failing. */
-function recipesSection(recipes: readonly RecipeHit[]): string[] {
+function recipesSection(recipes: readonly RecipeHit[], shape: RecipeShape): string[] {
   if (!recipes.length) return [];
   return [
     `## Recipes that apply to what is failing (retrieved by failing check, and by the defects the judge named — a "for defect:…" line is prose the judge wrote, not a check on your board)`,
-    ...recipes.flatMap(({ recipe, checkIds }) => [
-      `### ${recipe.title} (${recipe.id}, ${recipe.status}; ${recipe.stats.wins}W/${recipe.stats.losses}L) — for ${checkIds.join(", ")}`,
-      `How: ${recipe.intent}`,
-      recipe.sketch ? "```js\n" + recipe.sketch.trim() + "\n```" : "",
-      recipe.port ? `Port: ${recipe.port}` : "",
-      ``,
-    ]),
+    ...recipes.flatMap((hit) => recipeLines(hit, shape)),
+  ];
+}
+
+/**
+ * One recipe: its title, its intent, and its sketch and port inline, or a pointer to the file
+ * that has them. With a recipes file only THE FIX's own recipe keeps its sketch here; without
+ * one (a direct engine, an older caller) every sketch stays inline unless the budget took them.
+ */
+function recipeLines({ recipe, checkIds }: RecipeHit, shape: RecipeShape): string[] {
+  const hasBody = Boolean(recipe.sketch?.trim() || recipe.port);
+  const keptHere = shape.file ? shape.bodies && recipe.id === shape.pinned : shape.bodies;
+  const pointer =
+    hasBody && shape.file ? `Sketch and port: ${shape.file}, under "${recipe.title} (${recipe.id})".` : "";
+  const how = shape.file ? clipWords(recipe.intent, RECIPE_INTENT_CHARS) : recipe.intent;
+  return [
+    `### ${recipe.title} (${recipe.id}, ${recipe.status}; ${recipe.stats.wins}W/${recipe.stats.losses}L) — for ${checkIds.join(", ")}`,
+    // Past the budget only the title and the pointer stay: the file has the rest.
+    shape.bodies ? `How: ${how}` : "",
+    keptHere && recipe.sketch ? "```js\n" + recipe.sketch.trim() + "\n```" : "",
+    keptHere && recipe.port ? `Port: ${recipe.port}` : "",
+    keptHere ? "" : pointer,
+    ``,
   ];
 }
 
@@ -1066,11 +1167,22 @@ function briefRules(
       ? `- Determinism: rng from update(), no Math.random, no wall clock.`
       : `- Determinism: the studio seeds Math.random and owns the clock for this page, so the same seed replays the same run — take time from the delta your own loop already computes, never from a second clock of your own.`,
     `- Capture (${toolCall(roleEngine(run, RoleKey.Builder), "capture")}) after every meaningful change and LOOK before you finish; write what you tried and why in ${facetNotes(spec.id)}.`,
+    template ? benchRule(spec.id) : "",
     `- A line beginning \`HARNESS:\` in ${facetNotes(spec.id)} is read by the loop, not by the next builder: use it to say a check cannot pass as written (name the check id) or that a camera cannot see what it asks — the planner re-points the check instead of you burning iterations.`,
     resumed
       ? `- You are resuming your own session: you remember your previous attempt — change the mechanism where a check keeps failing, do not re-tune the same numbers.`
       : "",
   ];
+}
+
+/**
+ * The fast self-look: a page that mounts one module loads in seconds where the whole game takes
+ * most of a minute. It stays out of index.html, so it never enters the judged build; the round's
+ * evidence pass still judges the game.
+ */
+function benchRule(facetId: string): string {
+  const page = `bench/${slug(facetId, "part")}.html`;
+  return `- For work inside one module, keep a bench page ${page} that mounts just your module, and capture page=${page} to look at it in seconds; index.html never references a bench page. Capture the game itself before you finish.`;
 }
 
 /**

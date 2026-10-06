@@ -64,7 +64,7 @@ export function briefWithMovedSections(
     build?: string | null;
   } = {},
 ): string {
-  const body = withDoneSection(String(text ?? ""), spec);
+  const body = rulesBeforeHistory(withDoneSection(String(text ?? ""), spec));
   if (body.includes("- YOUR SEAM:") || body.includes("- YOUR FILES:")) return body;
   const rules = [
     seamRule(spec, ownShape),
@@ -80,6 +80,28 @@ export function briefWithMovedSections(
   return body.includes(header)
     ? body.replace(header, [header, ...rules].join("\n"))
     : [body, ``, header, ...rules].join("\n");
+}
+
+/** The brief's rules block, and the sections of history and recipes it must come before. */
+const RULES_HEADER = "## Rules that do not change";
+const HISTORY_HEADERS = ["## Earlier rounds", "## Recipes that apply"];
+
+/**
+ * The brief with its rules block ahead of the earlier rounds and the recipes. Those two are the
+ * longest and least binding sections, and a direct engine's inline brief is cut from the end:
+ * behind them the seam and the entry rule were what the cut took. Moved whole, up to the next
+ * heading, so the lessons after it stay where they were; a brief already in that order is
+ * returned unchanged.
+ */
+function rulesBeforeHistory(body: string): string {
+  const rulesAt = body.indexOf(`\n${RULES_HEADER}`);
+  const historyAt = Math.min(...HISTORY_HEADERS.map((header) => body.indexOf(`\n${header}`)).filter((at) => at !== -1));
+  if (rulesAt === -1 || !Number.isFinite(historyAt) || rulesAt < historyAt) return body;
+  const next = body.indexOf("\n## ", rulesAt + 1);
+  const end = next === -1 ? body.length : next;
+  const block = body.slice(rulesAt, end).replace(/\n+$/, "");
+  const rest = `${body.slice(0, rulesAt)}${body.slice(end)}`;
+  return `${rest.slice(0, historyAt)}${block}\n${rest.slice(historyAt)}`;
 }
 
 /** The brief with its "Done means" section, placed before the scoreboard when it has one. */
@@ -307,8 +329,9 @@ function moveAsk(move: AnyRecord | null): string {
     ? ` — measured by check ${move.check.id}`
     : " — the taste judge answers whether it is visible";
   const lead = move.mandatory ? "A build that only tunes what already exists LOSES; make" : "Make";
-  const escalate =
-    moveEscalated(move) ? ` ESCALATE: your last ${move.polishStreak} accepted builds were polish only.` : "";
+  const escalate = moveEscalated(move)
+    ? ` ESCALATE: your last ${move.polishStreak} accepted builds were polish only.`
+    : "";
   return `THE MOVE THIS ITERATION (${move.mandatory ? "mandatory" : "asked for"}): ${move.what}${measured}. ${lead} the move first — the whole step, boldly, so a player notices it in the first minute — then fix up to three ledger items.${escalate}`;
 }
 
