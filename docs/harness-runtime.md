@@ -325,6 +325,17 @@ review; one with any path still unmerged, or staged with conflict markers, makes
 the worker's side of another part's file is a `merge-dropped` finding, restored from the merged
 head. `facet_review_enforced` lists `reverted`, `kept`, `quarantined` and `restored` files.
 
+A plan whose parts loop two or more (a part marked `"mode":"single"` does not count) needs a
+module contract before its loop workers start: `plan contract=` names each module's file, owner
+part, API, and the shared files one part owns (`director/module-contract.ts`). The harness commits it as
+`docs/ARCHITECTURE.md` on the integration branch; a loop worker starts only from a commit that holds
+it, with its own modules there (stubs written by the lead or a single worker), and a seam that leaves
+other parts' modules alone. With no seam named it owns its contract modules (`director/contract-gate.ts`).
+After two refusals for a missing contract the harness writes one from the plan's seams. `integrate
+worker=a,b` merges a wave in order with one health pass; a healthy integrate, or `wave=close`, moves
+the head running workers merge, so they take integration once per wave. A round, or a merge, that
+loses a camera, demo or probe another facet's checks use is a regression (`loop/registry.ts`).
+
 Manual SkillOpt resolves the most recent run's model through `modelOn`, as the post-run path does.
 A cross-provider run stores its builder model alongside its orchestrator engine, so those two raw
 fields must not be passed together to a completion call. Skill gates compare instruction texts against saved task descriptions; they do not execute

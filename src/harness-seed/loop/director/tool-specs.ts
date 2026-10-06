@@ -99,6 +99,11 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
           type: "string",
           description: `Game kind: ${KIND_NAMES.join(", ")}. The harness drives its controls before every judgement and boards only checks it can pass; undeclared assumes nothing.`,
         },
+        contract: {
+          type: "string",
+          description:
+            'Module contract, required before loop workers when 2+ parts loop: JSON {"conventions":[…],"modules":[{"path","owner":"<part id>","api":[…]}],"shared":[{"path","owner"}]}. Committed as docs/ARCHITECTURE.md; a bad one is answered with the grammar.',
+        },
         play_script: {
           type: "string",
           description:
@@ -341,8 +346,16 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
       "Merge a worker's last accepted commit into the integration branch (your worktree), union-merging the FACET WIRING block. A conflict elsewhere is left for you: the merge is aborted and the files listed — resolve it yourself with git in your worktree, then commit. A clean merge gets a health pass (does it run), not a verdict.",
     parameters: {
       type: "object",
-      properties: { worker: { type: "string", description: "The worker id." } },
-      required: ["worker"],
+      properties: {
+        worker: {
+          type: "string",
+          description: "The worker id, or ids comma-separated: one wave, merged in order, one health pass.",
+        },
+        wave: {
+          type: "string",
+          description: "close: running workers take the integration head now (a healthy integrate closes the wave).",
+        },
+      },
     },
   },
   {

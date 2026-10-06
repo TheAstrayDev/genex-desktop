@@ -32,6 +32,8 @@ import {
 import { CLIP_QUOTE, CLIP_REASON, clip } from "../text.ts";
 import { Against } from "../verdict.ts";
 import { KIND_QUOTED, lines, list, num, parseJson, slug } from "./args.ts";
+import { contractRefusalWords } from "./contract-prompts.ts";
+import { parseModuleContract, singlePart } from "./module-contract.ts";
 import { MAX_LEDGER, MAX_PLAN_WORKERS, PLAN_HOLD_SLICE_MS, SILENT_ROUND_MIN } from "./budgets.ts";
 import { SECOND_MS } from "../time.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
@@ -218,6 +220,8 @@ export function plainly(text: unknown): string {
 /** One part of a plan, as the harness holds the director to it. */
 export interface PlanPart {
   multiplayer?: boolean;
+  /** `"mode":"single"`: a part only ever built by one session, not counted as a looping part (module-contract.ts). */
+  single?: boolean;
   id: string;
   title: string;
   seam: string;
@@ -269,6 +273,7 @@ function planPart(entry: unknown, id: string): PlanPart {
     owns: entries(raw.owns, list),
     done: entries(raw.done, lines).slice(0, PART_DONE),
     ...(raw.multiplayer === true ? { multiplayer: true } : {}),
+    ...(singlePart(raw) ? { single: true } : {}),
     minutes: Math.round(num(raw.minutes, 0)) || null,
   };
 }
@@ -316,6 +321,7 @@ export function compilePlan({
   risks = "",
   kind = "",
   play_script = null,
+  contract = null,
 }: {
   summary?: string;
   workers?: unknown;
@@ -323,6 +329,8 @@ export function compilePlan({
   risks?: unknown;
   kind?: string;
   play_script?: unknown;
+  /** The module contract (module-contract.ts): who owns which module and what it exposes. */
+  contract?: unknown;
 } = {}): { plan: AnyRecord; error?: undefined } | { error: string; plan?: undefined } {
   const text = String(summary ?? "").trim();
   if (!text)
@@ -331,6 +339,11 @@ export function compilePlan({
   if (declared.error !== undefined) return { error: declared.error };
   const named = planParts(workers);
   if (named.error !== undefined) return { error: named.error };
+  const modules = parseModuleContract(
+    contract,
+    named.parts.map((part) => part.id),
+  );
+  if (modules.problem !== undefined) return { error: contractRefusalWords(modules.problem) };
   return {
     plan: {
       summary: text.slice(0, PLAN_SUMMARY),
@@ -340,6 +353,7 @@ export function compilePlan({
         .slice(0, PLAN_BASE),
       risks: lines(risks).slice(0, PLAN_RISKS),
       game: declared.game,
+      ...(modules.contract ? { contract: modules.contract } : {}),
     },
   };
 }

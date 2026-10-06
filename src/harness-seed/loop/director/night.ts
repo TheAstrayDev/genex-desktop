@@ -48,6 +48,7 @@ import type { FacetSpec } from "../spec.ts";
 import type { RoundRecord } from "./digests.ts";
 import type { NightClock, PriorWorker } from "./journal.ts";
 import type { ConflictMerge } from "./conflict-worker.ts";
+import type { NightContract } from "./contract-gate.ts";
 import type { LeadSeat } from "./lead-session.ts";
 import type { ShelvedDefect } from "./rules.ts";
 import type { NoteKind } from "./wake-schedule.ts";
@@ -182,6 +183,17 @@ export interface NightState {
   baseCommit: string | null;
   integrationWorktree: string;
   integrationHead: string | null;
+  /**
+   * The head the last wave closed on (integrate.ts): what running loop workers merge, so they take
+   * the integration branch once per wave and not after every commit. Absent until a wave closes.
+   */
+  waveHead?: string | null;
+  /** The module contract loop workers are held to (contract-gate.ts), once committed. */
+  contract?: NightContract | null;
+  /** Why the last contract could not be committed, until one is. */
+  contractError?: string | null;
+  /** How many loop workers were refused for want of a contract (contract-gate.ts `contractBeforeFork`). */
+  contractRefusals?: number;
   integrationHealthy: boolean | null;
   healthByHead: Map<string | null | undefined, boolean>;
   consoleByHead: Map<string | null | undefined, string[]>;
@@ -655,6 +667,8 @@ export async function evidenceOf(
     inheritedConsole = [],
     keepPaths = boardStatePaths(night),
     viewport = null,
+    maxDemos = Infinity,
+    requiredDemos = [],
   }: {
     handle?: string | null;
     label: string;
@@ -667,6 +681,12 @@ export async function evidenceOf(
     keepPaths?: string[];
     /** Look at this size (the art director's 1600×900): the leased window only. */
     viewport?: { width: number; height: number } | null;
+    /**
+     * Demos beyond `requiredDemos` this look runs: every one, unless a pass says otherwise — a
+     * health pass inside a wave runs the demos workers' checks name (integrate.ts).
+     */
+    maxDemos?: number;
+    requiredDemos?: string[];
   },
 ): Promise<Evidence> {
   const { ctx, run } = night;
@@ -683,7 +703,8 @@ export async function evidenceOf(
     eyes: true,
     motion,
     audio: true,
-    maxDemos: Infinity,
+    maxDemos,
+    ...(requiredDemos.length ? { requiredDemos } : {}),
     setup: setup === undefined ? run.setup : setup,
     scaffold,
     inheritedConsole,

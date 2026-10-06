@@ -40,7 +40,9 @@ import { CLIP_DETAIL, CLIP_REASON } from "../text.ts";
 import { minutes, SECOND_MS, sleep } from "../time.ts";
 import { againstWords, NotLandedReason, observedFrom, VerdictPass, VerdictRule } from "../verdict.ts";
 import { randomUUID } from "node:crypto";
-import { slug, yes } from "./args.ts";
+import { demosNamedBy, dependentsOf, lookOf, lostRegistrations, lostWords } from "../registry.ts";
+import type { LostRegistration } from "../registry.ts";
+import { list, slug, yes } from "./args.ts";
 import { CLOSE_SETTLE_MS, timedWorkRemaining } from "./budgets.ts";
 import { workerDigest } from "./digests.ts";
 import { resolveByWorker, unresolvedOf } from "./conflict-worker.ts";
@@ -67,6 +69,29 @@ const MergeStage = { Director: "director" } as const;
 
 /** How many of a health pass's problems its card on the run's thread names. */
 const HEALTH_CARD_PROBLEMS = 5;
+/**
+ * Demos a merge's health pass runs beyond the ones workers' checks name: none asked for (the
+ * evidence pass still runs one, its floor). The close's own look runs every demo.
+ */
+const HEALTH_EXTRA_DEMOS = 0;
+
+/** What `integrate wave=` may say: never rename a value. */
+const WaveArg = { Close: "close" } as const;
+
+/** The words of a wave and of a merge that lost a registration, to the lead and on the user's card. */
+const WAVE_WORDS = {
+  closed: (head: string) => `the wave closed on ${shortSha(head)}: running workers take it at their next round`,
+  health: (known: boolean | undefined) => {
+    if (known === true) return "ok";
+    if (known === false) return "does not run — fix it before workers build on it";
+    return "not looked at yet — judge integration";
+  },
+  lost: (words: string) => `the merged build ${words} — put it back before workers merge this head`,
+  lostNext:
+    "the merged build runs but lost what another worker depends on (health.problems) — put it back (your own commit, or a single worker) or re-plan the contract before anything else",
+  lostPlain: "the merged build lost something another part of the build relies on; the lead is putting it back",
+  thenClose: "; then integrate wave=close so running workers take the repair",
+} as const;
 
 /** Why `integrate` will not merge a worker, in the sentence the director reads. */
 const INTEGRATE_REFUSAL = {
@@ -159,9 +184,23 @@ function lookAtIntegration(
     label,
     scaffold,
     worker = null,
-  }: { lease: WindowLease; label: string; scaffold?: boolean; worker?: Worker | null },
+    workers = null,
+    demos = null,
+  }: {
+    lease: WindowLease;
+    label: string;
+    scaffold?: boolean;
+    worker?: Worker | null;
+    /** The workers a wave merged: none of their fork points' errors is the merge's doing. */
+    workers?: readonly Worker[] | null;
+    /** A health pass inside a wave runs the demos workers' checks name, not every demo (the close does). */
+    demos?: string[] | null;
+  },
 ): Promise<Evidence> {
   const { consoleInheritedBy, integrationWorktree, patientEvidence, run, withLease } = night;
+  const inherited = workers?.length
+    ? [...new Set(workers.flatMap((each) => consoleInheritedBy(each)))]
+    : consoleInheritedBy(worker);
   return withLease(
     lease,
     async (handle: string | null) =>
@@ -171,7 +210,8 @@ function lookAtIntegration(
         motion: 0,
         setup: run.setup ?? null,
         scaffold,
-        inheritedConsole: consoleInheritedBy(worker),
+        inheritedConsole: inherited,
+        ...(demos ? { maxDemos: HEALTH_EXTRA_DEMOS, requiredDemos: demos } : {}),
       }),
     { borrow: true },
   );
@@ -330,13 +370,19 @@ async function mergeWorker(
  */
 async function healthPass(
   night: Night,
-  worker: Worker,
+  workers: readonly Worker[],
   label: string,
-): Promise<{ health: Evidence; started: boolean }> {
+  previousHead: string | null,
+): Promise<{ health: Evidence; started: boolean; lost: LostRegistration[] }> {
   const { nestedGit, nestedRepos, rememberEvidence, state } = night;
   const head = state.integrationHead;
   const healthLabel = `health_${shortSha(head, LABEL_SHA_LENGTH)}`;
-  const health = await lookAtIntegration(night, { lease: WindowLease.Health, label: healthLabel, worker });
+  const health = await lookAtIntegration(night, {
+    lease: WindowLease.Health,
+    label: healthLabel,
+    workers,
+    demos: demosNamedBy(dependentsOf(state.facetSpecs)),
+  });
   const started = health.ok === true;
   const unversioned = await unversionedNested((command) => nestedGit(command, label), nestedRepos);
   if (unversioned.length) {
@@ -346,20 +392,54 @@ async function healthPass(
     ];
     health.ok = false;
   }
+  const lost = lostByMerge(night, health, workers, previousHead);
+  if (lost.length) {
+    health.problems = [...(health.problems ?? []), WAVE_WORDS.lost(lostWords(lost))];
+    health.ok = false;
+  }
   state.integrationHealthy = health.ok === true;
   rememberEvidence(head, health);
   await recordHeadHealth(night, head, healthLabel, health);
-  return { health, started };
+  return { health, started, lost };
+}
+
+/**
+ * What the merge lost that a worker it did not merge depends on: a camera, a demo or a probe the
+ * head before it registered and the merged head does not (registry.ts). Only a build that runs is
+ * asked, and only against a head this night has looked at.
+ */
+function lostByMerge(
+  night: Night,
+  health: Evidence,
+  workers: readonly Worker[],
+  previousHead: string | null,
+): LostRegistration[] {
+  const { state } = night;
+  const before = state.evidenceByHead.get(previousHead);
+  if (health.ok !== true || !before) return [];
+  return lostRegistrations({
+    before: { cameras: before.cameras, demos: before.demos, state: before.state, demoStates: before.demoStates },
+    after: lookOf(health),
+    dependents: dependentsOf(
+      state.facetSpecs,
+      workers.map((worker) => worker.id),
+    ),
+  });
 }
 
 /**
  * The health pass on the record, next to the merge: does the merged build run? The studio offers
  * the user a build to look at mid-night only once something has confirmed that it does.
  */
-async function recordHealth(night: Night, worker: Worker, health: Evidence, started: boolean): Promise<void> {
+async function recordHealth(
+  night: Night,
+  workers: readonly Worker[],
+  { health, started, lost }: { health: Evidence; started: boolean; lost: readonly LostRegistration[] },
+): Promise<void> {
   const { appendRun, consoleInheritedBy, decision, note, recordVerdict, saveJournal, state } = night;
   const head = state.integrationHead;
   const problems = (health.problems ?? []).join("; ");
+  const last = workers.at(-1) as Worker;
   await appendRun(RunEvent.IntegrationHealth, {
     head,
     ok: health.ok === true,
@@ -368,21 +448,28 @@ async function recordHealth(night: Night, worker: Worker, health: Evidence, star
   await recordVerdict({
     pass: VerdictPass.Health,
     head,
-    worker: worker.id,
+    worker: last.id,
     ...observedFrom(health),
-    consoleInherited: consoleInheritedBy(worker),
+    consoleInherited: consoleInheritedBy(last),
     kept: health.ok === true,
     rule: health.ok === true ? VerdictRule.Starts : VerdictRule.DoesNotStart,
   });
   await saveJournal();
-  note(`integrated ${worker.id} → ${shortSha(head)}; health ${health.ok ? "ok" : `problems: ${problems}`}`);
+  const ids = workers.map((worker) => worker.id).join(", ");
+  note(`integrated ${ids} → ${shortSha(head)}; health ${health.ok ? "ok" : `problems: ${problems}`}`);
   if (health.ok) return;
   await decision(
     `the integrated build ${shortSha(head)} did not pass its health pass: ${problems} — the director must fix it or judge it before it can land`,
-    started
-      ? "the merged build carries nothing from the folder inside your game that keeps its own history; what was built there cannot be made live"
-      : "the merged build did not start when it was checked; the lead is fixing it before it can go live",
+    unhealthyPlain(started, lost),
   );
+}
+
+/** The user's sentence for a merge that failed its health pass: lost a registration, carries nothing, or does not start. */
+function unhealthyPlain(started: boolean, lost: readonly LostRegistration[]): string {
+  if (lost.length) return WAVE_WORDS.lostPlain;
+  return started
+    ? "the merged build carries nothing from the folder inside your game that keeps its own history; what was built there cannot be made live"
+    : "the merged build did not start when it was checked; the lead is fixing it before it can go live";
 }
 
 /** What a build that does not run after a merge asks of the lead: its own repair, or a worker's (one session). */
@@ -391,8 +478,26 @@ function fixNext(night: Night): string {
   return "the integrated build does not run — fix it in your worktree (git log shows what came in) before anything else";
 }
 
-/** What `integrate` answers after a clean merge: the new head, its health, what was set aside, and what to do next. */
-function integrationAnswer(night: Night, health: Evidence, union: boolean, setAside: SetAside | null): string {
+/** What a merge asks of the lead next: look before building on it, put back what it lost, or repair it. */
+function nextAfterMerge(night: Night, health: Evidence, lost: readonly LostRegistration[]): string {
+  if (health.ok) return "judge or look at integration before you build on it";
+  const repair = lost.length ? WAVE_WORDS.lostNext : fixNext(night);
+  // Running workers follow the last wave's head: a repair committed by hand reaches them when a wave closes.
+  return night.state.waveHead ? `${repair}${WAVE_WORDS.thenClose}` : repair;
+}
+
+/**
+ * What `integrate` answers after a clean merge: the new head, its health, what was set aside, and
+ * what to do next. `extra` (a wave's ids, what it lost) closes the answer; a single worker's merge
+ * that lost nothing has none, and answers as it always did.
+ */
+function integrationAnswer(
+  night: Night,
+  health: Evidence,
+  union: boolean,
+  setAside: SetAside | null,
+  { lost = [], extra = {} }: { lost?: readonly LostRegistration[]; extra?: AnyRecord } = {},
+): string {
   const { ledgerLines, shotsOf, state } = night;
   return JSON.stringify({
     merged: true,
@@ -409,11 +514,95 @@ function integrationAnswer(night: Night, health: Evidence, union: boolean, setAs
     // Defects a judge named for a worker that had already finished: nobody is building them,
     // so the integrated build is where they get fixed — by you, or by a new worker.
     ...(state.ledger.length ? { defectsNobodyOwns: ledgerLines() } : {}),
-    next: health.ok ? "judge or look at integration before you build on it" : fixNext(night),
+    next: nextAfterMerge(night, health, lost),
+    ...(lost.length ? { lost } : {}),
+    ...extra,
   });
 }
 
-export async function integrate(night: Night, args: AnyRecord) {
+/** A healthy merge closes the wave: running loop workers take this head at their next round. */
+function closeWaveIfHealthy(night: Night, health: Evidence): void {
+  const { state } = night;
+  if (health.ok === true) state.waveHead = state.integrationHead;
+}
+
+/** `integrate wave=close`: running loop workers take the integration head as it stands now. */
+async function closeWave(night: Night): Promise<string> {
+  const { note, saveJournal, state } = night;
+  const head = state.integrationHead;
+  state.waveHead = head;
+  await saveJournal();
+  if (head) note(WAVE_WORDS.closed(head));
+  return JSON.stringify({
+    wave: "closed",
+    head: head ? shortSha(head) : null,
+    health: WAVE_WORDS.health(state.healthByHead.get(head)),
+  });
+}
+
+/** An answer with fields added: into its JSON when it is an object, else said after it. */
+function withFields(answer: string, fields: AnyRecord): string {
+  try {
+    const parsed = JSON.parse(answer);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return JSON.stringify({ ...parsed, ...fields });
+  } catch {
+    // a sentence, not JSON
+  }
+  return JSON.stringify({ answer, ...fields });
+}
+
+/** One worker of a wave, merged — or why it was left out of the wave. */
+async function takeIntoWave(
+  night: Night,
+  id: string,
+  label: string,
+): Promise<{ skipped: string } | { worker: Worker; merged: Awaited<ReturnType<typeof mergeWorker>> }> {
+  const worker = night.state.workers.get(slug(id));
+  if (!worker) return { skipped: INTEGRATE_REFUSAL.noWorker(id) };
+  const unresolved = unresolvedOf(worker);
+  if (unresolved) return { skipped: unresolved };
+  const resolved = await resolveWorkerCommit(night, worker);
+  if (resolved.refusal !== undefined) return { skipped: resolved.refusal };
+  return { worker, merged: await mergeWorker(night, worker, resolved.commit, `${label}:${worker.id}`) };
+}
+
+/**
+ * A wave (`integrate worker=a,b,c`): each worker merged in order — one `integration_merge` each —
+ * then ONE health pass over what they make together. The first conflict stops the wave where it is
+ * and goes where a single worker's would; a worker with nothing to merge is left out and named.
+ */
+async function integrateWave(night: Night, ids: readonly string[]): Promise<string> {
+  const { run, state } = night;
+  const label = `director:${run.runId}:integrate:wave`;
+  const ready = await checkpointAssets(night, label);
+  if (ready.refusal) return ready.refusal;
+  const previousHead = state.integrationHead;
+  const merged: Worker[] = [];
+  const skipped: Record<string, string> = {};
+  let union = false;
+  for (const [at, id] of ids.entries()) {
+    const taken = await takeIntoWave(night, id, label);
+    if ("skipped" in taken) skipped[id] = taken.skipped;
+    else if (!taken.merged.ok) {
+      // What merged before the conflict is on the branch, and nobody has looked at it yet.
+      if (merged.length) state.integrationHealthy = null;
+      const wave = { merged: merged.map((worker) => worker.id), notTried: ids.slice(at + 1), skipped };
+      return withFields(taken.merged.answer, { wave });
+    } else {
+      merged.push(taken.worker);
+      union = union || taken.merged.union;
+    }
+  }
+  if (!merged.length) return JSON.stringify({ merged: false, skipped });
+  const pass = await healthPass(night, merged, label, previousHead);
+  closeWaveIfHealthy(night, pass.health);
+  await recordHealth(night, merged, pass);
+  const wave = { merged: merged.map((worker) => worker.id), ...(Object.keys(skipped).length ? { skipped } : {}) };
+  return integrationAnswer(night, pass.health, union, ready.setAside, { lost: pass.lost, extra: { wave } });
+}
+
+/** One worker's merge and its health pass: the answer `integrate` has always given. */
+async function integrateOne(night: Night, args: AnyRecord): Promise<string> {
   const { run, state } = night;
   const worker = state.workers.get(slug(args.worker));
   if (!worker) return INTEGRATE_REFUSAL.noWorker(args.worker);
@@ -425,11 +614,31 @@ export async function integrate(night: Night, args: AnyRecord) {
   if (resolved.refusal !== undefined) return resolved.refusal;
   const ready = await checkpointAssets(night, label);
   if (ready.refusal) return ready.refusal;
+  const previousHead = state.integrationHead;
   const merged = await mergeWorker(night, worker, resolved.commit, label);
   if (!merged.ok) return merged.answer;
-  const { health, started } = await healthPass(night, worker, label);
-  await recordHealth(night, worker, health, started);
-  return integrationAnswer(night, health, merged.union, ready.setAside);
+  const pass = await healthPass(night, [worker], label, previousHead);
+  closeWaveIfHealthy(night, pass.health);
+  await recordHealth(night, [worker], pass);
+  return integrationAnswer(night, pass.health, merged.union, ready.setAside, { lost: pass.lost });
+}
+
+/**
+ * `integrate`: one worker's accepted commit, or a wave of them (`worker=a,b,c`), merged into the
+ * integration branch with one health pass. A healthy integrate closes the wave — running loop
+ * workers take the integration branch once per wave, not after every commit — and `wave=close`
+ * closes it by hand, after the lead's own commits (with or without workers to merge first).
+ */
+export async function integrate(night: Night, args: AnyRecord) {
+  const closing =
+    String(args.wave ?? "")
+      .trim()
+      .toLowerCase() === WaveArg.Close;
+  const ids = list(args.worker);
+  if (closing && !ids.length) return closeWave(night);
+  const answer = ids.length > 1 ? await integrateWave(night, ids) : await integrateOne(night, args);
+  if (!closing) return answer;
+  return withFields(answer, { waveClosed: JSON.parse(await closeWave(night)) });
 }
 
 // ── the close ──

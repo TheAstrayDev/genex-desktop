@@ -227,6 +227,10 @@ export function recordNight(night: Night, now = Date.now()): void {
     // A resumed or reopened night numbers its judge and playtest folders on from here (`restoreNight`).
     judges: state.judges,
     plays: state.plays,
+    // The module contract and the last wave's head, only once there is one: a journal of a night
+    // with neither reads exactly as it did.
+    ...(state.contract ? { contract: state.contract } : {}),
+    ...(state.waveHead ? { waveHead: state.waveHead } : {}),
   });
   // The art director's last word and a goal build's one turned-back finish: kept once there is one.
   if (state.lastShip) director.lastShip = { ...state.lastShip, at: iso(state.lastShip.at) };
@@ -329,6 +333,22 @@ function restoredWorkerLimit(saved: unknown, now: number): WorkerLimit | null {
   };
 }
 
+/** A commit's hash, as the journal kept one. */
+const commitOf = (value: unknown): string | null =>
+  typeof value === "string" && /^[0-9a-f]{7,64}$/.test(value) ? value : null;
+
+/**
+ * The module contract its loop workers were held to and the head the last wave closed on, as the
+ * journal kept them: a resumed night goes on holding its workers to the same contract.
+ */
+function restoreIntegration(state: NightState, saved: AnyRecord): void {
+  const contract = saved.contract as AnyRecord | undefined;
+  const commit = commitOf(contract?.commit);
+  if (commit && Array.isArray(contract?.spec?.modules)) state.contract = { commit, spec: contract.spec };
+  const waveHead = commitOf(saved.waveHead);
+  if (waveHead) state.waveHead = waveHead;
+}
+
 /** The log's newest lines as the journal kept them, and how much of it the lead has heard. */
 function restoreLog(night: Night, saved: AnyRecord): void {
   const log = (Array.isArray(saved.log) ? saved.log : []).filter(
@@ -409,6 +429,7 @@ export function restoreNight(night: Night, now = Date.now()): void {
   restorePlanWindow(state, saved.planReview, now);
   if (typeof saved.integrationHealthy === "boolean") state.integrationHealthy = saved.integrationHealthy;
   state.workerLimit = restoredWorkerLimit(saved.workerLimit, now);
+  restoreIntegration(state, saved);
   restoreLog(night, saved);
   // Its judge_N and play_N folders go on from the earlier sessions', never over them.
   state.judges = passesSoFar(saved.judges);

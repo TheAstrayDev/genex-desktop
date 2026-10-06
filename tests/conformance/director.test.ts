@@ -113,6 +113,19 @@ const planFor = (...ids: string[]): Record<string, unknown> => ({
   risks: "one window at a time on this machine",
 });
 
+/**
+ * The same plan with the parts `singles` names built by one session only (`"mode":"single"`): one
+ * looping part is left, so no module contract is needed before its worker starts (contract-gate.ts).
+ */
+const planWithSingle = (singles: string[], ...ids: string[]): Record<string, unknown> => {
+  const plan = planFor(...ids);
+  const parts = JSON.parse(String(plan.workers)) as Array<{ id: string }>;
+  return {
+    ...plan,
+    workers: JSON.stringify(parts.map((part) => (singles.includes(part.id) ? { ...part, mode: "single" } : part))),
+  };
+};
+
 describe("the director's tools and brief", () => {
   it("offers flat, uniquely named run tools that both bridges can carry", () => {
     const names = DIRECTOR_TOOLS.map((t) => t.name);
@@ -2776,7 +2789,8 @@ describe("a director's night through the real core and harness", () => {
         seen.director.push(request);
         const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
         results.judged = json(await call("judge", { target: "integration", against: "start" }));
-        await call("plan", planFor("plaza", "sky"));
+        // Flipped (module contract): plaza is a single session, so the plan has one looping part.
+        await call("plan", planWithSingle(["plaza"], "plaza", "sky"));
         results.started = json(
           await call("worker_start", {
             id: "plaza",
@@ -3489,7 +3503,8 @@ describe("a director's night through the real core and harness", () => {
     fakeEngine(rig, async (request) => {
       if (request.director) {
         const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
-        await call("plan", planFor("plaza", "sky"));
+        // Flipped (module contract): sky is a single session, so the plan has one looping part.
+        await call("plan", planWithSingle(["sky"], "plaza", "sky"));
         results.started = json(
           await call("worker_start", {
             id: "plaza",
@@ -5778,5 +5793,83 @@ describe("the selected direction-build duration", () => {
     // The lead was woken once, to be asked what next (director/wake.ts): nothing else woke it.
     assert.deepEqual(customEvents(events, "director_continued")[0]!.reasons, ["idle_ask"]);
     assert.equal(customEvents(events, "run_finished").filter((e) => e.runId === runId).length, 1);
+  });
+});
+
+/**
+ * A plan of several looping parts holds its loop workers to a module contract (D7): on the
+ * Midnight Apex build parallel workers rewrote each other's modules around a shared state object
+ * nobody had written down. Through the real core and harness, no worker starts here — what is
+ * proved is every refusal, and the contract the plan commits on the integration branch.
+ */
+describe("a module contract before loop workers", () => {
+  it("MC1. refuses a loop worker until the plan carries a contract, its stubs exist and its seam leaves the other part alone", async () => {
+    const rig = await startRig(
+      { replies: [] },
+      { previewPoolMax: 3, createHeadlessPreview: async () => makeFakePreview() },
+    );
+    rigs.push(rig);
+    const project = await rig.core.games.scaffold("director-contract", { title: "Director contract" });
+    const results: Record<string, any> = {};
+    const contract = {
+      conventions: ["the plaza is 40 metres across"],
+      modules: [
+        { path: "src/plaza.js", owner: "plaza", api: ["export function buildPlaza(scene)"] },
+        { path: "src/sky.js", owner: "sky", api: ["export function buildSky(scene)"] },
+      ],
+    };
+    fakeEngine(rig, async (request) => {
+      if (!request.director)
+        return { ok: true, engine: "codex", turns: 1, usage: {}, sessionId: "worker", summary: "nothing" };
+      const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
+      await call("plan", planFor("plaza", "sky"));
+      results.noContract = text(await call("worker_start", { id: "plaza", brief: "pave it", owns: "src/plaza.js" }));
+      results.badPath = text(
+        await call("plan", {
+          ...planFor("plaza", "sky"),
+          contract: '{"modules":[{"path":"../x.js","owner":"plaza"}]}',
+        }),
+      );
+      results.planned = text(await call("plan", { ...planFor("plaza", "sky"), contract: JSON.stringify(contract) }));
+      results.noStubs = text(await call("worker_start", { id: "plaza", brief: "pave it" }));
+      results.wide = text(await call("worker_start", { id: "sky", brief: "a dusk sky", owns: "src/" }));
+      results.finished = text(await call("finish", { summary: "a contract and nothing built", land: "no" }));
+      return { ok: true, engine: "codex", turns: 1, usage: {}, sessionId: "director-contract", summary: "done" };
+    });
+    const runId = rig.core.newRunId();
+    await rig.core.dispatchRun({
+      runId,
+      goal: "a plaza under a dusk sky",
+      project: project.name,
+      mode: "autopilot",
+      engine: "codex",
+      reference: { name: "plaza", shots: [] },
+      budgets: { wallClockMs: 15 * 60_000 },
+    });
+    const events = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "run_finished").some((e) => e.runId === runId),
+      120_000,
+      "director run_finished",
+    );
+    assert.match(results.noContract, /2 parts that loop, and no module contract yet: call plan again with contract=/);
+    assert.match(results.badPath, /^plan: contract path \.\.\/x\.js is not one file relative to the game/);
+    assert.match(
+      results.planned,
+      /The module contract is committed on integration as docs\/ARCHITECTURE\.md \([0-9a-f]{10}\).*Stubs still to write before their loop workers start: src\/plaza\.js, src\/sky\.js/,
+    );
+    assert.match(
+      results.noStubs,
+      /the contract gives "plaza" src\/plaza\.js, which does not exist at [0-9a-f]{10}: write the stubs first/,
+    );
+    assert.match(results.wide, /owns= would reach other parts' modules \(src\/ → src\/plaza\.js, plaza's\)/);
+    assert.deepEqual(
+      customEvents(events, "director_worker").filter((e) => e.runId === runId),
+      [],
+      "nobody started",
+    );
+    const architecture = await git(project.dir, ["show", `refs/studio/runs/${runId}/integration:docs/ARCHITECTURE.md`]);
+    assert.match(architecture, /### src\/plaza\.js — owned by `plaza` \(plaza\)/);
+    assert.match(architecture, /- the plaza is 40 metres across/);
   });
 });

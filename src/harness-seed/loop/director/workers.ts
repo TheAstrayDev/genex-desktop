@@ -45,6 +45,7 @@ import {
 import { singleWorkerBrief } from "./briefs.ts";
 import { iterationDigest, loopNote, workerDigest } from "./digests.ts";
 import { conflictMergeOf, markersLeft, mergeFirst } from "./conflict-worker.ts";
+import { briefWithContract, contractAtFork, contractBeforeFork, contractOnPlan } from "./contract-gate.ts";
 import { defaultWorkerId, priorFork, priorIdRefusal, priorWorkerIds } from "./journal.ts";
 import { LEAD_FORK_REFUSED, LEAD_START_DIRTY } from "./lead-session-prompts.ts";
 import { BuildTarget } from "./night.ts";
@@ -362,7 +363,7 @@ async function planAcceptance(
 }
 
 export async function setPlan(night: Night, args: AnyRecord) {
-  const { appendRun, journal, note, saveJournal, state } = night;
+  const { journal, saveJournal, state } = night;
   const compiled = compilePlan(args);
   if (compiled.error !== undefined) return compiled.error;
   const plan = compiled.plan;
@@ -380,6 +381,19 @@ export async function setPlan(night: Night, args: AnyRecord) {
   };
   await saveJournal();
   if (first) await openPlanReview(night);
+  // A plan of several looping parts with a module contract: committed as docs/ARCHITECTURE.md.
+  const contracted = await contractOnPlan(night);
+  const answer = await planAnswer(night, plan, { first, acceptanceKept, args });
+  return contracted ? `${answer} ${contracted}` : answer;
+}
+
+/** What `plan` answers once the plan is kept: the card on the user's screen, and what to do next. */
+async function planAnswer(
+  night: Night,
+  plan: AnyRecord,
+  { first, acceptanceKept, args }: { first: boolean; acceptanceKept: boolean; args: AnyRecord },
+): Promise<string> {
+  const { appendRun, note, state } = night;
   const acceptanceUnchanged = !first && acceptanceKept && !args.scope_instruction;
   if (acceptanceUnchanged)
     return "Worker assignments updated; required acceptance is unchanged. Read run_status only if the supplied snapshot is stale.";
@@ -959,7 +973,7 @@ function compileContract(night: Night, worker: Worker, parsed: WorkerArgs, args:
     {
       id,
       title: worker.title,
-      brief: worker.brief,
+      brief: briefWithContract(night, worker.brief, [id, args.replaces, args.goal]),
       owns: worker.owns,
       identity: worker.identity,
       cameras: worker.cameras,
@@ -1158,6 +1172,26 @@ function goalRefusal(night: Night, id: string, args: AnyRecord): string | null {
   return goalAttemptRefusal(state.goals, String(args.goal ?? id));
 }
 
+/**
+ * The fork point, held to the module contract a plan of several looping parts carries
+ * (contract-gate.ts): the commit, and the seam the worker starts with — its contract modules when
+ * it named none — or the refusal.
+ */
+async function contractedFork(
+  night: Night,
+  id: string,
+  args: AnyRecord,
+  mode: WorkerMode,
+): Promise<{ from: string; commit: string | null; owns: string[]; refusal?: undefined } | { refusal: string }> {
+  const uncontracted = await contractBeforeFork(night, args, mode);
+  if (uncontracted) return { refusal: uncontracted };
+  const fork = await resolveForkCommit(night, args.from);
+  if (fork.refusal !== undefined) return fork;
+  const contracted = await contractAtFork(night, { id, args, mode, commit: fork.commit });
+  if (contracted.refusal !== undefined) return { refusal: contracted.refusal };
+  return { from: fork.from, commit: fork.commit, owns: contracted.owns ?? list(args.owns) };
+}
+
 export async function startWorker(night: Night, args: AnyRecord) {
   const { ctx, integrationWorktree, medianRoundMs, note, run, runningWorkers, startRefusal, state } = night;
   const id = slug(args.id) || defaultWorkerId(night);
@@ -1179,9 +1213,9 @@ export async function startWorker(night: Night, args: AnyRecord) {
   const ownsMain = yes(args.owns_main, runningWorkers().length === 0);
   const parsed = parseWorkerArgs(night, args);
   if (typeof parsed === "string") return parsed;
-  const fork = await resolveForkCommit(night, args.from);
+  const fork = await contractedFork(night, id, args, mode);
   if (fork.refusal !== undefined) return fork.refusal;
-  const { from, commit } = fork;
+  const { from, commit, owns } = fork;
   const dirty = await gitAt(ctx, integrationWorktree, GIT.status, { label: `director:${run.runId}:dirty` }).catch(
     () => "",
   );
@@ -1190,7 +1224,7 @@ export async function startWorker(night: Night, args: AnyRecord) {
     args,
     mode,
     brief: String(args.brief ?? "").trim(),
-    owns: list(args.owns),
+    owns,
     ownsMain,
     cameras: list(args.cameras),
     identity: list(args.identity),
@@ -1357,7 +1391,8 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
       if (state.finish) return { by: "director", reason: "stopped by the director: the build is wrapping up" };
       return false;
     },
-    integration: { head: async () => state.integrationHead },
+    // Once a wave has closed, a worker takes the integration branch once per wave (integrate.ts).
+    integration: { head: async () => state.waveHead ?? state.integrationHead },
     projectDir,
     onIteration: (record: AnyRecord) => recordRound(night, worker, record),
     facets: state.facetSpecs,

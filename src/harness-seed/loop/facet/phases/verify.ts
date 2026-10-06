@@ -15,6 +15,7 @@ import { diffAgainstIncumbent, scoreEvidence } from "../scoring.ts";
 import { noisyRegressions, remeasurable } from "../round-judgement.ts";
 import { OutagePhase, recordDecision, roundFields } from "../record.ts";
 import { tasteVerdict } from "./taste.ts";
+import { registryRefusal } from "../../registry.ts";
 import { FacetStage, isZeroDiff, roundStage } from "../stage.ts";
 
 /** A regression is followed up in the builder's session only with this much of the facet's clock left (or a slice of a short one). */
@@ -305,6 +306,18 @@ async function decideOnBoard(loop: FacetLoop, round: FacetRound): Promise<void> 
   if (comparison.regressions.length > 0) {
     const regressed = comparison.regressions.join(", ");
     refuse(VerdictSource.Checks, `regressed ${regressed}`, `checks regressed: ${regressed}`);
+    return;
+  }
+  // A camera, demo or probe another facet's checks depend on is a regression too, though no check
+  // on this board measures it: that facet's board would only find out once it merged this build.
+  const lost = registryRefusal({
+    facetId: loop.facet.id,
+    facets: loop.facets,
+    incumbent: loop.incumbentEvidence,
+    challenger: evidence,
+  });
+  if (lost) {
+    refuse(VerdictSource.Checks, lost.gap, lost.reason);
     return;
   }
   // A finishing round's polish can sit under the build stage's "no visible change" line at the
