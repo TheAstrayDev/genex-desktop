@@ -871,13 +871,18 @@ describe("a worker's contract: done, compiled and dry-run", () => {
       ctx: { call: async () => null },
       runningWorkers: () => [{ id: "hud", state: "running", spec: hud.spec }],
       softDeadline: Date.now() + 60 * 60_000,
-      state: { finish: false, workers: new Map() },
+      state: { finish: false, workers: new Map([["hud", { id: "hud" }]]) },
       priorWorkers: [],
     };
     const refusal = async (id: string, args: Record<string, unknown>) =>
       String(await startRefusal(night as never, id, { id, brief: "x", ...args }));
     assert.match(await refusal("menus", { critic: "screen" }), /"hud" already owns the screen/);
     assert.doesNotMatch(await refusal("race", {}), /owns the screen/, "a part that draws nothing is not refused");
+    assert.doesNotMatch(
+      await refusal("hud-2", { critic: "screen", replaces: "hud" }),
+      /owns the screen/,
+      "the owner's own restart takes the screen over",
+    );
   });
 
   it("turns a running worker to finishing with worker_steer stage=, and back to building with a move", async () => {
@@ -1114,7 +1119,8 @@ describe("the night's plan, before anyone builds", () => {
 
     const said = "yes, keep the pursuit meter";
     const decisions: Array<[string, string | undefined]> = [];
-    const night = (budgets: Record<string, unknown> = {}) => {
+    const notes: string[] = [];
+    const night = (budgets: Record<string, unknown> = {}, steers: string[] = []) => {
       const run = {
         runId: "apex",
         project: "apex",
@@ -1124,6 +1130,7 @@ describe("the night's plan, before anyone builds", () => {
       };
       return {
         run,
+        steers,
         ctx: { call: async () => null },
         resume: false,
         waking: false,
@@ -1131,17 +1138,23 @@ describe("the night's plan, before anyone builds", () => {
         state: { plan: null, goals: undefined, planReviewUntil: null, planSaidFrom: 0, planGo: false } as any,
         journal: { director: {}, plan: {}, run: { ...run } } as any,
         saveJournal: async () => {},
-        note: () => {},
+        note: (text: string) => void notes.push(text),
         appendRun: async () => {},
         decision: async (text: string, plain?: string) => void decisions.push([text, plain]),
-        inbox: { steering: async () => [said] },
+        // The user's steers so far, as the inbox reads them at each call: later ones arrive later.
+        inbox: { steering: async () => [...steers] },
       };
     };
     const lead = night();
-    await setPlan(lead as never, args);
+    await setPlan(lead as never, { ...args, cut: "police\ntraffic\none race" });
     assert.equal(decisions.length, 1, `one card per addition: ${JSON.stringify(decisions)}`);
     assert.match(String(decisions[0]![1]), /a pursuit meter/);
     assert.deepEqual(lead.run.scope.cut, ["open world", "police", "traffic"], "cuts only grow");
+    assert.deepEqual(lead.run.scope.inScope, ["one race"], "and never cut what the user asked for");
+    assert.ok(
+      notes.some((text) => text.includes("one race")),
+      `the lead hears which cut was not taken: ${notes.join(" | ")}`,
+    );
     assert.deepEqual(lead.run.scope.added, ["a pursuit meter"], "waiting for the user's yes");
     assert.ok(!lead.run.scope.inScope.includes("a pursuit meter"), "and not in scope by itself");
     assert.deepEqual(lead.journal.run.scope, lead.run.scope, "the journal keeps it for a Resume");
@@ -1150,6 +1163,8 @@ describe("the night's plan, before anyone builds", () => {
     await setPlan(lead as never, { ...args, added: '["a helicopter"]', scope_instruction: "the user wants one" });
     assert.ok(!lead.run.scope.inScope.includes("a helicopter"), "a steer the user never wrote widens nothing");
     assert.equal(decisions.length, 2);
+    // The user answers the card.
+    lead.steers.push(said);
     await setPlan(lead as never, { ...args, scope_instruction: said });
     assert.ok(lead.run.scope.inScope.includes("a pursuit meter"), "their own words, quoted, widen it");
     assert.ok(!lead.run.scope.added.includes("a pursuit meter"));
@@ -1165,6 +1180,27 @@ describe("the night's plan, before anyone builds", () => {
       ],
       "an added part is an optional goal: it never holds the finish",
     );
+
+    // Review of WP-SCOPE-2: a steer the user sent before the card asked them anything (here,
+    // about the cars) is quoted to revise acceptance; it never says yes to the pursuit meter.
+    const earlier = night({ completionPolicy: "goal" }, ["make the cars faster"]);
+    await setPlan(earlier as never, args);
+    const revised = await setPlan(earlier as never, { ...args, scope_instruction: "make the cars faster" });
+    assert.doesNotMatch(String(revised), /Scope revision needs/, "the steer revises acceptance, as it may");
+    assert.ok(
+      !earlier.run.scope.inScope.includes("a pursuit meter"),
+      "an answer to nothing the card asked widens nothing",
+    );
+    assert.deepEqual(earlier.run.scope.added, ["a pursuit meter"], "it still waits for the user");
+
+    // A goal-mode plan whose every part is beyond the ask would leave no goal that can pass.
+    const nothingAsked = night({ completionPolicy: "goal" });
+    const refused = await setPlan(nothingAsked as never, {
+      ...args,
+      workers: JSON.stringify([{ id: "pursuit", done: ["a pursuit meter fills"], added: true }]),
+    });
+    assert.match(String(refused), /at least one part must be what the user asked for/);
+    assert.equal(nothingAsked.state.plan, null, "and is not taken");
   });
 
   it("takes what kind of game this is on the plan, and refuses a kind that is not one", () => {

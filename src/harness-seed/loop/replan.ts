@@ -308,6 +308,7 @@ export async function nextMove(
     moves = [],
     counts = null,
     cameras = [],
+    asked = [],
   }: {
     run: Run;
     spec: PlannedFacet;
@@ -317,11 +318,13 @@ export async function nextMove(
     moves?: ReadonlyArray<{ what?: string; delivered?: boolean }>;
     counts?: unknown;
     cameras?: string[];
+    /** Steps beyond the ask already put to the user (facet/beyond.ts): never proposed again. */
+    asked?: readonly string[];
   },
 ): Promise<{ what: string; why: string; check: Check | null; scope?: MoveScope } | null> {
   let raw: AnyRecord;
   try {
-    const user = nextMoveUserPrompt({ run, spec, defects, notes, moves, counts, cameras });
+    const user = nextMoveUserPrompt({ run, spec, defects, notes, moves, counts, cameras, asked });
     raw = await askPlanner(ctx, run, NEXT_MOVE_SYSTEM, user);
   } catch (err: any) {
     if (isStop(err, ctx)) throw err;

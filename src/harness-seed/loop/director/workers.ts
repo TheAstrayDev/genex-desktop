@@ -345,9 +345,13 @@ async function openPlanReview(night: Night): Promise<void> {
 async function planAcceptance(
   night: Night,
   args: AnyRecord,
-  workers: Array<{ id: string; done: string[] }>,
+  workers: Array<{ id: string; done: string[]; added?: boolean }>,
 ): Promise<string | null> {
   const { state } = night;
+  // Parts beyond the ask are optional goals (goals.ts createGoals): a plan of nothing else would
+  // leave no goal that can ever pass.
+  const nothingAsked = workers.length > 0 && workers.every((part) => part.added === true);
+  if (goalCommission(night.run) && nothingAsked) return MESSAGE_GOALS.nothingAsked;
   // Built aside and kept only when the plan is taken: a refused plan sets no outcomes.
   let goals = state.goals;
   if (goalCommission(night.run) && !goals) {
@@ -370,19 +374,33 @@ async function planAcceptance(
   return null;
 }
 
+/** What the plan tool answers about a goal-mode plan's parts. */
+const MESSAGE_GOALS = {
+  nothingAsked:
+    "Goal mode: at least one part must be what the user asked for. Parts marked added are optional goals, so a plan of only those leaves no goal that can pass.",
+} as const;
+
 /** A card about something a plan builds beyond the user's ask: the record, and the sentence the user reads. */
 const MESSAGE_ADDED = {
   text: (item: string) => `plan: added beyond the user's ask — ${item}`,
   plain: (item: string) =>
     `The plan adds ${item}, which is outside what you asked; say so to keep it, or say "cut it" to drop it`,
+  notCut: (items: string[]) => `plan: not cut — the user asked for ${items.join("; ")}`,
 } as const;
+
+/** When an addition's card went to the user: how many of their steers had arrived by then. */
+interface AddedAsked {
+  item: string;
+  steers: number;
+}
 
 /**
  * The plan's cut and added lists against the run's scope (loop/scope.ts). Cuts only ever grow the
- * scope's cut list. An addition joins the scope only when the plan quotes the user's own steer
- * (`scope_instruction`, scope.ts `addToScope`); every other one waits on the scope as `added` and
- * is put to the user once, as a card. Answers the additions to put to the user now. A run from
- * before scope keeps no scope, but its additions are still asked about, once each.
+ * scope's cut list, and never take what the user asked for. An addition joins the scope only when
+ * the plan quotes a steer the user sent after its card (`scope_instruction`, scope.ts
+ * `addToScope`); every other one waits on the scope as `added` and is put to the user once, as a
+ * card. Answers the additions to put to the user now. A run from before scope keeps no scope, but
+ * its additions are still asked about, once each.
  */
 async function settlePlanScope(
   night: Night,
@@ -392,17 +410,52 @@ async function settlePlanScope(
 ): Promise<string[]> {
   const added: string[] = plan.added ?? [];
   const scope = runScope(night.run);
-  const withCuts = scope ? scopeWith(scope, { cut: plan.cut ?? [] }) : undefined;
-  const next = withCuts ? await widenedByUser(night, withCuts, added, String(args.scope_instruction ?? "")) : undefined;
+  const withCuts = scope ? scopeWith(scope, { cut: cutsOutsideAsk(night, plan, scope) }) : undefined;
+  const steers: string[] = added.length ? await night.inbox.steering(undefined, false).catch(() => []) : [];
+  const askedAt: AddedAsked[] = Array.isArray(previous?.addedAskedAt) ? [...previous.addedAskedAt] : [];
+  const instruction = String(args.scope_instruction ?? "");
+  const next = withCuts
+    ? widenedByUser(withCuts, answeredBy(added, instruction, steers, askedAt), instruction, steers)
+    : undefined;
   const asked = [...new Set<string>([...(previous?.addedAsked ?? []), ...(scope?.added ?? [])])];
   const fresh = added.filter((item) => !asked.includes(item) && !next?.inScope.includes(item));
+  for (const item of fresh) askedAt.push({ item, steers: steers.length });
   if (asked.length || fresh.length) plan.addedAsked = [...asked, ...fresh];
+  if (askedAt.length) plan.addedAskedAt = askedAt;
   const kept = next ? scopeWith(next, { added: fresh }) : undefined;
   if (kept && kept !== scope) {
     night.run.scope = kept;
     night.journal.run = { ...night.journal.run, scope: kept };
   }
   return fresh;
+}
+
+/** The plan's cuts that are not what the user asked for; the others leave the plan, and the lead hears it. */
+function cutsOutsideAsk(night: Night, plan: AnyRecord, scope: RunScope): string[] {
+  const cut: string[] = plan.cut ?? [];
+  const asked = cut.filter((item) => scope.inScope.includes(item));
+  if (!asked.length) return cut;
+  night.note(MESSAGE_ADDED.notCut(asked));
+  const kept = cut.filter((item) => !asked.includes(item));
+  if (kept.length) plan.cut = kept;
+  else delete plan.cut;
+  return kept;
+}
+
+/**
+ * The additions the quoted steer can answer: those whose card had gone to the user before it
+ * arrived. A steer sent before any card asked about an item (an acceptance revision, say) is an
+ * answer to something else.
+ */
+function answeredBy(
+  added: readonly string[],
+  instruction: string,
+  steers: readonly string[],
+  askedAt: readonly AddedAsked[],
+): string[] {
+  const at = instruction ? steers.lastIndexOf(instruction) : -1;
+  if (at < 0) return [];
+  return added.filter((item) => askedAt.some((asked) => asked.item === item && asked.steers <= at));
 }
 
 /** A scope with more cut or added items (each list only grows, capped as scope.ts caps it); the same scope when none. */
@@ -414,9 +467,8 @@ function scopeWith(scope: RunScope, more: { cut?: string[]; added?: string[] }):
 }
 
 /** The plan's additions moved into scope, when the plan quotes the user's own steer (scope.ts `addToScope`). */
-async function widenedByUser(night: Night, scope: RunScope, added: string[], instruction: string): Promise<RunScope> {
+function widenedByUser(scope: RunScope, added: string[], instruction: string, steers: readonly string[]): RunScope {
   if (!added.length || !instruction) return scope;
-  const steers = await night.inbox.steering(undefined, false).catch(() => []);
   return addToScope(scope, added, instruction, steers) ?? scope;
 }
 
@@ -663,12 +715,13 @@ export async function startRefusal(night: Night, id: string, args: AnyRecord) {
 
 /**
  * One owner of the screen (loop/screen-owner.ts): a part reviewed as a screen owns it, so a second
- * one is refused while the first runs — the same way two owners of the entry are.
+ * one is refused while the first runs — the same way two owners of the entry are. The owner's own
+ * restart (`replaces`) takes the screen over instead.
  */
 function screenOwnerRefusal(running: Worker[], id: string, args: AnyRecord): string | null {
   if (String(args.critic ?? "").trim() !== SCREEN_CRITIC) return null;
   const owner = runningScreenOwner(running);
-  if (!owner) return null;
+  if (!owner || owner === slug(args.replaces)) return null;
   return `worker "${owner}" already owns the screen (critic=screen) for this run: one part draws the HUD, menus and layout. Start "${id}" without critic=screen and have it expose its values, steer "${owner}" to draw them, or wait for "${owner}" to finish.`;
 }
 
@@ -1078,7 +1131,7 @@ function compileContract(night: Night, worker: Worker, parsed: WorkerArgs, args:
   // Live, not a snapshot: a worker started later is one this worker's judge can route to.
   state.facetSpecs.push(worker.spec);
   // …and who owns the screen, both ways round (loop/screen-owner.ts).
-  linkScreenOwner(state.facetSpecs, worker.spec);
+  linkScreenOwner(state.facetSpecs, worker.spec, worker.replaces);
   if (compiled.unsatisfiable.length) {
     note(
       `worker ${id}: ${compiled.unsatisfiable.length} check(s) name paths ${shortSha(worker.from)} does not report — ${compiled.unsatisfiable.map((u) => `${u.id} (${u.missing.join(", ")})`).join("; ")}`,

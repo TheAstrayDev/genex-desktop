@@ -19,15 +19,10 @@ import { similarDefect } from "../defects.ts";
 import { recordDecision } from "../record.ts";
 import { movesInStage, stageOf } from "../stage.ts";
 import { isBeyondScope } from "../../scope.ts";
+import { askUserAboutBeyond, BEYOND_MESSAGE } from "../beyond.ts";
 
 /** The planner is asked for a move only with this much of the facet's clock left (or a slice of a short one). */
 const PLANNER_MOVE_MIN_MS = 8 * MINUTE_MS;
-
-/** What the user reads on a card about a step beyond what they asked for. */
-const MESSAGE = {
-  reviewerBeyond: (what: string) => `A reviewer proposes ${what}, which is outside what you asked; say so to add it`,
-  plannerBeyond: (what: string) => `The planner proposes ${what}, which is outside what you asked; say so to add it`,
-} as const;
 
 /** The move (§5): the director's ladder always; else identity first, then the pending move, the reviewer's, the critic's gap or the planner's. */
 export async function chooseRoundMove(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
@@ -52,7 +47,7 @@ export async function chooseRoundMove(loop: FacetLoop, round: FacetRound): Promi
     lastBigMove: loop.lastBigMove,
     policy,
   });
-  if (choice.beyond) await askUserAboutBeyond(loop, choice.beyond, MESSAGE.reviewerBeyond);
+  if (choice.beyond) await askUserAboutBeyond(loop, choice.beyond, BEYOND_MESSAGE.reviewer);
   // Each source names its move in its own field (rules.ts `MoveChoice`).
   if (choice.milestone) takeMilestone(loop, choice.milestone);
   else if (choice.pending) takePendingMove(loop, choice.pending);
@@ -158,6 +153,8 @@ async function askPlannerForMove(loop: FacetLoop, round: FacetRound): Promise<Ro
       moves,
       counts: loop.incumbentEvidence?.state?.counts ?? null,
       cameras: spec.cameras,
+      // What was already put to the user is theirs to answer, never the planner's to propose again.
+      asked: loop.surfacedBeyond ?? [],
     });
   } catch (err: any) {
     if (isStopped(err, ctx)) return stoppedByUser(loop);
@@ -166,7 +163,7 @@ async function askPlannerForMove(loop: FacetLoop, round: FacetRound): Promise<Ro
   if (!proposed?.what) return;
   // A move that needs something the user did not ask for is their decision, never this round's move.
   if (isBeyondScope(proposed)) {
-    await askUserAboutBeyond(loop, proposed, MESSAGE.plannerBeyond);
+    await askUserAboutBeyond(loop, proposed, BEYOND_MESSAGE.planner);
     return;
   }
   const { what, why, check } = proposed;
@@ -181,23 +178,6 @@ async function askPlannerForMove(loop: FacetLoop, round: FacetRound): Promise<Ro
   });
   loop.currentMove = { what, why, milestoneId: null, check, source: MoveSource.Planner };
   seedMoveCheck(loop, check);
-}
-
-/**
- * A step beyond what the user asked for, put to them as one decision card the first time it is
- * proposed: the Midnight Apex night built police, traffic and a pursuit meter into a street race
- * nobody asked for, one reviewer's move at a time. The user's yes is a steer; until then it waits.
- */
-async function askUserAboutBeyond(
-  loop: FacetLoop,
-  proposal: AnyRecord,
-  words: (what: string) => string,
-): Promise<void> {
-  const what = String(proposal.what ?? "").trim();
-  const asked = loop.surfacedBeyond ?? [];
-  if (!what || asked.includes(what)) return;
-  loop.surfacedBeyond = [...asked, what];
-  await recordDecision(loop, `${loop.facet.title ?? loop.facet.id}: ${words(clip(what, CLIP_QUOTE))}`);
 }
 
 /** A move's own check joins the board as a failing entry — the move is not built yet. */

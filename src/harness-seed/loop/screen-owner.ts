@@ -20,10 +20,11 @@ export const SCREEN_CRITIC = "screen";
 export const SCREEN_OWNER_CATEGORY = "screen-owner";
 
 /**
- * A line that draws through the contract HUD: anything on `__studio.hud`, or one of the HUD's
- * drawing calls on a handle to it (template `src/hud.js` `HudItemKind`, plus the screen flash).
+ * A line that draws on or changes the contract HUD, on `__studio.hud` or a handle to it: the
+ * drawing calls (template `src/hud.js` `HudItemKind`, the screen flash, a font) and the ones that
+ * remove, clear or switch it. Reading it (`get`, `items`) is a probe, not drawing.
  */
-const HUD_CALL = /__studio\.hud\.|\bhud\.(?:text|bar|crosshair|flash|arc|path|image|panel)\s*\(/;
+const HUD_CALL = /\bhud\.(?:text|bar|crosshair|flash|arc|path|image|panel|font|remove|clear|enable)\s*\(/;
 
 /** Game code the rule reads: JavaScript or TypeScript. */
 const SOURCE_FILE = /\.(?:m?js|ts)$/;
@@ -94,9 +95,16 @@ export function runningScreenOwner(running: readonly ScreenPart[]): string | nul
 /**
  * Tell every part of the run who owns the screen, the newest owner winning: a part started later
  * learns the owner, and an owner started later is learnt by the parts already running (the loop
- * reads its spec live, so their next review applies it).
+ * reads its spec live, so their next review applies it). A part that `replaces` the owner (its
+ * restart) owns the screen in its place, whether or not it was started with critic=screen.
  */
-export function linkScreenOwner(specs: readonly ScreenSpec[], spec: ScreenSpec & { id?: unknown }): void {
+export function linkScreenOwner(
+  specs: readonly ScreenSpec[],
+  spec: ScreenSpec & { id?: unknown },
+  replaces?: string | null,
+): void {
+  const restartsOwner = Boolean(replaces) && specs.some((each) => each.id === replaces && each.ownsScreen === true);
+  if (restartsOwner) spec.ownsScreen = true;
   if (spec.ownsScreen === true) {
     for (const each of specs) each.screenOwner = spec.id;
     spec.screenOwner = spec.id;

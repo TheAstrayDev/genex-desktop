@@ -2,6 +2,7 @@
 import { renderChecks, type Check, type FacetSpec, type Milestone } from "./spec.ts";
 import { clip } from "./text.ts";
 import { judgeScopeLines, PROPOSAL_SCOPE_RULE } from "./scope-prompts.ts";
+import { runScope } from "./scope.ts";
 import type { Run } from "../types/harness.d.ts";
 
 /** How much of a facet's intent a replan question quotes, and how much the next-move question does. */
@@ -79,6 +80,11 @@ export const NEXT_MOVE_SYSTEM = [
   'Reply with JSON only: {"what":"one or two sentences — the move","why":"one sentence","scope":"deepens"|"adds","check":{…}|null}',
 ].join("\n");
 
+/** The next move's reply shape in the planner's user content, as a run without scope has always read it. */
+const NEXT_MOVE_REPLY = '{"what":"…","why":"…","check":{…}|null}';
+/** …and with a scope: the typed field the planner is asked for (scope.ts `MoveScope`), in the shape itself. */
+const NEXT_MOVE_REPLY_SCOPED = '{"what":"…","why":"…","scope":"deepens"|"adds","check":{…}|null}';
+
 /** The builder's own "known gaps" section of its notes, if it wrote one. */
 function knownGapsOf(notes: string): string {
   return (
@@ -98,6 +104,7 @@ export function nextMoveUserPrompt({
   moves,
   counts,
   cameras,
+  asked = [],
 }: {
   run: Run;
   spec: PlannedFacet;
@@ -106,8 +113,12 @@ export function nextMoveUserPrompt({
   moves: ReadonlyArray<{ what?: string; delivered?: boolean }>;
   counts: unknown;
   cameras: string[];
+  /** Steps beyond the ask this part already put to the user (facet/beyond.ts): theirs to answer. */
+  asked?: readonly string[];
 }): string {
   const knownGaps = knownGapsOf(notes);
+  // With a scope the reply's own shape carries the typed field: a model copies the last shape it reads.
+  const reply = runScope(run) ? NEXT_MOVE_REPLY_SCOPED : NEXT_MOVE_REPLY;
   return [
     `GAME GOAL: ${run.goal}`,
     judgeScopeLines(run, [PROPOSAL_SCOPE_RULE]),
@@ -120,6 +131,7 @@ export function nextMoveUserPrompt({
     moves.length
       ? `MOVES SO FAR (do not repeat): ${moves.map((m) => `${m.what}${m.delivered ? " (delivered)" : " (not delivered)"}`).join(" | ")}`
       : "",
+    asked.length ? `ALREADY PUT TO THE USER (outside the ask; never propose these): ${asked.join(" | ")}` : "",
     counts ? `WHAT THE BUILD CONTAINS NOW (tag counts): ${JSON.stringify(counts).slice(0, STATE_CHARS)}` : "",
     defects.length
       ? `THE JUDGE'S LEDGER (polish — already covered, do not choose from it): ${defects
@@ -131,7 +143,7 @@ export function nextMoveUserPrompt({
     cameras.length ? `CAMERAS: ${cameras.join(", ")}` : "",
     `CHECK IDS IN USE (do not reuse): ${(spec.checks ?? []).map((c) => c.id).join(", ")}`,
     "",
-    'Reply with JSON only: {"what":"…","why":"…","check":{…}|null}',
+    `Reply with JSON only: ${reply}`,
   ]
     .filter(Boolean)
     .join("\n");

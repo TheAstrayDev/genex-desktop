@@ -1912,6 +1912,53 @@ describe("code reviewer, mechanical half", () => {
     assert.deepEqual(quiet, []);
   });
 
+  /** Review of WP-SCOPE-2: reading the HUD (a probe of what it shows) is not drawing on it. */
+  it("lets a part read the HUD another part owns, and finds it changing it", () => {
+    const lines = [
+      "+const shown = { hudIds: () => __studio.hud.items() };",
+      "+const speed = hud.get('speed');",
+      "+__studio.hud.remove('speed');",
+      "+hud.clear();",
+      "+__studio.hud.enable(false);",
+    ];
+    const diff = ["+++ b/src/race/probe.js", `@@ -1,0 +1,${lines.length} @@`, ...lines].join("\n");
+    const race = { id: "race", owns: ["src/race/"], checks: [], screenOwner: "hud" };
+    const found = mechanicalReview(diff, race).filter((v) => v.category === "screen-owner");
+    assert.deepEqual(
+      found.map((v) => v.line),
+      [3, 4, 5],
+      `reads pass, changes are the owner's: ${found.map((v) => v.line).join(", ")}`,
+    );
+  });
+
+  /**
+   * Review of WP-SCOPE-2: the HUD part restarted (`replaces=hud`) without critic=screen lost the
+   * screen, and every HUD line it drew was a finding naming the part it replaced.
+   */
+  it("hands the screen to the part that replaces its owner", async () => {
+    const { linkScreenOwner } = await import("../../src/harness-seed/loop/screen-owner.ts");
+    const hud: Record<string, unknown> = { id: "hud", ownsScreen: true };
+    const race: Record<string, unknown> = { id: "race" };
+    const specs = [hud, race];
+    linkScreenOwner(specs, hud);
+    linkScreenOwner(specs, race);
+    const again: Record<string, unknown> = { id: "hud-2", owns: ["src/hud/"], checks: [] };
+    specs.push(again);
+    linkScreenOwner(specs, again, "hud");
+    assert.equal(again.ownsScreen, true, "the replacement owns the screen");
+    assert.equal(race.screenOwner, "hud-2", "and the other parts learn it");
+    const drawing = "+++ b/src/hud/speed.js\n@@ -1,0 +1,1 @@\n+hud.text('speed', '120 km/h');\n";
+    assert.deepEqual(
+      mechanicalReview(drawing, again as never).filter((v) => v.category === "screen-owner"),
+      [],
+    );
+    const other: Record<string, unknown> = { id: "lights" };
+    specs.push(other);
+    linkScreenOwner(specs, other, "race");
+    assert.equal(other.ownsScreen, undefined, "replacing a part that never owned the screen gives none");
+    assert.equal(other.screenOwner, "hud-2");
+  });
+
   it("says the same thing to the model half of the review", () => {
     const rubric = readFileSync(pathMod.join(repoRoot, "src/harness-seed/judge/code-review.md"), "utf8");
     for (const global of ["__studioClock", "__studioDraw", "__studioCapture", "__studioGl", "__studioHook"])

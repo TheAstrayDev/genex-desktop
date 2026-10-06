@@ -9849,8 +9849,24 @@ describe("MAP-5. scope inflated without the user", () => {
       assert.ok(texts[name]![0].includes(SCOPE_RULE), `${name} is told to judge what is in scope`);
     assert.ok(texts.director![0].includes(DIRECTOR_SCOPE_RULE), "the director decides what to cut");
     assert.ok(!texts.director![1].includes(DIRECTOR_SCOPE_RULE), "and a run without scope reads its old rules");
+    // The last reply shape a model reads carries the typed field it is asked for, with a scope only.
+    const replyLine = (text: string) =>
+      text.split("\n").findLast((line) => line.startsWith("Reply with JSON only")) ?? "";
+    const SCOPED_FIELDS: Record<string, string> = {
+      taste: '"bigMove":{"what":"…","why":"…","scope":"deepens"|"adds"}',
+      planner: '"scope":"deepens"|"adds"',
+      liveness: '"adds":false',
+    };
+    for (const [name, field] of Object.entries(SCOPED_FIELDS)) {
+      const scopedReply = replyLine(texts[name]![0]);
+      assert.ok(scopedReply.includes(field), `${name}'s reply shape asks for ${field}: ${scopedReply}`);
+      assert.ok(!texts[name]![1].includes(field), `${name} without scope replies in the shape it did`);
+    }
+    /** A scoped text with the typed reply fields taken out: what a run without scope must read. */
+    const unscoped = (text: string) => text.replaceAll(',"scope":"deepens"|"adds"', "").replaceAll(',"adds":false', "");
     // Byte for byte: the scope is only ever added, so a run from before it reads what it read.
-    for (const [name, [withScope, without]] of Object.entries(texts)) {
+    for (const [name, [scopedText, without]] of Object.entries(texts)) {
+      const withScope = unscoped(scopedText);
       const before = without.split("\n");
       const added = withScope.split("\n").filter((line) => !before.includes(line));
       const kept = withScope
@@ -10054,5 +10070,113 @@ describe("MAP-5. scope inflated without the user", () => {
     const cards = events.filter((e) => e.type === "autopilot_decision");
     assert.equal(cards.length, 1);
     assert.match(String(cards[0]!.payload.decision), /a police pursuit system.*outside what you asked/);
+  });
+
+  /**
+   * Review of WP-SCOPE-2: a taste judge names a big move every round, and one that rewords the
+   * helicopter ("a police helicopter over the course", then "a helicopter chasing the leader") was a
+   * new card each round; the planner, never told what was already put to the user, proposed it again.
+   * The critic's and the player's steps beyond the ask never reached the user at all.
+   */
+  it("MAP-5g. a reviewer that rewords the helicopter every round asks the user twice at most, the planner hears what was already put to them, and the critic's and the player's steps beyond the ask are cards too", async () => {
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { critiqueLiveness } = await import("../../src/harness-seed/loop/facet/phases/learn.ts");
+    const { BEYOND_CARDS_PER_PART, playtestStepWords } = await import("../../src/harness-seed/loop/facet/beyond.ts");
+    const { FACET_POLICY } = await import("../../src/harness-seed/loop/facet/policy.ts");
+    const run = { ...(await apexRun()), engine: "fake" } as Run;
+    const pursuit = { what: "a police pursuit system", why: "pressure", scope: "adds", check: null };
+    const recorder = ctxRecorder({
+      handlers: { "engine.complete": () => ({ message: { content: JSON.stringify(pursuit) } }) },
+    });
+    const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const loop = {
+      ctx: recorder.ctx,
+      run,
+      facet: { id: "race", title: "Race" },
+      spec: { id: "race", title: "Race", checks: [], cameras: [] },
+      board: { lit: { pass: true, weight: "identity" } },
+      moves: [] as Array<Record<string, unknown>>,
+      milestonesDone: new Set<string>(),
+      milestonesSetAside: new Set<string>(),
+      polishStreak: 0,
+      lastLiveness: null,
+      lastBigMove: null as Record<string, unknown> | null,
+      surfacedBeyond: [] as string[],
+      defectList: [],
+      policy: FACET_POLICY,
+      legacy: false,
+      critic: "place",
+      hasTime: () => true,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void events.push({ type, payload }),
+    };
+    const reworded = [
+      "a police helicopter over the course",
+      "a helicopter chasing the leader",
+      "police choppers with searchlights",
+    ];
+    for (const [index, what] of reworded.entries()) {
+      loop.lastBigMove = { what, why: "pressure", scope: "adds" };
+      await chooseRoundMove(loop as never, { iteration: index + 2 } as never);
+    }
+    const cards = () => events.filter((e) => e.type === "autopilot_decision");
+    assert.equal(BEYOND_CARDS_PER_PART, 2);
+    assert.equal(
+      cards().length,
+      BEYOND_CARDS_PER_PART,
+      `three rounds, three wordings: ${cards()
+        .map((c) => c.payload.decision)
+        .join(" | ")}`,
+    );
+    assert.deepEqual(loop.moves, [], "and none of them is a move");
+    const asked = recorder.paramsOf("engine.complete").map((params) => {
+      const request = params as { messages: Array<{ content: string }> };
+      return String(request.messages[0]?.content);
+    });
+    assert.equal(asked.length, reworded.length, "the planner was asked each round");
+    assert.match(
+      asked.at(-1)!,
+      /ALREADY PUT TO THE USER \(outside the ask; never propose these\): a police helicopter over the course \| a police pursuit system/,
+      "the planner hears what the user was already asked",
+    );
+
+    // The liveness critic's fix that needs something not in scope is put to the user too, once.
+    const critic = {
+      ...loop,
+      surfacedBeyond: [] as string[],
+      ctx: ctxRecorder({
+        handlers: {
+          "engine.complete": () => ({
+            message: {
+              content: JSON.stringify({
+                life: { score: 0, reason: "nothing moves", fix: "pedestrians on the pavements", adds: true },
+                extent: { score: 1, reason: "the course ends", fix: "grandstands along the course" },
+                biggest: "life",
+              }),
+            },
+          }),
+        },
+      }).ctx,
+    };
+    const before = cards().length;
+    const round = { won: true, iteration: 5, iterationId: "i5", evidence: { shots: [{ camera: "default" }] } };
+    await critiqueLiveness(critic as never, round as never);
+    const fromCritic = cards().slice(before);
+    assert.equal(fromCritic.length, 1, `one card for the fix beyond the ask: ${JSON.stringify(events.slice(-3))}`);
+    assert.match(
+      String(fromCritic[0]!.payload.decision),
+      /pedestrians on the pavements, which is outside what you asked/,
+    );
+    await critiqueLiveness(critic as never, round as never);
+    assert.equal(cards().length, before + 1, "asked once");
+
+    // The player's big step: labelled for the lead, and a card for the user, only when it adds.
+    const beyond = playtestStepWords({ what: "a police helicopter", scope: "adds" });
+    assert.match(beyond.note, /a police helicopter.*outside the ask/);
+    assert.match(String(beyond.card), /The player proposes a police helicopter, which is outside what you asked/);
+    assert.deepEqual(playtestStepWords({ what: "tighter steering" }), {
+      note: " — the player's big step: tighter steering",
+      card: null,
+    });
+    assert.deepEqual(playtestStepWords(null), { note: "", card: null });
   });
 });

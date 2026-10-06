@@ -38,6 +38,7 @@ import { EngineFailure } from "./outage.ts";
 import { MINUTE_MS, SECOND_MS, sleep } from "./time.ts";
 import { workingGoal } from "./goal-prompts.ts";
 import { judgeScopeLines, LIVENESS_SCOPE_RULE, PROPOSAL_SCOPE_RULE } from "./scope-prompts.ts";
+import { runScope } from "./scope.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type { CompleteResponse, HarnessCompleteParams, MessageImage, StillSource } from "../types/host-api.d.ts";
 import { CheckKind, CheckOrigin, CheckWeight, type Check } from "./spec.ts";
@@ -1450,6 +1451,12 @@ function tasteCheck(raw: unknown, regression: { camera: string; what: string } |
 /** The JSON a taste judge answers with, as both its rubric and its user content spell it. */
 const TASTE_REPLY =
   '{"pick":"A"|"B"|"tie","satisfied":true|false,"regression":{"camera":"…","what":"…"}|null,"newCheck":{"id":"…","camera":"…","ask":"…"}|null,"bigMove":{"what":"…","why":"…"}|null,"defects":["…"],"polish":["…"],"moveDelivered":true|false|null,"moveAlreadyPresent":true|false|null,"scale":"structural"|"polish","reason":"…"}';
+/**
+ * The same reply for a run with a scope: the big move carries its typed scope (scope.ts
+ * `MoveScope`) in the shape itself, since a model copies the last shape it reads.
+ */
+const TASTE_REPLY_SCOPED =
+  '{"pick":"A"|"B"|"tie","satisfied":true|false,"regression":{"camera":"…","what":"…"}|null,"newCheck":{"id":"…","camera":"…","ask":"…"}|null,"bigMove":{"what":"…","why":"…","scope":"deepens"|"adds"}|null,"defects":["…"],"polish":["…"],"moveDelivered":true|false|null,"moveAlreadyPresent":true|false|null,"scale":"structural"|"polish","reason":"…"}';
 
 /**
  * The taste veto. Runs on an attempt the scoreboard already accepted: blind A/B over the
@@ -1520,7 +1527,7 @@ export async function tasteVeto(
     "BUILD B",
     describeCandidate(B, hudBudget),
     "",
-    `Reply with JSON only: ${TASTE_REPLY}`,
+    `Reply with JSON only: ${runScope(run) ? TASTE_REPLY_SCOPED : TASTE_REPLY}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -2105,6 +2112,12 @@ function criticImages(evidence: Candidate, cameras: string[] | null, facet: AnyR
   return images;
 }
 
+/** The critic's reply shape: the first principle spelled out (with its typed `adds` when `scoped`), the rest elided. */
+function livenessShape(table: readonly Principle[], scoped: boolean): string {
+  const first = scoped ? '{"score":0,"reason":"…","fix":"…","adds":false}' : '{"score":0,"reason":"…","fix":"…"}';
+  return `{${table.map((p, i) => `"${p.key}":${i === 0 ? first : "{…}"}`).join(",")},"biggest":"${table[0]!.key}","summary":"…"}`;
+}
+
 /**
  * Ask the liveness critic about ONE build of ONE facet: the facet's cameras and one eye,
  * scored 0–3 against the eight principles, each with a reason and a fix. One call per
@@ -2138,7 +2151,9 @@ export async function livenessCritique(
     .filter((p) => p.kind === PrincipleKind.Polish)
     .map((p) => p.key)
     .join(", ");
-  const shape = `{${table.map((p, i) => `"${p.key}":${i === 0 ? '{"score":0,"reason":"…","fix":"…"}' : "{…}"}`).join(",")},"biggest":"${table[0]!.key}","summary":"…"}`;
+  const shape = livenessShape(table, false);
+  // With a scope, the user content's shape carries the typed `adds` (scope-prompts.ts LIVENESS_SCOPE_RULE).
+  const replyShape = runScope(run) ? livenessShape(table, true) : shape;
   const system = await judgePrompt(
     ctx,
     which === "screen" ? "readability.md" : "liveness.md",
@@ -2165,7 +2180,7 @@ export async function livenessCritique(
       ? `IMAGES ATTACHED (${images.length}): ${images.map((img) => img.label).join("; ")}. Judge only what they show.`
       : "No screenshots could be attached — score every principle null and say so in summary.",
     "",
-    `Reply with JSON only: ${shape}`,
+    `Reply with JSON only: ${replyShape}`,
   ]
     .filter(Boolean)
     .join("\n");

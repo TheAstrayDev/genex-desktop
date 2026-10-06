@@ -18,6 +18,7 @@ import { attemptRef } from "../repo.ts";
 import { RunEvent, SteeringSource } from "../run-events.ts";
 import { CheckKind, CheckWeight, MoveOwner, normalizeFacetSpec, normalizeMilestone } from "../spec.ts";
 import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
+import { playtestStepWords } from "../facet/beyond.ts";
 import {
   STEER_BACK_TO_BUILD,
   STEER_EMPTY_REFUSAL,
@@ -904,7 +905,10 @@ async function playIn(
     await night.saveJournal();
   }
   const bigMove = played?.report?.bigMove ?? null;
-  note(`playtested ${target.label}: ${words.said}${bigMove ? ` — the player's big step: ${bigMove.what}` : ""}`);
+  // A step beyond the ask is labelled for the lead and put to the user (facet/beyond.ts), never a move.
+  const step = playtestStepWords(bigMove);
+  note(`playtested ${target.label}: ${words.said}${step.note}`);
+  if (step.card) await night.decision(step.card, step.card);
   return JSON.stringify({
     target: target.label,
     question: ask,
@@ -913,6 +917,7 @@ async function playIn(
     actions: played?.report?.actions ?? 0,
     report: played?.report?.report ?? "",
     bigMove,
+    ...(step.card ? { bigMoveOutsideAsk: "put to the user as a decision card; never a move" } : {}),
   });
 }
 
