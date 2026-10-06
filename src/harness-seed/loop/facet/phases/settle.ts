@@ -14,6 +14,7 @@ import { recordDecision } from "../record.ts";
 import { ReplanSource } from "./replans.ts";
 import { CLIP_QUOTE } from "../../text.ts";
 import { FINISH_POLISH_NOTES, polishCountsInStage, polishEscalates, roundStage } from "../stage.ts";
+import { carryFixesOver } from "../carried-fixes.ts";
 
 /** The judge's biggest gaps a brief remembers, newest first. */
 const MAX_GAP_HISTORY = 4;
@@ -38,6 +39,8 @@ export async function settleMoveAndGap(loop: FacetLoop, round: FacetRound): Prom
   countGapStreak(loop, round, fixed);
   if (loop.currentFix) await settleTheFix(loop, round, loop.currentFix, fixed);
   updateDefectLedger(loop, round);
+  // An undone round's demonstrated fixes ride into every next brief until the accepted build has them.
+  loop.carriedFixes = carryFixesOver(loop.carriedFixes, { round, spec: loop.spec, board: loop.board });
   loop.loseStreak = round.won ? 0 : loop.loseStreak + 1;
 }
 

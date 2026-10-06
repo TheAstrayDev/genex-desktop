@@ -57,6 +57,9 @@ import {
 } from "./facet/stage-prompts.ts";
 import { heldHudBriefRule } from "./held-hud-prompts.ts";
 import { screenOwnerFinishRules, screenOwnerLine, type ScreenOwnerSpec } from "./screen-owner-prompts.ts";
+import { benchPage, blockBriefSection } from "./facet/build-block-prompts.ts";
+import { CARRY_OVER_EXCEPTION, carryOverSection } from "./facet/carried-fixes-prompts.ts";
+import type { CarriedFix } from "./facet/carried-fixes.ts";
 import type { Check, FacetSpec } from "./spec.ts";
 import type { ReferenceStats, Scoreboard } from "./checks.ts";
 import type { StyleStats } from "./style.ts";
@@ -790,6 +793,10 @@ export interface BriefOptions {
   maxChars?: number;
   /** Where the retrieved recipes are written whole (`.studio/RECIPES.md`): the brief then points there for every sketch but the fix's. */
   recipesFile?: string | null;
+  /** The worker's build block (facet/build-block.ts): its first, long round, and the bench page it names. */
+  buildBlock?: { bench: string | null } | null;
+  /** What undone rounds had fixed that the accepted build still fails (facet/carried-fixes.ts): carried over. */
+  carried?: CarriedFix[];
 }
 
 /** Per-camera style distance to the stills, now and the round before. */
@@ -851,6 +858,8 @@ function renderBriefSections(
     /** "finish" for a worker finishing what exists: THE FINISH replaces THE MOVE, and the polish list is the work. */
     stage = null,
     recipesFile = null,
+    buildBlock = null,
+    carried = [],
   }: BriefOptions,
   cuts: ReadonlySet<BriefCut>,
 ): string {
@@ -859,8 +868,10 @@ function renderBriefSections(
   const lines = [
     ...briefHeader(run, spec, iteration, game),
     ...steeringSection(steering),
+    ...(buildBlock ? blockBriefSection(buildBlock.bench) : []),
     ...(finishing ? finishSection(polish, finishRules(spec, screen && template)) : moveSection(move)),
     ...fixSection(fix, template, finishing),
+    ...carryOverSection(carried),
     ...scoreboardSection(board, comparison, spec),
     ...doNotRegressSection(spec.doNotRegress),
     ...(integration ? [`## Integration`, clipWords(integration, BRIEF_INTEGRATION_CHARS), ``] : []),
@@ -871,7 +882,7 @@ function renderBriefSections(
     ...(finishing || cuts.has(BriefCut.Polish) ? [] : polishSection(polish)),
     ...reviewSection(review),
     ...(spike ? [`## Spike result`, spike, ``] : []),
-    ...attemptsSection(attempts, !cuts.has(BriefCut.DiffStats)),
+    ...attemptsSection(attempts, !cuts.has(BriefCut.DiffStats), carried.length > 0),
     ...recipesSection(recipes, recipeShape),
     ...briefRules(run, spec, { screen, template, resumed }),
     ...(cuts.has(BriefCut.Lessons) ? [] : lessonsSections(gameLessons, lessons)),
@@ -1117,9 +1128,10 @@ function reviewSection(review: BriefOptions["review"]): string[] {
  * to be filed under "Attempts that lost — do not repeat them", accepted ones too, which told a
  * builder not to repeat the work it had just been kept for.
  */
-function attemptsSection(attempts: readonly AnyRecord[], diffStats = true): string[] {
+function attemptsSection(attempts: readonly AnyRecord[], diffStats = true, carrying = false): string[] {
   if (!attempts.length) return [];
-  const lines = [`## Earlier rounds (build on what was kept; do not repeat what lost)`];
+  const exception = carrying ? CARRY_OVER_EXCEPTION : "";
+  const lines = [`## Earlier rounds (build on what was kept; do not repeat what lost${exception})`];
   for (const attempt of attempts.slice(-EARLIER_ROUNDS_SHOWN)) lines.push(...attemptLines(attempt, diffStats));
   lines.push(``);
   return lines;
@@ -1232,7 +1244,7 @@ function briefScreenOwner(spec: BriefOptions["spec"], applies: boolean): string[
  * evidence pass still judges the game.
  */
 function benchRule(facetId: string): string {
-  const page = `bench/${slug(facetId, "part")}.html`;
+  const page = benchPage(facetId);
   return `- For work inside one module, keep a bench page ${page} that mounts just your module, and capture page=${page} to look at it in seconds; index.html never references a bench page. Capture the game itself before you finish.`;
 }
 

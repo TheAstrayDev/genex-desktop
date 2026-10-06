@@ -12,6 +12,8 @@ import { visionBriefLines } from "../vision-prompts.ts";
 import { heldHudPromptDraws } from "../held-hud-prompts.ts";
 import { appliesToBuild } from "../applies-to-build.ts";
 import { screenOwnerLine } from "../screen-owner-prompts.ts";
+import { blockPromptLine } from "./build-block-prompts.ts";
+import { reapplyWords } from "./carried-fixes-prompts.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** Reference stills into the first brief, and pair images later, at most. */
@@ -283,10 +285,13 @@ function promptInput({
   ownShape = false,
   game = null,
   stage = null,
+  buildBlock = null,
   ...rest
 }: AnyRecord): PromptInput {
   const { briefFile } = rest;
   const finishing = stageOf({ stage }) === FacetStage.Finish;
+  // A worker's first, long round (facet/build-block.ts) says so before its move.
+  const blockLine = buildBlock ? blockPromptLine(buildBlock.bench ?? null) : "";
   return {
     ...rest,
     briefText,
@@ -318,7 +323,7 @@ function promptInput({
     steering: cappedSteering(userSteering),
     failureText: lastFailure ? cappedFailure(lastFailure) : null,
     finishing,
-    moveLine: (finishing ? [FINISH_PROMPT_LINE, fixAsk(fix, true)] : [moveAsk(move), fixAsk(fix)])
+    moveLine: (finishing ? [FINISH_PROMPT_LINE, fixAsk(fix, true)] : [blockLine, moveAsk(move), fixAsk(fix)])
       .filter(Boolean)
       .join("\n"),
     briefPointer: briefFile
@@ -430,7 +435,8 @@ function lastAttemptLine(lastAttempt: AnyRecord | null): string {
   if (!lastAttempt) return "";
   if (lastAttempt.won)
     return `Your last build was ACCEPTED${lastAttempt.flips.length ? ` (flipped: ${lastAttempt.flips.join(", ")})` : ""}.`;
-  const kept = lastAttempt.flips.length ? ` (it did flip ${lastAttempt.flips.join(", ")} — keep that)` : "";
+  // The worktree went back to the accepted build: what the lost build fixed is re-applied, not "kept".
+  const kept = lastAttempt.flips.length ? reapplyWords(lastAttempt.flips) : "";
   const retained = lastAttempt.branch ? `. Its code is retained on ${lastAttempt.branch}` : "";
   return `Your last build LOST: ${lastAttempt.why || "no check flipped"}${kept}${retained}. The worktree is back on the accepted build.`;
 }

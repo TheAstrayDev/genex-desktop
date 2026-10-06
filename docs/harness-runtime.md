@@ -325,6 +325,13 @@ when its wiring conflicts too). A hand merge the builder left uncommitted is com
 review; one with any path still unmerged, or staged with conflict markers, makes the build broken. Enforcement keeps an unowned file that matches an integration head, and a merge that kept
 the worker's side of another part's file is a `merge-dropped` finding, restored from the merged
 head. `facet_review_enforced` lists `reverted`, `kept`, `quarantined` and `restored` files.
+The review's diff base is the newest integration commit the worktree holds: it walks the
+integration line from the lead's latest head (`loopIntegration().latest`) back to the incumbent
+(`loop/facet/merged-heads.ts`), so a lead's fix the builder was told to merge before its wave
+closed is never the builder's edit. A clean merge that changes a part's own files (other than a
+template entry's wiring) tells its builder, in the brief's Integration section, that they are the
+lead's changes to keep; the lead's brief and `skills/director.md` send a fix in a running worker's
+files to that worker (`worker_steer now=yes`).
 
 A plan whose parts loop two or more (a part marked `"mode":"single"` does not count) needs a
 module contract before its loop workers start: `plan contract=` names each module's file, owner
@@ -403,6 +410,24 @@ polish streak: its brief works the taste judge's polish list (up to eight; `judg
 is appended to the taste rubric) and the defect ledger, it wins on the blind pick, a regression
 still rolls it back, and the worker ends once a preferred, unbroken build holds every identity
 check. The art director's finish mark (below) is when the lead turns owners to it.
+
+The build block. A director's new loop worker (not a restart: `replaces=` or an id from before a
+pause) whose window holds `BUILD_BLOCK_MIN_WINDOW_MS` (two hours) opens with one long round on a
+session engine in its own worktree
+(`loop/facet/build-block.ts`): its turns never run past `BUILD_BLOCK_MAX_MS` (90 min), and a builder
+that ends its turn before `BUILD_BLOCK_MIN_MS` (60 min) is asked in the same session to keep going
+in a screenshot-and-fix loop on its bench page (at most `BUILD_BLOCK_TURNS` asks). The block is
+kept on the checks alone — broken, regressed, lost-registry and unchanged builds are still refused
+on the board — and the taste judge looks once for notes, never a verdict; blind A/B starts at round
+two. A finisher and the classic pipeline have no block. Its build time seeds neither the worker's
+round estimate nor the run's median (`facet_iteration.buildBlock`).
+
+Kept fixes. A round the judge preferred that missed a mandatory move is kept when it flipped any of
+the judge's own defect questions (`rules.ts acceptRound`): the move stays owed and its rung is not
+climbed. A judged round undone with flips leaves them, with its attempt ref, in
+`carriedFixes` (`loop/facet/carried-fixes.ts`); every next brief's CARRY OVER section tells the
+builder to re-apply them until the accepted build passes them. A round the judge did not prefer is
+recorded as a taste loss, not `no-move`.
 
 Manual SkillOpt resolves the most recent run's model through `modelOn`, as the post-run path does.
 A cross-provider run stores its builder model alongside its orchestrator engine, so those two raw

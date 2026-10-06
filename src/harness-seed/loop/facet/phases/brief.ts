@@ -15,6 +15,8 @@ import { pinFixRecipe } from "../rules.ts";
 import { facetPrompt, promptImagesFor } from "../prompt.ts";
 import { roundStage } from "../stage.ts";
 import { fitBrief } from "../brief-fit.ts";
+import { blockBench } from "../build-block-prompts.ts";
+import { openCarriedFixes } from "../carried-fixes.ts";
 
 /** A template game's entry module, when the shape names none. */
 const DEFAULT_ENTRY = "src/main.js";
@@ -138,6 +140,9 @@ function briefInput(loop: FacetLoop, round: FacetRound) {
     liveness: loop.lastLiveness ? renderLiveness(loop.lastLiveness) : null,
     // Building or finishing (facet/stage.ts): the stage this round was fixed in when its move was chosen.
     stage: roundStage(round, spec),
+    // The worker's first, long round (facet/build-block.ts), and what undone rounds had fixed.
+    buildBlock: round.buildBlock ? { bench: blockBench(loop) } : null,
+    carried: openCarriedFixes(loop.carriedFixes, loop.board),
   };
 }
 
@@ -187,5 +192,6 @@ export function facetPromptFor(
     move: loop.currentMove,
     fix,
     stage: roundStage(round, spec),
+    buildBlock: round.buildBlock ? { bench: blockBench(loop) } : null,
   });
 }

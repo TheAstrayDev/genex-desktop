@@ -1493,8 +1493,9 @@ export function recordRound(night: Night, worker: Worker, record: AnyRecord): vo
     }),
   );
   // What the round cost, kept so the next worker's budget is sized from data and not
-  // from the eight minutes a round was assumed to take (observed: nine to forty-six).
-  worker.roundMs.push(Date.now() - (worker.lastIterationAt ?? worker.startedAt));
+  // from the eight minutes a round was assumed to take (observed: nine to forty-six). A build
+  // block is one long first round on purpose (facet/build-block.ts), not what a round costs.
+  if (!record.buildBlock) worker.roundMs.push(Date.now() - (worker.lastIterationAt ?? worker.startedAt));
   // The next round starts here, and with it the monitor's clock and its blank slate.
   worker.lastIterationAt = Date.now();
   worker.monitor = null;
@@ -1548,11 +1549,25 @@ function roundNote(id: string, kept: AnyRecord): string {
 /**
  * The integration hook a loop worker's facet loop merges from: the head the last wave closed on,
  * so running workers take the integration branch once per wave and not after every commit the
- * lead makes (integrate.ts); the integration head itself until a wave has closed.
+ * lead makes (integrate.ts); the integration head itself until a wave has closed. `latest` is the
+ * lead's newest head, which a worker may have been told to merge before its wave closes: its
+ * review walks back from there (facet/merged-heads.ts).
  */
-export function loopIntegration(night: Night): { head: () => Promise<string | null> } {
+export function loopIntegration(night: Night): {
+  head: () => Promise<string | null>;
+  latest: () => Promise<string | null>;
+} {
   const { state } = night;
-  return { head: async () => state.waveHead ?? state.integrationHead };
+  return { head: async () => state.waveHead ?? state.integrationHead, latest: async () => state.integrationHead };
+}
+
+/**
+ * Does this loop worker open with a build block (facet/build-block.ts)? A new part does; a restart
+ * of one this run already had — `replaces=`, or an id from before a pause — builds on what exists
+ * and is judged side by side from its first round.
+ */
+function opensWithBuildBlock(night: Night, worker: Worker): boolean {
+  return !worker.replaces && !priorWorkerIds(night).includes(worker.id);
 }
 
 async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
@@ -1569,6 +1584,7 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
     worktree: worker.worktree,
     handle: worker.handle,
     deadline: worker.deadline,
+    buildBlock: opensWithBuildBlock(night, worker),
     // How many rounds fit, sized from what a round on this game has actually cost. Eight
     // minutes was the assumption; the rounds of one real night took nine to forty-six.
     maxIterations: Math.max(

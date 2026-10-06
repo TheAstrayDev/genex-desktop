@@ -122,6 +122,9 @@ itself and keeps the memory file its brief names current.)
   from `judge` or `playtest` means every window is a worker's: ask again once one has finished.
 - `mode=loop` when you can write checks (the loop measures them and rolls back what regresses);
   `mode=single` for a well-defined job you will judge yourself (a port, a refactor, the stubs).
+- A new loop worker given two hours or more opens with a build block: 60–90 minutes on its own
+  module with a bench page and a screenshot-and-fix loop, kept on its checks; blind side-by-side
+  rounds start after it. A restart (`replaces=`) has no block.
 
 ## A brief a worker can win
 
@@ -184,7 +187,9 @@ itself and keeps the memory file its brief names current.)
 - Every round says what it was asked to build and whether it arrived. A round kept with "the move was
   not delivered" is the worker choosing something else: say the move again with `worker_steer move=`
   or let it go. A rung the judge finds built climbs by itself; one missed three judged rounds is set
-  aside so the ladder moves on.
+  aside so the ladder moves on. A round the judge preferred that fixed owed defects is kept though
+  its move did not arrive — the move stays owed — and an undone round's fixes ride into the next
+  brief to be re-applied.
 - Before the finish mark every wake shows each building part's next big step as its reviewers see
   it. When one inside SCOPE is bigger than your next rung, make it the next rung with `worker_steer move=`. Steer the big picture
   — a direction, a priority, the next big step; a single defect is the worker's ledger.
@@ -212,6 +217,9 @@ itself and keeps the memory file its brief names current.)
 - A conflict is never resolved by dropping a worker's module. A round that loses a camera, demo or
   probe another part's checks use is a regression; a merge that loses one fails its health pass —
   put it back before the workers merge that head.
+- A fix in a running worker's files is that worker's: `worker_steer now=yes` with the file and the
+  fix, not your own edit of its module. A commit of yours that does touch an owned file reaches its
+  owner as your change to keep, and no worker's review counts it as that worker's edit.
 - After the last merge of a wave: `judge target=integration against=start` and a `playtest` for
   what only play can tell. Then `show target=integration`: Live's Reload offers it, and the user
   plays it when they press it.

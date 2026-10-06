@@ -21,6 +21,7 @@ import { recordDecision } from "../record.ts";
 import { movesInStage, stageOf } from "../stage.ts";
 import { isBeyondScope } from "../../scope.ts";
 import { askUserAboutBeyond, BEYOND_MESSAGE, recallAskedBeyond } from "../beyond.ts";
+import { isBuildBlock } from "../build-block.ts";
 
 /** The planner is asked for a move only with this much of the facet's clock left (or a slice of a short one). */
 const PLANNER_MOVE_MIN_MS = 8 * MINUTE_MS;
@@ -33,6 +34,8 @@ export async function chooseRoundMove(loop: FacetLoop, round: FacetRound): Promi
   // The round's stage is fixed here, once: a steer that lands while it builds takes effect from
   // the next round, never halfway through this one (facet/stage.ts roundStage).
   round.stage = stageOf(spec);
+  // So is whether it is the worker's build block: one long first build, kept on the checks.
+  round.buildBlock = isBuildBlock(loop, round);
   // A finishing worker takes no move of any kind — no rung, no reviewer's or critic's move, no
   // planner call: the judge's polish list and the defect ledger are its work (facet/stage.ts).
   if (!movesInStage(round)) return;

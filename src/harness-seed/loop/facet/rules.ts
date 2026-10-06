@@ -271,6 +271,11 @@ export function strongFlips(
  * not do before, and only a named regression (the taste veto) undoes it. Everything else — no
  * flip at all, or only the judge's own notes flipping — is decided by the blind side-by-side
  * pick, which is the one judgement that looked at both builds at once.
+ *
+ * A missing move somebody asked for undoes a preferred round only when the round fixed nothing it
+ * owed. The NFS run threw car-feel's round 5 away whole — two of the judge's defect questions
+ * flipped and the judge preferred it — for the rung it missed, and the lead had it redone. Such a
+ * round is kept and its move stays owed (`moveVerdict` never climbs it).
  */
 export function acceptRound({
   spec,
@@ -285,10 +290,16 @@ export function acceptRound({
   taste?: { veto?: boolean; pick?: string | null } | null;
   moveMissing?: boolean;
 }): { accepted: boolean; strong: string[]; source: string } {
-  const strong = strongFlips(spec, board, comparison?.flips ?? []);
+  const flips = comparison?.flips ?? [];
+  const strong = strongFlips(spec, board, flips);
   const veto = taste?.veto === true;
-  const accepted = strong.length > 0 ? !veto : taste?.pick === Side.Challenger && !moveMissing;
-  return { accepted, strong, source: acceptanceSource({ veto, strong: strong.length > 0, moveMissing }) };
+  const preferred = taste?.pick === Side.Challenger;
+  // The judge's own defect questions that flipped: what the round owed and fixed.
+  const fixedOwed = flips.length > strong.length;
+  const accepted = strong.length > 0 ? !veto : preferred && (!moveMissing || fixedOwed);
+  // Only a round the judge preferred is undone by its missing move; one it did not prefer lost on taste.
+  const lostToMove = moveMissing && preferred && !accepted;
+  return { accepted, strong, source: acceptanceSource({ veto, strong: strong.length > 0, moveMissing: lostToMove }) };
 }
 
 /** Which rule a kept-or-not round was decided by, in `acceptRound`'s order: a veto, a strong flip, a missing move, taste. */
@@ -501,17 +512,24 @@ export function moveVerdict({
   const looksStructural = taste?.moveDelivered !== false && taste?.scale === ChangeScale.Structural;
   const landed = measured || taste?.moveDelivered === true || looksStructural;
   const delivered = won === null ? null : already || Boolean(won && landed);
-  return { measured, missing, costsRound, delivered, already, note: moveNote(what, { missing, costsRound, already }) };
+  const kept = won === true;
+  const note = moveNote(what, { missing, costsRound, already, kept });
+  return { measured, missing, costsRound, delivered, already, note };
 }
 
-/** The round's note about its move: already built by an earlier round, or missed without costing the round. */
+/**
+ * The round's note about its move: already built by an earlier round, missed without costing the
+ * round, or missed by a round kept for what it fixed — whose move is still owed, never climbed.
+ */
 function moveNote(
   what: string,
-  { missing, costsRound, already }: { missing: boolean; costsRound: boolean; already: boolean },
+  { missing, costsRound, already, kept }: { missing: boolean; costsRound: boolean; already: boolean; kept: boolean },
 ): string | null {
-  if (already) return `the move was already in the accepted build — its rung is climbed: ${what.slice(0, CLIP_QUOTE)}`;
-  if (missing && !costsRound)
-    return `the move was not delivered, and it did not cost the round: ${what.slice(0, CLIP_QUOTE)}`;
+  const quoted = what.slice(0, CLIP_QUOTE);
+  if (already) return `the move was already in the accepted build — its rung is climbed: ${quoted}`;
+  if (missing && !costsRound) return `the move was not delivered, and it did not cost the round: ${quoted}`;
+  if (missing && kept)
+    return `the move was not delivered; the round was kept for what it fixed, and the move stays owed: ${quoted}`;
   return null;
 }
 

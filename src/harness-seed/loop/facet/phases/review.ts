@@ -21,6 +21,7 @@ import { roundFields } from "../record.ts";
 import { StopReason } from "../../outage.ts";
 import { unresolvedMergeWords } from "../gate-prompts.ts";
 import { ownedByFacet } from "../owned.ts";
+import { integrationLine } from "../merged-heads.ts";
 
 /** The review's fix turn is asked only with this much of the facet's clock left (or a slice of a short one). */
 const REVIEW_FIX_MIN_MS = 5 * MINUTE_MS;
@@ -57,13 +58,20 @@ export async function reviewCode(loop: FacetLoop, round: FacetRound): Promise<Ro
 }
 
 /**
- * Candidates, newest first: the head of a hand merge just concluded, the head the builder was
- * told to merge (integration may have moved on since the note), the current head, and the loop's
- * own last merge.
+ * Candidates, newest first: the head of a hand merge just concluded; the integration line from the
+ * newest head the orchestrator knows (`latest`, else the head it merges from) back to the
+ * incumbent — a builder the lead told to merge its fix merged a head that was no candidate, and its
+ * review read the lead's fix as the builder's own edit (facet/merged-heads.ts); then the head the
+ * builder was told to merge (integration may have moved on since the note), the current head, and
+ * the loop's own last merge.
  */
-async function integrationCandidates({ integration, mergedIntegration }: FacetLoop, round: FacetRound) {
+async function integrationCandidates(loop: FacetLoop, round: FacetRound) {
+  const { git, incumbentCommit, integration, mergedIntegration } = loop;
   const current = await integration?.head?.().catch(() => null);
-  return [...new Set([round.handMergeHead, round.notedHead, current, mergedIntegration].filter(Boolean))];
+  const latest = await integration?.latest?.().catch(() => null);
+  const line = await integrationLine(git, { from: latest ?? current, incumbent: incumbentCommit }).catch(() => []);
+  const candidates = [round.handMergeHead, ...line, round.notedHead, current, mergedIntegration];
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 /** A command run in the build's worktree, as the review's own git runs. */
