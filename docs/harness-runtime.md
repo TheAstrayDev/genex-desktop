@@ -333,8 +333,11 @@ it, with its own modules there (stubs written by the lead or a single worker), a
 other parts' modules alone. With no seam named it owns its contract modules (`director/contract-gate.ts`).
 After two refusals for a missing contract the harness writes one from the plan's seams. `integrate
 worker=a,b` merges a wave in order with one health pass; a healthy integrate, or `wave=close`, moves
-the head running workers merge, so they take integration once per wave. A round, or a merge, that
-loses a camera, demo or probe another facet's checks use is a regression (`loop/registry.ts`).
+the head running workers merge, so they take integration once per wave. A merge's health pass runs
+the demos workers' checks name (and at most one more); the close runs every demo. A round, or a
+merge, that loses a camera, demo or probe another facet's checks use is a regression
+(`loop/registry.ts`). Only cameras the page registers count, never the harness's own `default`
+view; a merge compares state paths only with a health pass under the same setup.
 
 Manual SkillOpt resolves the most recent run's model through `modelOn`, as the post-run path does.
 A cross-provider run stores its builder model alongside its orchestrator engine, so those two raw

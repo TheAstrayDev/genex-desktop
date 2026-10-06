@@ -45,7 +45,13 @@ import {
 import { singleWorkerBrief } from "./briefs.ts";
 import { iterationDigest, loopNote, workerDigest } from "./digests.ts";
 import { conflictMergeOf, markersLeft, mergeFirst } from "./conflict-worker.ts";
-import { briefWithContract, contractAtFork, contractBeforeFork, contractOnPlan } from "./contract-gate.ts";
+import {
+  briefWithContract,
+  contractAtFork,
+  contractBeforeFork,
+  contractOnPlan,
+  contractSeam,
+} from "./contract-gate.ts";
 import { defaultWorkerId, priorFork, priorIdRefusal, priorWorkerIds } from "./journal.ts";
 import { LEAD_FORK_REFUSED, LEAD_START_DIRTY } from "./lead-session-prompts.ts";
 import { BuildTarget } from "./night.ts";
@@ -504,7 +510,9 @@ function seamRefusal(night: Night, id: string, args: AnyRecord): string | null {
   if (!ownShape) return null;
   const running: Worker[] = runningWorkers();
   const seamOthers = running.length;
-  if (seamOthers > 0 && list(args.owns).length === 0) {
+  // A loop worker under the module contract with no owns= takes its contract modules as its seam.
+  const seam = list(args.owns).length ? list(args.owns) : contractSeam(night, id, args, workerModeOf(args));
+  if (seamOthers > 0 && seam.length === 0) {
     return `worker "${id}" needs a seam: this game is the user's own, so a worker with no owns= may edit anything but the entry, the contract and index.html — and ${seamOthers === 1 ? "another worker is" : `${seamOthers} other workers are`} already running. Give it owns= (files, folders or a quoted glob), or wait for the others to finish.`;
   }
   // …and the same rule read the other way round. A seamless worker owns nearly the whole
@@ -1342,6 +1350,16 @@ function roundNote(id: string, kept: AnyRecord): string {
 }
 
 /** The judged loop a loop worker runs, until its `done` checks pass or its budget ends. */
+/**
+ * The integration hook a loop worker's facet loop merges from: the head the last wave closed on,
+ * so running workers take the integration branch once per wave and not after every commit the
+ * lead makes (integrate.ts); the integration head itself until a wave has closed.
+ */
+export function loopIntegration(night: Night): { head: () => Promise<string | null> } {
+  const { state } = night;
+  return { head: async () => state.waveHead ?? state.integrationHead };
+}
+
 async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
   const { ctx, medianRoundMs, note, noteWorkerLimit, ownShape, projectDir, run, shape, state, threadId } = night;
   const result = await runFacetLoop(ctx, {
@@ -1392,7 +1410,7 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
       return false;
     },
     // Once a wave has closed, a worker takes the integration branch once per wave (integrate.ts).
-    integration: { head: async () => state.waveHead ?? state.integrationHead },
+    integration: loopIntegration(night),
     projectDir,
     onIteration: (record: AnyRecord) => recordRound(night, worker, record),
     facets: state.facetSpecs,

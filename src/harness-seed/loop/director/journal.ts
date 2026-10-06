@@ -35,6 +35,7 @@ import {
 import { priorEra } from "./reopen.ts";
 import { DirectorLoop, WAKE_WINDOW_MS } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
+import type { ContractModule, ContractShared, ModuleContract } from "./module-contract.ts";
 import type { Night, NightLogEntry, NightState, Worker, WorkerLimit } from "./night.ts";
 import type { ShelvedDefect } from "./rules.ts";
 import type { DigestWorker } from "./wake-prompts.ts";
@@ -344,9 +345,28 @@ const commitOf = (value: unknown): string | null =>
 function restoreIntegration(state: NightState, saved: AnyRecord): void {
   const contract = saved.contract as AnyRecord | undefined;
   const commit = commitOf(contract?.commit);
-  if (commit && Array.isArray(contract?.spec?.modules)) state.contract = { commit, spec: contract.spec };
-  const waveHead = commitOf(saved.waveHead);
+  if (commit && Array.isArray(contract?.spec?.modules)) state.contract = { commit, spec: restoredSpec(contract.spec) };
+  // A finished build reopened forks from the game folder as it is now (reopen.ts): the finished
+  // night's wave head is an ancestor its workers would follow, missing the lead's new commits.
+  const waveHead = saved.reopened ? null : commitOf(saved.waveHead);
   if (waveHead) state.waveHead = waveHead;
+}
+
+/** A saved contract with every list it is read by present: a partial journal never throws on the next worker_start. */
+function restoredSpec(spec: AnyRecord): ModuleContract {
+  const array = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+  const owned = (entry: unknown): entry is AnyRecord =>
+    typeof (entry as AnyRecord)?.path === "string" && typeof (entry as AnyRecord)?.owner === "string";
+  return {
+    ...spec,
+    conventions: array(spec.conventions).map(String),
+    modules: array(spec.modules)
+      .filter(owned)
+      .map((module) => ({ ...module, api: array(module.api).map(String) }) as ContractModule),
+    shared: array(spec.shared)
+      .filter(owned)
+      .map((entry) => entry as ContractShared),
+  };
 }
 
 /** The log's newest lines as the journal kept them, and how much of it the lead has heard. */

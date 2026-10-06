@@ -169,7 +169,15 @@ export interface HeadEvidence {
   state: AnyRecord;
   demoStates: AnyRecord | null;
   demos: string[] | null;
+  /** The cameras photographed (the harness's `default` always among them), not what the page registers. */
   cameras: string[];
+  /** The cameras the page itself registered, when the look could tell (`Evidence.registeredCameras`). */
+  registeredCameras?: string[] | null;
+  /**
+   * The setup the look was taken under (registry.ts `setupKey`), when the caller said: only a look
+   * under the same setup can tell which state paths a merge lost (integrate.ts).
+   */
+  setup?: string;
 }
 
 /** The night's `state` (`nightState`, setup.ts): the workers, the heads, the log — everything that changes all night. */
@@ -474,6 +482,7 @@ export function rememberEvidence(
   night: Night,
   commit: string | null | undefined,
   evidence: Evidence | null | undefined,
+  { setup }: { setup?: string } = {},
 ): void {
   const { state } = night;
   if (!commit || evidence?.ok !== true) return;
@@ -482,6 +491,10 @@ export function rememberEvidence(
   // a dry run against it would call every path unsatisfiable.
   if (isTruncatedState(evidence.state)) return;
   state.evidenceByHead.set(commit, {
+    // What the page registered, and the setup the look was taken under: what a merge's health
+    // pass compares with (integrate.ts), only when there is one.
+    ...(Array.isArray(evidence.registeredCameras) ? { registeredCameras: evidence.registeredCameras.map(String) } : {}),
+    ...(setup === undefined ? {} : { setup }),
     state: evidence.state,
     demoStates: evidence.demoStates ?? null,
     demos: Array.isArray(evidence.registeredDemos) ? evidence.registeredDemos : null,

@@ -15,10 +15,9 @@
  */
 import { lstat, mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { gitExec, headOf, shortFailure, shortSha } from "../git.ts";
-import { STUDIO_AS } from "../repo.ts";
+import { GIT, gitExec, headOf, shortFailure, shortSha } from "../git.ts";
 import { RunEvent } from "../run-events.ts";
-import { commitArg, shellQuote } from "../shell.ts";
+import { commitArg } from "../shell.ts";
 import { WorkerMode } from "../outcomes.ts";
 import { list } from "./args.ts";
 import { conflictMergeOf } from "./conflict-worker.ts";
@@ -48,6 +47,8 @@ import type { Night } from "./night.ts";
 export const CONTRACT_REFUSALS_BEFORE_DERIVED = 2;
 /** The commit message of the contract's commit. */
 const CONTRACT_COMMIT_MESSAGE = "studio: module contract (docs/ARCHITECTURE.md)";
+/** Why the contract's commit failed when git said nothing. */
+const COMMIT_FAILED = "the commit failed with no message from git";
 
 /** Why the contract file was not written, in the words the lead reads. */
 const WRITE_REFUSED = {
@@ -101,11 +102,20 @@ export async function writeArchitecture(worktree: string, text: string): Promise
   return null;
 }
 
-/** One `yes`/`no` question to git; anything that fails (a bad commit, a dead host) answers no. */
-async function gitSays(ctx: HarnessCtx, worktree: string, command: () => string, label: string): Promise<boolean> {
+/**
+ * One question to git, its command line built by loop/git.ts: does it answer `expected`? Anything
+ * that fails (a bad commit, a dead host) answers no.
+ */
+async function gitSays(
+  ctx: HarnessCtx,
+  worktree: string,
+  command: () => string,
+  label: string,
+  expected = "yes",
+): Promise<boolean> {
   try {
     const exec = await gitExec(ctx, worktree, command(), { label });
-    return exec?.code === 0 && String(exec.stdout ?? "").trim() === "yes";
+    return exec?.code === 0 && String(exec.stdout ?? "").trim() === expected;
   } catch {
     return false;
   }
@@ -121,13 +131,13 @@ export async function missingAt(
 ): Promise<string[]> {
   const missing: string[] = [];
   for (const file of paths) {
-    const exists = () => `git cat-file -e ${shellQuote(`${commitArg(commit)}:${file}`)} && echo yes || echo no`;
+    const exists = () => GIT.catFileExists(commitArg(commit), file);
     if (!(await gitSays(ctx, worktree, exists, label))) missing.push(file);
   }
   return missing;
 }
 
-/** Does `commit` hold `contract` (is the contract's commit its ancestor, or itself)? */
+/** Does `commit` hold `contract` (is the contract's commit its ancestor, or itself: nothing in it `commit` lacks)? */
 export function holdsContract(
   ctx: HarnessCtx,
   worktree: string,
@@ -135,27 +145,22 @@ export function holdsContract(
   commit: string,
   label = "module-contract",
 ): Promise<boolean> {
-  const ancestor = () =>
-    `git merge-base --is-ancestor ${commitArg(contract)} ${commitArg(commit)} && echo yes || echo no`;
-  return gitSays(ctx, worktree, ancestor, label);
+  const lacking = () => GIT.revListCount(commitArg(commit), commitArg(contract));
+  return gitSays(ctx, worktree, lacking, label, "0");
 }
 
 /** Stage and commit the contract file alone, whatever else is uncommitted there; why it could not, or null. */
 async function commitArchitecture(night: Night, label: string): Promise<string | null> {
   const { ctx, integrationWorktree } = night;
-  const file = shellQuote(ARCHITECTURE_FILE);
-  const unchanged = await gitSays(
-    ctx,
-    integrationWorktree,
-    () => `git add -f -- ${file} && git diff --cached --quiet HEAD -- ${file} && echo yes || echo no`,
-    label,
-  );
+  const unchanged = await gitSays(ctx, integrationWorktree, () => GIT.sameAsRev("HEAD", ARCHITECTURE_FILE), label);
   if (unchanged) return null;
-  const message = shellQuote(CONTRACT_COMMIT_MESSAGE);
-  const committed = await gitExec(ctx, integrationWorktree, `git ${STUDIO_AS} commit -q -m ${message} -- ${file}`, {
-    label,
-  }).catch((error: unknown) => ({ code: 1, stdout: "", stderr: String((error as Error)?.message ?? error) }));
-  return committed.code === 0 ? null : shortFailure(committed) || "git commit failed";
+  // Staged even where the game's .gitignore covers docs/ (an older git.ts adds it as it always did).
+  const stage = GIT.addPath(ARCHITECTURE_FILE, { force: true });
+  const commit = GIT.commit(CONTRACT_COMMIT_MESSAGE, { only: [ARCHITECTURE_FILE] });
+  const committed = await gitExec(ctx, integrationWorktree, `${stage} && ${commit}`, { label }).catch(
+    (error: unknown) => ({ code: 1, stdout: "", stderr: String((error as Error)?.message ?? error) }),
+  );
+  return committed.code === 0 ? null : shortFailure(committed) || COMMIT_FAILED;
 }
 
 /**
@@ -220,7 +225,9 @@ export async function contractOnPlan(night: Night): Promise<string | null> {
 export async function contractBeforeFork(night: Night, args: AnyRecord, mode: WorkerMode): Promise<string | null> {
   const { ctx, integrationWorktree, note, state } = night;
   if (exempt(night, args, mode) || state.contract) return null;
-  if (state.contractError) return CONTRACT_GATE.notCommitted(state.contractError);
+  // A contract the lead gave that could not be committed is the lead's to give again; one the
+  // harness derived is tried again below, so a cause since cleared does not stall every worker.
+  if (state.contractError && state.plan?.contract) return CONTRACT_GATE.notCommitted(state.contractError);
   const parts = loopParts(state.plan);
   const refusals = state.contractRefusals ?? 0;
   if (refusals < CONTRACT_REFUSALS_BEFORE_DERIVED) {
@@ -232,7 +239,7 @@ export async function contractBeforeFork(night: Night, args: AnyRecord, mode: Wo
   );
   const missing = new Set(await missingAt(ctx, integrationWorktree, "HEAD", named));
   const committed = await commitContract(night, derivedContract(parts, new Set(named.filter((f) => !missing.has(f)))));
-  if ("error" in committed) return CONTRACT_GATE.notCommitted(committed.error);
+  if ("error" in committed) return CONTRACT_GATE.derivedNotCommitted(committed.error);
   note(contractCommittedWords(committed.commit, [], { lead: Boolean(night.lead), derived: true }));
   return null;
 }
@@ -259,6 +266,17 @@ export async function contractAtFork(
   const missing = commit ? await missingAt(ctx, integrationWorktree, commit, mine) : [];
   if (missing.length && commit) return { refusal: CONTRACT_GATE.stubsMissing(id, missing, commit) };
   return { owns: asked.length || !mine.length ? null : mine };
+}
+
+/**
+ * The seam a loop worker with no `owns=` starts with under the contract: the paths it gives the
+ * worker's plan part (what `contractAtFork` defaults its owns to). Empty for a worker the contract
+ * does not hold, or when there is no contract yet.
+ */
+export function contractSeam(night: Night, id: string, args: AnyRecord, mode: WorkerMode): string[] {
+  const contract = night.state.contract;
+  if (!contract || exempt(night, args, mode)) return [];
+  return pathsOwnedBy(contract.spec, partOfWorker(night.state.plan, [id, args.replaces, args.goal]));
 }
 
 /** A loop worker's brief with the contract's pointer, its own modules and the conventions — or as it was. */

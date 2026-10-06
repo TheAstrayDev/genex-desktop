@@ -11,6 +11,7 @@
  *
  * Pure. A new module: the callers that upgrade with it import it, and nothing older does.
  */
+import { DEFAULT_CAMERA } from "./cameras.ts";
 import { dryRunChecks } from "./checks.ts";
 import { isRecord } from "./json.ts";
 import { isTruncatedState, StateShape, stateCutOf } from "./state-shape.ts";
@@ -27,6 +28,17 @@ export type RegistrationKind = (typeof RegistrationKind)[keyof typeof Registrati
 
 /** The frames the harness makes itself (`demo:x`, `eye:y`, `user:view`): never a registered camera. */
 const HARNESS_FRAME = ":";
+
+/**
+ * Is this a camera a game registers? Not a harness frame, and not the harness's own `default`
+ * view: every compiled spec looks through it, and studio.js stops listing it the moment a game
+ * names a camera of its own, so a game's first named camera is not the loss of `default`.
+ */
+const registeredCamera = (camera: string): boolean => !camera.includes(HARNESS_FRAME) && camera !== DEFAULT_CAMERA;
+
+/** A look's cameras without the harness's own views; null stays null (the look could not tell). */
+const registeredOnly = (cameras: readonly string[] | null | undefined): string[] | null =>
+  Array.isArray(cameras) ? cameras.filter(registeredCamera) : null;
 /** A camera named `demo:x` is the frame demo x leaves: a dependency on that demo. */
 const DEMO_FRAME = "demo:";
 /** How many lost registrations one sentence names. */
@@ -77,7 +89,7 @@ const checksOf = (spec: { checks?: unknown }): Check[] =>
 function camerasOf(spec: { cameras?: unknown }, checks: readonly Check[]): string[] {
   const own = Array.isArray(spec.cameras) ? spec.cameras.map(String) : [];
   const named = checks.map((check) => String(check.camera ?? "")).filter(Boolean);
-  return [...new Set([...own, ...named])].filter((camera) => !camera.includes(HARNESS_FRAME));
+  return [...new Set([...own, ...named])].filter(registeredCamera);
 }
 
 /** The demos a part's checks run or look at (`demo` on a check, or a `demo:x` frame). */
@@ -133,11 +145,26 @@ function unsatisfiedIds(checks: readonly Check[], look: RegistryLook): Map<strin
   return new Map(unsatisfiable.map((entry) => [entry.id, entry.missing]));
 }
 
+/** Did this look run the demo (its state is among the look's demo states)? */
+const ranDemo = (look: RegistryLook, demo: string): boolean => isRecord(look.demoStates) && demo in look.demoStates;
+
+/**
+ * The probes both looks read alike: a demo-scoped probe only when both ran its demo. A look that
+ * did not run it (another facet's demo is only an extra slot) would read the main state instead.
+ */
+function comparableProbes(probes: readonly Check[], before: RegistryLook, after: RegistryLook): Check[] {
+  return probes.filter((check) => {
+    const demo = typeof check.demo === "string" ? check.demo : "";
+    return !demo || (ranDemo(before, demo) && ranDemo(after, demo));
+  });
+}
+
 /** The state paths one part's probes read before and cannot read after. */
 function pathsGone(dependent: RegistryDependent, before: RegistryLook, after: RegistryLook): string[] {
-  if (!dependent.probes.length) return [];
-  const was = unsatisfiedIds(dependent.probes, before);
-  return [...unsatisfiedIds(dependent.probes, after)].filter(([id]) => !was.has(id)).flatMap(([, missing]) => missing);
+  const probes = comparableProbes(dependent.probes, before, after);
+  if (!probes.length) return [];
+  const was = unsatisfiedIds(probes, before);
+  return [...unsatisfiedIds(probes, after)].filter(([id]) => !was.has(id)).flatMap(([, missing]) => missing);
 }
 
 /** Probes other parts read that the state answered before and does not after. */
@@ -174,8 +201,8 @@ export function lostRegistrations({
   return [
     ...lostNames(
       RegistrationKind.Camera,
-      before.cameras,
-      after.cameras,
+      registeredOnly(before.cameras),
+      registeredOnly(after.cameras),
       users((d) => d.cameras),
     ),
     ...lostNames(
@@ -217,6 +244,15 @@ export function registryRefusal({
   });
   if (!lost.length) return null;
   return { gap: lostWords(lost), reason: MESSAGE.reason, lost };
+}
+
+/**
+ * A look's setup as a key: two looks under the same setup have the same key. Only those two can
+ * tell which state paths a change lost; a judge's look under a setup it asked for reaches paths
+ * the run's own setup never does.
+ */
+export function setupKey(setup: unknown): string {
+  return JSON.stringify(setup ?? null);
 }
 
 /** An evidence pass's registry, as the registry reads it. */

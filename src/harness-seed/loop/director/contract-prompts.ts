@@ -40,6 +40,8 @@ export const CONTRACT_GATE = {
     `this plan has ${parts} parts that loop, and no module contract yet: call plan again with contract= so the harness writes ${ARCHITECTURE_FILE} before the workers fork — who owns which module, its API, the conventions. ${CONTRACT_GRAMMAR}`,
   notCommitted: (error: string) =>
     `the module contract could not be committed on the integration branch (${error}) — conclude what is open there, then call plan again with the same contract`,
+  derivedNotCommitted: (error: string) =>
+    `the studio could not commit the module contract it wrote from the plan's seams (${error}) — conclude what is open on the integration branch and start the worker again (the studio tries again), or call plan with contract=`,
   forkBefore: (fork: string, contract: string) =>
     `the fork point ${shortSha(fork)} does not contain the module contract (${shortSha(contract)}): fork from integration, or from a commit after it`,
   stubsMissing: (id: string, paths: readonly string[], fork: string) =>

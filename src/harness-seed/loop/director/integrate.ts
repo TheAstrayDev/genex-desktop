@@ -40,7 +40,7 @@ import { CLIP_DETAIL, CLIP_REASON } from "../text.ts";
 import { minutes, SECOND_MS, sleep } from "../time.ts";
 import { againstWords, NotLandedReason, observedFrom, VerdictPass, VerdictRule } from "../verdict.ts";
 import { randomUUID } from "node:crypto";
-import { demosNamedBy, dependentsOf, lookOf, lostRegistrations, lostWords } from "../registry.ts";
+import { demosNamedBy, dependentsOf, lookOf, lostRegistrations, lostWords, setupKey } from "../registry.ts";
 import type { LostRegistration } from "../registry.ts";
 import { list, slug, yes } from "./args.ts";
 import { CLOSE_SETTLE_MS, timedWorkRemaining } from "./budgets.ts";
@@ -96,6 +96,8 @@ const WAVE_WORDS = {
 /** Why `integrate` will not merge a worker, in the sentence the director reads. */
 const INTEGRATE_REFUSAL = {
   noWorker: (id: unknown) => `no worker "${id}"`,
+  noneNamed:
+    "integrate needs worker= (one id, or ids comma-separated for a wave) or wave=close (running workers take the integration head now)",
   noCommit: (id: string) => `worker ${id} has no commit yet`,
   notACommit: (id: string) => `worker ${id}'s last commit is not a commit hash`,
   nothingNew: (id: string, commit: string) =>
@@ -172,6 +174,13 @@ const LANDING_WORDS = {
     `the game folder still has uncommitted changes the landing left as they were — ${named(paths)}; they are not part of this build`,
 } as const;
 
+/** The console errors the merged workers' fork points already had: none of them is the merge's doing. */
+function inheritedByAll(night: Night, workers: readonly Worker[]): string[] {
+  const { consoleInheritedBy } = night;
+  if (workers.length === 1) return consoleInheritedBy(workers[0] as Worker);
+  return [...new Set(workers.flatMap((each) => consoleInheritedBy(each)))];
+}
+
 /**
  * A look at the integration worktree that may not be skipped — a merge's health pass, the
  * close's last look: whether the build runs is not a question the night may leave open, so the
@@ -198,9 +207,7 @@ function lookAtIntegration(
   },
 ): Promise<Evidence> {
   const { consoleInheritedBy, integrationWorktree, patientEvidence, run, withLease } = night;
-  const inherited = workers?.length
-    ? [...new Set(workers.flatMap((each) => consoleInheritedBy(each)))]
-    : consoleInheritedBy(worker);
+  const inherited = workers?.length ? inheritedByAll(night, workers) : consoleInheritedBy(worker);
   return withLease(
     lease,
     async (handle: string | null) =>
@@ -398,15 +405,20 @@ async function healthPass(
     health.ok = false;
   }
   state.integrationHealthy = health.ok === true;
-  rememberEvidence(head, health);
+  // Kept with the setup it was taken under: the next merge compares state paths only with a look
+  // like its own (lostByMerge).
+  rememberEvidence(head, health, { setup: setupKey(night.run.setup) });
   await recordHeadHealth(night, head, healthLabel, health);
   return { health, started, lost };
 }
 
 /**
- * What the merge lost that a worker it did not merge depends on: a camera, a demo or a probe the
- * head before it registered and the merged head does not (registry.ts). Only a build that runs is
- * asked, and only against a head this night has looked at.
+ * What the merge lost that a worker depends on: a camera, a demo or a probe the head before it
+ * registered and the merged head does not (registry.ts). Only a build that runs is asked, and only
+ * against a head this night has looked at; the cameras compared are the ones the page registered
+ * (never the harness's own shots), and state paths only against a health pass under the same
+ * setup. A single worker that drops its own registration is its own business; in a wave, one
+ * merged worker can break another, so every worker's checks count.
  */
 function lostByMerge(
   night: Night,
@@ -414,16 +426,20 @@ function lostByMerge(
   workers: readonly Worker[],
   previousHead: string | null,
 ): LostRegistration[] {
-  const { state } = night;
+  const { run, state } = night;
   const before = state.evidenceByHead.get(previousHead);
   if (health.ok !== true || !before) return [];
+  const alike = before.setup === setupKey(run.setup);
+  const merged = workers.length === 1 ? workers.map((worker) => worker.id) : [];
   return lostRegistrations({
-    before: { cameras: before.cameras, demos: before.demos, state: before.state, demoStates: before.demoStates },
+    before: {
+      cameras: before.registeredCameras ?? null,
+      demos: before.demos,
+      state: alike ? before.state : null,
+      demoStates: alike ? before.demoStates : null,
+    },
     after: lookOf(health),
-    dependents: dependentsOf(
-      state.facetSpecs,
-      workers.map((worker) => worker.id),
-    ),
+    dependents: dependentsOf(state.facetSpecs, merged),
   });
 }
 
@@ -436,7 +452,7 @@ async function recordHealth(
   workers: readonly Worker[],
   { health, started, lost }: { health: Evidence; started: boolean; lost: readonly LostRegistration[] },
 ): Promise<void> {
-  const { appendRun, consoleInheritedBy, decision, note, recordVerdict, saveJournal, state } = night;
+  const { appendRun, decision, note, recordVerdict, saveJournal, state } = night;
   const head = state.integrationHead;
   const problems = (health.problems ?? []).join("; ");
   const last = workers.at(-1) as Worker;
@@ -450,7 +466,8 @@ async function recordHealth(
     head,
     worker: last.id,
     ...observedFrom(health),
-    consoleInherited: consoleInheritedBy(last),
+    // The same errors the look forgave: every merged worker's fork point's.
+    consoleInherited: inheritedByAll(night, workers),
     kept: health.ok === true,
     rule: health.ok === true ? VerdictRule.Starts : VerdictRule.DoesNotStart,
   });
@@ -634,9 +651,12 @@ export async function integrate(night: Night, args: AnyRecord) {
     String(args.wave ?? "")
       .trim()
       .toLowerCase() === WaveArg.Close;
-  const ids = list(args.worker);
-  if (closing && !ids.length) return closeWave(night);
-  const answer = ids.length > 1 ? await integrateWave(night, ids) : await integrateOne(night, args);
+  const named = list(args.worker);
+  // A worker named twice is merged once, where it was first named.
+  const ids = named.filter((id, at) => named.findIndex((other) => slug(other) === slug(id)) === at);
+  if (!ids.length) return closing ? closeWave(night) : INTEGRATE_REFUSAL.noneNamed;
+  const one = named.length === 1 ? args : { ...args, worker: ids[0] };
+  const answer = ids.length > 1 ? await integrateWave(night, ids) : await integrateOne(night, one);
   if (!closing) return answer;
   return withFields(answer, { waveClosed: JSON.parse(await closeWave(night)) });
 }

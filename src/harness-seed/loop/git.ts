@@ -111,7 +111,9 @@ export const GIT = Object.freeze({
   addAll: "git add -A",
   /** Intent-to-add: a new file shows in `git diff` without anything being staged for real. */
   intentToAddAll: "git add -A -N -- .",
-  addPath: (file: string): string => `git add -- ${shellQuote(file)}`,
+  /** Stage one file; `force` stages it even where .gitignore covers it (the module contract's file). */
+  addPath: (file: string, { force = false }: { force?: boolean } = {}): string =>
+    `git add${force ? " -f" : ""} -- ${shellQuote(file)}`,
   commit: (message: string, options: { allowEmpty?: boolean; only?: string[] | null; noEdit?: boolean } = {}): string =>
     `git ${STUDIO_AS} commit ${commitFlags(options)} -m ${shellQuote(message)}${options.only ? ` -- ${options.only.map(shellQuote).join(" ")}` : ""}`,
   /**

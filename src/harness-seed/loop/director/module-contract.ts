@@ -11,6 +11,7 @@
  * Pure. A new module (seed upgrades keep an edited older sibling, and a new name imported from one
  * would not link), so everything the contract needs is here or in contract-prompts.ts.
  */
+import { WorkerMode } from "../outcomes.ts";
 import { ownMatches } from "../review.ts";
 import { clip } from "../text.ts";
 import { parseJson, slug } from "./args.ts";
@@ -40,8 +41,6 @@ const PATH_CHARS = 200;
 const NAME_CHARS = 80;
 /** How much of a refused value the refusal quotes. */
 const QUOTED_CHARS = 80;
-/** The plan part a worker that only writes the stubs is: `"mode":"single"` on its part. */
-const SINGLE_MODE = "single";
 
 /** What a module registers with the studio, so no other part's evidence loses it. */
 export interface ContractRegisters {
@@ -98,9 +97,10 @@ export function contractRequired(plan: { workers?: readonly ContractPart[] } | n
   return loopParts(plan).length >= 2;
 }
 
-/** Is this part only ever a single session (`"mode":"single"` on the plan)? */
+/** Is this part only ever a single session (`"mode":"single"` on the plan, in any case, as worker_start reads it)? */
 export function singlePart(raw: unknown): boolean {
-  return typeof raw === "object" && raw !== null && String((raw as { mode?: unknown }).mode ?? "") === SINGLE_MODE;
+  if (typeof raw !== "object" || raw === null) return false;
+  return String((raw as { mode?: unknown }).mode ?? "").toLowerCase() === WorkerMode.Single;
 }
 
 /**
