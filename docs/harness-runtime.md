@@ -593,7 +593,8 @@ refused, since the other build was seen at 960×600), and its look never replace
 already standing on that head (`state.lastJudge`). The studio runs it itself at the
 finish mark (`director/art-direction.ts`): a timed build's last 30% of working time
 (`budgets.ts` `finishMarkMs`, 30 to 120 minutes, none under 90), said once (`WakeCause.FinishMark`,
-journaled; a mark that finds nothing integrated leaves the lead to `judge ship=yes` itself); a goal
+journaled; a mark that finds nothing integrated leaves the lead to `judge ship=yes` itself; a mark
+still unsaid once the wrap-up is due, after a sleep or a Resume, gives way to the wrap-up); a goal
 build once, when its lead idles a second time or calls `finish` with no review on its head (a "no"
 turns that finish back once, never twice, and never the user's own finish). That finish gate runs
 inside the `finish` call: its one look also answers the close's own question, so the close does not

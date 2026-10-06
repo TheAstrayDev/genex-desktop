@@ -853,6 +853,36 @@ describe("the finish mark (director/budgets.ts, wake.ts, art-direction.ts)", () 
     assert.match(idle, /judge ship=yes/);
   });
 
+  it("AD-3c. a timed build that slept through its finish mark and its wrap-up wraps up without the art director's pass", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    night.state.workers.set("hud", loopWorker("hud"));
+    const mark = night.clock.softDeadline - finishMarkMs(night.run, 4 * HOUR_MS)!;
+    const { talk, turns } = lead((turn) => {
+      if (turn === 2) night.state.finished = true;
+      return { ok: true, sessionId: "lead-1", turns: 1 };
+    });
+    // The Mac sleeps through both: the first rest wakes a minute past the wrap-up.
+    let slept = false;
+    const clock = fakeClock(mark - 2 * MINUTE_MS, () => {
+      if (slept) return;
+      slept = true;
+      clock.at = night.softDeadline + MINUTE_MS;
+    });
+    await runWakeLoop(night, talk, BRIEF, clock);
+
+    assert.equal(turns.length, 2, turns.map((t) => t.prompt.slice(0, 120)).join("\n---\n"));
+    const woken = turns[1]!.prompt;
+    assert.match(woken, /wrap-up/i);
+    assert.doesNotMatch(woken, /stage=finish/, "no art paragraph that contradicts the wrap-up");
+    assert.equal(shipCalls(host).length, 0, "the wrap-up reserve is not spent on a ship review");
+    const continued = host.calls
+      .filter((c) => c.method === HostMethod.EventsAppend)
+      .flatMap((c) => c.params.batch)
+      .filter((e: Record<string, any>) => e.event_type === "director_continued");
+    assert.ok(continued.every((e: Record<string, any>) => !e.payload.reasons.includes(WakeCause.FinishMark)));
+  });
+
   it("AD-3b. a goal build whose lead idles twice with no ship review on its head is reviewed once before its wrap-up", async () => {
     const host = fakeHost();
     const { night } = fakeNight(host, {

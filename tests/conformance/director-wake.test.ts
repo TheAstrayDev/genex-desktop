@@ -297,6 +297,19 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     assert.deepEqual(nextWake(view({ running: 0, finishMarkAt: mark })), { at: T0, reasons: [WakeCause.IdleAsk] });
   });
 
+  it("W10b. a finish mark still unsaid when the wrap-up is due gives way to the wrap-up: the two never share a wake", () => {
+    // A Mac that slept through both times, or a Resume of a night paused in its wrap-up (soft deadline now).
+    const mark = T0 - 40 * MINUTE_MS;
+    const due = nextWake(view({ softDeadline: T0 - 1_000, finishMarkAt: mark, running: 2 }));
+    assert.deepEqual(due?.reasons, [WakeCause.WrapUp]);
+    assert.deepEqual(nextWake(view({ softDeadline: T0, finishMarkAt: mark, running: 0 })), {
+      at: T0,
+      reasons: [WakeCause.WrapUp],
+    });
+    // Ahead of the wrap-up, the mark still wakes the lead on its own.
+    assert.deepEqual(nextWake(view({ now: mark, finishMarkAt: mark })), { at: mark, reasons: [WakeCause.FinishMark] });
+  });
+
   it("W11. a goal run idle twice with no ship review on its head is sent to art direction once, then wraps up", () => {
     const idle = {
       ok: true,

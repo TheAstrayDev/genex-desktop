@@ -221,6 +221,14 @@ function userCandidates(view: WakeView): Candidate[] {
   return out;
 }
 
+/**
+ * The finish mark wakes the lead only before the wrap-up is due: a mark still unsaid once the
+ * working time is over (a Mac that slept through both, a Resume of a night paused in its wrap-up)
+ * gives way to the wrap-up rather than spend its reserve on the art director's look.
+ */
+const markAheadOfWrapUp = (view: WakeView): view is WakeView & { finishMarkAt: number } =>
+  !view.wrapping && typeof view.finishMarkAt === "number" && view.now < view.softDeadline;
+
 /** The studio's own reasons: the idle ask, and the timers. */
 function timerCandidates(view: WakeView): Candidate[] {
   const out: Candidate[] = [];
@@ -228,7 +236,7 @@ function timerCandidates(view: WakeView): Candidate[] {
   if (view.idleDue) add(view.now, WakeCause.IdleAsk, false);
   if (view.planWindowEndsAt !== null) add(view.planWindowEndsAt, WakeCause.PlanWindow, false);
   if (!view.wrapping) add(view.softDeadline, WakeCause.WrapUp, false);
-  if (!view.wrapping && typeof view.finishMarkAt === "number") add(view.finishMarkAt, WakeCause.FinishMark, false);
+  if (markAheadOfWrapUp(view)) add(view.finishMarkAt, WakeCause.FinishMark, false);
   if (view.workersLimitLiftsAt !== null) add(view.workersLimitLiftsAt, WakeCause.WorkersLimitLifted, true);
   if (view.running > 0) add(view.asleepSince + HEARTBEAT_MS, WakeCause.Heartbeat, true);
   return out;

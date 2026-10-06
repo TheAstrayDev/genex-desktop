@@ -386,10 +386,11 @@ function artDirectionOwed(night: Night, wake: WakeState): boolean {
 /**
  * When the finish mark wakes the lead: now for a goal build sent to art direction, a timed build's
  * mark (art-direction.ts `finishMarkAt`) while it is ahead of the wrap-up, or never once it was
- * said — or on a night without the art director.
+ * said, or once the wrap-up is due (the mark gives way to it) — or on a night without the art director.
  */
 function finishMarkView(night: Night, wake: WakeState, now: number): number | null {
   if (wake.finishMarkSaid || !WakeCause.FinishMark) return null;
+  if (now >= night.softDeadline) return null;
   if (wake.finishMarkDue) return now;
   const at = typeof night.finishMarkAt === "function" ? night.finishMarkAt() : null;
   return at !== null && at < night.softDeadline ? at : null;
