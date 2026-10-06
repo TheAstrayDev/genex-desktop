@@ -32,6 +32,7 @@ import { MESSAGE, REOPEN_RUN, reopenPromise } from "./reopen-run-prompts.ts";
 import { EventKind, RunEvent, RunState } from "./run-events.ts";
 import { latestRun } from "./run-inbox.ts";
 import { readJournal, writeJournal } from "./run-journal.ts";
+import { addToScope, runScope } from "./scope.ts";
 import { isCommit } from "./shell.ts";
 import { HOUR_MS } from "./time.ts";
 import type { AfterNight } from "./after-night.ts";
@@ -242,6 +243,20 @@ export function withAsk(saved: AnyRecord, text: string): string[] {
   return (text ? [text, ...earlier] : earlier).slice(0, MAX_REOPEN_ASKS);
 }
 
+/**
+ * The build's scope with the reopening message among the user's words (scope.ts `addToScope`): only
+ * the message's own words as the log has them, once. Nothing for a build from before scope.
+ */
+function reopenedScope(saved: AnyRecord, words: string, events: readonly HarnessEvent[]): AnyRecord {
+  const scope = runScope(saved);
+  if (!scope) return {};
+  const said = events
+    .flatMap((event) => (event.data?.type === EventKind.Messages ? (event.data.messages ?? []) : []))
+    .filter((message: AnyRecord) => message?.role === "user" && typeof message.content === "string")
+    .map((message: AnyRecord) => String(message.content).trim());
+  return { scope: addToScope(scope, [], words.trim(), said) ?? scope };
+}
+
 /** How the chat starts a reopened night (chat-dispatch.ts: `handleRunStart`, resumed, keeping a Stop). */
 export type StartReopened = (run: RunSpec & AnyRecord, reopen: RunReopen) => Promise<void>;
 
@@ -277,7 +292,7 @@ export async function reopenAfterReply(
     const { close, closeAt } = finishedClose(events, night.runId);
     const text = (ask.text ?? ask.words).trim();
     const reopened = reopenedRun(journal.run, reopenBudgets(journal.run.budgets, ask.hours), ask.models);
-    const run = { ...reopened, asks: withAsk(journal.run, text) };
+    const run = { ...reopened, asks: withAsk(journal.run, text), ...reopenedScope(journal.run, ask.words, events) };
     const finishedHead = isCommit(close.integrationHead) ? close.integrationHead : null;
     const at = new Date(now()).toISOString();
     await writeJournal(host, threadId, night.runId, reopenedJournal(journal, run, { at, finishedHead }));

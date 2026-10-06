@@ -467,6 +467,37 @@ describe("reopening the finished build once the reply has ended", () => {
     assert.match(String(toldOf(unbounded.calls)[0]?.words), /until its critics are satisfied/);
   });
 
+  it("R4c. the reopening message joins the user's words in the build's scope, once; a build without scope gets none, and words the log does not have change nothing", async () => {
+    const { createScope } = await import("../../src/harness-seed/loop/scope.ts");
+    const scope = createScope({ asked: ["a dusk plaza"], inScope: ["the plaza"], cut: ["a city"] });
+    const userSaid = (words: string): Entry => ({
+      id: "e3",
+      data: { type: "messages", messages: [{ role: "user", content: words }] },
+    });
+    const scoped = (): Json => ({ ...finishedJournal(), run: { ...finishedJournal().run, scope } });
+
+    const s = studioWith({ log: [...finishedLog(), userSaid(ask.words)], journal: scoped() });
+    await reopenAfterReply(s.studio as never, s.ctx, night as never, ask, s.start, clock);
+    const reopened = s.starts[0]?.run.scope;
+    assert.deepEqual(reopened?.asked, ["a dusk plaza", ask.words], "the user's message, not the session's words");
+    assert.deepEqual(reopened?.inScope, ["the plaza"]);
+    assert.deepEqual(reopened?.cut, ["a city"]);
+    assert.deepEqual((s.store.journal as Json).run.scope, reopened, "the journal keeps it for the next Resume");
+
+    const replayed = studioWith({ log: [...finishedLog(), userSaid(ask.words)], journal: s.store.journal });
+    (replayed.store.journal as Json).phase = "done";
+    await reopenAfterReply(replayed.studio as never, replayed.ctx, night as never, ask, replayed.start, clock);
+    assert.deepEqual(replayed.starts[0]?.run.scope, reopened, "a replayed message adds nothing twice");
+
+    const unlogged = studioWith({ journal: scoped() });
+    await reopenAfterReply(unlogged.studio as never, unlogged.ctx, night as never, ask, unlogged.start, clock);
+    assert.deepEqual(unlogged.starts[0]?.run.scope, scope, "words the log does not have are not the user's");
+
+    const legacy = studioWith({ log: [...finishedLog(), userSaid(ask.words)] });
+    await reopenAfterReply(legacy.studio as never, legacy.ctx, night as never, ask, legacy.start, clock);
+    assert.equal("scope" in (legacy.starts[0]?.run ?? {}), false, "a build from before scope stays without one");
+  });
+
   it("R5. refused with nothing written, recorded or started, and one word to the chat: not the latest, not finished, a build under way, no journal, Stop", async () => {
     const rows: Array<{ label: string; set: (s: ReturnType<typeof studioWith>) => void; why: RegExp }> = [
       {

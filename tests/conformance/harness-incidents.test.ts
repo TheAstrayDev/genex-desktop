@@ -939,8 +939,7 @@ describe("harness incidents", () => {
       2,
       "outside the block nothing is touched",
     );
-    assert.equal(verifyWiringMerge("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> theirs").ok, false);
-  });
+    assert.equal(verifyWiringMerge("  });
 
   it("3. D1 circuit breaker: two unjudgeable builds with one cause stop the facet; there is no third build", async () => {
     const rig = await startRig();
@@ -9529,6 +9528,7 @@ describe("ownership after a merge (Midnight Apex)", () => {
   });
 });
 
+<<<<<<< HEAD
 describe("a racing build judged during its countdown (Midnight Apex, 2026-10-05)", () => {
   it("NFS-1. a racing build judged during its countdown: the drive waits for flow.playing", async () => {
     const rig = await startRig();
@@ -9600,5 +9600,84 @@ describe("a racing build judged during its countdown (Midnight Apex, 2026-10-05)
       preview.stateOpts.some((options) => options?.keep?.includes("race.lap")),
       "the state the board reads is kept whole",
     );
+/**
+ * Midnight Apex (2026-10-05): the user asked for "a hyper-realistic NFS-inspired racing game"; the
+ * Loop chat launched with a goal that added police, traffic and a pursuit meter, and from then on that
+ * paraphrase was the only ask any agent read. The run now carries the user's own words from the
+ * chat's log, and the contractor's in-scope and cut lists beside them, through a Resume.
+ */
+describe("MAP-5. scope inflated without the user", () => {
+  const ASK = "Create a hyper-realistic NFS-inspired racing game";
+
+  it("MAP-5a. the contractor added police to an NFS-inspired ask: the run keeps the user's words verbatim and the cut list, and a Resume restores them", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    let calls = 0;
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        calls++;
+        // Only the chat's launch matters here; the night's lead thinks until it is stopped.
+        if (calls > 1)
+          return new Promise((resolve) =>
+            request.signal?.addEventListener("abort", () =>
+              resolve({ ok: false, stopReason: "stopped", summary: "" } as never),
+            ),
+          );
+        return {
+          ok: true,
+          engine: "vendor",
+          summary: "Recap: a neon night race. Starting it now.",
+          turns: 1,
+          usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 0, cost_usd: 0 },
+          studioToolCalls: [
+            {
+              name: "start_autopilot",
+              args: {
+                goal: "A neon night street race with police pursuit, traffic and a pursuit meter",
+                direction: "NFS",
+                in_scope: ["one race", "one hero car"],
+                cut: ["police pursuit", "open world"],
+              },
+            },
+          ],
+        };
+      },
+    });
+    await rig.core.games.scaffold("apex", { title: "apex" });
+    const thread = await rig.core.threadForGame("apex");
+    type Log = Awaited<ReturnType<typeof rig.core.listAllEvents>>;
+    const leading = (n: number) => (log: Log) => customEvents(log, "run_registered").length >= n && calls > n;
+    const paused = (n: number) => (log: Log) =>
+      customEvents(log, "autopilot_paused").length + customEvents(log, "run_finished").length >= n;
+
+    await rig.core.sendUserMessage(ASK, { thread, engine: "vendor", autopilot: { hours: 1 } });
+    const first = await waitForLog(rig.core, leading(1), 60_000, "the night's lead at work");
+    const [launched] = customEvents(first, "run_registered") as Array<Record<string, any>>;
+    assert.ok(launched);
+    assert.deepEqual(launched.scope?.asked, [ASK], "the user's words, from the log, not the contractor's goal");
+    assert.deepEqual(launched.scope?.inScope, ["one race", "one hero car"]);
+    assert.deepEqual(launched.scope?.cut, ["police pursuit", "open world"]);
+    assert.match(String(launched.goal), /police/, "the contractor's goal is kept as its brief, beside the ask");
+
+    const runId = String(launched.runId);
+    const journal = (await rig.core.store.readArtifact(thread, `autopilot_${runId}`)) as Record<string, any> | null;
+    assert.deepEqual(journal?.run?.scope, launched.scope, "the journal keeps the scope a Resume reads");
+
+    await rig.core.stopThread(thread).catch(() => {});
+    await waitForLog(rig.core, paused(1), 60_000, "the night to pause");
+    // The resumed night runs until it is stopped; the Resume is the user's click, not awaited.
+    void rig.core.resumeAutopilot(runId).catch(() => {});
+    const second = await waitForLog(rig.core, leading(2), 60_000, "the resumed night's lead at work");
+    const resumed = (customEvents(second, "run_registered") as Array<Record<string, any>>)[1];
+    assert.equal(resumed?.resumed, true);
+    assert.deepEqual(resumed?.scope, launched.scope, "a Resume restores the same scope");
+    await rig.core.stopThread(thread).catch(() => {});
+    await waitForLog(rig.core, paused(2), 60_000, "the resumed night to pause").catch(() => {});
   });
 });

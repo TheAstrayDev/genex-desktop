@@ -309,7 +309,7 @@ function contractorRules(engine: string | undefined): string[] {
     "When your shell is sandboxed, it rejects commands it cannot statically analyze — avoid $-expansions, escaped whitespace, heredocs and long && chains; run one simple command at a time, and put multi-step logic in a script file you then run with node.",
     `When a sandbox blocks a step only the user's own Mac can do (an install or download that needs the network, such as brew or pip, a system tool, a sign-in), do not work around it: end your reply with that one command on a single line in a \`\`\`${USER_COMMAND_FENCE} block and one plain sentence on why. The chat shows it with a Run button; how it went comes back as the user's next message. Never offer a command you can run yourself, sudo, or anything piped into a shell.`,
     `The moment the game first runs end-to-end, and after each substantial feature lands, call ${toolCall(engine, "checkpoint")} with a one-line note — the studio lights the user's Reload with your note, so they see your progress when they press it.`,
-    "Keep NOTES.md in the workspace root current as you build — the game's pitch, the key decisions so far and why, and its current state (features, known issues). Update it when something lands, not only at the end. A newcomer should understand the game from NOTES.md alone.",
+    "Keep NOTES.md in the workspace root current as you build — the game's pitch (what the user asked for, in their words: not a wish list), the key decisions so far and why, and its current state (features, known issues). Update it when something lands, not only at the end. A newcomer should understand the game from NOTES.md alone.",
   ];
 }
 

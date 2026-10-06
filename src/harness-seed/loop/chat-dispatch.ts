@@ -45,6 +45,7 @@ import { followupAsk } from "./studio-prompts.ts";
 import { type ActiveRun, type RunReopen, StatusLane, type Studio } from "./studio-state.ts";
 import { clampRunHours } from "./config.ts";
 import { CLIP_GAME_TITLE } from "./text.ts";
+import { createScope } from "./scope.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, HarnessEvent, Host, HostCall } from "../types/harness.d.ts";
 import type { ModelPreferences, RunSpec } from "../types/host-api.d.ts";
 import type { QueueAction, SteerHandle } from "./message-queue.ts";
@@ -720,7 +721,7 @@ export async function launchFromIntake(
   const readiness = await host.call(HostMethod.GameValidate, { project }).catch(() => null);
   const refusal = nightRefusal(games.find((g) => g.name === project) ?? null, readiness?.problems ?? []);
   if (refusal) throw new Error(refusal);
-  const run = intakeRun(spec, action, project, readiness);
+  const run = intakeRun(spec, action, project, readiness, await userWordsSoFar(host, action));
   // A promise the night cannot keep is worse than no promise: a second Overnight for a game
   // that already owns a run is refused below, and the only record of that refusal is an event
   // no chat surface renders. Ask the same question here, before anything is promised — once a
@@ -789,12 +790,43 @@ export function intakeBudgets(spec: AnyRecord): RunSpec["budgets"] {
   };
 }
 
+/**
+ * The user's own messages on this thread up to the one that launched, as the log has them — never a
+ * model's words. A queued message sees its thread only up to itself (`conversationThrough`). With
+ * none in the log, the launching message's own text.
+ */
+async function userWordsSoFar(host: Host, action: QueueAction): Promise<string[]> {
+  const events: HarnessEvent[] = await host
+    .call(HostMethod.EventsList, { threadId: action.threadId })
+    .then((listed) => (Array.isArray(listed) ? listed : []))
+    .catch(() => []);
+  const said = conversationThrough(events, action.messageId)
+    .flatMap((event) => (event.data?.type === EventKind.Messages ? (event.data.messages ?? []) : []))
+    .filter((message: AnyRecord) => message?.role === "user" && typeof message.content === "string")
+    .map((message: AnyRecord) => String(message.content));
+  return said.length ? said : [String(action.text ?? "")];
+}
+
+/**
+ * What the run is for (loop/scope.ts): the user's words as the log has them, and the in-scope and cut
+ * lists the launch named. None when there are no words to keep.
+ */
+function intakeScope(spec: AnyRecord, asked: readonly string[]): AnyRecord {
+  const scope = createScope({
+    asked,
+    inScope: Array.isArray(spec.inScope) ? spec.inScope : [],
+    cut: Array.isArray(spec.cut) ? spec.cut : [],
+  });
+  return scope.asked.length ? { scope } : {};
+}
+
 /** The run an interview commissioned, as `run_start` takes it. */
 function intakeRun(
   spec: AnyRecord,
   action: QueueAction,
   project: string,
   readiness: { contract?: string; problems?: string[] } | null,
+  asked: readonly string[] = [],
 ): RunSpec & AnyRecord {
   return {
     runId: `run_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
@@ -814,6 +846,7 @@ function intakeRun(
     ...(spec.engine ? { engine: spec.engine } : {}),
     ...(spec.model ? { model: spec.model } : {}),
     ...(spec.roles ? { roles: spec.roles } : {}),
+    ...intakeScope(spec, asked),
     // The run inherits the interview's effort: builders work at exactly the model and effort
     // the user generates with, never a quieter tier than the chat that commissioned them.
     ...commissionedWith(action),

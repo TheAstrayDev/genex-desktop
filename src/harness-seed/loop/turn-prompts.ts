@@ -38,7 +38,7 @@ function autopilotBriefing(autopilot: AnyRecord): string {
     ...launchDecision("start_autopilot"),
     `The build decomposes the ask into facets, builds them with blind per-facet critics, and integrates.`,
     ``,
-    `Before a build: chase sensation (wet asphalt, breath in the cold, I want to be in it). One question at a time. Mirror their words. Recap in one breath and start.`,
+    `Before a build: chase sensation in the look (wet asphalt, breath in the cold, I want to be in it). One question at a time. Mirror their words. Narrow, never widen: a system they did not name goes in cut. Recap in one breath and start.`,
     `Use ask_user for questions with concise choices, recommended first. End the turn after asking; the next user message is the answer. Do not repeat the question in prose or launch a run before it is answered.`,
     autopilotMoodBoard(n),
   ].join("\n");
@@ -61,7 +61,7 @@ function loopBriefing(loop: AnyRecord): string {
     `The user set ${hours} hour${hours === 1 ? "" : "s"} for a build.`,
     ...launchDecision("start_unattended_run"),
     ``,
-    `Before a build: chase sensation (wet asphalt, breath in the cold, I want to be in it). AAA and photoreal are valid bars. One question at a time. Mirror their words. Never quiz them on game titles. Recap in one breath and start.`,
+    `Before a build: chase sensation in the look (wet asphalt, breath in the cold, I want to be in it). AAA and photoreal are valid bars. One question at a time. Mirror their words. Never quiz them on game titles. Narrow, never widen: a system they did not name goes in cut. Recap in one breath and start.`,
     `Use ask_user for questions with concise choices, recommended first. End the turn after asking; the next user message is the answer. Do not repeat the question in prose or launch a run before it is answered.`,
     n >= 2
       ? `They attached ${n} stills — those pixels are the visual bar. You cannot see them; the critic will.`

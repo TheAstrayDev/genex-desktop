@@ -13,6 +13,7 @@ import { REFERENCE_MIN_STILLS, ReferenceKind, RunMode } from "../loop/run-events
 import { MINUTE_MS } from "../loop/time.ts";
 import { TurnStop } from "../loop/turn-record.ts";
 import { isRecord } from "../loop/json.ts";
+import { scopeItems } from "../loop/scope.ts";
 
 /** How long `run_command` lets a command run when the call names no timeout. */
 const COMMAND_TIMEOUT_MS = 2 * MINUTE_MS;
@@ -46,6 +47,22 @@ const SLUG_STOP = new Set([
 ]);
 
 const str = (description: string) => ({ type: "string", description });
+const list = (description: string) => ({ type: "array", items: { type: "string" }, description });
+
+/** What a launch's goal is: the user's ask, nothing they did not ask for. */
+const GOAL_WORDS = "one paragraph in the user's words; add nothing they did not ask for — put it in cut, or ask";
+/** What a launch delivers. */
+const IN_SCOPE_WORDS = "what this build delivers, each item in the user's words";
+/** What a launch leaves out: a named reference is a look bar, not a feature list. */
+const CUT_WORDS =
+  "what a game like this often has that this build will not (a reference is a look bar, not a feature list)";
+
+/** A launch's in-scope and cut lists as the run carries them to its scope (chat-dispatch.ts `intakeRun`); none when unnamed. */
+function scopeArgs(args: AnyRecord): { inScope?: string[]; cut?: string[] } {
+  const inScope = scopeItems(args.in_scope);
+  const cut = scopeItems(args.cut);
+  return { ...(inScope.length ? { inScope } : {}), ...(cut.length ? { cut } : {}) };
+}
 
 /** Does the call name a folder other than the one this chat is pinned to? */
 function pinnedElsewhere(args: AnyRecord, ctx: ToolCtx): boolean {
@@ -280,10 +297,12 @@ export const tools: HarnessTool[] = [
     parameters: {
       type: "object",
       properties: {
-        goal: str("one paragraph: what exists when the build ends, in the user's words plus the feeling"),
+        goal: str(GOAL_WORDS),
         direction: str("the feeling bar — AAA photoreal rainy city, etc. Titles optional"),
         project: str("folder slug for a chat that has no folder yet, lowercase; a chat already bound to one keeps it"),
         notes: str("optional extra for the critic"),
+        in_scope: list(IN_SCOPE_WORDS),
+        cut: list(CUT_WORDS),
       },
       required: ["goal", "direction"],
     },
@@ -318,6 +337,7 @@ export const tools: HarnessTool[] = [
         hours,
         engine: builderEngine,
         ...(builderModel ? { model: builderModel } : {}),
+        ...scopeArgs(args),
       };
       return {
         ok: true,
@@ -335,11 +355,13 @@ export const tools: HarnessTool[] = [
     parameters: {
       type: "object",
       properties: {
-        goal: str("one paragraph: what should exist, in the user's words plus the feeling"),
+        goal: str(GOAL_WORDS),
         direction: str("the visual/feeling bar — a named game or film, or a described feeling"),
         project: str("folder slug for a chat that has no folder yet, lowercase; a chat already bound to one keeps it"),
         notes: str("optional extra for the critics — what makes the reference good"),
         textual_reference: str("if the user had no images: the game/film they named as the vibe"),
+        in_scope: list(IN_SCOPE_WORDS),
+        cut: list(CUT_WORDS),
       },
       required: ["goal", "direction"],
     },
@@ -387,6 +409,7 @@ export const tools: HarnessTool[] = [
         // (model-roles.ts) — the interview's own model is never inferred as the builders'.
         ...(autopilot.roles && typeof autopilot.roles === "object" ? { roles: autopilot.roles } : {}),
         ...(autopilot.reviewPlan === true ? { reviewPlan: true } : {}),
+        ...scopeArgs(args),
       };
       const clock = capped ? `Building for up to ${hours} h` : `Building until the critics are satisfied`;
       return {
