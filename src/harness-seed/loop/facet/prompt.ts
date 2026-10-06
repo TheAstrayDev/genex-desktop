@@ -392,6 +392,8 @@ function resumedPrompt(p: PromptInput): string {
   return [
     `Iteration ${iteration} of your facet "${facet.title}" (run ${run.runId}). You are resuming your own session — you remember what you tried.`,
     p.briefPointer,
+    // A direct engine has no brief to point at, and the screen's owner can change between rounds.
+    ...(pointsAtBrief ? [] : screenOwnerLines(p)),
     ...steeringLines(p.steering),
     // Three sections the brief carries in full: repeated here only when there is no brief.
     ...(!pointsAtBrief && integrationNote ? ["", integrationNote] : []),

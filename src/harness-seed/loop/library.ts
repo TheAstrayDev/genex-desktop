@@ -56,7 +56,7 @@ import {
   FINISH_SECTION_HEAD,
 } from "./facet/stage-prompts.ts";
 import { heldHudBriefRule } from "./held-hud-prompts.ts";
-import { screenOwnerLine, type ScreenOwnerSpec } from "./screen-owner-prompts.ts";
+import { screenOwnerFinishRules, screenOwnerLine, type ScreenOwnerSpec } from "./screen-owner-prompts.ts";
 import type { Check, FacetSpec } from "./spec.ts";
 import type { ReferenceStats, Scoreboard } from "./checks.ts";
 import type { StyleStats } from "./style.ts";
@@ -856,7 +856,7 @@ function renderBriefSections(
   const lines = [
     ...briefHeader(run, spec, iteration, game),
     ...steeringSection(steering),
-    ...(finishing ? finishSection(polish) : moveSection(move)),
+    ...(finishing ? finishSection(polish, finishRules(spec, screen && template)) : moveSection(move)),
     ...fixSection(fix, template, finishing),
     ...scoreboardSection(board, comparison, spec),
     ...(integration ? [`## Integration`, clipWords(integration, BRIEF_INTEGRATION_CHARS), ``] : []),
@@ -932,11 +932,19 @@ function moveSection(move: AnyRecord | null): string[] {
   ];
 }
 
+/**
+ * The finish rules this part reads: the stage's own, or — in a template game where another part
+ * owns the screen (loop/screen-owner.ts) — the same rules with the HUD's craft handed to that part.
+ */
+function finishRules(spec: BriefOptions["spec"], applies: boolean): readonly string[] {
+  return (applies ? screenOwnerFinishRules(spec) : null) ?? FINISH_RULES;
+}
+
 /** A finishing worker's iteration: no move — the judge's polish list, all of it, is the work. */
-function finishSection(polish: readonly string[]): string[] {
+function finishSection(polish: readonly string[], rules: readonly string[] = FINISH_RULES): string[] {
   return [
     FINISH_SECTION_HEAD,
-    ...FINISH_RULES,
+    ...rules,
     ...(polish.length
       ? ["", FINISH_POLISH_HEAD, ...polish.slice(0, FINISH_POLISH_NOTES).map((p, i) => `${i + 1}. ${p}`)]
       : []),

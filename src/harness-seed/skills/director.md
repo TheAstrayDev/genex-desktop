@@ -95,11 +95,10 @@ itself and keeps the memory file its brief names current.)
   first: each module's file, its owner part, its API and the conventions (axes, signs, units). The
   harness commits it as `docs/MODULE-CONTRACT.md` (a game's own `docs/ARCHITECTURE.md` stays as
   it is); each module then needs its stub on integration — its API as no-op exports, its cameras,
-  demos and probes registered — before its loop worker starts
-  (the plan's answer names the stubs left and who writes them). A loop worker forks only from a
-  commit with the contract, owns its contract modules when it names no seam, and is refused a seam
-  that reaches another part's module. Refused twice without one, the harness writes the contract
-  from your seams.
+  demos and probes registered — before its loop worker starts (the plan's answer names the stubs
+  left and who writes them). A loop worker forks only from a commit with the contract, owns its
+  contract modules when it names no seam, and is refused a seam that reaches another part's module.
+  Refused twice without one, the harness writes the contract from your seams.
 - In a game the user brought, `owns` is not optional the moment a second worker runs: name a path, a
   folder or a **quoted** glob (`owns: "src/ui/*.tsx"` — an unquoted `*` is expanded by the shell) in
   the structure that game already has.

@@ -355,7 +355,8 @@ proposal is never a move: it becomes a decision card (`loop/facet/beyond.ts`, at
 joins the cut list; `added=` and a part marked `added:true` are cards too. One part owns the screen
 (`critic=screen`; `worker_start` refuses a second running one): while it runs, another template part
 that draws through the contract HUD is a `screen-owner` finding (`loop/screen-owner.ts`); each
-part's brief and opening prompt say who owns the screen (`loop/screen-owner-prompts.ts`). A check
+part's brief and opening prompt (and a direct engine's resumed one) say who owns the screen, and a
+finishing non-owner hands HUD polish to the owner (`loop/screen-owner-prompts.ts`). A check
 asking that how much the build draws (HUD items, per-kind counts such as `hud.kinds.bar`, draw
 calls, triangles, vertices) be large is
 refused where checks are validated (`loop/check-lint.ts`, `draw-count-floor`); a ceiling or an
