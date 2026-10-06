@@ -88,6 +88,7 @@ export interface FacetOptions {
   policy: FacetPolicy;
   onLoopState: ((state: AnyRecord) => void) | null;
   buildBlock: boolean;
+  onProviderLost: ((lost: AnyRecord) => void) | null;
 }
 
 /** What `runFacetLoop` works out once from its options: the facet, its places, its engine, its clock. */
@@ -459,6 +460,8 @@ function optionDefaults(): Omit<FacetOptions, "runThreadId" | "facetThreadId" | 
      * kept on the checks. The director asks it for a new part; the classic pipeline never does.
      */
     buildBlock: false,
+    /** Called when a round starts waiting for a lost provider (facet/provider.ts) — the director's wake. */
+    onProviderLost: null,
   };
 }
 

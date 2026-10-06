@@ -222,6 +222,7 @@ export interface NightState {
   fromScratch: boolean;
   startConsole: string[];
   lastJudge: LastJudge | null;
+  /** The provider loss that pauses the night — an engine limit, a lost sign-in, an outage the lead could not wait out. */
   limit: EngineLimit | null;
   workerLimit: WorkerLimit | null;
   workers: Map<string, Worker>;

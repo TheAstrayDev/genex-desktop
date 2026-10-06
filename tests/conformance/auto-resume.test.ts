@@ -19,6 +19,7 @@ import {
   AutoResumeService,
   AutoResumeSkip,
   LIMIT_RESET_MARGIN_MS,
+  OUTAGE_RESUME_AFTER_MS,
   autoResumePlan,
   type AutoResumeFacts,
 } from "../../src/main/core/auto-resume.ts";
@@ -34,6 +35,7 @@ import { coreLite } from "../helpers/core-lite.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CodexEngine, type CodexExec } from "../../src/substrate/engines/codex.ts";
+import { ClaudeCodeEngine } from "../../src/substrate/engines/claude-code.ts";
 import { engineLimitOf } from "../../src/harness-seed/loop/outage.ts";
 import { fixtureCodingCli } from "../helpers/external-cli.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -160,8 +162,45 @@ describe("autoResumePlan: when a paused build resumes on its own", () => {
       want: { action: AutoResumeAction.None, skip: AutoResumeSkip.ResetTooFar },
     },
     {
-      name: "a failure that is not an engine limit never resumes",
+      name: "a lost sign-in is the user's to fix, whatever reset its close names",
       events: () => [registered(), ...limitPause(PAUSED_AT, { kind: EngineFailureKind.Auth, retryAfterMs: RESET_MS })],
+      now: DUE,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.AccessLost },
+    },
+    {
+      name: "an account whose access was taken away is the user's to fix",
+      events: () => [
+        registered(),
+        ...limitPause(PAUSED_AT, { kind: EngineFailureKind.Auth, message: "access disabled", retryAfterMs: null }),
+      ],
+      now: PAUSED_AT + HOUR_MS,
+      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.AccessLost },
+    },
+    {
+      name: "a provider outage that outlasted the lead's patience is tried again after a wait",
+      events: () => [
+        registered(),
+        ...limitPause(PAUSED_AT, { kind: EngineFailureKind.Unavailable, retryAfterMs: null }),
+      ],
+      now: PAUSED_AT + MINUTE_MS,
+      want: { action: AutoResumeAction.Wait, at: PAUSED_AT + OUTAGE_RESUME_AFTER_MS, hold: AutoResumeHold.Outage },
+    },
+    {
+      name: "once that wait is over it resumes, as an automatic resume of its own cause",
+      events: () => [
+        registered(),
+        ...limitPause(PAUSED_AT, {
+          kind: EngineFailureKind.Unavailable,
+          retryAfterMs: null,
+          at: PAUSED_AT - MINUTE_MS,
+        }),
+      ],
+      now: PAUSED_AT - MINUTE_MS + OUTAGE_RESUME_AFTER_MS,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.ProviderOutage, attempt: 1 },
+    },
+    {
+      name: "a failure that is neither a limit, a sign-in nor an outage never resumes",
+      events: () => [registered(), ...limitPause(PAUSED_AT, { kind: EngineFailureKind.Other, retryAfterMs: RESET_MS })],
       now: DUE,
       want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NotResumable },
     },
@@ -970,5 +1009,50 @@ describe("an engine's own limit, from its error to the planned resume", () => {
       cause: AutoResumeCause.LimitReset,
       attempt: 1,
     });
+  });
+
+  /**
+   * The NFS run (6 Oct 2026): "Your organization has disabled Claude subscription access…", in a
+   * `success`-subtype result flagged `is_error`. No reset ends that: the pause waits for the user.
+   */
+  it("an account whose access was taken away pauses for the user, never for a reset", async () => {
+    const disabled =
+      "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+    const root = await tmpDir("studio-claude-access-");
+    const home = path.join(root, "claude-home");
+    await mkdir(home, { recursive: true });
+    await writeFile(path.join(home, ".credentials.json"), "{}");
+    const stream = [
+      { type: "system", subtype: "init", model: "claude-opus-5-5", session_id: "ses_lead", tools: [] },
+      { type: "assistant", message: { content: [{ type: "text", text: disabled }] }, parent_tool_use_id: null },
+      { type: "result", subtype: "success", is_error: true, num_turns: 5, total_cost_usd: 15.9, result: disabled },
+    ];
+    const claude = new ClaudeCodeEngine({
+      resolveCli: fixtureCodingCli,
+      engineHome: home,
+      systemHome: path.join(root, "no-system-login"),
+      queryFn: (() => ({
+        async *[Symbol.asyncIterator]() {
+          for (const message of stream) yield message;
+        },
+      })) as never,
+    });
+    const codex = await codexFailing("Your workspace has disabled Codex access for this account");
+    for (const [name, engine, cwd] of [
+      ["claude-code", claude, root],
+      ["codex", codex.engine, codex.cwd],
+    ] as const) {
+      const err = await engine.delegate({ prompt: "build", cwd }).then(
+        () => assert.fail(`${name}: a lost account is an error`),
+        (e: unknown) => e,
+      );
+      const limit = engineLimitOf(err, PAUSED_AT);
+      assert.equal(limit.kind, EngineFailureKind.Auth, `${name}: ${limit.message}`);
+      const events = [registered(), ...limitPause(PAUSED_AT, { ...limit })];
+      assert.deepEqual(autoResumePlan(events, PAUSED_AT + 3 * HOUR_MS, facts()), {
+        action: AutoResumeAction.None,
+        skip: AutoResumeSkip.AccessLost,
+      });
+    }
   });
 });

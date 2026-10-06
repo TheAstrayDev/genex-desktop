@@ -15,6 +15,7 @@ import { EventKind, ExecutionStatus, RunEvent, RunMode } from "./run-events.ts";
 import { type ActiveRun, RunnerKind, type RunStart, type Studio, heldRuns } from "./studio-state.ts";
 import { passCtx } from "./live-chat.ts";
 import { resumeStopped } from "./after-night.ts";
+import { forgetProviderLosses } from "./provider-loss.ts";
 import type { AnyRecord, HarnessCtx, HarnessEvent, Host, Run } from "../types/harness.d.ts";
 import type { EngineDescriptor } from "../types/host-api.d.ts";
 
@@ -297,6 +298,8 @@ async function conductRun(
   ctx.runInbox = inbox;
   const described =
     run.mode === RunMode.Autopilot ? await host.call(HostMethod.EngineDescribe, {}).catch(() => []) : [];
+  // A run (a Resume included) starts trusting its providers again: a loss was the last stretch's.
+  forgetProviderLosses(run.runId);
   const report = await RUNNERS[chooseRunner(run, described)](ctx, { threadId, run, resume });
   closed();
   host.notify("run.finished", report);
@@ -311,6 +314,9 @@ async function conductRun(
  * new rounds, and learning is on.
  */
 async function wantsToLearn(pass: HarnessCtx, inbox: RunInbox, report: AnyRecord): Promise<boolean> {
+  // A run its provider paused (`report.limit`: a limit, a lost sign-in, an outage) is not over, and
+  // its provider is gone: it is learned from when it ends, not now against a dead account.
+  if (report?.limit) return false;
   if (pass.cancelled || (await inbox.finishing()) || !keptNewRounds(report)) return false;
   return (await learningOn(pass)) && !pass.cancelled;
 }

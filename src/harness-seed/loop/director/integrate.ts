@@ -122,6 +122,9 @@ function notLanded(reason: string, why: NotLandedReason): AnyRecord {
   return { ok: false, reason, why };
 }
 
+/** Why a night a lost provider paused lands nothing (`closeTheNight` with `paused`). */
+const PAUSED_UNLANDED = "the run paused on its provider; nothing is made live that nobody could check";
+
 /** The starting point is not a night's work: said when the branch has nothing beyond it. */
 const NOTHING_BEYOND_THE_START = "the integration branch has nothing beyond the starting point";
 
@@ -767,6 +770,7 @@ export async function closeTheNight(
     because = null,
     summary = null,
     victory = false,
+    paused = false,
   }: {
     land?: boolean;
     stopWhy?: string;
@@ -774,6 +778,8 @@ export async function closeTheNight(
     because?: string | ((landed: AnyRecord) => string) | null;
     summary?: string | null;
     victory?: boolean;
+    /** A lost provider paused the night: it lands nothing, and says so. */
+    paused?: boolean;
   },
 ): Promise<AnyRecord> {
   const { closeRun, ctx, report, runningWorkers, settleWorkers, stopWorker } = night;
@@ -781,6 +787,7 @@ export async function closeTheNight(
   await settleWorkers(settleMs);
   let landed: AnyRecord;
   if (ctx.cancelled) landed = notLanded(STOPPED_BY_USER, NotLandedReason.Stopped);
+  else if (paused) landed = notLanded(PAUSED_UNLANDED, NotLandedReason.Paused);
   else if (!land) landed = notLanded("land=no", NotLandedReason.NotAsked);
   else landed = await landWhatRuns(night);
   report.victory = victory === true && landed.ok === true;
@@ -1094,7 +1101,7 @@ export async function appendClose(ctx: HarnessCtx, threadId: string, batch: Even
   }
 }
 
-/** The engine limit that paused the night, as its close reports it. */
+/** The provider loss (an engine limit, a lost sign-in, an outage) that paused the night, as its close reports it. */
 function reportedLimit(limit: AnyRecord): AnyRecord {
   return {
     kind: limit.kind,
@@ -1146,8 +1153,9 @@ export async function closeRun(night: Night, landed: AnyRecord): Promise<void> {
     reason: "Director runs finish without the optimization stage",
   }).catch(() => null);
   report.finishedAt = new Date().toISOString();
-  // A run the user stopped, or one the engine's limit cut short, is paused: Resume picks it up
-  // at its integration head (kept reachable by the ref) once the user or the limit allows.
+  // A run the user stopped, or one a lost provider cut short (a limit, a sign-in, an outage), is
+  // paused: Resume picks it up at its integration head (kept reachable by the ref) once the user,
+  // the limit or the provider allows.
   const pausedByStopOrLimit = !state.finish && (ctx.cancelled || Boolean(state.limit));
   const goalsBlocked = state.goals && goalDecision(state.goals, state.integrationHead) === GoalStatus.Blocked;
   journal.phase = pausedByStopOrLimit || goalsBlocked ? JournalPhase.Paused : JournalPhase.Done;

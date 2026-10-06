@@ -102,6 +102,8 @@ export const NotLandedReason = {
   UncommittedChanges: "uncommitted-changes",
   Stopped: "stopped",
   Crashed: "crashed",
+  /** A lost provider paused the run (a sign-in gone, a limit, an outage): Resume lands it once it can be checked. */
+  Paused: "paused",
 } as const;
 export type NotLandedReason = (typeof NotLandedReason)[keyof typeof NotLandedReason];
 
@@ -191,6 +193,8 @@ const NOT_LANDED: Record<string, string> = {
     "Nothing was made live: files in your game folder had changes not yet in its history, so this build was left beside it, waiting for Make it live.",
   stopped: "Nothing was made live: the build was stopped before it finished.",
   crashed: "Nothing was made live: the build hit a problem and stopped early.",
+  paused:
+    "Nothing was made live: the model provider stopped answering, so the build paused before anything could check it — Resume picks it up.",
 } satisfies Record<NotLandedReason, string>;
 
 /** A commit, a branch, a ref, a run id, an absolute path — nothing a player has a use for. */

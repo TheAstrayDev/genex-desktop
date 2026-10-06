@@ -51,7 +51,9 @@ taste verdicts from round two on.
 These are test cases, not human-labelled quality results. Begin without model calls by checking
 capture reproducibility, malformed responses, budget limits and blind-label handling through the
 existing conformance and harness suites. A real-model campaign requires its own authorized
-provider and spend limit.
+provider and spend limit. A judge whose provider is lost (a sign-in gone, a cap, a limit not yet
+reset) is asked once per run (`loop/provider-loss.ts`): later calls fail at once with its kind and the
+round waits, so a lapsed account leaves no verdicts, never ties or "no" answers.
 
 Captures, judge verdicts and human labels stay in ignored evidence directories; only metrics-only
 baselines and per-release ledger exports under `evals/` are committed ([evals](evals.md)).

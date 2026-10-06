@@ -23,6 +23,7 @@ import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "..
 import { ChatFileOpen } from "../shared/chat-files.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
+import { EngineFailureKind } from "../shared/engine-requests.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
@@ -179,11 +180,15 @@ const PART_PHRASES: Array<[RegExp, (part: string, match: RegExpMatchArray) => St
     /^judge overloaded, retrying verification in (\d+)s$/i,
     (part, m) => ({ line: `${part} · the reviewer is busy — trying again in ${m[1]}s`, short: `${part} · waiting` }),
   ],
+  [
+    /^waiting for its model provider \((.+)\)$/i,
+    (part, m) => ({ line: `${part} · waiting for the model provider (${m[1]})`, short: `${part} · waiting` }),
+  ],
 ];
 
 /** The phases the harness hangs off a title with " — ": stripped when the title itself has a dash. */
 const PHASE_SUFFIX =
-  /\s+—\s+(iteration \d+|verifying|spike on .+|fixing review findings|reverting a regression|(?:provider|judge) overloaded.*)$/i;
+  /\s+—\s+(iteration \d+|verifying|spike on .+|fixing review findings|reverting a regression|(?:provider|judge) overloaded.*|waiting for its model provider.*)$/i;
 
 /**
  * Turn a harness status line into what the user reads. The harness prefixes almost every status
@@ -494,6 +499,11 @@ function whyItEnded(why: string): string | null {
     return said ? `stopped by the lead — ${withoutIds(said)}` : "stopped by the lead";
   }
   if (/^autopilot finished$/i.test(why)) return "the build finished";
+  // A lost provider paused it (harness provider-loss.ts `pauseEnding`): what to fix, never the provider's own words.
+  if (/^the engine lost its sign-in\b/i.test(why))
+    return "the model provider stopped accepting the account — sign in again, then Resume";
+  if (/^the engine's provider stayed down\b/i.test(why))
+    return "the model provider stayed down — Resume picks the build up";
   // The engine's own limit is the one ending a user can act on: it says when to come back.
   if (/usage cap|usage limit|session limit|rate limit/i.test(why))
     return "the engine hit its limit — the build can pick up again when it resets";
@@ -585,6 +595,8 @@ export function nightWords(night: {
   stoppedBecause?: string | null;
   /** the night stopped where it can be picked up again — a plan limit, a quit, a crash */
   paused?: boolean;
+  /** the provider failure that paused it (the close's `limit.kind`), when one did */
+  pausedOn?: string | null;
   /**
    * Is there a merged build to play? The card offers Play only when the night left a head of its
    * own, so the sentence may only promise one under the same condition. Unknown counts as yes,
@@ -603,7 +615,7 @@ export function nightWords(night: {
   const hasBuild = night.hasBuild ?? true;
   const landing = reviewerWords(withoutIds((night.landing ?? "").trim()));
   const why = stoppedWords(night.stoppedBecause);
-  if (night.paused) return pausedNightWords(after, wasCancelled(night.stoppedBecause), why);
+  if (night.paused) return pausedNightWords(after, wasCancelled(night.stoppedBecause), pausedWhy(night.pausedOn, why));
   if (wasCancelled(night.stoppedBecause)) return stoppedNightWords(after, night.landed === true, hasBuild);
   if (night.landed === true) {
     return {
@@ -620,6 +632,22 @@ export function nightWords(night: {
       : { headline: `Finished${after} · nothing new`, because: `Your game is as you left it — ${why}.` };
   }
   return { headline: `Finished${after}`, because: `${capitalise(why)}.` };
+}
+
+/**
+ * Why a night its model provider paused stopped, and what brings it back, from the close's typed
+ * kind (`run_finished.limit.kind`). A limit keeps the close's own words (`stoppedWords`).
+ */
+const PAUSED_ON_WORDS = {
+  [EngineFailureKind.Auth]:
+    "the model provider stopped accepting this account — sign in again (or ask your admin to turn access back on), then press Resume",
+  [EngineFailureKind.Unavailable]: "the model provider stayed down — Resume picks the build up where it stopped",
+} as const satisfies Partial<Record<EngineFailureKind, string>>;
+
+/** The paused night's reason: the typed provider failure's words when there are some, else the close's. */
+function pausedWhy(kind: string | null | undefined, why: string): string {
+  for (const [key, words] of Object.entries(PAUSED_ON_WORDS)) if (key === kind) return words;
+  return why;
 }
 
 /** Stop and pause are one thing to the owner: the work is kept and Resume sits beside this line. */
@@ -901,9 +929,35 @@ export function livenessWords(
 }
 
 /** The provider is busy. The user needs the wait, never the exception text. */
+/**
+ * What took a round's model provider away (`facet_provider_outage.lost`, an engine failure kind):
+ * the round waits for it, and the user reads why without the provider's own exception.
+ */
+const LOST_PROVIDER_WORDS = {
+  [EngineFailureKind.Auth]: "stopped accepting the account",
+  [EngineFailureKind.UsageLimit]: "hit your plan's usage cap",
+  [EngineFailureKind.RateLimit]: "hit your plan's session limit",
+  [EngineFailureKind.Unavailable]: "is down",
+} as const satisfies Partial<Record<EngineFailureKind, string>>;
+
+/** The words for a lost provider's kind, or null for one this version does not know. */
+function lostProviderWords(kind: unknown): string | null {
+  for (const [key, words] of Object.entries(LOST_PROVIDER_WORDS)) if (key === kind) return words;
+  return null;
+}
+
 export function outageWords(
-  outage: PartRound & { phase?: string | null; minutes?: number | null; attempt?: number | null },
+  outage: PartRound & {
+    phase?: string | null;
+    minutes?: number | null;
+    attempt?: number | null;
+    /** The provider was lost, not busy (an engine failure kind): the round waits for it. */
+    lost?: string | null;
+  },
 ): string {
+  const lost = lostProviderWords(outage.lost);
+  if (lost)
+    return `${partName(outage, "this build")}: the model provider ${lost} — the round waits for it; nothing is counted against the build`;
   const minutes = Math.max(1, Math.trunc(outage.minutes ?? 1));
   return `${partName(outage, "this build")}: the model provider is busy — waiting ${minutes} min before trying again (attempt ${Math.max(1, Math.trunc(outage.attempt ?? 1))}); nothing is counted against the build`;
 }
@@ -1073,6 +1127,7 @@ export function pausedWords(): string {
 const AUTO_RESUMED_WORDS = {
   [AutoResumeCause.LimitReset]: "Resumed automatically after the limit reset",
   [AutoResumeCause.LoopRestart]: "Resumed automatically after Studio’s loop restarted",
+  [AutoResumeCause.ProviderOutage]: "Resumed automatically to try the model provider again after its outage",
 } as const satisfies Record<AutoResumeCause, string>;
 
 /** The chat's line for a build the studio resumed on its own; a cause this version does not know still reads. */
@@ -1085,7 +1140,7 @@ export function autoResumedWords(cause: unknown): string {
 export const AUTO_RESUME_SETTING_WORDS = {
   label: "Resume builds automatically",
   detail:
-    "When a session limit resets or Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped.",
+    "When a session limit resets, a while after a model provider’s outage, or when Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.",
 } as const;
 
 export function resumedWords(parts: number): string {

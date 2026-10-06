@@ -342,6 +342,7 @@ const AUTO_RESUMED = {
   title: "Resumed a build automatically",
   [AutoResumeCause.LimitReset]: "The limit reset.",
   [AutoResumeCause.LoopRestart]: "Studio’s loop restarted.",
+  [AutoResumeCause.ProviderOutage]: "The model provider was down; the wait after it is over.",
 } as const;
 
 const autoResumeItem: ItemReader = ({ event, payload: p }) => {

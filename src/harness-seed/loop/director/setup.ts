@@ -14,7 +14,8 @@ import { readDeclaredGame } from "../kinds.ts";
 import { appendLedger, ledgerFromEvents, loadGameLessons, readLedger } from "../ledger.ts";
 import { writeWorktreeFile } from "../library.ts";
 import { roleEffort, roleEngine, RoleKey } from "../model-roles.ts";
-import { engineLimitOf, isEngineLimit } from "../outage.ts";
+import { engineLimitOf } from "../outage.ts";
+import { isProviderLoss, noteProviderLoss } from "../provider-loss.ts";
 import { baseBrief } from "../prompts-build.ts";
 import { runRef } from "../repo.ts";
 import { EventKind, JournalPhase, RunEvent, RunMode } from "../run-events.ts";
@@ -693,7 +694,11 @@ async function prepareInWorktree(
     const ok = delegation.ok === true;
     return { ok, error: ok ? null : delegation.errorText || delegation.stopReason || session.unfinished };
   } catch (err: any) {
-    if (isEngineLimit(err?.kind)) state.limit = engineLimitOf(err);
+    // A provider lost while the start was prepared pauses the night like the lead's own would.
+    if (isProviderLoss(err?.kind)) {
+      state.limit = engineLimitOf(err);
+      noteProviderLoss(run.runId, roleEngine(run, RoleKey.Builder), err);
+    }
     return { ok: false, error: String(err?.message ?? err) };
   }
 }

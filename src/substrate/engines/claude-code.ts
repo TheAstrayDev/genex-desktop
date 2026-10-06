@@ -79,6 +79,7 @@ import {
   type DelegateEnding,
   hasCredentials,
   interruption,
+  isAccessLost,
   type PartialDelegateState,
   partialDelegateResult,
   STOPPED_BY_USER,
@@ -199,6 +200,20 @@ const SdkSystemSubtype = {
 /** The only `result` subtype that means the turn ended well. */
 const SDK_RESULT_SUCCESS = "success";
 
+/**
+ * The CLI's own code on a reply that is an API error (`SDKAssistantMessage.error`), for the codes
+ * that mean the account cannot be used until somebody acts: a stale sign-in, an organization that
+ * does not allow it, an account on hold, a billing problem.
+ */
+const SdkApiError = {
+  AuthenticationFailed: "authentication_failed",
+  OauthOrgNotAllowed: "oauth_org_not_allowed",
+  AccountOnHold: "account_on_hold",
+  BillingError: "billing_error",
+} as const;
+/** The codes a sign-in failure is read from, whatever the words beside them. */
+const SIGN_IN_ERRORS: ReadonlySet<unknown> = new Set<string>(Object.values(SdkApiError));
+
 /** Compact Now's command: Claude Code's own compaction of the resumed session (`DelegateRequest.compact`). */
 const COMPACT_COMMAND = "/compact";
 /** `/compact` runs no model turn; a CLI that did not know it may answer once, never build. */
@@ -252,6 +267,8 @@ const JUDGE_DISALLOWED_TOOLS = [
 /** What this engine says to the user: statuses, remedies and errors. */
 const MESSAGE = {
   LoginHint: "Sign in with your Claude subscription. The studio never sees your password.",
+  AccessLostHint:
+    "Sign in with a Claude account that has access, or ask your organization's admin to turn Claude Code back on.",
   InstallRemedy: "Install Claude Code, then check again.",
   SdkMissing: "the Claude Agent SDK is not installed",
   SdkRemedy: "Reinstall the app; the SDK ships with it.",
@@ -893,7 +910,7 @@ export class ClaudeCodeEngine implements Engine {
     const login = await this.resolveLogin();
     // One stable, empty directory for every verdict (JUDGE_CWD) — remade if the OS swept it.
     await mkdir(this.judgeCwd, { recursive: true });
-    const judge: JudgeState = { text: "", modelUsed: undefined, usage: { engine: this.id } };
+    const judge: JudgeState = { text: "", modelUsed: undefined, usage: { engine: this.id }, apiError: null };
     // One controller, two triggers, same shape as delegate: the caller's stop and the ceiling.
     const controller = abortControllerFor(request.signal);
     let ceilingHit = false;
@@ -974,18 +991,28 @@ export class ClaudeCodeEngine implements Engine {
       if (message.subtype === SdkSystemSubtype.Init) judge.modelUsed = String(message.model ?? "") || undefined;
     }
     if (type === SdkMessage.Assistant) {
+      judge.apiError = apiErrorOf(message);
       for (const text of assistantTexts(message)) {
         judge.text += text;
         request.onDelta?.(text);
       }
     }
-    if (type !== SdkMessage.Result) return;
-    const result = message as SdkResult;
+    if (type === SdkMessage.Result) this.#judgeResult(message as SdkResult, judge);
+  }
+
+  /** The judge's result: its cost, its words when its replies had none, and the failure it reports. */
+  #judgeResult(result: SdkResult, judge: JudgeState): void {
     recordResultUsage(judge.usage, result);
     if (result.result && !judge.text.trim()) judge.text = result.result;
-    if (isFailedResult(result)) {
-      throw this.#classify(new Error(result.result || result.subtype || MESSAGE.JudgeFailed));
-    }
+    const failed = isFailedResult(result);
+    const signedOut = this.#signedOut({
+      failed,
+      errorSubtype: resultErrorSubtype(result, !failed),
+      apiError: judge.apiError,
+      text: result.result || judge.text,
+    });
+    if (signedOut) throw signedOut;
+    if (failed) throw this.#classify(new Error(result.result || result.subtype || MESSAGE.JudgeFailed));
   }
 
   /** What a judge that did not answer threw, in the order that says whose stop it was. */
@@ -1251,7 +1278,10 @@ export class ClaudeCodeEngine implements Engine {
     if (!fromAssistant) return;
     this.#observeTelemetry(stream, request.onEvent, run.sessionId);
     // A subagent's request is its own context, not the one the session's next turn starts from.
-    if (!message.parent_tool_use_id) run.contextTokens = requestTokens(message) ?? run.contextTokens;
+    if (message.parent_tool_use_id) return;
+    run.contextTokens = requestTokens(message) ?? run.contextTokens;
+    // Whether the main thread's last word was the CLI's own API error: a later reply clears it.
+    run.apiError = apiErrorOf(message);
   }
 
   /** A system message: the session's init, a compaction boundary, and a telemetry reading. */
@@ -1342,6 +1372,16 @@ export class ClaudeCodeEngine implements Engine {
 
   /** How a build whose stream ended on its own is reported, or the limit it hit thrown. */
   #finish(run: RunState, request: DelegateRequest, startedAt: number): DelegateResult {
+    const signedOut = this.#signedOut({
+      failed: !run.ok,
+      errorSubtype: run.errorSubtype,
+      apiError: run.apiError,
+      text: String(run.errorText ?? run.summary ?? ""),
+    });
+    if (signedOut) {
+      this.#authFailure = signedOut.message;
+      throw signedOut;
+    }
     if (run.ok) this.#authFailure = null;
     this.#throwIfLimited(run);
     const model = request.model ?? this.#model;
@@ -1421,11 +1461,56 @@ export class ClaudeCodeEngine implements Engine {
     if (RATE_LIMIT_PATTERNS.some((re) => re.test(text))) {
       return new EngineError(EngineFailureKind.RateLimit, this.id, text, resetMs);
     }
-    if (AUTH_PATTERNS.some((re) => re.test(text))) {
-      return new EngineError(EngineFailureKind.Auth, this.id, `${text} — ${this.loginHint()}`);
-    }
+    if (isSignInText(text)) return this.#signInError(text);
     return new EngineError(EngineFailureKind.Other, this.id, text);
   }
+
+  /** A sign-in failure in the CLI's words, with what the user can do about it. */
+  #signInError(text: string): EngineError {
+    const hint = isAccessLost(text) ? MESSAGE.AccessLostHint : this.loginHint();
+    return new EngineError(EngineFailureKind.Auth, this.id, `${text} — ${hint}`);
+  }
+
+  /**
+   * A turn whose last word was the CLI's own API error saying the account cannot be used, as the
+   * sign-in failure it is, or null. The CLI reports one as a `success` result flagged `is_error`
+   * (or, by its code alone, as a plain success), and a revoked account once read as an ordinary
+   * failed turn there: the run closed and landed an unchecked build (provider lost, 6 Oct 2026).
+   * A limit in those words stays a limit (`#throwIfLimited`).
+   */
+  #signedOut(ending: ApiErrorEnding): EngineError | null {
+    if (!endedOnApiError(ending)) return null;
+    const text = ending.text || ending.apiError || MESSAGE.JudgeFailed;
+    if (SIGN_IN_ERRORS.has(ending.apiError)) return this.#signInError(text);
+    if (limitKind(text) || !isSignInText(text)) return null;
+    return this.#signInError(text);
+  }
+}
+
+/** How a turn ended, as far as telling the CLI's own API error from the model's words goes. */
+interface ApiErrorEnding {
+  /** The result said the turn failed (`is_error`, or a failing subtype). */
+  failed: boolean;
+  /** The failure's stop reason: `StopReason.Error` when the result's own subtype was "success". */
+  errorSubtype: string | null;
+  /** The CLI's code on the main thread's last reply, when that reply was an API error. */
+  apiError: string | null;
+  text: string;
+}
+
+/**
+ * Did the turn end on the CLI's own error message rather than on the model's words: a reply that
+ * carried an API error code, or a failed result whose subtype still said "success" (the shape the
+ * CLI gives an API error the turn could not get past)?
+ */
+function endedOnApiError(ending: ApiErrorEnding): boolean {
+  if (ending.apiError !== null) return true;
+  return ending.failed && ending.errorSubtype === StopReason.Error;
+}
+
+/** Does a CLI's error text say the sign-in no longer works: stale, missing, or the access taken away? */
+function isSignInText(text: string): boolean {
+  return AUTH_PATTERNS.some((re) => re.test(text)) || isAccessLost(text);
 }
 
 // ── one delegation's state, and the stream it is read from ─────────────────────────────────
@@ -1508,6 +1593,8 @@ interface JudgeState {
   text: string;
   modelUsed: string | undefined;
   usage: Usage;
+  /** The CLI's code on its last reply, when that reply was an API error (`SdkApiError`). */
+  apiError: string | null;
 }
 
 /** Everything one delegation learns from its stream, in the order it learns it. */
@@ -1544,6 +1631,8 @@ interface RunState {
   compactSummary: string | null;
   /** Why it did not compact, as its status message said; null when it did not say. */
   compactError: string | null;
+  /** The CLI's code on the main thread's last reply, when that reply was an API error (`SdkApiError`). */
+  apiError: string | null;
 }
 
 /** A delegation that has not heard anything from its contractor yet. */
@@ -1568,6 +1657,7 @@ function newRunState(usage: Usage, cliInstallation: ClaudeInstallation): RunStat
     control: { release: () => {} },
     compactSummary: null,
     compactError: null,
+    apiError: null,
   };
 }
 
@@ -1662,6 +1752,11 @@ function resultErrorSubtype(result: SdkResult, ok: boolean): string | null {
   if (ok) return null;
   if (result.subtype && result.subtype !== SDK_RESULT_SUCCESS) return result.subtype;
   return StopReason.Error;
+}
+
+/** The CLI's code on an assistant message that is an API error, or null for an ordinary reply. */
+function apiErrorOf(message: Record<string, unknown>): string | null {
+  return typeof message.error === "string" && message.error ? message.error : null;
 }
 
 /** Did the result report a failure, by flag or by subtype? */

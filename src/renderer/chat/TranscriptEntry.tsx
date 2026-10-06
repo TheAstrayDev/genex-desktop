@@ -101,6 +101,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
           landingLine={entry.landingLine}
           learned={entry.learned}
           stoppedBecause={entry.stoppedBecause}
+          pausedOn={entry.pausedOn}
           kept={entry.kept}
           undone={entry.undone}
           landed={entry.landed}

@@ -1,7 +1,9 @@
 /**
  * Host auto-resume: a paused build picks itself back up when what paused it has passed. A build an
- * engine limit paused resumes once the limit resets; one the loop's crash paused resumes once the
- * loop runs again. Bounded: at most AUTO_RESUMES_MAX times a run, never after the user's Stop or
+ * engine limit paused resumes once the limit resets; one a provider outage paused is tried again
+ * after a wait; one the loop's crash paused resumes once the loop runs again. A build paused on a
+ * lost sign-in (an expired login, an account whose access was taken away) waits for the user, who
+ * has to fix it. Bounded: at most AUTO_RESUMES_MAX times a run, never after the user's Stop or
  * Finish, never with too little working time or memory left, and only while Settings → Harness
  * "Resume builds automatically" is on. A cold start (the app itself died) stays the user's click.
  *
@@ -21,6 +23,11 @@ import { RUN_START_EVENTS, RunState, runExecution, runExecutions } from "../../s
 export const AUTO_RESUMES_MAX = 2;
 /** How long after a limit's reset the resume waits, so the first call does not meet the old limit. */
 export const LIMIT_RESET_MARGIN_MS = 2 * MINUTE_MS;
+/**
+ * How long after a provider outage paused a build the studio tries it again. The lead had already
+ * waited the outage out for about half an hour before it paused (the seed's outage ladder).
+ */
+export const OUTAGE_RESUME_AFTER_MS = 15 * MINUTE_MS;
 /** A reset further away than this is the user's to wait for (a weekly cap, say). */
 export const AUTO_RESUME_HORIZON_MS = 12 * HOUR_MS;
 /** Less working time left than this is not worth a resume. */
@@ -51,6 +58,8 @@ export type AutoResumeAction = (typeof AutoResumeAction)[keyof typeof AutoResume
 export const AutoResumeHold = {
   /** The engine limit has not reset yet. */
   Reset: "reset",
+  /** The wait after a provider outage is not over yet. */
+  Outage: "outage",
   /** The loop is not running yet. */
   Harness: "harness",
   /** Free memory is below the floor. */
@@ -64,8 +73,10 @@ export const AutoResumeSkip = {
   NotPaused: "not-paused",
   UserStopped: "user-stopped",
   FinishAsked: "finish-asked",
-  /** Neither an engine limit with a reset time nor a crash of the loop paused it. */
+  /** Neither an engine limit with a reset time, a provider outage nor a crash of the loop paused it. */
   NotResumable: "not-resumable",
+  /** A lost sign-in paused it — an expired login, or an account whose access was taken away: the user fixes it. */
+  AccessLost: "access-lost",
   Spent: "spent",
   /** The user moved on: a newer run started in the conversation, or another run is running. */
   Superseded: "superseded",
@@ -142,16 +153,25 @@ function dueResume(
   facts: AutoResumeFacts,
 ): { at: number; cause: AutoResumeCause } | AutoResumeSkip {
   const limit = record(close.payload.limit);
+  // No wait mends a lost sign-in, whatever reset the close names: the user does.
+  if (limit?.kind === EngineFailureKind.Auth) return AutoResumeSkip.AccessLost;
+  const hitAt = positiveMs(limit?.at) ?? close.at;
   const resetMs = positiveMs(limit?.retryAfterMs);
   if (limit && resetMs !== null && RESETTING_LIMITS.has(limit.kind)) {
-    const hitAt = positiveMs(limit.at) ?? close.at;
     return { at: hitAt + resetMs + LIMIT_RESET_MARGIN_MS, cause: AutoResumeCause.LimitReset };
   }
+  if (limit?.kind === EngineFailureKind.Unavailable)
+    return { at: hitAt + OUTAGE_RESUME_AFTER_MS, cause: AutoResumeCause.ProviderOutage };
   // The crash the host saw happened while this stretch ran, and this close came after it.
   const { crashedAt } = facts;
   const crashClosedIt = crashedAt !== null && stretch.startAt <= crashedAt && close.at >= crashedAt;
   if (crashClosedIt) return { at: close.at, cause: AutoResumeCause.LoopRestart };
   return AutoResumeSkip.NotResumable;
+}
+
+/** What a resume due later waits for: the outage's wait, or the limit's reset. */
+function holdFor(cause: AutoResumeCause): AutoResumeHold {
+  return cause === AutoResumeCause.ProviderOutage ? AutoResumeHold.Outage : AutoResumeHold.Reset;
 }
 
 /** Has the user moved on from this run: a newer run in its conversation, or another one running? */
@@ -208,7 +228,7 @@ export function autoResumePlan(events: readonly EventEnvelope[], now: number, fa
   const due = dueResume(close, stretch, facts);
   if (typeof due === "string") return none(due);
   if (due.at - now > AUTO_RESUME_HORIZON_MS) return none(AutoResumeSkip.ResetTooFar);
-  if (now < due.at) return waitUntil(due.at, AutoResumeHold.Reset);
+  if (now < due.at) return waitUntil(due.at, holdFor(due.cause));
   return (
     readiness(due.at, now, facts) ?? {
       action: AutoResumeAction.Resume,

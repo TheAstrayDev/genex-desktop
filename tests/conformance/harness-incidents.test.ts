@@ -74,6 +74,7 @@ import {
   replanCheck,
 } from "../../src/harness-seed/loop/replan.ts";
 import { isTransientProviderError, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
+import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
 import {
   HARNESS_CHECKS,
   loadCatalogue,
@@ -3970,6 +3971,7 @@ describe("the lead's later turns (wake loop)", () => {
     name: string,
     lead: (request: DelegateRequest, turn: number) => Promise<Record<string, unknown>>,
     budgets: Record<string, unknown> = {},
+    complete: FakeEngineHooks["complete"] = () => null,
   ) {
     const rig = await startRig(
       { replies: [] },
@@ -3979,7 +3981,7 @@ describe("the lead's later turns (wake loop)", () => {
     const project = await rig.core.games.scaffold(name, { title: name });
     const turns: DelegateRequest[] = [];
     registerFakeEngine(rig, {
-      complete: () => null,
+      complete,
       delegate: async (request: DelegateRequest) => {
         if (request.director) {
           turns.push(request);
@@ -4007,7 +4009,7 @@ describe("the lead's later turns (wake loop)", () => {
       180_000,
       `${name} run_finished`,
     );
-    return { turns, finished: customEvents(events, "run_finished").find((e) => e.runId === runId)! };
+    return { turns, events, finished: customEvents(events, "run_finished").find((e) => e.runId === runId)! };
   }
 
   it("I1. the lead's session limit on a later turn is waited out and the same session carries on", async () => {
@@ -4077,6 +4079,66 @@ describe("the lead's later turns (wake loop)", () => {
     assert.match(turns[2]!.prompt, /YOUR NOTES[\s\S]*the sky first; the plaza after it/);
     assert.match(turns[2]!.prompt, /WHAT HAPPENED/);
     assert.equal(finished.stoppedBecause, "the director finished the run");
+  });
+
+  it("D11 (provider lost, NFS 2026-10-06). the lead's account disabled on a wake pauses the run: workers stopped, nothing landed, no wrap-up, the user told what to fix", async () => {
+    const disabled =
+      "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+    const { turns, finished } = await lateTurnNight("late-access-lost", async (request, turn) => {
+      const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
+      if (turn === 1) {
+        await call("plan", plan);
+        await call("worker_start", { ...start, mode: "loop" });
+        return { sessionId: "lead-1", summary: "the sky worker is building" };
+      }
+      throw new EngineError("auth", "fake-delegate", disabled);
+    });
+    assert.equal(turns.length, 2, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
+    assert.equal(finished.executionStatus, "paused", String(finished.stoppedBecause));
+    assert.equal(finished.landed, false);
+    assert.equal((finished.landingResult as { why?: string }).why, "paused");
+    assert.equal((finished.limit as { kind?: string }).kind, "auth");
+    assert.match(String(finished.stoppedBecause), /lost its sign-in/);
+    assert.match(String(finished.stoppedBecause), /disabled Claude subscription access/);
+    assert.match(String(finished.stoppedBecause), /nothing was landed/);
+  });
+
+  it("D15 (provider lost, NFS 2026-10-06). a judge's disabled account: the round waits instead of an auto-tie, one call reaches it, and the run pauses", async () => {
+    const disabled =
+      "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+    const judgeCalls: string[] = [];
+    const { turns, events, finished } = await lateTurnNight(
+      "judge-access-lost",
+      async (request, turn) => {
+        const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
+        if (turn === 1) {
+          await call("plan", plan);
+          await call("worker_start", { ...start, mode: "loop" });
+          return { sessionId: "lead-1", summary: "the sky worker is building" };
+        }
+        await call("finish", { summary: "the sky is blue", land: "no" });
+        return { sessionId: "lead-1", summary: "finished" };
+      },
+      { providerPollMs: 200 },
+      (text, request) => {
+        judgeCalls.push(`${JSON.stringify((request as any).provenance)} ${text.replace(/\s+/g, " ").slice(0, 300)}`);
+        throw new EngineError("auth", "fake-delegate", disabled);
+      },
+    );
+    assert.equal(turns.length, 1, "the lead is not woken into a dead account: the night pauses first");
+    assert.equal(finished.executionStatus, "paused", String(finished.stoppedBecause));
+    assert.equal((finished.limit as { kind?: string }).kind, "auth");
+    assert.equal(judgeCalls.length, 1, `one call reached the dead account: ${judgeCalls.join(" | ")}`);
+    assert.equal(customEvents(events, "run_learning").length, 0, "nor is the paused run learned from against it");
+    const sky = (type: string) => customEvents(events, type).filter((e) => e.facetId === "sky");
+    assert.deepEqual(
+      sky("facet_provider_outage").map((o) => [o.phase, o.lost]),
+      [["verify", "auth"]],
+    );
+    assert.ok(
+      sky("facet_iteration").every((r) => r.verdictSource !== "outage" && r.verdictSource !== "broken"),
+      JSON.stringify(sky("facet_iteration").map((r) => [r.verdictSource, r.reason])),
+    );
   });
 });
 
@@ -4548,6 +4610,247 @@ const worked = { ok: true, sessionId: "lead-1", turns: 1 };
  * what the user said; a lead that cannot read input mid-turn was cut short inside a tool call; and
  * the chat's own wakes used up the lead's hourly cap.
  */
+/**
+ * The NFS run (6 Oct 2026): 3 h 05 min in, the provider disabled the account. The lead's failed
+ * turn wrapped up and landed an unchecked build, a worker's round was counted broken and another's
+ * auto-tied, and thirteen judge calls went to the dead account. A lost provider is no verdict on
+ * anybody's work: the night pauses (nothing landed, Resume carries on), and nobody asks it again.
+ */
+describe("a provider lost mid-run (NFS, 2026-10-06)", () => {
+  const DISABLED =
+    "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+  const lostRun: Run = {
+    runId: "run_lost_judge",
+    project: "fixture",
+    goal: "a street race",
+    engine: EngineId.ClaudeCode,
+    judgeEngine: EngineId.ClaudeCode,
+    reference: { name: "fixture", shots: [] },
+    budgets: { wallClockMs: 1000 },
+  };
+  const sides = { run: lostRun, challenger: { state: { score: 2 } }, incumbentEvidence: { state: { score: 1 } } };
+
+  it("D5. a judge whose account is gone is asked once: every later verdict of the run fails at once, until the run starts again", async () => {
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.complete": () => {
+          throw Object.assign(new Error(DISABLED), { kind: "auth" });
+        },
+      },
+    });
+    try {
+      for (let verdict = 0; verdict < 3; verdict++)
+        await assert.rejects(
+          () => blindCompare(recorder.ctx, sides),
+          (err: any) => err?.kind === "auth",
+        );
+      assert.equal(recorder.paramsOf("engine.complete").length, 1, "one call reached the dead account");
+      forgetProviderLosses(lostRun.runId);
+      await assert.rejects(
+        () => blindCompare(recorder.ctx, sides),
+        (err: any) => err?.kind === "auth",
+      );
+      assert.equal(recorder.paramsOf("engine.complete").length, 2, "a resumed run asks again");
+    } finally {
+      forgetProviderLosses(lostRun.runId);
+    }
+  });
+
+  it("D6. a limit that names its reset holds its engine until then and no longer; one that names none is retried as before", () => {
+    const at = Date.UTC(2026, 9, 6, 11, 7, 0);
+    try {
+      const limit = { kind: "rate_limit", message: "session limit", retryAfterMs: 60_000 };
+      noteProviderLoss("run_limit", "claude-code", limit, at);
+      assert.equal(providerLossFor("run_limit", "claude-code", at + 59_000)?.kind, "rate_limit");
+      assert.equal(providerLossFor("run_limit", "claude-code", at + 60_000), null, "reset: the circuit closes");
+      assert.equal(providerLossFor("run_limit", "codex", at), null, "another engine is not lost");
+      assert.equal(providerLossFor("run_other", "claude-code", at), null, "nor another run");
+      assert.equal(noteProviderLoss("run_limit", "claude-code", { kind: "rate_limit", message: "429" }, at), null);
+      assert.equal(noteProviderLoss("run_limit", "claude-code", { kind: "other", message: "boom" }, at), null);
+      assert.equal(noteProviderLoss("run_limit", "claude-code", { kind: "unavailable", message: "529" }, at), null);
+    } finally {
+      forgetProviderLosses("run_limit");
+    }
+  });
+
+  it("D7. a lead whose account is disabled on a wake pauses the night: no wrap-up turn, the loss kept for the close", async () => {
+    const w = clockNight();
+    try {
+      const { talk, calls } = w.lead((turn) => {
+        if (turn === 1) return { ok: true, sessionId: "lead-1" };
+        throw new EngineError("auth", "claude-code", DISABLED);
+      });
+      const outcome = await w.run(talk);
+      assert.equal(calls.length, 2, calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+      assert.equal(outcome.wrapCause, null, "no wrap-up started");
+      assert.equal(w.state.limit?.kind, "auth");
+      assert.match(String(w.state.limit?.message), /disabled Claude subscription access/);
+    } finally {
+      forgetProviderLosses("run_w");
+    }
+  });
+
+  it("D8. a lead's first turn that meets a disabled account pauses the night instead of crashing it", async () => {
+    const w = clockNight();
+    try {
+      const { talk, calls } = w.lead(() => {
+        throw new EngineError("auth", "claude-code", DISABLED);
+      });
+      await w.run(talk);
+      assert.equal(calls.length, 1);
+      assert.equal(w.state.limit?.kind, "auth");
+    } finally {
+      forgetProviderLosses("run_w");
+    }
+  });
+
+  it("D9. a lead turn the provider's outage ended is not a failed turn: the night pauses, it does not wrap up", async () => {
+    const w = clockNight();
+    const { talk, calls } = w.lead((turn) =>
+      turn === 1
+        ? { ok: true, sessionId: "lead-1" }
+        : { ok: false, stopReason: "error", errorText: "API Error: 529 Overloaded", sessionId: "lead-1" },
+    );
+    const outcome = await w.run(talk);
+    assert.equal(outcome.wrapCause, null, calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+    assert.ok(
+      calls.slice(1).every((c) => c.prompt === calls[1]!.prompt),
+      "only the same message, asked again",
+    );
+    assert.equal(w.state.limit?.kind, "unavailable");
+    assert.equal(w.state.limit?.retryAfterMs, null);
+  });
+
+  it("D10. a sign-in a judge lost while the lead slept pauses the night before the lead is woken", async () => {
+    const w = clockNight();
+    try {
+      w.ticks.push((now) => {
+        if (now < w.T0 + MINUTE_MS || w.state.log.length) return;
+        noteProviderLoss("run_w", "claude-code", { kind: "auth", message: DISABLED }, now);
+        w.note("worker sky round 2: verification waits for its judge", NoteKind.WorkerRound);
+      });
+      const { talk, calls } = w.lead(() => ({ ok: true, sessionId: "lead-1" }));
+      await w.run(talk);
+      assert.equal(calls.length, 1, calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+      assert.equal(w.state.limit?.kind, "auth");
+      assert.match(String(w.state.limit?.message), /^claude-code: Your organization has disabled/);
+    } finally {
+      forgetProviderLosses("run_w");
+    }
+  });
+
+  /** A facet loop on a stub studio whose build turns `build` answers (an Error is thrown); the director stops it once an outage is on the record, when `stopOnOutage`. */
+  const facetOnStub = async (build: (turn: number) => unknown, { stopOnOutage = true, budgets = {} } = {}) => {
+    const calls: Array<{ method: string; params: Record<string, any> }> = [];
+    let builds = 0;
+    let outage = false;
+    const ctx = {
+      workspace: path.join(import.meta.dirname, "no-such-workspace"),
+      cancelled: false,
+      notify: () => {},
+      setStatus: () => {},
+      call: async (method: string, params: Record<string, any>) => {
+        calls.push({ method, params });
+        const batch: Array<Record<string, any>> = params?.batch ?? [];
+        if (method === "events.append" && batch.some((e) => e.event_type === "facet_provider_outage")) outage = true;
+        if (method === "engine.delegate") {
+          builds += 1;
+          const answer = build(builds);
+          if (answer instanceof Error) throw answer;
+          if (builds >= 3) ctx.cancelled = true;
+          return answer ?? { ok: true, summary: "built", sessionId: "ses_1" };
+        }
+        if (method === "run.exec") return { code: 0, stdout: "0123456789abcdef0123456789abcdef01234567", stderr: "" };
+        if (method === "engine.describe") return [{ id: "codex", kind: "delegated" }];
+        return null;
+      },
+    };
+    const result = await runFacetLoop(
+      ctx as never,
+      {
+        runThreadId: "run-thread",
+        facetThreadId: "facet-thread",
+        run: { runId: "run_lost_build", project: "plaza", engine: "codex", budgets },
+        facet: { id: "plaza", title: "Plaza", intent: "paint the plaza", checks: [] },
+        worktree: "/scratch/autopilot/run_lost_build/plaza",
+        deadline: Date.now() + 60 * 60_000,
+        finishRequested: async () =>
+          outage && stopOnOutage ? { by: "director", reason: "stopped by the director: the build is over" } : false,
+      } as never,
+    );
+    const appended = (type: string) =>
+      calls
+        .filter((c) => c.method === "events.append")
+        .flatMap((c) => c.params.batch)
+        .filter((e: Record<string, any>) => e.event_type === type)
+        .map((e: Record<string, any>) => e.payload);
+    const turns = calls.filter((c) => c.method === "engine.delegate").map((c) => c.params);
+    return { result, appended, turns };
+  };
+
+  it("D12. a worker's build turn that meets a disabled account is an outage, never a broken round: it waits, and the run's stop keeps its work", async () => {
+    try {
+      const { result, appended } = await facetOnStub(() => Object.assign(new Error(DISABLED), { kind: "auth" }));
+      assert.deepEqual(
+        appended("facet_provider_outage").map((o) => [o.phase, o.lost]),
+        [["build", "auth"]],
+      );
+      const rounds = appended("facet_iteration");
+      assert.deepEqual(
+        rounds.map((r) => r.verdictSource),
+        ["stopped"],
+        "no strike: the round is stopped, not broken",
+      );
+      assert.equal(result.stopCode, "stopped-round");
+      assert.equal(
+        providerLossFor("run_lost_build", "codex")?.kind,
+        "auth",
+        "the builders' engine is lost for the run",
+      );
+    } finally {
+      forgetProviderLosses("run_lost_build");
+    }
+  });
+
+  it("D13. a session limit with its reset is waited out and the same iteration is built again, uncounted", async () => {
+    try {
+      const { appended, turns } = await facetOnStub(
+        (turn) =>
+          turn === 1
+            ? Object.assign(new Error("You've hit your session limit"), { kind: "rate_limit", retryAfterMs: 30 })
+            : undefined,
+        { stopOnOutage: false },
+      );
+      assert.deepEqual(
+        appended("facet_provider_outage").map((o) => [o.phase, o.lost]),
+        [["build", "rate_limit"]],
+      );
+      assert.equal(turns[1]?.selfCapture?.iteration, 1, "the same iteration, built again");
+      const first = appended("facet_iteration")[0];
+      assert.equal(first?.iteration, 1);
+      assert.doesNotMatch(String(first?.biggest_gap), /session limit/, "the limit is nobody's defect");
+    } finally {
+      forgetProviderLosses("run_lost_build");
+    }
+  });
+
+  it("D14. an outage the ladder could not outlast is tried again, not struck", async () => {
+    const { appended, turns } = await facetOnStub(
+      (turn) => (turn === 1 ? new Error("API Error: 529 Overloaded") : undefined),
+      {
+        stopOnOutage: false,
+        budgets: { outageDelays: [] },
+      },
+    );
+    assert.deepEqual(
+      appended("facet_provider_outage").map((o) => [o.phase, o.lost]),
+      [["build", "unavailable"]],
+    );
+    assert.equal(turns[1]?.selfCapture?.iteration, 1);
+    assert.doesNotMatch(String(appended("facet_iteration")[0]?.biggest_gap), /529/);
+  });
+});
+
 describe("live chat during a build, reviewed", () => {
   /**
    * Night one: the lead hears "is the sky dusk yet?" (woken by it) and "then light the lamps"

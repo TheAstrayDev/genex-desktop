@@ -237,6 +237,30 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     });
   });
 
+  it("W7b (provider lost). a turn a lost provider failed closes the night paused — never the wrap-up that lands a build", () => {
+    // The NFS run (6 Oct 2026): the account was disabled, the failed turn started the wrap-up, and
+    // the wrap-up's close landed a build nobody could check.
+    const lost = {
+      ok: false,
+      closed: false,
+      providerLost: true,
+      running: 3,
+      planWindowOpen: false,
+      workersLimitPending: false,
+      idleAsked: false,
+      workingTimeLeft: true,
+      finishRequested: false,
+    };
+    assert.deepEqual(afterTurn(lost), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...lost, workingTimeLeft: false }), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...lost, ok: true, idleAsked: true }), { next: TurnEnd.Close, idleAsked: true });
+    assert.deepEqual(
+      afterTurn({ ...lost, providerLost: false }),
+      { next: TurnEnd.WrapUp, idleAsked: false, wrapCause: WrapCause.Failed },
+      "any other failed turn keeps today's wrap-up",
+    );
+  });
+
   it("W8. a lead that went to sleep busy is asked what next the moment nothing runs and nothing else is ahead", () => {
     // The lead stopped its last worker and ended its turn; the worker has settled since.
     const stopped = { at: T0, seq: 11, kind: NoteKind.WorkerStopped };

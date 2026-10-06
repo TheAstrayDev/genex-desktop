@@ -181,6 +181,8 @@ export type Entry =
       /** the studio's own line about what the night taught it, from its ledger */
       learned: string | null;
       stoppedBecause: string | null;
+      /** the provider failure that paused the night (the close's `limit.kind`), for the card's words */
+      pausedOn: string | null;
       kept: number;
       undone: number;
       landed: boolean | null;
@@ -1347,6 +1349,12 @@ function settleRunTools(chat: ChatDraft, finished: FinishedPayload): void {
   }
 }
 
+/** The provider failure that paused the run, by its typed kind (`run_finished.limit.kind`), or null. */
+function pausedOnOf(finished: FinishedPayload): string | null {
+  const kind = finished.limit?.kind;
+  return typeof kind === "string" ? kind : null;
+}
+
 function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload): MorningEntry {
   const { rounds } = chat;
   const judged = rounds.kept + rounds.undone;
@@ -1364,6 +1372,7 @@ function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload): Mo
     landingLine: typeof finished.landingResult?.line === "string" ? finished.landingResult.line : null,
     learned: typeof finished.learned === "string" && finished.learned.trim() ? finished.learned : null,
     stoppedBecause: finished.stoppedBecause ?? null,
+    pausedOn: pausedOnOf(finished),
     kept: rounds.kept,
     undone: rounds.undone,
     landed: finished.landed ?? null,
