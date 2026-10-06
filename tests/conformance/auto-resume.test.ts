@@ -372,6 +372,8 @@ function harness(
     ready?: boolean;
     freeMb?: number | null;
     resume?: (runId: string) => Promise<void>;
+    /** Runs while the record is being appended, before it lands. */
+    record?: () => Promise<void>;
   } = {},
 ) {
   let now = PAUSED_AT;
@@ -395,6 +397,7 @@ function harness(
       return log;
     },
     record: async (threadId, payload) => {
+      await options.record?.();
       recorded.push({ threadId, payload });
       log = [...log, custom(now, CustomEvent.RunAutoResumed, { ...payload })];
     },
@@ -513,6 +516,35 @@ describe("AutoResumeService: the planner wired to timers and the resume path", (
       await h.advance(DUE + HOUR_MS);
       assert.deepEqual(h.resumed, []);
       assert.deepEqual(h.recorded, []);
+    });
+  }
+
+  const lateCancellations: Array<{ name: string; cancel: (h: ReturnType<typeof harness>) => void }> = [
+    { name: "the user's Stop in the chat", cancel: (h) => h.service.userStopped(THREAD) },
+    { name: "the user's stop of the run itself", cancel: (h) => h.service.userStoppedRun(RUN) },
+    { name: "the user's own Resume", cancel: (h) => h.service.cancelRun(RUN) },
+  ];
+  for (const { name, cancel } of lateCancellations) {
+    it(`${name}, pressed while the automatic resume is being recorded, keeps it from dispatching`, async () => {
+      let recording: () => void = () => {};
+      const started = new Promise<void>((resolve) => (recording = resolve));
+      let land: () => void = () => {};
+      const landed = new Promise<void>((resolve) => (land = resolve));
+      const h = harness({
+        record: () => {
+          recording();
+          return landed;
+        },
+      });
+      h.append(limitPause(PAUSED_AT, rateLimit));
+      await h.advance(PAUSED_AT);
+      for (let at = PAUSED_AT; at < DUE; at += AUTO_RESUME_RECHECK_MAX_MS) await h.advance(at);
+      h.fire(DUE);
+      await started;
+      cancel(h);
+      land();
+      await h.service.idle();
+      assert.deepEqual(h.resumed, [], "the user's word since the plan holds the dispatch");
     });
   }
 

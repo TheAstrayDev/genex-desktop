@@ -398,8 +398,8 @@ export class AutoResumeService {
       if (!this.#current(runId, token)) return;
       const plan = freeMb === null ? due : this.#planAt(events, now, ids, freeMb);
       if (plan.action === AutoResumeAction.Wait) return this.#plan(threadId, runId, plan.at);
-      this.#forget(runId, token);
-      if (plan.action === AutoResumeAction.Resume) await this.#resume(threadId, runId, events, plan);
+      if (plan.action !== AutoResumeAction.Resume) return this.#forget(runId, token);
+      await this.#resume({ threadId, runId, token }, events, plan);
     } catch (err) {
       // The resume settles only when the resumed run ends: by then a later pause may have a plan.
       this.#forget(runId, token);
@@ -407,13 +407,17 @@ export class AutoResumeService {
     }
   }
 
-  /** Recorded first, so the count that bounds resumes holds even when the resume itself fails. */
+  /**
+   * Recorded first, so the count that bounds resumes holds even when the resume itself fails. The
+   * plan stays current while the record is appended: a Stop or the user's own Resume in that window
+   * cancels it, and then nothing is dispatched.
+   */
   async #resume(
-    threadId: string,
-    runId: string,
+    look: { threadId: string; runId: string; token: number },
     events: readonly EventEnvelope[],
     plan: Extract<AutoResumePlan, { action: typeof AutoResumeAction.Resume }>,
   ): Promise<void> {
+    const { threadId, runId, token } = look;
     const project = events
       .map((event) => customRecord(event.data)?.payload)
       .findLast((payload) => payload?.runId === runId && typeof payload.project === "string")?.project;
@@ -423,6 +427,9 @@ export class AutoResumeService {
       cause: plan.cause,
       attempt: plan.attempt,
     });
+    if (!this.#current(runId, token)) return;
+    // Forgotten before the dispatch: the resume settles only when the resumed run ends.
+    this.#forget(runId, token);
     await this.#deps.resume(runId);
   }
 }
