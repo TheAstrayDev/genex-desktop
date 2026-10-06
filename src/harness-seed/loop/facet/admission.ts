@@ -27,7 +27,10 @@ type AdmissionLoop = Pick<
   FacetLoop,
   "appendRun" | "ctx" | "deadline" | "facet" | "finishRequested" | "iterationsThisRound" | "run" | "sleepFor"
 > &
-  Partial<Pick<FacetLoop, "emitLoopState">>;
+  Partial<Pick<FacetLoop, "emitLoopState">> & {
+    /** The clock `sleepFor` moves and `deadline` is read on; the wall clock when the loop has none. */
+    now?: () => number;
+  };
 
 /** Free memory as the host reports it, or null when it says nothing (an older host, a failed call). */
 async function freeMemoryMb(ctx: AdmissionLoop["ctx"]): Promise<number | null> {
@@ -56,7 +59,8 @@ async function stopAsked(loop: AdmissionLoop): Promise<boolean> {
 
 /** Can the facet wait one more poll and still have time left after it, with nobody asking it to stop? */
 async function canWaitAnotherPoll(loop: AdmissionLoop): Promise<boolean> {
-  if (Date.now() + MACHINE_PRESSURE_POLL_MS >= loop.deadline) return false;
+  const now = loop.now?.() ?? Date.now();
+  if (now + MACHINE_PRESSURE_POLL_MS >= loop.deadline) return false;
   return !(await stopAsked(loop));
 }
 

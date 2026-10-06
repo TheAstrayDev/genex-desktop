@@ -26,7 +26,11 @@ import { runFacetLoop } from "../../src/harness-seed/loop/facet-loop.ts";
 import { openRound, rebaselineIncumbent } from "../../src/harness-seed/loop/facet/phases/gate.ts";
 import { nameTheFix } from "../../src/harness-seed/loop/facet/phases/plan.ts";
 import { StopCode } from "../../src/harness-seed/loop/outcomes.ts";
-import { MACHINE_PRESSURE_POLL_MS, ROUND_MIN_FREE_MB } from "../../src/harness-seed/loop/facet/admission.ts";
+import {
+  admitRound,
+  MACHINE_PRESSURE_POLL_MS,
+  ROUND_MIN_FREE_MB,
+} from "../../src/harness-seed/loop/facet/admission.ts";
 import { MIN_FREE_MB } from "../../src/harness-seed/loop/director/budgets.ts";
 import { MOTION_FRAMES } from "../../src/harness-seed/loop/facet/policy.ts";
 import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
@@ -637,6 +641,23 @@ describe("memory admission before a round", () => {
     assert.equal(slept.length, 2, "two whole polls fit before the deadline");
     assert.equal(events.filter((e) => e.type === RunEvent.FacetMachinePressure).length, 1);
     assert.ok(!events.some((e) => e.type === RunEvent.FacetBuildStarted), "no build at the deadline");
+  });
+
+  it("reads the deadline on the loop's own clock, the one its sleeps move, not the wall clock", async (t) => {
+    // No mocked Date: the loop's clock starts at zero and only its own sleeps move it.
+    const { loop, slept } = admissionLoop(t, () => ({ memory: { freeMb: 10 } }));
+    let at = 0;
+    Object.assign(loop, {
+      now: () => at,
+      deadline: 2.5 * MACHINE_PRESSURE_POLL_MS,
+      sleepFor: async (ms: number) => {
+        slept.push(ms);
+        at += ms;
+      },
+    });
+    await admitRound(loop as never, 2);
+    assert.equal(slept.length, 2, `two whole polls fit before the loop's deadline (${slept.length} slept)`);
+    assert.equal(at, 2 * MACHINE_PRESSURE_POLL_MS);
   });
 });
 

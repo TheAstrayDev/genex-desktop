@@ -990,6 +990,19 @@ describe("the ship verdict on the record (director/integrate.ts)", () => {
     assert.equal(second.state.lastJudge.pick, "challenger");
   });
 
+  it("AD-8c. the finish gate asks whether there is time to act on the clock it is given, not the wall clock", async () => {
+    const host = fakeHost();
+    const softDeadline = Date.now() + HOUR_MS;
+    const { night } = fakeNight(host, {
+      answers: { [HostMethod.EngineComplete]: shipAndQuestion() },
+      budgets: { wallClockMs: 2 * HOUR_MS, completionPolicy: "goal" },
+      clock: { started: softDeadline - HOUR_MS, softDeadline, finalDeadline: softDeadline + HOUR_MS },
+    });
+    // On the loop's clock the working time is over, though the wall clock still has an hour of it.
+    assert.equal(await night.shipFinishGate(false, () => softDeadline + MINUTE_MS), null, "no time to act on a no");
+    assert.equal(shipCalls(host).length, 0, "and nothing is looked at for it");
+  });
+
   it("the finish answer counts the defects left whether or not the art director would ship", () => {
     const nits = [SHIP_NO.defects[2]!, { ...SHIP_NO.defects[2]!, what: "a seam in the sky" }];
     assert.match(shipFinishLine({ ship: true, defects: nits as never }), /would ship this build; 2 defects left/);

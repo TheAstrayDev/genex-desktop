@@ -414,6 +414,7 @@ export async function artDirectionPass(night: Night, how: ArtDirectionAsk = {}):
   if (!movedBeyondStart(night, head)) return { head, review: null, skipped: ART_SKIPPED.nothingNew };
   if (state.healthByHead.get(head) === false) return { head, review: null, skipped: ART_SKIPPED.doesNotLoad };
   const judged = { ...ask, target: BuildTarget.Integration, against: Against.None, ship: "yes" };
+  // `until` is read by the judge (tools.ts), which holds its calls to the wall clock: the same clock here.
   await night
     .judge(judged, { borrow: true, final, until: Date.now() + judgeMs })
     .catch((err: unknown) =>
@@ -447,12 +448,17 @@ function closeJudgeOwed(night: Night): AnyRecord | null | undefined {
  * the wrap-up (no time to act on it). The look runs inside the lead's `finish` call, so it is
  * bounded by `finishGateJudgeMs` and answers the close's own question too, so the close does not
  * judge the head again; when the close still owes a blind judge against the start, there is no
- * time for both, and the finish closes without it. Answers the refusal, or null to close.
+ * time for both, and the finish closes without it. `now` is the clock the working deadline is
+ * read on (a test's, or the wall clock). Answers the refusal, or null to close.
  */
-export async function shipFinishGate(night: Night, userEnds: boolean): Promise<string | null> {
+export async function shipFinishGate(
+  night: Night,
+  userEnds: boolean,
+  now: () => number = Date.now,
+): Promise<string | null> {
   const { ctx, note, state } = night;
   const notOurs = userEnds || ctx.cancelled || state.shipFinishRefused === true;
-  const noTimeToAct = Date.now() >= night.softDeadline;
+  const noTimeToAct = now() >= night.softDeadline;
   if (notOurs || noTimeToAct) return null;
   if (!shipOwed(night)) return null;
   const owed = closeJudgeOwed(night);
