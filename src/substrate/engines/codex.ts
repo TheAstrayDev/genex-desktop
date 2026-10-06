@@ -60,6 +60,7 @@ import { credentialHomes } from "../credential-homes.ts";
 import { normalizeCodexUsage, type ProviderUsage } from "../../shared/provider-usage.ts";
 import {
   type LockRecord,
+  LOCK_RECOVERY_DIR,
   lockUnowned,
   ownershipBriefing,
   reapplyLocks,
@@ -207,12 +208,6 @@ const DEFAULT_MODEL = "default";
 const CREDENTIAL_FILE = "auth.json";
 /** The marker a studio-connected profile leaves in the engine home, signed in or not. */
 const STUDIO_LOGIN_MARKER = "studio-login.json";
-/**
- * The host's ownership-lock records, in a folder beside the engine home and never inside it: any
- * folder in a Codex home reads as a sign-in (`hasCredentials`), and Codex runs with that home. The
- * app keeps its engine homes side by side in one folder no agent may read.
- */
-const LOCK_RECOVERY_DIR = "ownership-locks";
 
 /** A still's file name keeps at most this much of its label. */
 const STILL_NAME_CHARS = 40;

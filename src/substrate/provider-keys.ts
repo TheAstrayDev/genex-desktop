@@ -6,6 +6,9 @@
  */
 import { SecretStore } from "./secrets.ts";
 
+/** The secret OpenRouter's key is kept under. Stored on disk: never rename it. */
+export const OPENROUTER_KEY_SECRET = "openrouter-api-key";
+
 /** One provider's key: read it, replace it, or forget it. A locked store throws `SecretStorageUnavailableError`. */
 export interface ApiKeyStore {
   read(): Promise<string | null>;
