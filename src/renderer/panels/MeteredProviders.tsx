@@ -191,7 +191,7 @@ function openCodeSignInView(signingIn: boolean, act: { recheck: () => void; sign
   if (signingIn)
     return {
       tone: RowTone.Busy,
-      status: WORDS.checking,
+      status: WORDS.signingIn,
       line: WORDS.openCode.signingIn,
       actions: (
         <>

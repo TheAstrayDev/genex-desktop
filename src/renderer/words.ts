@@ -1391,6 +1391,7 @@ export const METERED_PROVIDER_WORDS = {
   installing: "Installing…",
   updating: "Updating…",
   checking: "Checking…",
+  signingIn: "Signing in…",
   saving: "Saving…",
   couldNotCheck: "Couldn't check",
   checkAgain: "Check again",
