@@ -39,6 +39,8 @@ import { SECOND_MS } from "../time.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
 import { scopeItems } from "../scope.ts";
 import { SCREEN_CRITIC } from "../screen-owner.ts";
+import { parseVision } from "../vision.ts";
+import { visionRefusalWords } from "../vision-prompts.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { Check, FacetSpec } from "../spec.ts";
@@ -327,6 +329,7 @@ export function compilePlan({
   kind = "",
   play_script = null,
   contract = null,
+  vision = null,
   cut = null,
   added = null,
 }: {
@@ -338,6 +341,8 @@ export function compilePlan({
   play_script?: unknown;
   /** The module contract (module-contract.ts): who owns which module and what it exposes. */
   contract?: unknown;
+  /** The vision (vision.ts): what the world grows toward — scale, the far view, set-pieces, headroom. */
+  vision?: unknown;
   /** What this run will not build (scope.ts): joins the run's cut list. */
   cut?: unknown;
   /** What the plan builds beyond the ask: one decision card each, never scope by itself. */
@@ -355,6 +360,8 @@ export function compilePlan({
     named.parts.map((part) => part.id),
   );
   if (modules.problem !== undefined) return { error: contractRefusalWords(modules.problem) };
+  const direction = parseVision(vision);
+  if (direction.problem !== undefined) return { error: visionRefusalWords(direction.problem) };
   // Capped like every scope list (scope.ts `scopeItems`); a plan that names neither is what it was.
   const cutItems = scopeItems(cut);
   const addedItems = scopeItems(added);
@@ -368,6 +375,7 @@ export function compilePlan({
       risks: lines(risks).slice(0, PLAN_RISKS),
       game: declared.game,
       ...(modules.contract ? { contract: modules.contract } : {}),
+      ...(direction.vision ? { vision: direction.vision } : {}),
       ...(cutItems.length ? { cut: cutItems } : {}),
       ...(addedItems.length ? { added: addedItems } : {}),
     },

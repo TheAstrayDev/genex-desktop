@@ -6,6 +6,8 @@
  * lead whose contract, or whose loop worker, was refused.
  */
 import { shortSha } from "../git.ts";
+import { VISION_FILE } from "../vision.ts";
+import { VISION_GATE } from "../vision-prompts.ts";
 import { ContractRefusal } from "./module-contract.ts";
 import type { ContractModule, ContractProblem, ModuleContract } from "./module-contract.ts";
 
@@ -17,7 +19,7 @@ export const ARCHITECTURE_FILE = "docs/MODULE-CONTRACT.md";
 
 /** How the contract is written: the plan's `contract` argument. */
 export const CONTRACT_GRAMMAR =
-  'contract is JSON: {"conventions":["steer +1 = right","car local +Z is forward","metres"],"modules":[{"path":"src/car.js","owner":"<plan part id>","api":["export function stepCar(state, input, dt)"],"state":"car","registers":{"cameras":["chase"],"demos":["drift"],"probes":["car.speed"]}}],"shared":[{"path":"src/state.js","owner":"<plan part id>"}]}. Each path is one file relative to the game with exactly one owner, a part of this plan; api lists what other parts may call; state, registers and shared are optional. A part you only ever run as mode=single can say "mode":"single" in plan workers and is not counted.';
+  'contract is JSON: {"conventions":["steer +1 = right","car local +Z is forward","metres"],"modules":[{"path":"src/car.js","owner":"<plan part id>","api":["export function stepCar(state, input, dt)"],"state":"car","registers":{"cameras":["chase"],"demos":["drift"],"probes":["car.speed"]}}],"shared":[{"path":"src/state.js","owner":"<plan part id>"}]}. Each path is one file relative to the game with exactly one owner, a part of this plan; api lists what other parts may call; state, registers and shared are optional. Conventions give axes, signs, units and ranges for content (a track of 2.5–4 km, 6–12 corners), never a fixed layout: each owner designs the content. A part you only ever run as mode=single can say "mode":"single" in plan workers and is not counted.';
 
 /** What a refused contract is told, by code. */
 const REFUSAL_WORDS: Record<ContractRefusal, (detail: string) => string> = {
@@ -37,10 +39,13 @@ export function contractRefusalWords(problem: ContractProblem): string {
   return `plan: ${REFUSAL_WORDS[problem.code](problem.detail)}. ${CONTRACT_GRAMMAR}`;
 }
 
-/** Why a loop worker may not start under a plan of several loop parts, by what is missing. */
+/**
+ * Why a loop worker may not start under a plan of several loop parts, by what is missing. A missing
+ * vision is vision-prompts.ts `VISION_GATE`'s to word: a kept older copy of this file still links.
+ */
 export const CONTRACT_GATE = {
-  none: (parts: number) =>
-    `this plan has ${parts} parts that loop, and no module contract yet: call plan again with contract= so the harness writes ${ARCHITECTURE_FILE} before the workers fork — who owns which module, its API, the conventions. ${CONTRACT_GRAMMAR}`,
+  none: (parts: number, { vision = true }: { vision?: boolean } = {}) =>
+    `this plan has ${parts} parts that loop, and no module contract yet: call plan again with contract= so the harness writes ${ARCHITECTURE_FILE} before the workers fork — who owns which module, its API, the conventions. ${CONTRACT_GRAMMAR}${vision ? "" : ` ${VISION_GATE.alsoMissing}`}`,
   notCommitted: (error: string) =>
     `the module contract could not be committed on the integration branch (${error}) — conclude what is open there, then call plan again with the same contract`,
   derivedNotCommitted: (error: string) =>
@@ -73,14 +78,22 @@ function stubHands(lead: boolean, worktree: string | undefined): string {
 export function contractCommittedWords(
   commit: string,
   missing: readonly string[],
-  { lead = false, derived = false, worktree }: { lead?: boolean; derived?: boolean; worktree?: string } = {},
+  {
+    lead = false,
+    derived = false,
+    worktree,
+    vision,
+  }: { lead?: boolean; derived?: boolean; worktree?: string; vision?: boolean } = {},
 ): string {
   const what = derived
     ? `No contract was given, so the harness wrote one from the plan's owns into ${ARCHITECTURE_FILE}`
     : `The module contract is committed on integration as ${ARCHITECTURE_FILE}`;
-  const at = `${what} (${shortSha(commit)}); loop workers fork from it or later.`;
-  if (!missing.length) return at;
-  return `${at} Stubs still to write before their loop workers start: ${missing.join(", ")} — ${stubHands(lead, worktree)}.`;
+  const beside = vision ? `, the vision beside it as ${VISION_FILE}` : "";
+  const at = `${what} (${shortSha(commit)})${beside}; loop workers fork from it or later.`;
+  // Said only by a caller that knows whether the plan has a vision (a kept older caller passes nothing).
+  const ask = vision === false ? ` No vision yet: give vision= before the loop workers start (${VISION_FILE}).` : "";
+  if (!missing.length) return `${at}${ask}`;
+  return `${at}${ask} Stubs still to write before their loop workers start: ${missing.join(", ")} — ${stubHands(lead, worktree)}.`;
 }
 
 /** One module as the contract file lists it. */
@@ -98,6 +111,12 @@ function moduleLines(module: ContractModule, title: string): string[] {
 }
 
 /**
+ * What the contract freezes and what it leaves to its owners: the NFS lead froze its whole world
+ * (the loop, its corners, the cut list) in the contract, and the track never grew again.
+ */
+const FROZEN = `Frozen: these interfaces and conventions. Not frozen: content, layout, scale. Each part grows its own content within the conventions' ranges, toward ${VISION_FILE} when the build has one. Change it by re-planning, never by editing another part's module.`;
+
+/**
  * The contract file (`ARCHITECTURE_FILE`), rendered from the contract: pure, the same contract renders the same bytes.
  * `titles` maps a part id to its plan title.
  */
@@ -105,9 +124,7 @@ export function renderArchitecture(contract: ModuleContract, titles: Readonly<Re
   const lines = [
     "# Module contract",
     "",
-    contract.derived
-      ? "The studio wrote this module contract from the build plan's seams. Change it by re-planning, never by editing another part's module."
-      : "The module contract of this build, written by the studio from the plan. Change it by re-planning, never by editing another part's module.",
+    `${contract.derived ? "The studio wrote this module contract from the build plan's seams." : "The module contract of this build, written by the studio from the plan."} ${FROZEN}`,
     "",
   ];
   if (contract.conventions.length) lines.push("## Conventions", "", ...contract.conventions.map((c) => `- ${c}`), "");
@@ -140,6 +157,7 @@ export function contractPointer(contract: ModuleContract, modules: readonly Cont
     `MODULE CONTRACT: ${ARCHITECTURE_FILE} names every module, its owner and its API — read it before you build.`,
     own.length ? `Your modules: ${own.join("; ")}. Keep their API and what they register.` : "",
     contract.conventions.length ? `Conventions: ${contract.conventions.join("; ")}.` : "",
+    "The contract freezes interfaces and conventions, never content: grow yours within its ranges.",
     "Never edit another part's module: what you need from it goes through its API, or to the director.",
   ]
     .filter(Boolean)

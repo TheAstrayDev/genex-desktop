@@ -1,5 +1,5 @@
 import { durationCommission, goalCommission } from "./commission.ts";
-import { MAX_WORKERS, workerWindows } from "./budgets.ts";
+import { workersAtOnce } from "./foundation.ts";
 /**
  * The briefs the night's sessions open with, as the model reads them: the director's own, the
  * wrap-up prompt, a single-session worker's and the one that makes somebody's own game
@@ -20,6 +20,7 @@ import { WAKE_BRIEF, wakeTools } from "./wake-prompts.ts";
 import { DirectorLoop } from "./wake-schedule.ts";
 import { workingGoal } from "../goal-prompts.ts";
 import { DIRECTOR_SCOPE_RULE, scopeLines } from "../scope-prompts.ts";
+import { visionBriefLines } from "../vision-prompts.ts";
 import { SHIP_DEFECTS_NOT_POLISH } from "./art-direction-prompts.ts";
 import type { AnyRecord, Run } from "../../types/harness.d.ts";
 // Type-only: erased at runtime, so this module still imports no part of the night.
@@ -125,7 +126,7 @@ export interface DirectorBriefFacts {
  */
 function poolWords(capacity: AnyRecord | null): string {
   if (!capacity?.max) return "the pool size is unknown";
-  const atOnce = capacity.headless === false ? 1 : Math.min(MAX_WORKERS, workerWindows(capacity.max));
+  const atOnce = workersAtOnce(capacity);
   return `up to ${atOnce} workers at once (the user's setting; two more windows are yours), ${capacity.memory?.freeMb ?? "?"} MB memory free`;
 }
 
@@ -177,8 +178,19 @@ function unobservedStartLine(startObserved: boolean, startingPoint: AnyRecord | 
   return `THE START COULD NOT BE OBSERVED: the game as this run found it drew nothing a camera could see, so there is no "before" to compare with — \`judge against=start\` will say so. Judge a build on its own evidence (checks, a question) or against another build, and do not spend calls on the comparison.`;
 }
 
-/** The starting point the studio built for an empty project, or why it could not. */
+/**
+ * The foundation a run with room for a team lays itself (foundation.ts `foundationFirst`): no starting
+ * scene was built, so the lead writes the contract, the vision and crude stubs — Midnight Apex's
+ * start, where the NFS run's discarded straight sprint cost it its first twelve minutes.
+ */
+function foundationLine(leads: boolean): string {
+  const where = leads ? "yourself in the integration worktree by its full path" : "in your worktree";
+  return `THE FOUNDATION IS YOURS: this game is an empty project and this run has room for a team, so the studio built no starting scene — you stand on the empty template. Lay the foundation in about 12 minutes: look, then plan with contract= and vision= (the contract freezes interfaces, conventions and ranges — a circuit of 2.5–4 km, 6–12 corners — never a layout; the vision says where the world is going), then write each module's stubs as crude playable code, its cameras, demos and probes registered, ${where}, commit, and look at it: a blank world is refused at worker_start. Then start the loop workers. The real content is their owners': the world part designs the world within your ranges and toward the vision.`;
+}
+
+/** The starting point the studio built for an empty project, or why it could not — or the foundation the lead lays instead. */
 function startingPointLine(startingPoint: AnyRecord | null, leads: boolean): string {
+  if (startingPoint?.skipped) return foundationLine(leads);
   if (startingPoint?.ok)
     return `THE STARTING POINT: this game was an empty project, so the studio built the starting point you are standing on (commit ${shortSha(startingPoint.commit ?? "")}${startingPoint.empty ? " — an empty world with working cameras, no content yet" : ""}) and every worker forks from it. There is nothing to compare it with: \`judge against=start\` answers "first build". The whole run is the game itself.`;
   if (startingPoint && leads) return LEAD_BRIEF.startingPointFailed(startingPoint.error);
@@ -413,6 +425,7 @@ export function singleWorkerBrief({
     ``,
     `GAME GOAL (context): ${workingGoal(run)}`,
     scopeLines(run),
+    visionBriefLines(run),
     ``,
     `YOUR BRIEF FROM THE DIRECTOR — ${worker.title}:`,
     worker.brief,

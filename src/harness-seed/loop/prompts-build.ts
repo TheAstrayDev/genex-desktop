@@ -7,6 +7,7 @@
  * from there.
  */
 import { roleEngine, RoleKey, toolCall } from "./model-roles.ts";
+import { scopeLines } from "./scope-prompts.ts";
 import type { AnyRecord, Run } from "../types/harness.d.ts";
 
 /**
@@ -35,7 +36,7 @@ export interface BasePlan {
 /** What the base builder is told about the game's shape: its entry, its page and its build. */
 type BriefShape = { main?: string; entry?: string; build?: string | null } | null;
 /** The run as the base brief reads it. */
-type BriefRun = Pick<Run, "goal" | "reference" | "engine" | "builderEngine"> & { runId?: string };
+type BriefRun = Pick<Run, "goal" | "reference" | "engine" | "builderEngine"> & { runId?: string; scope?: unknown };
 /** The base plan's facets. */
 type BriefFacets = NonNullable<BasePlan["facets"]>;
 
@@ -75,12 +76,17 @@ export function baseBrief({
     .join("\n");
 }
 
-/** A director's night from scratch: one visible, working first version, and no roll call. */
+/**
+ * A director's run from scratch: a crude playable skeleton of what the user asked for, and no roll
+ * call. It reads the user's scope: the NFS run's starting scene had the goal and a mood only, built a
+ * straight sprint where the ask raced laps, and its lead threw it away six minutes later.
+ */
 function startingSceneBrief(run: BriefRun, projectLabel: string, setup: AnyRecord | null): string {
   return [
     `You are building the starting scene for "${projectLabel}". Goal: ${run.goal}`,
+    scopeLines({ scope: run.scope }),
     run.reference?.name ? `Direction: ${run.reference.name}.` : "",
-    `Complete one visible, working first version now. Preserve the user's intended scene/game; later workers can enrich detail. Include the goal's main subject, a suitable setting, lighting and a camera that frames it. Do not spend this stage designing a large framework.`,
+    `Build one visible, working first version now — a crude playable skeleton, not a finished level: the shape the user asked for (SCOPE, when it is above) at its scale, the goal's main subject, a suitable setting, lighting and a camera that frames it. Preserve the user's intended scene/game; later workers own each part's real content. Do not spend this stage designing a large framework.`,
     `Read src/main.js first, then edit it. Read docs/CONTRACT.md only for a specific unanswered API question. src/studio.js is existing host instrumentation: use its public API; do not study or rewrite its implementation. index.html already supplies the Three.js import map.`,
     `Integration guide: keep import { installStudio } from "./studio.js" and the existing renderer resize handler. Add your THREE objects to scene; tag important objects with obj.userData.tag. Set camera.position and camera.lookAt to frame visible objects. Define cameras.default() with that same framing; it is called by reset.`,
     `Keep installStudio({canvas:renderer.domElement, scene, renderer, camera, input:{pointerLock:false}, reset(){cameras.default()}, update(dt){/* optional animation */}, render(){renderer.render(scene,camera)}, probes(){return {phase:"scene",drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles}}, cameras}). Studio drives update/render: no separate animation loop. Keep the FACET WIRING markers for later edits.`,

@@ -118,8 +118,10 @@ delta('player.x'). Write the number down once, in the check — never only in th
 Facets that all edit `src/main.js` conflict at merge time by construction. Give every facet its
 own module under `src/` (`city.js`, `lighting.js`, `movement.js`) in `owns`, and name in `base`
 (its notes and files) what each module exports for the others and the conventions they share
-(axes, signs, units): the base builder writes that contract as the shared stubs every facet forks
-from, and no facet edits another's module — what it needs goes through the API. When
+(axes, signs, units, and ranges for content such as a track of 2.5–4 km with 6–12 corners — never a
+fixed layout): the base builder writes that contract as crude stubs every facet forks from, in
+minutes, and the real content is each facet's to design within those ranges; no facet edits
+another's module — what it needs goes through the API. When
 the game carries `docs/MODULE-CONTRACT.md` (the harness's) or its own `docs/ARCHITECTURE.md`, that
 is the contract already: read both when present. The `mainOwner` facet is the only one that may
 restructure `src/main.js` and `src/studio.js`. Non-owner facets touch main.js only to add their

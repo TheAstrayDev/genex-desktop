@@ -618,9 +618,10 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
 - `run.scope` (`loop/scope.ts`) is the user's words; `scopeLines` sits beside every goal, and
   a proposal typed `scope: "adds"` is a decision card (`facet/beyond.ts`), never a move.
   `critic=screen` marks the screen's one owner (`loop/screen-owner.ts`).
-- Two or more looping parts need `plan contract=` (`director/contract-gate.ts`), committed as
-  `docs/MODULE-CONTRACT.md` before loop workers fork; `integrate worker=a,b` is a wave (one health
-  pass, `state.waveHead`); `loop/registry.ts` refuses lost registrations.
+- Two or more looping parts need `plan contract=`/`vision=` (`director/contract-gate.ts`),
+  committed as `docs/MODULE-CONTRACT.md`/`VISION.md` before loop workers fork; `integrate
+  worker=a,b` is a wave (one health pass, `state.waveHead`); `loop/registry.ts` refuses lost
+  registrations.
 - The finish mark (`budgets.ts` `finishMarkMs`) or `judge ship=yes` runs the art director
   (`director/art-direction.ts`, `loop/ship-review.ts`): defects go to their parts' owners; it never
   vetoes ([harness runtime](../harness-runtime.md)).
@@ -647,13 +648,14 @@ before any reset and refuses (`branch-changed`, `history-changed`, `operation-in
 `shellQuote` and a commit reaches a command line only when `isCommit`.
 
 **Base stage and contract.** An empty game gets a base stage first (`autopilot_base`,
-`journal.base`), using at most a third of the remaining time (capped at thirty minutes). A brought
+`journal.base`; a third of the time left, thirty minutes at most; none for a team,
+`foundationFirst`). A brought
 game whose contract is `missing` gets `installContract` in the integration worktree, verified by a
-full evidence pass and committed as `studio: install contract`, which becomes `state.startEvidence`;
-`journal.contract` keeps it. `worker_start` runs the health pass once per fork commit and refuses a
-fork that does not run; the run's own starting points (`state.baseHeads`) are exempt from
-blankness; inherited console errors are a warning, not a void. A worker starts another round only
-when the remaining time covers one (`tooLateToStart`, measured `minIterationMs`); a build turn at
+full evidence pass, committed as `studio: install contract`, which becomes `state.startEvidence`;
+`journal.contract` keeps it. `worker_start` runs the health pass once per fork commit and refuses
+one that does not run; the run's own starting points (`state.baseHeads`) are exempt from
+blankness; inherited console errors are a warning, not a void. A worker starts a round only
+when the time left covers one (`tooLateToStart`, measured `minIterationMs`); a build turn at
 its mark is asked to finish cleanly in the same session (`WIND_DOWN_ASK`).
 
 **Verdicts.** Every judged build leaves one record, `verdictRecord()` in `loop/verdict.ts`:

@@ -18,6 +18,7 @@ import { hudBudgetFor } from "./hud-budget.ts";
 import { JudgeParse } from "./judge-provenance.ts";
 import { workingGoal } from "./goal-prompts.ts";
 import { scopeLines } from "./scope-prompts.ts";
+import { visionJudgeLines } from "./vision-prompts.ts";
 import { clip, CLIP_QUOTE, CLIP_REASON } from "./text.ts";
 import {
   BUILD_OUTPUT,
@@ -179,6 +180,8 @@ function shipContent(ask: ShipAsk, labels: readonly string[]): string {
     `GOAL: ${workingGoal(run)}`,
     // The user's own scope (launch stamps it on the run): the review never asks for what is out of it.
     scopeLines({ scope: (run as AnyRecord).scope }),
+    // Where the lead says the whole world is going (loop/vision.ts): growth toward it deepens the ask.
+    visionJudgeLines(run),
     run.reference?.name ? `QUALITY BAR: ${run.reference.name}` : "",
     run.reference?.notes ? `BAR NOTES: ${run.reference.notes}` : "",
     partsLine(parts),

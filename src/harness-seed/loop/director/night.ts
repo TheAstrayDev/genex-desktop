@@ -200,8 +200,10 @@ export interface NightState {
   contract?: NightContract | null;
   /** Why the last contract could not be committed, until one is. */
   contractError?: string | null;
-  /** How many loop workers were refused for want of a contract (contract-gate.ts `contractBeforeFork`). */
+  /** How many loop workers were refused for want of a contract or a vision (contract-gate.ts `contractBeforeFork`). */
   contractRefusals?: number;
+  /** The lead gave no vision through its refusals: loop workers start without one (contract-gate.ts). */
+  visionWaived?: boolean;
   /**
    * A night resumed from a journal written before the contract gate (journal.ts `restoreNight`): its
    * loop workers start as they always did until its lead commits a contract.

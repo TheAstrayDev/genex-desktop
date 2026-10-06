@@ -328,7 +328,10 @@ head. `facet_review_enforced` lists `reverted`, `kept`, `quarantined` and `resto
 
 A plan whose parts loop two or more (a part marked `"mode":"single"` does not count) needs a
 module contract before its loop workers start: `plan contract=` names each module's file, owner
-part, API, and the shared files one part owns (`director/module-contract.ts`). The harness commits it as
+part, API, and the shared files one part owns (`director/module-contract.ts`); a convention or API
+line is kept up to 400 characters and cut only at a word, with an ellipsis. The file's header says
+what it freezes (interfaces and conventions, with ranges for content) and what it does not
+(content, layout, scale). The harness commits it as
 `docs/MODULE-CONTRACT.md` on the integration branch (its own file: a game's `docs/ARCHITECTURE.md` is never touched); a loop worker starts only from a commit that holds
 it, with its own modules there (stubs the lead writes and commits in the integration worktree itself, or a single worker), and a seam that leaves
 other parts' modules alone. With no seam named it owns its contract modules (`director/contract-gate.ts`).
@@ -343,6 +346,24 @@ the demos workers' checks name (and at most one more); the close runs every demo
 merge, that loses a camera, demo or probe another facet's checks use is a regression
 (`loop/registry.ts`). Only cameras the page registers count, never the harness's own `default`
 view; a merge compares state paths only with a health pass under the same setup.
+
+The vision (`loop/vision.ts`) is where the world's ambition lives, apart from the contract: `plan
+vision=` gives the world's scale, what the player sees past the nearest building, two or three
+set-pieces and the headroom, each section cut at a word, the whole under 6,000 characters. A re-plan
+without one keeps the last; it rides on the plan and on `run.vision`, so a Resume reads it back. Under
+a plan of two or more looping parts it is committed beside the contract, in the same commit, as
+`docs/VISION.md`, and a loop worker is refused until it is there (the refusal names whether the
+contract, the vision or both are missing); after two refusals the build goes on without one and
+the lead hears it. Every worker brief (the facet opening prompt and a single worker's brief) and
+the taste judge, liveness critic and ship review read a bounded excerpt (`loop/vision-prompts.ts`)
+as the direction to grow toward: growth toward its headroom deepens the ask.
+
+A game from scratch whose run has an hour of working time and room for two loop workers at once
+(`director/foundation.ts` `foundationFirst`) gets no starting scene: `journal.base` records the skip,
+a decision card says so, and the lead's brief (THE FOUNDATION IS YOURS) asks for the contract, the
+vision and crude playable stubs in about twelve minutes, the content left to each part's owner. A
+shorter run or a pool of one still builds the starting scene, now a crude playable skeleton of the
+user's scope.
 
 What a run builds. Its scope (`loop/scope.ts`, `run.scope`) is the user's own words from the
 chat's log since the last run, stamped at launch with what is in scope and what is cut; a Resume or

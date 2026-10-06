@@ -14,6 +14,7 @@
 import { WorkerMode } from "../outcomes.ts";
 import { ownMatches } from "../review.ts";
 import { clip } from "../text.ts";
+import { clipWords } from "../word-clip.ts";
 import { parseJson, slug } from "./args.ts";
 
 /** Why a plan's contract was refused: the code the plan's answer is worded from. Never rename a value. */
@@ -34,9 +35,14 @@ export const MAX_CONTRACT_SHARED = 12;
 const MAX_CONVENTIONS = 8;
 const MAX_API_LINES = 12;
 const MAX_REGISTERED = 12;
-/** How long one convention, one API line, a path or a registered name may be. */
-const CONVENTION_CHARS = 200;
-const API_CHARS = 200;
+/**
+ * How long one convention, one API line, a path or a registered name may be. A convention or an API
+ * line longer than its room is cut at a word, with an ellipsis: the NFS contract read "Road
+ * half-width is tr" when both were cut at 200 characters mid-word. The counts above keep the whole
+ * contract bounded.
+ */
+const CONVENTION_CHARS = 400;
+const API_CHARS = 400;
 const PATH_CHARS = 200;
 const NAME_CHARS = 80;
 /** How much of a refused value the refusal quotes. */
@@ -120,12 +126,13 @@ export function contractPath(value: unknown): string | null {
   return path;
 }
 
-/** Trimmed, non-empty strings of an array (or one string), at most `max`, each clipped. */
-function strings(value: unknown, max: number, chars: number): string[] {
+/** Trimmed, non-empty strings of an array (or one string), at most `max`, each clipped (at a word with `words`). */
+function strings(value: unknown, max: number, chars: number, { words = false }: { words?: boolean } = {}): string[] {
   const raw = Array.isArray(value) ? value : [value];
+  const cut = words ? clipWords : clip;
   return raw
     .filter((entry) => typeof entry === "string" || typeof entry === "number")
-    .map((entry) => clip(String(entry).trim(), chars))
+    .map((entry) => cut(String(entry).trim(), chars))
     .filter(Boolean)
     .slice(0, max);
 }
@@ -173,7 +180,7 @@ function moduleEntry(
   return {
     module: {
       ...owned.owned,
-      api: strings(raw.api ?? [], MAX_API_LINES, API_CHARS),
+      api: strings(raw.api ?? [], MAX_API_LINES, API_CHARS, { words: true }),
       ...(state ? { state } : {}),
       ...(registers ? { registers } : {}),
     },
@@ -235,7 +242,7 @@ export function parseModuleContract(
   if (twice) return refused(ContractRefusal.OwnedTwice, twice);
   return {
     contract: {
-      conventions: strings(parsed.conventions ?? [], MAX_CONVENTIONS, CONVENTION_CHARS),
+      conventions: strings(parsed.conventions ?? [], MAX_CONVENTIONS, CONVENTION_CHARS, { words: true }),
       modules: modules.entries,
       shared: shared.entries,
     },
