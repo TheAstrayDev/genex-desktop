@@ -754,6 +754,33 @@ describe("the finish mark (director/budgets.ts, wake.ts, art-direction.ts)", () 
     assert.equal(host.journals.at(-1)!.director.wake.finishMarkSaid, true, "said once, and the journal keeps it");
   });
 
+  it("AD-3c. past the finish mark every later wake repeats the finish rule: the room for workers and the idle question never ask for new parts", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    night.capacity = { max: 4, headless: true };
+    night.state.workers.set("hud", loopWorker("hud"));
+    const mark = night.clock.softDeadline - finishMarkMs(night.run, 4 * HOUR_MS)!;
+    const { talk, turns } = lead((turn) => {
+      // The owner finished its part during the mark's turn: the next turn ends with nothing running.
+      if (turn === 2) night.state.workers.get("hud").state = "done";
+      if (turn === 3) night.state.finished = true;
+      return { ok: true, sessionId: "lead-1", turns: 1 };
+    });
+    await runWakeLoop(night, talk, BRIEF, fakeClock(mark - 2 * MINUTE_MS));
+
+    assert.equal(turns.length, 3, turns.map((t) => t.prompt.slice(0, 160)).join("\n---\n"));
+    const [atMark, idle] = [turns[1]!.prompt, turns[2]!.prompt];
+    for (const prompt of [atMark, idle]) {
+      assert.doesNotMatch(prompt, /next one the ask names/, "no new area offered past the mark");
+      assert.match(prompt, /past the finish mark/);
+    }
+    assert.match(idle, /What next\?/);
+    assert.doesNotMatch(idle, /most valuable unfinished feature/, "the idle question asks for no new feature");
+    assert.match(idle, /no new parts or systems/);
+    assert.match(idle, /stage=finish/);
+    assert.match(idle, /judge ship=yes/);
+  });
+
   it("AD-3b. a goal build whose lead idles twice with no ship review on its head is reviewed once before its wrap-up", async () => {
     const host = fakeHost();
     const { night } = fakeNight(host, {

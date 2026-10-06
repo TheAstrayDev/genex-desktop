@@ -122,6 +122,8 @@ export interface DigestFacts {
   finishRequested: boolean;
   /** When the finish mark comes, while it is ahead and unsaid (art-direction.ts); absent: none. */
   finishMarkAt?: number | null;
+  /** The finish mark was said: from here every wake repeats its rule (no new parts). Absent: not yet. */
+  finishMarkPassed?: boolean;
   card: CardFacts;
   /** The paragraph this wake ends on: carry on, what next, or the wrap-up. */
   closing: string;
@@ -214,17 +216,25 @@ function happenedSection(happened: readonly string[]): string {
 }
 
 /** The clock, as the lead plans against it. */
-function timeLine({ now, softDeadline, finalDeadline, wrapping, finishMarkAt }: DigestFacts): string {
+function timeLine(facts: DigestFacts): string {
+  const { now, softDeadline, finalDeadline, wrapping } = facts;
   if (wrapping)
     return `- time: wrapping up — ${minutes(finalDeadline - now)} minutes left, until ${utc(finalDeadline)}`;
-  return `- time: ${minutes(softDeadline - now)} working minutes, ${finishMarkWords(finishMarkAt, now)}wrap-up at ${utc(softDeadline)}, ${minutes(finalDeadline - now)} minutes in all`;
+  return `- time: ${minutes(softDeadline - now)} working minutes, ${finishMarkWords(facts)}wrap-up at ${utc(softDeadline)}, ${minutes(finalDeadline - now)} minutes in all`;
 }
 
-/** The finish mark ahead, as the time line names it: from then no new parts, the owners finish theirs. */
-function finishMarkWords(at: number | null | undefined, now: number): string {
+/**
+ * The finish mark as the time line names it: ahead, from then no new parts; once said, that the
+ * build is past it — on every wake, so a later wake never reads as leave to start something new.
+ */
+function finishMarkWords({ finishMarkAt: at, finishMarkPassed, now }: DigestFacts): string {
+  if (finishMarkPassed) return `past the finish mark (${PAST_MARK_RULE}), `;
   if (typeof at !== "number" || at <= now) return "";
   return `finish mark at ${utc(at)} (from then no new parts: the art director looks and the owners finish), `;
 }
+
+/** The rule past the finish mark, in the time line's words (art-direction-prompts.ts says it in full at the mark). */
+const PAST_MARK_RULE = "no new parts or systems: the owners finish theirs";
 
 /** What the last health pass said about the integration head. */
 function healthWords(healthy: boolean | null): string {
@@ -256,12 +266,13 @@ function workerLine(w: DigestWorker): string {
  * The room for more workers. The golden-goal night ran three of the six its owner allowed, then
  * two, then one, and nothing it read ever said a window stood idle.
  */
-function roomLine(room: WorkerRoom | null | undefined): string {
+function roomLine(room: WorkerRoom | null | undefined, pastMark = false): string {
   if (!room) return "";
   const free = Math.max(0, room.allowed - room.running);
-  const more = free
-    ? ` — room for ${free} more: a deeper layer of an in-scope area, or the next one the ask names with unbuilt work`
-    : "";
+  const use = pastMark
+    ? "only finish workers (stage=finish) on parts that exist, no new parts or systems"
+    : "a deeper layer of an in-scope area, or the next one the ask names with unbuilt work";
+  const more = free ? ` — room for ${free} more: ${use}` : "";
   return `- workers: ${room.running} running, up to ${room.allowed} at once (the user's Maximum concurrent workers)${more}`;
 }
 
@@ -291,7 +302,7 @@ function standsSection(facts: DigestFacts): string {
     timeLine(facts),
     `- integration: ${integrationHead ? shortSha(integrationHead) : "no commit yet"}, last health pass ${healthWords(facts.integrationHealthy)}`,
     defects.length ? `- defects nobody owns: ${defects.join(" | ")}` : "",
-    roomLine(facts.room),
+    roomLine(facts.room, facts.finishMarkPassed === true),
     ...workerLines(facts.workers),
     facts.priorLine ?? "",
     planWindowUntil === null
@@ -365,15 +376,35 @@ export function carryOn(): string {
   return "Decide, act, and end your turn — the studio wakes you when something happens.";
 }
 
-/** The closing when the lead's last turn ended with nothing running: asked once, what next. */
-export function idleAsk({ direction, minutesLeft }: { direction: boolean; minutesLeft: number }): string {
+/** What an idle lead past the finish mark is asked to do: finish what exists, never start a new part. */
+const IDLE_PAST_MARK =
+  "The build is past its finish mark: no new parts or systems. Start a finish worker (stage=finish) on a part with defects left, integrate, judge ship=yes, then finish.";
+
+/**
+ * The closing when the lead's last turn ended with nothing running: asked once, what next. Past
+ * the finish mark (`finishing`) it asks for the finish rule instead of the next feature or part.
+ */
+export function idleAsk({
+  direction,
+  minutesLeft,
+  finishing = false,
+}: {
+  direction: boolean;
+  minutesLeft: number;
+  finishing?: boolean;
+}): string {
   const lead = direction
     ? `The timed build still has ${minutesLeft} working minutes and nothing is running. What next?`
     : `Nothing is running and ${minutesLeft} working minutes remain. What next?`;
-  const what = direction
+  return `${lead} ${idleWhat(direction, finishing)} If you end this turn with nothing running, the studio starts the wrap-up.`;
+}
+
+/** What the idle question asks for: the finish rule past the mark, else the build stage's next step. */
+function idleWhat(direction: boolean, finishing: boolean): string {
+  if (finishing) return IDLE_PAST_MARK;
+  return direction
     ? "Plan and start a worker for the most valuable unfinished feature or verification gap; inspect, integrate and show progress."
     : "Start the next part the goal still needs, or verify, integrate and finish if it is met.";
-  return `${lead} ${what} If you end this turn with nothing running, the studio starts the wrap-up.`;
 }
 
 /** Why a wrap-up that is not the deadline's started. */

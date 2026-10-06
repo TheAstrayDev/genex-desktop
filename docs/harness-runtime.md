@@ -598,7 +598,9 @@ inside the `finish` call: its one look also answers the close's own question, so
 judge again, and when the close still owes a blind judge against the start there is no time for
 both and the finish closes without the art director. The
 lead is woken with the defects by part and the rule from there: no new parts, `worker_steer
-stage=finish` on each owner, integrate, `judge ship=yes` again. Each defect on the integration
+stage=finish` on each owner, integrate, `judge ship=yes` again. Every later wake repeats it: the
+time line says the build is past the mark, the room for workers offers only finish workers, and
+the idle question asks to finish what exists instead of a next feature. Each defect on the integration
 branch becomes a director-origin vision check on its running owner's board (the part's worker, or
 the running worker that replaced it; its fix is a strong flip), or a ledger line under its finished
 part or the lead. A loop worker started on that part later (its id, `replaces` chain or goal) takes

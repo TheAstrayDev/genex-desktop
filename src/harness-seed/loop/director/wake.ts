@@ -540,7 +540,12 @@ function closingFor(night: Night, wake: WakeState, reasons: readonly WakeReason[
     return wrapLead(wake.wrapCause ?? WrapCause.Deadline, wrapUp);
   }
   if (reasons.includes(WakeCause.IdleAsk))
-    return idleAsk({ direction: isDirection(night), minutesLeft: minutes(night.softDeadline - now) });
+    return idleAsk({
+      direction: isDirection(night),
+      minutesLeft: minutes(night.softDeadline - now),
+      // Past the finish mark the idle question repeats its rule, never asks for a new part.
+      finishing: wake.finishMarkSaid,
+    });
   return carryOn();
 }
 
@@ -637,6 +642,7 @@ function digestFacts(
     workersLimit: workersLimitFacts(state, said.now),
     finishRequested: wake.finishSaid,
     finishMarkAt: finishMarkView(night, wake, said.now),
+    ...(wake.finishMarkSaid ? { finishMarkPassed: true } : {}),
     card: cardFacts(night),
   };
 }
