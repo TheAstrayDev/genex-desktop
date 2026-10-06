@@ -64,6 +64,7 @@ import {
   restoreDropped,
   ReviewCategory,
 } from "../../src/harness-seed/loop/merge-ownership.ts";
+import { handMergeNote } from "../../src/harness-seed/loop/facet/gate-prompts.ts";
 import {
   flagTarget,
   harnessFlags,
@@ -8363,6 +8364,47 @@ describe("ownership after a merge (Midnight Apex)", () => {
     assert.equal(await repo.git("ls-files", "src/old.js"), "", "the other side's deletion stands");
   });
 
+  it("MA-3c. the wiring and this part's own file both conflict: the builder is left both, never told to take theirs on its wiring", async () => {
+    const wiring = (line: string) => `// ── FACET WIRING ──\n${line}\n// ── END FACET WIRING ──\n`;
+    const repo = await mergeRepo({ "src/main.js": wiring(""), "src/hud.js": "export const hud = 0;\n" });
+    const theirs = await commitOnBranch(repo, "theirs", {
+      "src/main.js": wiring('import "./water.js";'),
+      "src/hud.js": "export const hud = 'theirs';\n",
+    });
+    await writeFile(path.join(repo.dir, "src", "main.js"), wiring('import "./hud.js";'));
+    await writeFile(path.join(repo.dir, "src", "hud.js"), "export const hud = 'ours';\n");
+    await repo.git("commit", "-qam", "ours");
+    assert.notEqual((await repo.exec(`git merge ${theirs}`)).code, 0, "both files conflict");
+    const spec = { id: "hud", owns: ["src/hud.js"] };
+    const resolved = await resolveByOwnership(repo.exec, {
+      owned: (file: string) => reviewAllowedFile(file, spec, false),
+      message: "take integration",
+    });
+    assert.equal(resolved.ok, false);
+    assert.deepEqual([...(resolved.left ?? [])].sort(), ["src/hud.js", "src/main.js"], JSON.stringify(resolved));
+    const note = handMergeNote({
+      head: theirs,
+      reason: String(resolved.reason),
+      left: resolved.left,
+      theirs: resolved.theirs,
+    });
+    assert.match(note, /src\/main\.js/, "the builder resolves its own wiring");
+    assert.doesNotMatch(note, /--theirs/, "no conflicted file here is another part's: nothing is taken on their side");
+  });
+
+  it("MA-3d. the builder's merge note keeps both sides when the harness does not know which files are whose", () => {
+    const head = "a".repeat(40);
+    const unknown = handMergeNote({ head, reason: "could not merge" });
+    assert.match(unknown, /keeping both sides' work/);
+    assert.doesNotMatch(unknown, /--theirs/, "a resolver that names no files tells no builder to take theirs");
+    const none = handMergeNote({ head, reason: "no unmerged file", left: [], theirs: [] });
+    assert.match(none, /keeping both sides' work/);
+    assert.doesNotMatch(none, /--theirs/);
+    const others = handMergeNote({ head, reason: "could not commit", left: [], theirs: ["src/state.js"] });
+    assert.match(others, /--theirs/);
+    assert.doesNotMatch(others, /keeping both sides' work/);
+  });
+
   it("MA-4. a hand merge left uncommitted is concluded before review, and one left with markers is unresolved", async () => {
     const repo = await mergeRepo({ "src/main.js": "// main\n", "src/a.js": "a = 0\n" });
     const clean = await commitOnBranch(repo, "clean", { "src/b.js": "b = 1\n" });
@@ -8385,6 +8427,24 @@ describe("ownership after a merge (Midnight Apex)", () => {
     const staged = await concludeHandMerge(repo.exec, { message: "conclude" });
     assert.equal(staged.state, HandMerge.Unresolved);
     assert.deepEqual(staged.files, ["src/a.js"]);
+  });
+
+  it("MA-4b. a conflict git writes no markers for is never concluded on whatever is on disk", async () => {
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/old.js": "export const old = 0;\n" });
+    await repo.git("checkout", "-qb", "deletes");
+    await repo.git("rm", "-q", "src/old.js");
+    await repo.git("commit", "-qm", "the other side deletes old.js");
+    const deletes = await repo.git("rev-parse", "HEAD");
+    await repo.git("checkout", "-q", "main");
+    await writeFile(path.join(repo.dir, "src", "old.js"), "export const old = 'ours';\n");
+    await repo.git("commit", "-qam", "ours modifies old.js");
+    assert.notEqual((await repo.exec(`git merge ${deletes}`)).code, 0, "modify/delete conflict");
+    // The builder never touched it: git left the modified copy on disk, with no marker in it.
+    const left = await concludeHandMerge(repo.exec, { message: "conclude" });
+    assert.equal(left.state, HandMerge.Unresolved, JSON.stringify(left));
+    assert.deepEqual(left.files, ["src/old.js"]);
+    assert.equal(await repo.git("diff", "--name-only", "--diff-filter=U"), "src/old.js", "nothing was staged for it");
+    assert.equal((await repo.exec("git rev-parse -q --verify MERGE_HEAD")).code, 0, "the merge is still open");
   });
 
   it("MA-5. a conflict in a file only another part owns is settled by ownership: no builder is told to merge it by hand", async () => {
@@ -8505,6 +8565,20 @@ describe("ownership after a merge (Midnight Apex)", () => {
       `water's materials were never reverted on sky: ${JSON.stringify(enforced)}`,
     );
     const gameDir = path.join(rig.core.layout.gamesRoot, "handmergeworld");
+    const concluded = await gitFile([
+      "-C",
+      gameDir,
+      "log",
+      "--all",
+      "--format=%s",
+      "--grep=conclude the builder's merge",
+    ]);
+    assert.match(concluded.stdout, /facet sky: conclude the builder's merge/, "the harness committed sky's open merge");
+    const skyReviews = customEvents(events, "facet_review").filter((r) => r.facetId === "sky" && r.iteration === 1);
+    assert.ok(
+      skyReviews.every((r) => !JSON.stringify(r).includes("src/materials.js")),
+      `sky's review judged only its own diff: ${JSON.stringify(skyReviews)}`,
+    );
     assert.match(await readFile(path.join(gameDir, "src", "materials.js"), "utf8"), /waterTint = \d+/);
     assert.match(await readFile(path.join(gameDir, "src", "sky.js"), "utf8"), /sky = \d+/);
   });

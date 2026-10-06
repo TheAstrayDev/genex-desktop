@@ -130,8 +130,8 @@ async function mergeIntegration(loop: FacetLoop, round: FacetRound, head: string
     round.notedHead = head;
     loop.integrationNote = handMergeNote({
       head,
-      reason: String(merge.resolved?.reason),
-      left: Array.isArray(merge.resolved?.left) ? merge.resolved.left : [],
+      reason: String(merge.resolved?.reason ?? merge.error),
+      ...namedFiles(merge.resolved),
     });
     await appendRun(RunEvent.IntegrationMerge, {
       ...merged,
@@ -144,6 +144,17 @@ async function mergeIntegration(loop: FacetLoop, round: FacetRound, head: string
   loop.mergedIntegration = head;
   await appendRun(RunEvent.IntegrationMerge, { ...merged, conflict: false, ...resolvedFields(merge.resolved) });
   round.rebaseline = true;
+}
+
+/**
+ * The files a resolver said are whose. A resolver that names none (a kept older module, or one that
+ * threw) leaves them unknown, and the builder's note then keeps both sides as it always did.
+ */
+function namedFiles(resolved: AnyRecord | null | undefined): { left?: string[]; theirs?: string[] } {
+  return {
+    ...(Array.isArray(resolved?.left) ? { left: resolved.left } : {}),
+    ...(Array.isArray(resolved?.theirs) ? { theirs: resolved.theirs } : {}),
+  };
 }
 
 /** What a merge the harness settled records: a union on the wiring block, and the files that took the integration side. */

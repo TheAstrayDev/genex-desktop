@@ -302,9 +302,9 @@ step by a conformance test, because the seed runs outside the app, where nothing
 Ownership is judged on the worker's own diff, never on what arrived by merge (`loop/merge-ownership.ts`).
 Each round's merge of the integration head is settled by ownership: another part's conflicted file
 takes the integration side, the template entry's wiring block is union-merged, and only a conflict
-in the worker's own files goes to its builder, whose note names just those files. A hand merge the
-builder left uncommitted is committed before the review; one left with conflicts makes the build
-broken. Enforcement keeps an unowned file that matches an integration head, and a merge that kept
+in the worker's own files goes to its builder, whose note names just those files (and the entry,
+when its wiring conflicts too). A hand merge the builder left uncommitted is committed before the
+review; one with any path still unmerged, or staged with conflict markers, makes the build broken. Enforcement keeps an unowned file that matches an integration head, and a merge that kept
 the worker's side of another part's file is a `merge-dropped` finding, restored from the merged
 head. `facet_review_enforced` lists `reverted`, `kept`, `quarantined` and `restored` files.
 

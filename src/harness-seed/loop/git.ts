@@ -166,8 +166,6 @@ export const GIT = Object.freeze({
     `git checkout --theirs -- ${shellQuote(file)} && git add -- ${shellQuote(file)}`,
   /** Settle a conflicted path the side being merged in deleted: deleted here too. */
   takeTheirDeletion: (file: string): string => `git rm -q -- ${shellQuote(file)}`,
-  /** Stage a path as it stands on disk, a deletion included. */
-  addAllPath: (file: string): string => `git add -A -- ${shellQuote(file)}`,
   /** The paths staged against HEAD, one per line. */
   stagedNames: "git diff --cached --name-only --no-renames",
   /**

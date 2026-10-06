@@ -111,7 +111,6 @@ const MERGE_VERBS = [
   "stageExists",
   "takeTheirs",
   "takeTheirDeletion",
-  "addAllPath",
   "stagedNames",
   "conflictMarked",
 ] as const;
@@ -131,6 +130,34 @@ function lines(out: { stdout?: string } | null | undefined): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+/** The single-character escapes git writes in a quoted path, by the byte each stands for. */
+const C_ESCAPES: Readonly<Record<string, number>> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, "\\": 92 };
+
+/** The bytes one piece of a quoted path stands for: an escape (`\303`, `\"`) or plain text. */
+function quotedBytes(piece: string): number[] {
+  if (!piece.startsWith("\\")) return [...new TextEncoder().encode(piece)];
+  const escape = piece.slice(1);
+  if (/^[0-7]{3}$/.test(escape)) return [Number.parseInt(escape, 8)];
+  return [C_ESCAPES[escape] ?? escape.charCodeAt(0)];
+}
+
+/**
+ * A path as git lists it, read back as the file it names. Git quotes a name holding a byte outside
+ * printable ASCII, a quote or a backslash (`"src/caf\303\251.js"`); left quoted, such a name
+ * matches no file on disk.
+ */
+function gitPath(listed: string): string {
+  const quoted = listed.length > 1 && listed.startsWith('"') && listed.endsWith('"');
+  if (!quoted) return listed;
+  const pieces = listed.slice(1, -1).split(/(\\(?:[0-7]{3}|.))/s);
+  return new TextDecoder().decode(new Uint8Array(pieces.flatMap(quotedBytes)));
+}
+
+/** The paths a git listing names, one per line, each read back as the file it names. */
+function paths(out: { stdout?: string } | null | undefined): string[] {
+  return lines(out).map(gitPath);
 }
 
 /** Does `rev`'s copy of `file` match the worktree's? A command that fails answers no. */
@@ -213,17 +240,19 @@ export async function resolveByOwnership(
 ): Promise<OwnershipResolution> {
   if (!speaksMergeOwnership()) return unionMergeMain(exec, { message, main, wiring });
   const unmerged = await exec(GIT.unmerged);
-  const files = lines(unmerged);
+  const files = paths(unmerged);
   if (unmerged.code !== 0 || !files.length) return { ok: false, reason: "no unmerged file", left: [] };
   const entry = wiring && files.includes(main);
   const others = files.filter((file) => !(entry && file === main));
-  const left = others.filter((file) => owned(file));
+  const own = others.filter((file) => owned(file));
   const theirs = others.filter((file) => !owned(file));
+  // A merge settled only in part is aborted, so its builder merges the wiring block as well.
+  const left = entry ? [main, ...own] : own;
   for (const file of theirs) {
     const settled = await takeTheirSide(exec, file);
     if (!settled) return { ok: false, reason: `could not take the integration side of ${file}`, left, theirs };
   }
-  if (left.length) return { ok: false, reason: `conflicts in ${left.join(", ")}`, left, theirs };
+  if (own.length) return { ok: false, reason: `conflicts in ${left.join(", ")}`, left, theirs };
   if (entry) return unionTheEntry(exec, { main, message, theirs });
   const committed = await exec(GIT.commit(message, { noEdit: true }));
   if (committed.code !== 0)
@@ -253,9 +282,10 @@ async function takeTheirSide(exec: MergeExec, file: string): Promise<boolean> {
 /**
  * A hand merge the builder left uncommitted (`git merge --no-commit`, or a merge it never
  * finished) is committed before the review, so the review sees the merged head as an ancestor
- * and judges only this part's own diff. A merge with conflicts left (unmerged, or staged with
- * their markers) is not committed: the caller treats the build as broken instead of reviewing
- * half a merge. Conflicted files already settled on disk are staged first.
+ * and judges only this part's own diff. A merge with conflicts left (any path still unmerged, or
+ * one staged with its markers) is not committed: the caller treats the build as broken instead of
+ * reviewing half a merge. Nothing is staged on the builder's behalf: git writes no markers for a
+ * binary or modify/delete conflict, so what is on disk proves no resolution.
  */
 export async function concludeHandMerge(
   exec: MergeExec,
@@ -263,16 +293,15 @@ export async function concludeHandMerge(
 ): Promise<ConcludedMerge> {
   const head = await pendingMergeHead(exec);
   if (!head) return { state: HandMerge.None, files: [] };
-  const unmerged = lines(await exec(GIT.unmerged).catch(() => null));
-  const staged = lines(await exec(GIT.stagedNames).catch(() => null)).slice(0, MAX_MARKER_SCAN);
+  const unmerged = paths(await exec(GIT.unmerged).catch(() => null));
+  const staged = paths(await exec(GIT.stagedNames).catch(() => null)).slice(0, MAX_MARKER_SCAN);
   const suspects = [...new Set([...unmerged, ...staged])];
+  // The marker scan prints each name as given (`printf '%s'`), never git-quoted.
   const marked = suspects.length ? lines(await exec(GIT.conflictMarked(suspects)).catch(() => null)) : [];
-  if (marked.length) return { state: HandMerge.Unresolved, head, files: marked };
-  for (const file of unmerged) await exec(GIT.addAllPath(file)).catch(() => null);
-  const still = lines(await exec(GIT.unmerged).catch(() => null));
-  if (still.length) return { state: HandMerge.Unresolved, head, files: still };
+  const open = [...new Set([...unmerged, ...marked])];
+  if (open.length) return { state: HandMerge.Unresolved, head, files: open };
   const committed = await exec(GIT.commit(message, { noEdit: true })).catch(() => null);
-  if (committed?.code !== 0) return { state: HandMerge.Unresolved, head, files: unmerged };
+  if (committed?.code !== 0) return { state: HandMerge.Unresolved, head, files: [] };
   return { state: HandMerge.Concluded, head, files: [] };
 }
 
@@ -293,9 +322,9 @@ export async function droppedByMerge(
   if (!comparable || !speaksMergeOwnership()) return [];
   const base = String((await exec(GIT.mergeBase(incumbent, mergedHead)).catch(() => null))?.stdout ?? "").trim();
   if (!isCommit(base) || base === mergedHead) return [];
-  const incoming = lines(await exec(GIT.changedBetween(base, mergedHead)).catch(() => null));
+  const incoming = paths(await exec(GIT.changedBetween(base, mergedHead)).catch(() => null));
   // Only a file the worktree no longer has as the merged head has it can have been dropped.
-  const differs = new Set(lines(await exec(GIT.diffNames(mergedHead, ".")).catch(() => null)));
+  const differs = new Set(paths(await exec(GIT.diffNames(mergedHead, ".")).catch(() => null)));
   const suspects = incoming.filter((file) => differs.has(file) && !owned(file)).slice(0, MAX_DROPPED_SCAN);
   const findings: MergeFinding[] = [];
   for (const file of suspects) {
