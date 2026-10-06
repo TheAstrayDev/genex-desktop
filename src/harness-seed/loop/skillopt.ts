@@ -410,7 +410,8 @@ async function distillLessons(ctx: HarnessCtx, pass: Pass): Promise<LessonsOutco
   const named: string[] = (Array.isArray(parsed.remove) ? parsed.remove : []).map(lessonLine);
   if (proposed.length === 0 && named.length === 0) return { added: 0, removed: 0, staged: false };
   // The suggestion still waiting is folded into this one, so one waits at a time and none is lost.
-  const add = [...pending.add, ...proposed].filter((lesson) => !refused.has(lesson));
+  // A waiting lesson the distiller now takes out leaves the suggestion: the file never had it.
+  const add = [...pending.add, ...proposed].filter((lesson) => !refused.has(lesson) && !named.includes(lesson));
   const remove = [...new Set([...pending.remove, ...named])];
   const rationale = clip(parsed.rationale, CLIP_REASON);
   const counted = await stageLessons(ctx, { add, remove, rationale });
@@ -436,7 +437,11 @@ async function stageLessons(
   const header = currentText.trim() ? [] : [{ op: "append", text: LESSONS_HEADER }];
   const change = applyEdits(currentText, [...header, ...edits]);
   const counted = lessonsInEdits(change.applied);
-  if (counted.add.length + counted.remove.length === 0) return null;
+  if (counted.add.length + counted.remove.length === 0) {
+    // Nothing left to change: a suggestion still waiting is withdrawn, not left to apply.
+    await replaceLessonsRecord(ctx, null);
+    return null;
+  }
   const summary = [
     counted.add.length ? LESSONS_WORDS.added(counted.add.length) : "",
     counted.remove.length ? LESSONS_WORDS.removed(counted.remove.length) : "",
@@ -449,21 +454,25 @@ async function stageLessons(
     proposedText: change.text,
     edits: change.applied,
     rationale,
-    title: LESSONS_WORDS.title,
+    title: counted.add.length ? LESSONS_WORDS.title : LESSONS_WORDS.removeTitle,
     summary,
     at: new Date().toISOString(),
   };
-  const staged = ((await ctx.call(HostMethod.ArtifactRead, { artifactId: STAGED })) ?? []) as AnyRecord[];
-  await ctx.call(HostMethod.ArtifactWrite, {
-    artifactId: STAGED,
-    value: [...staged.filter((entry) => !isLessonsRecord(entry)), record],
-  });
+  await replaceLessonsRecord(ctx, record);
   const payload = { target: record.target, skill: record.skill, title: record.title, summary, rationale };
   await ctx.call(HostMethod.EventsAppend, {
     batch: [{ type: EventKind.Custom, event_type: RunEvent.SkilloptStaged, payload }],
   });
   ctx.notify("skillopt.staged", { skill: LESSONS_SKILL });
   return { added: counted.add.length, removed: counted.remove.length };
+}
+
+/** `skillopt_staged` with this record in place of any lessons suggestion waiting; none takes it out. */
+async function replaceLessonsRecord(ctx: HarnessCtx, record: AnyRecord | null): Promise<void> {
+  const staged = ((await ctx.call(HostMethod.ArtifactRead, { artifactId: STAGED })) ?? []) as AnyRecord[];
+  const others = staged.filter((entry) => !isLessonsRecord(entry));
+  if (!record && others.length === staged.length) return;
+  await ctx.call(HostMethod.ArtifactWrite, { artifactId: STAGED, value: record ? [...others, record] : others });
 }
 
 export function isTrainable(skill: Pick<Skill, "frontmatter"> | null | undefined): boolean {

@@ -43,6 +43,8 @@ export function lessonsPrompt(
 /** How a lessons suggestion reads in Activity, for someone who never opens the file. */
 export const LESSONS_WORDS = {
   title: "Add what builders learned to every brief",
+  /** The title of a suggestion that only takes lessons out. */
+  removeTitle: "Take out lessons that no longer hold",
   added: (count: number) =>
     count === 1
       ? "Adds one lesson the builders wrote down to the list every builder reads."

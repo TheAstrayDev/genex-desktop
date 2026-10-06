@@ -126,10 +126,12 @@ const LESSONS_FILE = "contract-lessons.md";
  */
 export async function loadContractLessons(workspace: string): Promise<string[]> {
   const text = await readFile(path.join(workspace, "library", LESSONS_FILE), "utf8").catch(() => "");
-  return text
+  const lines = text
     .split("\n")
     .map((l) => l.replace(/^\s*[-*]\s*/, "").trim())
     .filter((l) => l && !l.startsWith("#"));
+  // Once each: a suggestion folded while the host applied the one it replaced appends twice.
+  return [...new Set(lines)];
 }
 
 export async function saveContractLessons(
@@ -1054,7 +1056,8 @@ function lessonsSections(gameLessons: readonly string[], lessons: readonly strin
     lines.push(
       ``,
       `## Lessons from past runs (each cost a run — do not re-learn them)`,
-      ...lessons.slice(0, MAX_BRIEF_LESSONS).map((l) => `- ${l}`),
+      // The file appends (loop/contract-lessons.ts), so the newest are last: those are shown.
+      ...lessons.slice(-MAX_BRIEF_LESSONS).map((l) => `- ${l}`),
     );
   return lines;
 }

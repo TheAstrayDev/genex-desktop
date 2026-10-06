@@ -17,7 +17,8 @@ import { afterEach, describe, it } from "node:test";
 import { applyEdits, loadSkills, parseSkill } from "../../src/harness-seed/loop/skills.ts";
 import { rankEdits, mineValidationTasks, runSkillOpt } from "../../src/harness-seed/loop/skillopt.ts";
 import { lessonEdits, renderContractLessons } from "../../src/harness-seed/loop/contract-lessons.ts";
-import { loadContractLessons } from "../../src/harness-seed/loop/library.ts";
+import { loadContractLessons, renderBrief, saveContractLessons } from "../../src/harness-seed/loop/library.ts";
+import { LESSONS_WORDS } from "../../src/harness-seed/loop/skillopt-prompts.ts";
 import { parseVerdict } from "../../src/harness-seed/loop/judge.ts";
 import { customEvents, startRig, waitForLog, type Rig } from "../helpers/studio-rig.ts";
 import { studioActivity } from "../../src/shared/studio-activity.ts";
@@ -910,7 +911,9 @@ describe("skillopt: the lessons the builders wrote", () => {
     const artifacts = new Map<string, unknown>();
     const notified: string[] = [];
     const asked: string[] = [];
-    let proposals = [["Serve the built dist/index.html before judging a build."]];
+    let replies: Array<{ add?: string[]; remove?: string[] }> = [
+      { add: ["Serve the built dist/index.html before judging a build."] },
+    ];
     const ctx = {
       workspace,
       cancelled: false,
@@ -939,7 +942,9 @@ describe("skillopt: the lessons the builders wrote", () => {
         if (method === "events.append") return "head";
         if (method === "engine.complete") {
           asked.push((params.messages as Array<{ content: string }>)[0]!.content);
-          return { message: { content: JSON.stringify({ add: proposals.shift() ?? [], remove: [], rationale: "r" }) } };
+          const reply = replies.shift() ?? {};
+          const content = JSON.stringify({ add: reply.add ?? [], remove: reply.remove ?? [], rationale: "r" });
+          return { message: { content } };
         }
         throw new Error(`unexpected call ${method}`);
       },
@@ -956,13 +961,66 @@ describe("skillopt: the lessons the builders wrote", () => {
     assert.equal(artifacts.get("skillopt_lessons_staged"), undefined, "nothing goes to the list nobody reads");
     assert.doesNotMatch(String(report.note ?? ""), /nothing to learn from yet/);
 
-    proposals = [["Capture the base build before re-tuning the light."]];
+    replies = [{ add: ["Capture the base build before re-tuning the light."] }];
     await runSkillOpt(ctx as never, { threadId: "t1" });
     assert.match(asked[1]!, /Serve the built dist\/index\.html/, "a waiting lesson counts as known");
     const second = artifacts.get("skillopt_staged") as StagedRow[];
     assert.equal(second.length, 1, "one lessons suggestion waits at a time");
     assert.match(second[0]!.proposedText, /Serve the built dist\/index\.html/, "the waiting lesson is kept");
     assert.match(second[0]!.proposedText, /Capture the base build/);
+
+    // The distiller judges a waiting lesson wrong: it leaves the suggestion, not just the file.
+    replies = [{ remove: ["Serve the built dist/index.html before judging a build."] }];
+    await runSkillOpt(ctx as never, { threadId: "t1" });
+    const third = artifacts.get("skillopt_staged") as StagedRow[];
+    assert.equal(third.length, 1);
+    assert.doesNotMatch(third[0]!.proposedText, /Serve the built/, "a waiting lesson the distiller removed is gone");
+    assert.match(third[0]!.proposedText, /Capture the base build/);
+    replies = [{ remove: ["Capture the base build before re-tuning the light."] }];
+    await runSkillOpt(ctx as never, { threadId: "t1" });
+    assert.deepEqual(artifacts.get("skillopt_staged"), [], "nothing is left waiting to apply");
+
+    // A suggestion that only takes lessons out does not say it adds any.
+    await saveContractLessons(workspace, ["Serve src for speed, it is close enough to the build."]);
+    replies = [{ remove: ["Serve src for speed, it is close enough to the build."] }];
+    await runSkillOpt(ctx as never, { threadId: "t1" });
+    const removal = (artifacts.get("skillopt_staged") as StagedRow[])[0]!;
+    assert.equal(removal.title, LESSONS_WORDS.removeTitle);
+    assert.notEqual(removal.title, LESSONS_WORDS.title);
+  });
+
+  it("an applied lesson reaches the next brief, even past the six it shows", async () => {
+    const { rig } = await lessonsRig(false);
+    const older = Array.from({ length: 6 }, (_, i) => `an older lesson number ${i + 1} from earlier runs`);
+    await saveContractLessons(rig.core.layout.harnessWs, older);
+    await lessonsPass(rig);
+    const [row] = await stagedRows(rig);
+    await rig.core.acceptStagedProposal(0, "human", { at: row!.at, skill: row!.skill });
+    // What the next facet loads (facet/state.ts) and hands its brief.
+    const lessons = await loadContractLessons(rig.core.layout.harnessWs);
+    assert.equal(lessons.at(-1), LESSON, "the file appends the applied lesson");
+    const brief = renderBrief({
+      run: { runId: "run_b", goal: "light the sky" },
+      spec: { id: "sky", title: "Sky", intent: "a lit sky", checks: [] },
+      iteration: 1,
+      board: {},
+      comparison: null,
+      steering: [],
+      lessons,
+      gameLessons: [],
+    } as never);
+    assert.ok(brief.includes(`- ${LESSON}`), "the next brief carries the lesson just applied");
+    assert.ok(!brief.includes(older[0]!), "the oldest gives way in the brief");
+  });
+
+  it("a lesson the file holds twice is read once", async () => {
+    const workspace = await tmpDir("lessons-twice-");
+    await mkdir(path.join(workspace, "library"), { recursive: true });
+    await writeFile(
+      path.join(workspace, LESSONS_FILE),
+      `${renderContractLessons(["serve dist, not src", "capture the base first"])}- serve dist, not src\n`,
+    );
+    assert.deepEqual(await loadContractLessons(workspace), ["serve dist, not src", "capture the base first"]);
   });
 
   it("a pass with builders' lessons stages one lessons suggestion Activity lists, and Apply lands it in library/contract-lessons.md", async () => {

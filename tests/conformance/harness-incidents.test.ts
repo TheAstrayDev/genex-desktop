@@ -6898,6 +6898,62 @@ describe("lessons a builder wrote in a round that lost (WP-LEARN)", () => {
     assert.equal(lessons().length, 2, "a lesson already logged is never logged twice");
   });
 
+  it("a stop mid-run still leaves the lessons of completed rounds", async () => {
+    const { keepOrRollBack } = await import("../../src/harness-seed/loop/facet/phases/keep.ts");
+    const dir = await tmpDir("facet-lessons-stop-");
+    const sh = (command: string) =>
+      promisify(execFile)("sh", ["-c", command], { cwd: dir }).then(
+        ({ stdout, stderr }) => ({ code: 0, stdout, stderr }),
+        (err: { code?: number; stdout?: string; stderr?: string }) => ({
+          code: err.code ?? 1,
+          stdout: err.stdout ?? "",
+          stderr: err.stderr ?? "",
+        }),
+      );
+    const notes = path.join(dir, "docs", "notes", "NOTES.sky.md");
+    await mkdir(path.dirname(notes), { recursive: true });
+    await writeFile(notes, "incumbent: plain gradient\n");
+    const commit = "git -c user.name=t -c user.email=t@x";
+    await sh(`git init -q && ${commit} add -A && ${commit} commit -qm base`);
+    const ctx = {
+      call: async (method: string, params: { command?: string }) =>
+        method === HostMethod.RunExec ? sh(`${commit} ${String(params.command).replace(/^git /, "")}`) : null,
+    };
+    const appended: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const loop = {
+      ctx,
+      facet: { id: "sky" },
+      run: { runId: "r1", project: "skyline" },
+      worktree: dir,
+      workdir: dir,
+      gitWhere: dir,
+      gitOptions: {},
+      git: async (command: string) => (await sh(command)).stdout.trim(),
+      keepReachable: async () => {},
+      incumbentCommit: (await sh("git rev-parse HEAD")).stdout.trim(),
+      result: {} as Record<string, unknown>,
+      seenLessons: new Set<string>(),
+      appendRun: async (type: string, payload: Record<string, unknown>) => {
+        appended.push({ type, payload });
+      },
+    };
+    const play = async (iteration: number, won: boolean, written: string) => {
+      await writeFile(notes, written);
+      const verdict = { reason: "the sky is flat", biggest_gap: "the sky is flat" };
+      await keepOrRollBack(loop as never, { iteration, won, verdict, verdictSource: "judge", evidence: {} } as never);
+    };
+
+    await play(1, true, "## Fixed by looking\n- serve dist, not src, before judging the sky\n");
+    await play(
+      2,
+      false,
+      "## Fixed by looking\n- serve dist, not src, before judging the sky\n- capture the base first\n",
+    );
+    // The user stops here: the facet never reaches its final flush (facet-loop.ts keepLessons).
+    const logged = appended.filter((entry) => entry.type === "facet_lessons").flatMap((entry) => entry.payload.lessons);
+    assert.deepEqual(logged, ["serve dist, not src, before judging the sky", "capture the base first"]);
+  });
+
   it("a yielded facet remembers which lessons it already logged", async () => {
     const { restoreResumable, resumeSnapshot } = await import("../../src/harness-seed/loop/facet/state.ts");
     const { unseenLessons } = await import("../../src/harness-seed/loop/facet/lessons.ts");

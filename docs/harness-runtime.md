@@ -315,7 +315,7 @@ candidate builds or establish better future game outcomes. The analyst sees ever
 the gate judges only the rest, with the candidate changing sides between its three votes; a skill with
 no held-out task is not analysed. The pass stages proposals and never writes a skill itself: the host
 applies them (see Architecture, learned changes). Lessons distilled from builders' `## Fixed by looking`
-and `HARNESS:` notes (logged every round, judged rounds or not) are staged the same way, ungated, for
+and `HARNESS:` notes (logged every round, won or lost; distilled even when no round was judged) are staged the same way, ungated, for
 `library/contract-lessons.md`; a refused lesson is not proposed again. Anything that learns asks `learningOn(ctx)` first:
 with the user's Self-improvement switch off it records what happened and changes nothing. The idle code architect remains a separate
 opt-in and preserves fork validation, snapshots and rollback.

@@ -294,7 +294,14 @@ describe("the next night's briefs carry them", () => {
       gameLessons: [],
     } as never);
     assert.match(text, /## Lessons from past runs/);
-    assert.equal(text.split("\n").filter((line) => /^- past lesson \d+$/.test(line)).length, 6);
+    const shown = text.split("\n").filter((line) => /^- past lesson \d+$/.test(line));
+    assert.equal(shown.length, 6);
+    // The file appends, so its newest lessons are last: those are the six a builder reads.
+    assert.deepEqual(
+      shown,
+      [3, 4, 5, 6, 7, 8].map((n) => `- past lesson ${n}`),
+      "the newest six, not the six oldest",
+    );
   });
 });
 
