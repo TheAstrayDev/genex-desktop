@@ -16,6 +16,8 @@ import type { AnyRecord } from "../../../types/harness.d.ts";
 import type { FacetLoop, FacetRound } from "../state.ts";
 import { handMergeNote } from "../gate-prompts.ts";
 import { ownedByFacet } from "../owned.ts";
+import { othersChangesToOwnFiles } from "../merged-heads.ts";
+import { leadChangesNote } from "../merged-heads-prompts.ts";
 import { RoundFlow } from "../flow.ts";
 import { stopSignal, tooLateToStart } from "../rules.ts";
 import { MOTION_FRAMES } from "../policy.ts";
@@ -151,10 +153,32 @@ async function mergeIntegration(loop: FacetLoop, round: FacetRound, head: string
     });
     return;
   }
+  const before = loop.incumbentCommit;
   loop.incumbentCommit = await git(GIT.head);
   loop.mergedIntegration = head;
   await appendRun(RunEvent.IntegrationMerge, { ...merged, conflict: false, ...resolvedFields(merge.resolved) });
   round.rebaseline = true;
+  await noteLeadChanges(loop, { before, after: loop.incumbentCommit, head });
+}
+
+/**
+ * A clean merge that brought edits to this part's own files — the lead's integration fixes — tells
+ * the builder they are the lead's to keep: the NFS run's owners read such a change as an accident
+ * and undid it. Best-effort: a git that refuses says nothing.
+ */
+async function noteLeadChanges(
+  loop: FacetLoop,
+  { before, after, head }: { before: string | null; after: string | null; head: string },
+): Promise<void> {
+  const { git, ownShape, shape } = loop;
+  const files = await othersChangesToOwnFiles(git, {
+    before,
+    after,
+    owned: ownedByFacet(loop),
+    template: !ownShape,
+    main: shape?.main ?? null,
+  }).catch(() => []);
+  if (files.length) loop.integrationNote = leadChangesNote(files, head);
 }
 
 /**

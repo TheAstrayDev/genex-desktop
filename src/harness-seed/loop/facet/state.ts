@@ -24,6 +24,7 @@ import type { Recipe } from "../library.ts";
 import type { Scoreboard } from "../checks.ts";
 import type { SpikeOutcome } from "../spike.ts";
 import type { ExecAnswer, Trim } from "../git.ts";
+import type { CarriedFix } from "./carried-fixes.ts";
 
 /**
  * How the facet loop is started (`optionDefaults` documents each option): the run and its
@@ -86,6 +87,7 @@ export interface FacetOptions {
   baseConsole: unknown[];
   policy: FacetPolicy;
   onLoopState: ((state: AnyRecord) => void) | null;
+  buildBlock: boolean;
 }
 
 /** What `runFacetLoop` works out once from its options: the facet, its places, its engine, its clock. */
@@ -204,6 +206,11 @@ export interface ResumableState {
    * difference between two looks, so the list has to survive a yielded round.
    */
   retiredChecks: string[];
+  /**
+   * What undone rounds had fixed (facet/carried-fixes.ts): every next brief says to carry those
+   * fixes over until the accepted build passes them.
+   */
+  carriedFixes: CarriedFix[];
 }
 
 /** The rest of the loop's changing state: what every start of the loop begins again. */
@@ -306,6 +313,7 @@ export const RESUMABLE_FIELDS = {
   emaBuildMs: Carry.Value,
   emaAfterMs: Carry.Value,
   retiredChecks: Carry.List,
+  carriedFixes: Carry.List,
 } as const satisfies { [Field in keyof ResumableState]: CarryFor<ResumableState[Field]> };
 
 /** The result's own fields a yielded round carries back beside the loop's. */
@@ -360,6 +368,7 @@ function freshResumable(facet: AnyRecord, initialDefects: unknown): ResumableSta
     emaBuildMs: null,
     emaAfterMs: null,
     retiredChecks: [],
+    carriedFixes: [],
   };
 }
 
@@ -438,6 +447,11 @@ function optionDefaults(): Omit<FacetOptions, "runThreadId" | "facetThreadId" | 
     policy: FACET_POLICY,
     /** Called with a LoopState at three points of every round — the director's window in. */
     onLoopState: null,
+    /**
+     * Whether the worker's first round is a build block (facet/build-block.ts): one long build
+     * kept on the checks. The director asks it for a new part; the classic pipeline never does.
+     */
+    buildBlock: false,
   };
 }
 

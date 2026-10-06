@@ -9531,6 +9531,672 @@ describe("ownership after a merge (Midnight Apex)", () => {
   });
 });
 
+/**
+ * The NFS run (2026-10-06, run_muwe8k92lv4t) against Midnight Apex: its workers were judged blind
+ * from their first 20–40 minutes, a round that fixed two owed defects was thrown away whole for
+ * the move it missed, and a lead's fix the builder had been told to merge read as the builder's
+ * own edit — the fix turn reverted it, and two merge workers had to put it back.
+ */
+describe("facet rounds after the NFS run (2026-10-06)", () => {
+  const MIN = 60_000;
+  const nfsRun = { runId: "run_nfs", project: "nfs", goal: "an NFS-style night street race", model: "opus" };
+
+  /**
+   * The run's git history, small: car-feel's round 2 merged the lead's HDR fix in city-world's
+   * post.js by hand (0259c9d) while integration moved on to 99a2f8c, and kept building.
+   */
+  async function leadFixRepo() {
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/world/post.js": "export const post = 0;\n",
+      "src/car/car.js": "export const car = 0;\n",
+      "src/ui/screen.js": "export const screen = 0;\n",
+    });
+    const write = (file: string, text: string) => writeFile(path.join(repo.dir, file), text);
+    const start = await repo.git("rev-parse", "HEAD");
+    // car-feel's round 1, accepted (d47cdd1).
+    await repo.git("checkout", "-qb", "car-feel");
+    await write("src/car/car.js", "export const car = 1;\n");
+    await repo.git("commit", "-qam", "facet car-feel iteration 1: accepted");
+    const round1 = await repo.git("rev-parse", "HEAD");
+    // Integration takes the screen (e2c8324); the loop merges it at the top of round 2 (fd973ef).
+    await repo.git("checkout", "-qb", "integration", start);
+    await write("src/ui/screen.js", "export const screen = 1;\n");
+    await repo.git("commit", "-qam", "director: integrate screen");
+    const screenIn = await repo.git("rev-parse", "HEAD");
+    await repo.git("checkout", "-q", "car-feel");
+    await repo.git("merge", "-q", "--no-ff", "--no-edit", screenIn);
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    // The lead integrates round 1 (d2edc11) and fixes HDR in city-world's post.js itself (0259c9d).
+    await repo.git("checkout", "-q", "integration");
+    await repo.git("merge", "-q", "--no-ff", "--no-edit", round1);
+    const carIn = await repo.git("rev-parse", "HEAD");
+    await write("src/world/post.js", "export const post = 0;\nexport const safeHDR = true;\n");
+    await repo.git("commit", "-qam", "integration fix: sanitize HDR before bloom");
+    const leadFix = await repo.git("rev-parse", "HEAD");
+    // Integration moves on while car-feel builds (5558808, 99a2f8c).
+    await write("src/world/atmosphere.js", "export const fog = 1;\n");
+    await repo.git("add", "-A");
+    await repo.git("commit", "-qm", "integrate city-world by hand");
+    await write("src/ui/screen.js", "export const screen = 2;\n");
+    await repo.git("commit", "-qam", "director: integrate screen");
+    const head = await repo.git("rev-parse", "HEAD");
+    // The lead steers car-feel to merge its fix: the builder merges it by hand, commits, and builds.
+    await repo.git("checkout", "-q", "car-feel");
+    await repo.git("merge", "-q", "--no-ff", "--no-edit", leadFix);
+    await write("src/car/car.js", "export const car = 2;\n");
+    return { repo, write, incumbent, screenIn, carIn, leadFix, head };
+  }
+
+  type LeadFixRepo = Awaited<ReturnType<typeof leadFixRepo>>;
+
+  /** The loop the review phase reads, in car-feel's worktree: no model reviewer, no fix turn. */
+  function reviewLoop(fixture: LeadFixRepo, integration: Record<string, unknown>) {
+    const { repo } = fixture;
+    return {
+      ctx: repo.ctx,
+      git: repo.sh,
+      worktree: repo.dir,
+      projectDir: null,
+      legacy: false,
+      reviewEnabled: true,
+      modelReview: false,
+      delegated: false,
+      sessionId: null,
+      hasTime: () => true,
+      spec: { id: "car-feel", title: "Car", owns: ["src/car/"], checks: [] },
+      facet: { id: "car-feel", title: "Car" },
+      run: nfsRun,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      integration,
+      mergedIntegration: fixture.screenIn,
+      incumbentCommit: fixture.incumbent,
+      appendRun: async () => {},
+      stoppedHere: async () => false,
+    };
+  }
+
+  /** car-feel's round-2 review, with the integration hook the loop had. */
+  async function reviewRound(fixture: LeadFixRepo, integration: Record<string, unknown>) {
+    const { reviewCode } = await import("../../src/harness-seed/loop/facet/phases/review.ts");
+    const round: Record<string, any> = { iteration: 2, iterationId: "002", buildFailed: null };
+    await reviewCode(reviewLoop(fixture, integration) as never, round as never);
+    return round.review as { base: string; files?: string[]; violations: Array<{ file: string }> };
+  }
+
+  it("FR-1. a lead's fix the builder was told to merge is not its own edit: car-feel's review flagged city-world's post.js and the fix turn reverted the lead's HDR guard", async () => {
+    const fixture = await leadFixRepo();
+    // What the loop's integration hook answered while car-feel built: the head integration had moved on to.
+    const review = await reviewRound(fixture, { head: async () => fixture.head });
+    assert.deepEqual(
+      review.violations.map((v) => v.file),
+      [],
+      `the lead's fix arrived by the merge car-feel was told to make: ${JSON.stringify(review.violations)}`,
+    );
+    assert.equal(review.base, fixture.leadFix, "the newest integration commit the worktree holds is the diff base");
+    assert.deepEqual(review.files, ["src/car/car.js"], "only car-feel's own work is reviewed");
+  });
+
+  it("FR-2. the head a builder merged may be newer than the wave head its loop merges from: the review walks from the lead's latest head", async () => {
+    const { loopIntegration } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const fixture = await leadFixRepo();
+    const hook = loopIntegration({ state: { waveHead: fixture.carIn, integrationHead: fixture.head } } as never);
+    assert.equal(await hook.head(), fixture.carIn, "running workers still merge once per wave");
+    const review = await reviewRound(fixture, hook);
+    assert.deepEqual(
+      review.violations.map((v) => v.file),
+      [],
+      JSON.stringify(review.violations),
+    );
+    assert.equal(review.base, fixture.leadFix);
+  });
+
+  it("FR-3. the builder's own edit to another part's file is still its edit after the merge", async () => {
+    const fixture = await leadFixRepo();
+    await fixture.write("src/ui/screen.js", "export const screen = 9;\n");
+    const review = await reviewRound(fixture, { head: async () => fixture.head });
+    assert.deepEqual(
+      review.violations.map((v) => v.file),
+      ["src/ui/screen.js"],
+      "an edit nobody merged in is reviewed as the builder's",
+    );
+  });
+
+  /** A worker's loop at the top of a round, as the integration gate reads it, over a fresh repository. */
+  async function gateRound(id: string, owns: string[]) {
+    const { takeIntegration } = await import("../../src/harness-seed/loop/facet/phases/gate.ts");
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/world/post.js": "export const post = 0;\n",
+      "src/car/car.js": "export const car = 0;\n",
+    });
+    const start = await repo.git("rev-parse", "HEAD");
+    const head = await commitOnBranch(repo, "integration", {
+      "src/world/post.js": "export const post = 0;\nexport const safeHDR = true;\n",
+    });
+    const loop: Record<string, any> = {
+      ctx: repo.ctx,
+      git: repo.sh,
+      gitWhere: repo.dir,
+      gitOptions: { label: `facet:${id}:git`, timeoutMs: 30_000, trim: "both" },
+      worktree: repo.dir,
+      integration: { head: async () => head },
+      mergedIntegration: null,
+      incumbentCommit: start,
+      integrationNote: null,
+      appendRun: async () => {},
+      facet: { id, title: id },
+      run: nfsRun,
+      spec: { id, title: id, owns, checks: [] },
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+    };
+    const round: Record<string, any> = { iteration: 3 };
+    await takeIntegration(loop as never, round as never);
+    return { loop, round, head };
+  }
+
+  it("FR-4. a lead commit that touches a part's own file reaches its owner as the lead's change to keep", async () => {
+    const owner = await gateRound("city-world", ["src/world/"]);
+    assert.equal(owner.loop.mergedIntegration, owner.head, "the merge itself went through");
+    assert.match(String(owner.loop.integrationNote), /src\/world\/post\.js/);
+    assert.match(String(owner.loop.integrationNote), /keep/i);
+    const other = await gateRound("car-feel", ["src/car/"]);
+    assert.equal(other.loop.integrationNote, null, "a part whose files the lead left alone hears nothing");
+  });
+
+  // ── a round that fixed what it owed is not thrown away for the move it missed ──
+
+  /** Two of the judge's defect questions, failing on the accepted build: what car-feel owed going into round 5. */
+  const owedChecks = [
+    {
+      id: "defect-haze-plane",
+      kind: "vision",
+      camera: "default",
+      origin: "judge",
+      defect: "the spray is a milky ground layer",
+    },
+    {
+      id: "defect-spray-barely-reads",
+      kind: "vision",
+      camera: "default",
+      origin: "judge",
+      defect: "the tyre spray barely reads",
+    },
+  ];
+  const sprayRung = { id: "m4-spray", what: "Every car throws tyre spray and mist in the rain" };
+
+  /** A judge that picks `pick` (the side the checks accepted, or the other) and answers the move question. */
+  function tasteJudge(
+    pick: "challenger" | "incumbent",
+    moveDelivered: boolean | null,
+    regression: { camera: string; what: string } | null = null,
+  ) {
+    return ctxRecorder({
+      handlers: {
+        "engine.complete": (params) => {
+          const user = String((params.messages as Array<{ content?: unknown }> | undefined)?.[0]?.content ?? "");
+          const accepted = /build ([AB]) is the one the checks accepted/.exec(user)?.[1] ?? "A";
+          const other = accepted === "A" ? "B" : "A";
+          const letter = pick === "challenger" ? accepted : other;
+          return {
+            message: {
+              content: JSON.stringify({
+                pick: letter,
+                satisfied: false,
+                regression,
+                newCheck: null,
+                bigMove: null,
+                defects: ["rival spray does not read from the chase camera"],
+                polish: [],
+                moveDelivered,
+                scale: "polish",
+                reason: "the player's spray reads; the rivals are dry",
+              }),
+            },
+          };
+        },
+      },
+    });
+  }
+
+  /** car-feel at round 5: the spray rung mandatory, both owed defects flipped on its build. */
+  async function sprayRound(pick: "challenger" | "incumbent", extra: Record<string, unknown> = {}) {
+    const { FACET_POLICY } = await import("../../src/harness-seed/loop/facet/policy.ts");
+    const { tasteVerdict } = await import("../../src/harness-seed/loop/facet/phases/taste.ts");
+    const { settleMoveAndGap } = await import("../../src/harness-seed/loop/facet/phases/settle.ts");
+    const recorder = tasteJudge(pick, false);
+    const failing = Object.fromEntries(owedChecks.map((c) => [c.id, { ...c, pass: false, reason: "still there" }]));
+    const passing = Object.fromEntries(owedChecks.map((c) => [c.id, { ...c, pass: true, reason: "" }]));
+    const appended: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const loop: Record<string, any> = {
+      ctx: recorder.ctx,
+      run: nfsRun,
+      facet: { id: "car-feel", title: "Car" },
+      spec: {
+        id: "car-feel",
+        title: "Car",
+        cameras: ["default"],
+        checks: owedChecks.map((c) => ({ ...c })),
+        milestones: [sprayRung],
+        moveOwner: "director",
+      },
+      currentMove: { what: sprayRung.what, milestoneId: sprayRung.id, source: "milestone", mandatory: true },
+      currentFix: null,
+      board: failing,
+      incumbentEvidence: { eyes: [], state: { phase: "race" } },
+      milestonesDone: new Set<string>(),
+      milestonesSetAside: new Set<string>(),
+      rungMisses: {},
+      moves: [],
+      polishStreak: 0,
+      policy: FACET_POLICY,
+      gapHistory: [],
+      biggestGap: "",
+      gapStreak: null,
+      defectList: [],
+      polishList: [],
+      loseStreak: 0,
+      lastFailure: null,
+      lastBigMove: null,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void appended.push({ type, payload }),
+      ...extra,
+    };
+    const round: Record<string, any> = {
+      iteration: 5,
+      iterationId: "005",
+      evidence: { eyes: [], state: { phase: "race" } },
+      nextBoard: passing,
+      comparison: { flips: owedChecks.map((c) => c.id), regressions: [] },
+      challengerBroken: false,
+      defectNotes: [],
+      attemptBranch: null,
+    };
+    await tasteVerdict(loop as never, round as never);
+    round.won = round.verdict.pick === "challenger";
+    round.attemptBoard = round.nextBoard;
+    if (!round.won) round.attemptBranch = "refs/studio/runs/run_nfs/attempts/car-feel/5";
+    else loop.board = round.nextBoard;
+    await settleMoveAndGap(loop as never, round as never);
+    return { loop, round, appended };
+  }
+
+  it("FR-5. a round that fixed owed defects and missed its mandatory move is kept with the fixes credited and the rung still owed (car-feel round 5)", async () => {
+    const { loop, round } = await sprayRound("challenger");
+    assert.equal(round.won, true, `kept: ${round.verdict.reason}`);
+    assert.equal(round.verdictSource, "taste", "kept on the judge's blind preference, not on the missed move");
+    assert.match(round.verdict.reason, /defect-haze-plane/);
+    assert.match(round.verdict.reason, /kept for the 2 owed defects it fixed/);
+    assert.equal(loop.milestonesDone.has(sprayRung.id), false, "the rung was not delivered: it is not climbed");
+    assert.equal(round.moveRecord.delivered, false);
+    assert.match(String(round.moveRecord.note), /stays owed/);
+  });
+
+  it("FR-5b. polish alone still never wins past a missed move, and the judge's own notes never outvote its pick", async () => {
+    const { acceptRound } = await import("../../src/harness-seed/loop/facet/rules.ts");
+    const spec = { checks: owedChecks };
+    const flips = owedChecks.map((c) => c.id);
+    const kept = acceptRound({
+      spec,
+      board: {},
+      comparison: { flips },
+      taste: { pick: "challenger" },
+      moveMissing: true,
+    });
+    assert.deepEqual([kept.accepted, kept.source], [true, "taste"]);
+    const polish = acceptRound({
+      spec,
+      board: {},
+      comparison: { flips: [] },
+      taste: { pick: "challenger" },
+      moveMissing: true,
+    });
+    assert.deepEqual([polish.accepted, polish.source], [false, "no-move"], "nothing fixed, the move missing: undone");
+    const notPreferred = acceptRound({
+      spec,
+      board: {},
+      comparison: { flips },
+      taste: { pick: "incumbent" },
+      moveMissing: true,
+    });
+    assert.equal(notPreferred.accepted, false, "the judge kept the round before: a taste regression");
+  });
+
+  it("FR-6. a round undone for taste leaves its demonstrated fixes to carry over: the next brief and prompt say to re-apply them", async () => {
+    const { writeBrief } = await import("../../src/harness-seed/loop/facet/phases/brief.ts");
+    const { loop, round } = await sprayRound("incumbent");
+    assert.equal(round.won, false);
+    // The next round's brief and prompt, in the same session.
+    Object.assign(loop, {
+      baseShots: [],
+      delegated: true,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      workdir: null,
+      worktree: null,
+      game: null,
+      recipes: [],
+      critic: "place",
+      lessons: [],
+      result: {
+        attempts: [
+          {
+            iteration: 5,
+            won: false,
+            branch: round.attemptBranch,
+            flips: round.comparison.flips,
+            regressions: [],
+            why: round.verdict.reason,
+          },
+        ],
+      },
+      integrationNote: null,
+      flags: [],
+      references: [],
+      lastStyle: null,
+      lastPairs: [],
+      lastLiveness: null,
+      legacy: false,
+      sessionId: "ses_car",
+      currentMove: { ...loop.currentMove },
+    });
+    const next: Record<string, any> = { iteration: 6, userSteering: [], spikeText: null };
+    await writeBrief(loop as never, next as never);
+    assert.match(next.brief, /CARRY OVER/);
+    assert.match(next.brief, /defect-haze-plane/);
+    assert.match(next.brief, /defect-spray-barely-reads/);
+    assert.match(next.brief, /refs\/studio\/runs\/run_nfs\/attempts\/car-feel\/5/);
+    assert.match(next.prompt, /re-apply/i);
+    // Once the accepted build passes them, nothing is carried any more.
+    const { openCarriedFixes } = await import("../../src/harness-seed/loop/facet/carried-fixes.ts");
+    const passed = Object.fromEntries(owedChecks.map((c) => [c.id, { ...c, pass: true }]));
+    assert.deepEqual(openCarriedFixes(loop.carriedFixes, passed), []);
+  });
+
+  it("FR-7. a kept round whose move was not delivered marks neither the move nor its rung done (screen round 6)", async () => {
+    const { loop, round } = await sprayRound("challenger", {
+      spec: {
+        id: "screen",
+        title: "Screen",
+        cameras: ["default"],
+        checks: owedChecks.map((c) => ({ ...c })),
+        milestones: [],
+      },
+      currentMove: {
+        what: "stage the race's three big moments",
+        milestoneId: null,
+        source: "reviewer",
+        mandatory: false,
+      },
+      moves: [{ what: "stage the race's three big moments", source: "reviewer", delivered: false, attempts: 1 }],
+    });
+    assert.equal(round.won, true);
+    assert.equal(round.moveRecord.delivered, false);
+    assert.equal(loop.moves[0].delivered, false, "the reviewer's move is still open");
+    assert.equal(loop.milestonesDone.size, 0);
+  });
+
+  // ── the build block: a long first round, kept on the checks ──
+
+  /** A delegated build turn's loop on a fake clock: every turn the engine takes costs `turnMinutes`. */
+  function blockLoop(turnMinutes: number, extra: Record<string, unknown> = {}) {
+    const turns: Array<{ prompt: string; timeoutMs: number; resume?: string }> = [];
+    let clock = 0;
+    const ctx = {
+      workspace: "/nonexistent",
+      cancelled: false,
+      notify() {},
+      setStatus() {},
+      call: async (method: string, params: Record<string, any>) => {
+        if (method !== "engine.delegate") return null;
+        turns.push({ prompt: String(params.prompt), timeoutMs: Number(params.timeoutMs), resume: params.resume });
+        clock += turnMinutes * MIN;
+        return { ok: true, sessionId: "ses_block", summary: "done" };
+      },
+    };
+    const loop: Record<string, any> = {
+      ctx,
+      now: () => clock,
+      deadline: Date.now() + 8 * 60 * MIN,
+      budgetMs: 8 * 60 * MIN,
+      delegated: true,
+      buildBlock: true,
+      legacy: false,
+      startIteration: 1,
+      extraReadRoots: [],
+      spikeRoots: [],
+      facet: { id: "car-feel", title: "Car" },
+      spec: { id: "car-feel", title: "Car", owns: ["src/car/"], cameras: ["default"], checks: [], milestones: [] },
+      run: nfsRun,
+      engineId: "fake-delegate",
+      facetThreadId: "thread_car",
+      worktree: "/nonexistent/car-feel",
+      result: {},
+      windDownMs: 3 * MIN,
+      emaAfterMs: null,
+      sessionId: null,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      facetSetup: null,
+      handle: null,
+      outageRetries: 0,
+      iterationsThisRound: 1,
+      board: {},
+      moves: [],
+      milestonesDone: new Set<string>(),
+      milestonesSetAside: new Set<string>(),
+      stoppedHere: async () => false,
+      finishRequested: async () => false,
+      steering: async () => [],
+      appendRun: async () => {},
+      ...extra,
+    };
+    return { loop, turns, elapsed: () => clock };
+  }
+
+  /** Round one of a new loop worker: its move chosen (which stamps the block), then its build turn. */
+  async function firstRound(loop: Record<string, any>, iteration = 1) {
+    const { chooseRoundMove } = await import("../../src/harness-seed/loop/facet/phases/plan.ts");
+    const { buildChallenger } = await import("../../src/harness-seed/loop/facet/phases/build.ts");
+    const round: Record<string, any> = {
+      iteration,
+      prompt: "build the car",
+      promptImages: [],
+      acceptedShots: [],
+      userSteering: [],
+    };
+    await chooseRoundMove(loop as never, round as never);
+    await buildChallenger(loop as never, round as never);
+    return round;
+  }
+
+  it("FR-8. a new loop worker's first round is a build block: the builder is kept on a screenshot-and-fix loop until the block's shortest end", async () => {
+    const { loop, turns, elapsed } = blockLoop(20);
+    const round = await firstRound(loop);
+    assert.ok(
+      elapsed() >= 60 * MIN,
+      `the block ran at least an hour (${elapsed() / MIN} min in ${turns.length} turns)`,
+    );
+    assert.ok(turns.length >= 3, "the builder's early stops were answered with more building");
+    assert.ok(turns[0]!.timeoutMs <= 90 * MIN, "no turn runs past the block's longest");
+    assert.match(turns[1]!.prompt, /BUILD BLOCK/);
+    assert.match(turns[1]!.prompt, /bench\/car-feel\.html/);
+    assert.equal(turns[1]!.resume, "ses_block", "the same session carries on");
+    assert.equal(round.buildFailed, null);
+  });
+
+  it("FR-9. the block stops asking at its shortest end, and only the first round of a fresh building worker with the time for it is one", async () => {
+    const long = blockLoop(70);
+    await firstRound(long.loop);
+    assert.equal(long.turns.length, 1, "a builder that worked past the hour is not asked for more");
+    for (const extra of [
+      { buildBlock: false },
+      { spec: { id: "car-feel", title: "Car", owns: ["src/car/"], cameras: ["default"], checks: [], stage: "finish" } },
+      // A worker given less than the block and as long again of rounds after it.
+      { budgetMs: 90 * MIN },
+      { delegated: false },
+    ]) {
+      const { loop, turns } = blockLoop(20, extra);
+      if (loop.delegated) {
+        await firstRound(loop);
+        assert.equal(turns.length, 1, `no block for ${JSON.stringify(extra)}`);
+      } else {
+        const { isBuildBlock } = await import("../../src/harness-seed/loop/facet/build-block.ts");
+        assert.equal(
+          isBuildBlock(loop as never, { iteration: 1 } as never),
+          false,
+          "a direct engine has no session to keep going",
+        );
+      }
+    }
+    const second = blockLoop(20);
+    await firstRound(second.loop, 2);
+    assert.equal(second.turns.length, 1, "round two is a normal round");
+  });
+
+  it("FR-10. the block is kept on the checks: the judge looks once for notes and its pick is no verdict", async () => {
+    const { tasteVerdict } = await import("../../src/harness-seed/loop/facet/phases/taste.ts");
+    // The judge prefers the start and names a regression: a veto, in any later round.
+    const recorder = tasteJudge("incumbent", true, { camera: "default", what: "the paint reads flatter" });
+    const spec = {
+      id: "car-feel",
+      title: "Car",
+      cameras: ["default"],
+      checks: [{ id: "drift-demo", kind: "demo", weight: "identity" }],
+      milestones: [],
+    };
+    const loop: Record<string, any> = {
+      ctx: recorder.ctx,
+      run: nfsRun,
+      facet: { id: "car-feel", title: "Car" },
+      spec,
+      currentMove: null,
+      currentFix: null,
+      board: {},
+      incumbentEvidence: { eyes: [], state: { phase: "race" } },
+      appendRun: async () => {},
+    };
+    const round: Record<string, any> = {
+      iteration: 1,
+      iterationId: "001",
+      buildBlock: true,
+      evidence: { eyes: [], state: { phase: "race" } },
+      nextBoard: { "drift-demo": { id: "drift-demo", kind: "demo", weight: "identity", pass: true } },
+      comparison: { flips: ["drift-demo"], regressions: [] },
+      challengerBroken: false,
+    };
+    await tasteVerdict(loop as never, round as never);
+    assert.equal(round.verdict.pick, "challenger", `the block is kept: ${round.verdict.reason}`);
+    assert.equal(round.verdictSource, "checks");
+    assert.match(round.verdict.reason, /build block/);
+    assert.deepEqual(
+      round.verdict.defects,
+      ["rival spray does not read from the chase camera"],
+      "the judge's notes go to round two",
+    );
+  });
+
+  it("FR-10b. the block's brief and opening prompt say what the round is: the bench page, the screenshot-and-fix loop, kept on the checks", async () => {
+    const spec = { id: "car-feel", title: "Car", intent: "a planted coupe", checks: [] };
+    const brief = renderBrief({
+      run: nfsRun,
+      spec,
+      iteration: 1,
+      buildBlock: { bench: "bench/car-feel.html" },
+    } as never);
+    assert.match(brief, /THE BUILD BLOCK — your first round, 60–90 minutes/);
+    assert.match(brief, /bench\/car-feel\.html/);
+    assert.match(brief, /kept on the checks alone/);
+    const prompt = facetPrompt({
+      run: nfsRun,
+      spec: { ...spec, cameras: ["default"], owns: ["src/car/"] },
+      iteration: 1,
+      resumed: false,
+      briefFile: ".studio/BRIEF.md",
+      buildBlock: { bench: "bench/car-feel.html" },
+    });
+    assert.match(prompt, /THE BUILD BLOCK \(your first round, 60–90 min\)/);
+    const second = renderBrief({ run: nfsRun, spec, iteration: 2 } as never);
+    assert.doesNotMatch(second, /BUILD BLOCK/, "round two is judged side by side");
+  });
+
+  it("FR-11. the block's long build turn sizes no later round: not the worker's own estimate, not the run's median", async () => {
+    const { publishRound } = await import("../../src/harness-seed/loop/facet/phases/publish.ts");
+    const { recordRound } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const published: Record<string, unknown>[] = [];
+    const loop: Record<string, any> = {
+      emitLoopState: () => {},
+      facet: { id: "car-feel", title: "Car" },
+      facetThreadId: "thread_car",
+      publishIteration: async (record: Record<string, unknown>) => void published.push(record),
+      result: {},
+      run: nfsRun,
+      spec: { id: "car-feel", title: "Car", checks: [] },
+      board: {},
+      biggestGap: "",
+      legacy: true,
+      emaBuildMs: null,
+      emaAfterMs: null,
+      currentMove: null,
+      currentFix: null,
+      lastStyle: null,
+      lastPairs: [],
+      flags: [],
+      baseConsole: [],
+      lastSpike: null,
+      incumbentCommit: null,
+    };
+    loop.result = { spikes: [] };
+    const now = Date.now();
+    const round: Record<string, any> = {
+      iteration: 1,
+      buildBlock: true,
+      blockTurns: 3,
+      won: true,
+      verdict: { satisfied: false, reason: "build block: kept on the checks", defects: [] },
+      verdictSource: "checks",
+      attemptBoard: {},
+      comparison: { flips: [], regressions: [] },
+      defectNotes: [],
+      evidence: { ok: true, shots: [] },
+      diffs: {},
+      liveness: null,
+      buildStartedAt: now - 75 * MIN,
+      buildEndedAt: now - 5 * MIN,
+    };
+    await publishRound(loop as never, round as never);
+    assert.equal(loop.emaBuildMs, null, "the block's build is not what a round costs");
+    assert.ok(Number(loop.emaAfterMs) > 0, "the verdict half is measured as always");
+    assert.equal((published[0]?.buildBlock as { turns?: number } | undefined)?.turns, 3);
+    const worker: Record<string, any> = {
+      id: "car-feel",
+      title: "Car",
+      brief: "",
+      iterations: [],
+      roundMs: [],
+      startedAt: now - 80 * MIN,
+      lastIterationAt: null,
+      stopRequested: false,
+    };
+    const night = {
+      ledgerFacts: () => ({}),
+      note: () => {},
+      remember: async () => {},
+      report: { iterations: [] },
+      resting: true,
+      ctx: {},
+      state: {},
+    };
+    recordRound(night as never, worker as never, published[0]!);
+    assert.deepEqual(worker.roundMs, [], "the run's median round is not an hour and a half");
+  });
+});
+
 describe("a racing build judged during its countdown (Midnight Apex, 2026-10-05)", () => {
   it("NFS-1. a racing build judged during its countdown: the drive waits for flow.playing", async () => {
     const rig = await startRig();

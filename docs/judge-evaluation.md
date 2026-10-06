@@ -35,6 +35,10 @@ A finish-stage round's taste judge reads `judge/taste-finish.md` after its usual
 to eight polish items. Evaluate it on finish pairs only, and confirm that build-stage pairs, judged
 without it, keep their verdicts.
 
+A new loop worker's first round is a build block ([harness runtime](harness-runtime.md)): the taste judge still
+looks at it, but its pick and veto decide nothing — only its notes reach the next round. Measure
+taste verdicts from round two on.
+
 These are test cases, not human-labelled quality results. Begin without model calls by checking
 capture reproducibility, malformed responses, budget limits and blind-label handling through the
 existing conformance and harness suites. A real-model campaign requires its own authorized

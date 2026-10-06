@@ -74,18 +74,25 @@ export async function publishRound(loop: FacetLoop, round: FacetRound): Promise<
     // scoreboard stay where they are — this is the shape the screen reads, not a replacement.
     verdict: roundVerdict(loop, round),
     threadId: facetThreadId,
+    // The worker's first, long round (facet/build-block.ts): the director sizes no round from it.
+    ...(round.buildBlock ? { buildBlock: { minutes: buildMinutes(round), turns: round.blockTurns ?? 0 } } : {}),
   };
   await publishIteration(round.record);
   round.spikeText = null;
   // What this round actually cost, for the gate at the top of the next one. Measured in the
   // two halves it is spent in, and only on a round that ran all the way to a verdict — a
-  // stopped or held round says nothing about how long the work takes.
-  loop.emaBuildMs = smooth(loop.emaBuildMs, round.buildEndedAt - round.buildStartedAt);
+  // stopped or held round says nothing about how long the work takes. A build block's build is
+  // long on purpose: only its verdict half says what a round costs.
+  if (!round.buildBlock) loop.emaBuildMs = smooth(loop.emaBuildMs, round.buildEndedAt - round.buildStartedAt);
   loop.emaAfterMs = smooth(loop.emaAfterMs, Date.now() - round.buildEndedAt);
   // The round is decided and its cost is measured: the estimate the director sizes the next
   // worker from is only honest here.
   emitLoopState("scored", round.iteration);
 }
+
+/** How long the round's build ran, in whole minutes. */
+const buildMinutes = (round: FacetRound): number =>
+  Math.round((Number(round.buildEndedAt) - Number(round.buildStartedAt)) / MINUTE_MS);
 
 /** Failing checks (identity first), then the judge's own defects. */
 function recordDefects(round: FacetRound): string[] {

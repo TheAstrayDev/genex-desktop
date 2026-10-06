@@ -139,6 +139,9 @@ export const GIT = Object.freeze({
   reset: (rev: unknown): string => `git reset -q --hard ${commitArg(rev)}`,
   clean: "git clean -qfd",
   revListCount: (from: unknown, to: unknown): string => `git rev-list --count ${commitArg(from)}..${commitArg(to)}`,
+  /** The first-parent line from `head` back to (not into) what `since` holds, newest first, at most `max` commits. */
+  firstParentLine: (head: unknown, since: unknown, max: number): string =>
+    `git rev-list --first-parent --max-count=${Number(max)} ${commitArg(head)} ^${commitArg(since)}`,
   diffStat: (base: unknown): string => `git diff --stat ${commitArg(base)} HEAD -- . ':(exclude).studio/*'`,
   /** Paths changed against `base`, restricted to `pathspec` (already-quoted shell words). */
   diffNames: (base: unknown, pathspec: string): string => `git diff --name-only ${commitArg(base)} -- ${pathspec}`,
