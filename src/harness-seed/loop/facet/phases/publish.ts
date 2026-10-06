@@ -12,6 +12,7 @@ import { brokenStreakWords, facetIsDone, grownCheckIds, smooth } from "../rules.
 import { recordDecision, unjudgedMove } from "../record.ts";
 import { FacetStage, finishDone, isFinishing, roundStage } from "../stage.ts";
 import { Side } from "../../judge.ts";
+import { MINUTE_MS } from "../../time.ts";
 
 /** The defects a round's record lists, at most. */
 const MAX_RECORD_DEFECTS = 24;
