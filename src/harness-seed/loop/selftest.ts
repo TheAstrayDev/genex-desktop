@@ -345,10 +345,7 @@ const SELFTEST_STEPS: readonly SelftestStep[] = [
       // A racer's main owner carries the one a first-person game cannot (the throttle-only bot's race).
       const racer = withHarnessChecks(
         { id: "car", checks: [] as Check[], cameras: [] },
-        {
-          ownsMain: true,
-          game: { kind: "racing" },
-        },
+        { ownsMain: true, game: { kind: "racing" } },
       );
       const ridesOnce = (id: string, board: { checks: Check[] }) => board.checks.filter((c) => c.id === id).length;
       check(

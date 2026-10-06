@@ -9,8 +9,9 @@ import { VISION_FILE, VisionRefusal, runVision } from "./vision.ts";
 import { clipWords } from "./word-clip.ts";
 import type { RunVision, VisionCarrier, VisionProblem } from "./vision.ts";
 
-/** How much of the vision a worker's brief carries, and how much a judge's question. */
-export const VISION_BRIEF_CHARS = 2_400;
+/** How much of the vision a worker's brief carries. */
+const VISION_BRIEF_CHARS = 2_400;
+/** How much of the vision a judge's question carries. */
 export const VISION_JUDGE_CHARS = 1_200;
 
 /** The sections' headings, in the file and in an excerpt. */
@@ -22,7 +23,7 @@ const HEADING = {
 } as const;
 
 /** How the vision is written: the plan's `vision` argument. */
-export const VISION_GRAMMAR = `vision is JSON: {"scale":"the world's size in numbers — a circuit of 2.5–4 km through about 40 city blocks","far":"what the player sees past the nearest building — a skyline far away, the harbour's water, hills, a sky with weather","set_pieces":["a bridge over the harbour","a tunnel lit sodium orange"],"headroom":"what the world could grow into later — a second district, the waterfront"}. All four are required, two or three set-pieces. Nothing in it is frozen: it is the direction every part grows toward, committed as ${VISION_FILE}.`;
+const VISION_GRAMMAR = `vision is JSON: {"scale":"the world's size in numbers — a circuit of 2.5–4 km through about 40 city blocks","far":"what the player sees past the nearest building — a skyline far away, the harbour's water, hills, a sky with weather","set_pieces":["a bridge over the harbour","a tunnel lit sodium orange"],"headroom":"what the world could grow into later — a second district, the waterfront"}. All four are required, two or three set-pieces. Nothing in it is frozen: it is the direction every part grows toward, committed as ${VISION_FILE}.`;
 
 /** What the vision gives every part, as a refusal names it. */
 const VISION_SECTIONS =

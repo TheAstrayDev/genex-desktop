@@ -281,9 +281,7 @@ export function startKeysFor(game: AnyRecord | null | undefined): string[] {
  */
 export function cruiseFor(game: AnyRecord | null | undefined): string[] {
   // Read through the traits, so a plan's `play` alias counts as its own script too.
-  const { kind, playScript } = normalizeGameTraits(game);
-  if (playScript) return [];
-  return [...((kind ? GAME_KINDS[kind]?.cruise : null) ?? [])];
+  return normalizeGameTraits(game).playScript ? [] : throttleFor(game);
 }
 
 /**

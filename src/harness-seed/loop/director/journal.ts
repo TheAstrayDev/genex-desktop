@@ -511,7 +511,7 @@ function restoredShip(saved: unknown): NightState["lastShip"] {
   const ship = (saved ?? {}) as AnyRecord;
   if (typeof ship.head !== "string" || !Array.isArray(ship.defects)) return null;
   const verdict = typeof ship.ship === "boolean" ? ship.ship : null;
-  const doNotRegress = doNotRegressOf({ doNotRegress: Array.isArray(ship.doNotRegress) ? ship.doNotRegress : [] });
+  const doNotRegress = doNotRegressOf({ doNotRegress: ship.doNotRegress });
   return { head: ship.head, ship: verdict, defects: ship.defects, doNotRegress, at: msOf(ship.at) ?? 0 };
 }
 

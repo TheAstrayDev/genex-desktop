@@ -1286,7 +1286,7 @@ async function stepThroughDrive(look: Look): Promise<void> {
  * The player's heading, read page-side after a drive step: `state().player.yaw` in radians, or
  * null when the game reports none. One small answer, not the whole state over the wire.
  */
-export const CORNER_PROBE = `(() => {
+const CORNER_PROBE = `(() => {
   /* studio corner probe */
   try {
     var s = window.__studio;
@@ -1331,8 +1331,7 @@ const headingChange = (from: number, to: number): number => Math.atan2(Math.sin(
  */
 async function watchCorner(look: Look, step: number): Promise<void> {
   const watch: CornerWatch | null = look.cornerWatch;
-  if (!watch) return;
-  if (watch.unreadable || watch.corner) return;
+  if (!watch || watch.unreadable || watch.corner) return;
   const yaw = await readHeading(look);
   if (yaw === null) {
     watch.unreadable = watch.yaw === null;

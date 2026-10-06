@@ -19,8 +19,9 @@ OFF until the planner, the director or `studio.json`'s nested `game` block decla
 nobody described carries no harness input check at all; a declared kind supplies its traits and an
 explicit boolean beside it wins. The harness drives that kind's play script before every
 judgement (racing and flight then hold W/ArrowUp through the rest of the drive, `cruise`, steered by
-the game's racing line when it has one and released before the cameras; a declared script holds nothing; a front-end kept for its owner, `begin:false`,
-is pressed by nothing, not even a declared script), and `gameLine(run.game)` is the first line of
+the game's racing line when it has one and released before the cameras; a declared script holds
+nothing; a front-end kept for its owner, `begin:false`, is pressed by nothing, not even a declared
+script), and `gameLine(run.game)` is the first line of
 every judge call (for a kept front-end it says nothing was pressed and `[dead-input]` does not apply). A game with a title and no `__studio.begin()` may declare `start.keys`. Two critics, not one:
 `place` for a world a player walks through and `screen` for a board, a puzzle or a builder.
 
@@ -287,13 +288,14 @@ What a drive shows the judges (`loop/evidence.ts`). A held throttle steers by th
 racing line when the template's `config.steer` exists (`__studio.assist`, recorded as `drive`);
 otherwise nothing steers, as before. A racer's drive watches `player.yaw` after its third step and
 photographs the first turn faster than 20°/s as `drive:corner` (`loop/pass-frames.ts`), a frame
-every camera list keeps (`corner` records it or why there is none). A look runs every demo a check names — a vision check
-on `demo:<name>` included — and at most 12 more, demos the compared build lacks first; the judge
-and the builder's next prompt name any it left out (`demoCap`), never as a defect. A pass asked for `challenge` (a board
-carrying `throttle-bot-loses`, every round, or the art director's look) races a bot that holds
-only the kind's throttle, steered by the line, never braking, from `seed` in 5 s steps until
-`race.finished` or six simulated minutes; the probe (`after`, `loop/throttle-bot.ts`) reads the state it ends on, and a game
-reporting no `race.position` is not asked. Judges read the steering, corner and race as fact lines
+every camera list keeps (`corner` records it or why there is none). A look runs every demo a check
+names — a vision check on `demo:<name>` included — and at most 12 more, demos the compared build
+lacks first; the judge and the builder's next prompt name any it left out (`demoCap`), never as a
+defect. A pass asked for `challenge` (a board carrying `throttle-bot-loses`, every round, or the
+art director's look) races a bot that holds only the kind's throttle, steered by the line, never
+braking, from `seed` in 5 s steps until `race.finished` or six simulated minutes; the probe
+(`after`, `loop/throttle-bot.ts`) reads the state it ends on, and a game reporting no
+`race.position` is not asked. Judges read the steering, corner and race as fact lines
 (`loop/judge-facts.ts`).
 
 What a probe reads. The studio bounds `__studio.state()` by structure, never by cutting its text
@@ -351,8 +353,7 @@ module contract before its loop workers start: `plan contract=` names each modul
 part, API, and the shared files one part owns (`director/module-contract.ts`); a convention or API
 line is kept up to 400 characters and cut only at a word, with an ellipsis. The file's header says
 what it freezes (interfaces and conventions, with ranges for content) and what it does not
-(content, layout, scale). The harness commits it as
-`docs/MODULE-CONTRACT.md` on the integration branch (its own file: a game's `docs/ARCHITECTURE.md` is never touched); a loop worker starts only from a commit that holds
+(content, layout, scale). The harness commits it as `docs/MODULE-CONTRACT.md` on the integration branch (its own file: a game's `docs/ARCHITECTURE.md` is never touched); a loop worker starts only from a commit that holds
 it, with its own modules there (stubs the lead writes and commits in the integration worktree itself, or a single worker), and a seam that leaves
 other parts' modules alone. With no seam named it owns its contract modules (`director/contract-gate.ts`).
 After two refusals for a missing contract the harness writes one from the plan's seams. The
@@ -426,10 +427,10 @@ check. The art director's finish mark (below) is when the lead turns owners to i
 
 The build block. A director's new loop worker (not a restart: `replaces=` or an id from before a
 pause) whose window holds `BUILD_BLOCK_MIN_WINDOW_MS` (two hours) opens with one long round on a
-session engine in its own worktree
-(`loop/facet/build-block.ts`): its turns never run past `BUILD_BLOCK_MAX_MS` (90 min), and a builder
-that ends its turn before `BUILD_BLOCK_MIN_MS` (60 min) is asked in the same session to keep going
-in a screenshot-and-fix loop on its bench page (at most `BUILD_BLOCK_TURNS` asks). The block is
+session engine in its own worktree (`loop/facet/build-block.ts`): its turns never run past
+`BUILD_BLOCK_MAX_MS` (90 min), and a builder that ends its turn before `BUILD_BLOCK_MIN_MS` (60 min)
+is asked in the same session to keep going in a screenshot-and-fix loop on its bench page (at most
+`BUILD_BLOCK_TURNS` asks). The block is
 kept on the checks alone — broken, regressed, lost-registry and unchanged builds are still refused
 on the board — and the taste judge looks once for notes, never a verdict; blind A/B starts at round
 two. A finisher and the classic pipeline have no block. Its build time seeds neither the worker's
@@ -706,9 +707,9 @@ review stands on. A review the lead asked for, the mark's or the finish gate's r
 look that gave no review is tried again 30 minutes later (`SHIP_LOOK_GAP_MS`), and no regular look
 comes within 30 minutes before an unsaid finish mark, whose own look takes its place. A wake that
 carries the user's words leaves the look for the next wake. The cadence is journaled in working
-time (`nextShipLookWorkedMs`). The regular look only routes defects:
-owners are told as building workers (beside their move), the wake says it is not the finish mark,
-and the finish stage still begins at the mark or a goal build's idle or finish look. Each review
+time (`nextShipLookWorkedMs`). The regular look only routes defects: owners are told as building
+workers (beside their move), the wake says it is not the finish mark, and the finish stage still
+begins at the mark or a goal build's idle or finish look. Each review
 also names up to eight short things that already work (`doNotRegress`, cut at a word; an older
 rubric's `strengths` stand in). A review with a verdict puts the list on every running loop
 worker's spec and a loop worker started later takes the latest; its brief shows it ("Do not
@@ -772,8 +773,9 @@ or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and 
 until the run ends. A sign-in, cap or reset-naming limit opens that engine's circuit for the run
 (`loop/provider-loss.ts`): judge, critic and ship-review calls to it fail at once with its kind
 until the run starts again or the limit resets (ten minutes at most for a loss that names no end),
-and a sign-in any engine of the run lost pauses the night at the lead's next turn or wake. A worker round the provider failed (`facet/provider.ts`) is recorded
-as `facet_provider_outage` with `lost`, never judged, struck or rolled back: its build or
+and a sign-in any engine of the run lost pauses the night at the lead's next turn or wake. A worker
+round the provider failed (`facet/provider.ts`) is recorded as `facet_provider_outage` with
+`lost`, never judged, struck or rolled back: its build or
 verification waits for the provider and runs again, a run's stop keeps it on its `…-stopped` ref,
 and a usage cap still stops the worker with its limit for the lead.
 

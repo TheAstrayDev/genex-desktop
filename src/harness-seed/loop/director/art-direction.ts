@@ -83,7 +83,7 @@ export const SHIP_LOOK_EVERY_MS = 90 * MINUTE_MS;
  * No regular look comes this soon before a timed build's finish mark (the mark looks itself), and
  * one the art director could not give is tried again after this much working time.
  */
-export const SHIP_LOOK_GAP_MS = 30 * MINUTE_MS;
+const SHIP_LOOK_GAP_MS = 30 * MINUTE_MS;
 
 /**
  * The art director's last word on the integration branch: the head it looked at, ship or not, its

@@ -6,9 +6,9 @@ import type { AnyRecord } from "../types/harness.d.ts";
 import { clipWords } from "./word-clip.ts";
 
 /** The most items one review's do-not-regress list keeps. */
-export const MAX_DO_NOT_REGRESS = 8;
+const MAX_DO_NOT_REGRESS = 8;
 /** How much of one do-not-regress item is kept: a short name ("rain on the windscreen"), cut at a word. */
-export const DO_NOT_REGRESS_CHARS = 80;
+const DO_NOT_REGRESS_CHARS = 80;
 
 /**
  * A judge's do-not-regress list as the review keeps it: at most `MAX_DO_NOT_REGRESS` short names,

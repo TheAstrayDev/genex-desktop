@@ -2,7 +2,7 @@
 import type { CarriedFix } from "./carried-fixes.ts";
 
 /** The brief's heading for them; the earlier-rounds section points here by it. */
-export const CARRY_OVER_HEAD = "CARRY OVER";
+const CARRY_OVER_HEAD = "CARRY OVER";
 
 /** The brief's section: each undone round, what it fixed, where its code is, and to re-apply it first. */
 export function carryOverSection(carried: readonly CarriedFix[]): string[] {

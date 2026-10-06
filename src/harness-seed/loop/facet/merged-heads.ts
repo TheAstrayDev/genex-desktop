@@ -12,7 +12,7 @@ import { GIT } from "../git.ts";
 import { isCommit } from "../shell.ts";
 
 /** How far back along the integration line a review looks for the newest commit its worktree holds. */
-export const INTEGRATION_LINE_MAX = 40;
+const INTEGRATION_LINE_MAX = 40;
 /** A template game's entry, when its shape names none: the module every part's wiring line lands in. */
 const TEMPLATE_ENTRY = "src/main.js";
 

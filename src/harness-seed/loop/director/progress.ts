@@ -11,7 +11,7 @@ const SOFT_REVIEW_MS = 30 * MINUTE_MS;
  * How much working time may pass before a goal build's lead is nudged again to verify the outcomes
  * still unverified: one ∞ build's lead was told "0/4 outcomes verified" once and never playtested.
  */
-export const VERIFY_NUDGE_EVERY_MS = 60 * MINUTE_MS;
+const VERIFY_NUDGE_EVERY_MS = 60 * MINUTE_MS;
 
 /** A goal build's required outcomes on the current revision: how many, how many verified, and which are not. */
 export interface OutcomeTally {

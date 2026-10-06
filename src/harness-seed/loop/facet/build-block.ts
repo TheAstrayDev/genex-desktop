@@ -28,11 +28,11 @@ export const BUILD_BLOCK_MIN_MS = 60 * MINUTE_MS;
 /** The block's longest: no turn of it runs past this. */
 export const BUILD_BLOCK_MAX_MS = 90 * MINUTE_MS;
 /** The most times a block asks its builder to keep going: one that stops at once is not asked forever. */
-export const BUILD_BLOCK_TURNS = 8;
+const BUILD_BLOCK_TURNS = 8;
 /** Another stretch is asked only with this much left for it: less is the verdict's time. */
 const BLOCK_TURN_MIN_MS = 5 * MINUTE_MS;
 /** The shortest worker window a block opens: the block, and as long again of side-by-side rounds. */
-export const BUILD_BLOCK_MIN_WINDOW_MS = 2 * BUILD_BLOCK_MIN_MS;
+const BUILD_BLOCK_MIN_WINDOW_MS = 2 * BUILD_BLOCK_MIN_MS;
 
 /** What the block reads off the loop: whether it was asked for, where and how it builds, and its window. */
 type BlockLoop = {

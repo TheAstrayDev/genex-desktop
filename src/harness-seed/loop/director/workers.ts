@@ -1546,7 +1546,6 @@ function roundNote(id: string, kept: AnyRecord): string {
   return `worker ${id}: iteration ${kept.iteration} ${outcome}${why}${move}`;
 }
 
-/** The judged loop a loop worker runs, until its `done` checks pass or its budget ends. */
 /**
  * The integration hook a loop worker's facet loop merges from: the head the last wave closed on,
  * so running workers take the integration branch once per wave and not after every commit the
@@ -1571,6 +1570,7 @@ function opensWithBuildBlock(night: Night, worker: Worker): boolean {
   return !worker.replaces && !priorWorkerIds(night).includes(worker.id);
 }
 
+/** The judged loop a loop worker runs, until its `done` checks pass or its budget ends. */
 async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
   const { ctx, medianRoundMs, note, noteWorkerLimit, ownShape, projectDir, run, shape, state, threadId } = night;
   const result = await runFacetLoop(ctx, {

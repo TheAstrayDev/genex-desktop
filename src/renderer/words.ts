@@ -646,8 +646,13 @@ const PAUSED_ON_WORDS = {
 
 /** The paused night's reason: the typed provider failure's words when there are some, else the close's. */
 function pausedWhy(kind: string | null | undefined, why: string): string {
-  for (const [key, words] of Object.entries(PAUSED_ON_WORDS)) if (key === kind) return words;
-  return why;
+  return failureWords(PAUSED_ON_WORDS, kind) ?? why;
+}
+
+/** The words a table gives an engine failure kind, or null for a kind it does not name. */
+function failureWords(table: Partial<Record<EngineFailureKind, string>>, kind: unknown): string | null {
+  const known = Object.values(EngineFailureKind).find((value) => value === kind);
+  return known ? (table[known] ?? null) : null;
 }
 
 /** Stop and pause are one thing to the owner: the work is kept and Resume sits beside this line. */
@@ -928,7 +933,6 @@ export function livenessWords(
   return `${partRoundWords(alive)}: ${question}${score}${weakest}${summary}${grow}${polish}`;
 }
 
-/** The provider is busy. The user needs the wait, never the exception text. */
 /**
  * What took a round's model provider away (`facet_provider_outage.lost`, an engine failure kind):
  * the round waits for it, and the user reads why without the provider's own exception.
@@ -940,12 +944,7 @@ const LOST_PROVIDER_WORDS = {
   [EngineFailureKind.Unavailable]: "is down",
 } as const satisfies Partial<Record<EngineFailureKind, string>>;
 
-/** The words for a lost provider's kind, or null for one this version does not know. */
-function lostProviderWords(kind: unknown): string | null {
-  for (const [key, words] of Object.entries(LOST_PROVIDER_WORDS)) if (key === kind) return words;
-  return null;
-}
-
+/** The provider is busy, or lost. The user needs the wait, never the exception text. */
 export function outageWords(
   outage: PartRound & {
     phase?: string | null;
@@ -955,7 +954,7 @@ export function outageWords(
     lost?: string | null;
   },
 ): string {
-  const lost = lostProviderWords(outage.lost);
+  const lost = failureWords(LOST_PROVIDER_WORDS, outage.lost);
   if (lost)
     return `${partName(outage, "this build")}: the model provider ${lost} — the round waits for it; nothing is counted against the build`;
   const minutes = Math.max(1, Math.trunc(outage.minutes ?? 1));

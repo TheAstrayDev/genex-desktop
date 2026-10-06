@@ -649,9 +649,9 @@ before any reset and refuses (`branch-changed`, `history-changed`, `operation-in
 
 **Base stage and contract.** An empty game gets a base stage first (`autopilot_base`,
 `journal.base`; a third of the time left, thirty minutes at most; none for a team,
-`foundationFirst`). A brought
-game whose contract is `missing` gets `installContract` in the integration worktree, verified by a
-full evidence pass, committed as `studio: install contract`, which becomes `state.startEvidence`;
+`foundationFirst`). A brought game whose contract is `missing` gets `installContract` in the
+integration worktree, verified by a full evidence pass, committed as `studio: install contract`,
+which becomes `state.startEvidence`;
 `journal.contract` keeps it. `worker_start` runs the health pass once per fork commit and refuses
 one that does not run; the run's own starting points (`state.baseHeads`) are exempt from
 blankness; inherited console errors are a warning, not a void. A worker starts a round only

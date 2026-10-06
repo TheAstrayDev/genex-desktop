@@ -44,7 +44,7 @@ const FAR_CHARS = 1_300;
 const SET_PIECE_CHARS = 700;
 const HEADROOM_CHARS = 1_100;
 /** At most this many set-pieces. */
-export const MAX_SET_PIECES = 3;
+const MAX_SET_PIECES = 3;
 /** The whole docs/VISION.md, at most. */
 export const VISION_CHARS = 6_000;
 

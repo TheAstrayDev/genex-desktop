@@ -18,7 +18,7 @@
  */
 import { nearestReference, styleDistance, type StyleStats } from "./style.ts";
 import type { Check, CheckKind, CheckLike, CheckOrigin, CheckWeight } from "./spec.ts";
-import type { ProbeAfter } from "./throttle-bot.ts";
+import { ProbeAfter } from "./throttle-bot.ts";
 import { HostMethod } from "./host-methods.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON, clipMarked } from "./text.ts";
 import { isRecord } from "./json.ts";
@@ -148,7 +148,6 @@ const Kind = {
 } as const satisfies Record<string, CheckKind>;
 const Weight = { Identity: "identity", Normal: "normal" } as const satisfies Record<string, CheckWeight>;
 const Origin = { Judge: "judge" } as const satisfies Record<string, CheckOrigin>;
-const After = { ThrottleBot: "throttle-bot" } as const satisfies Record<string, ProbeAfter>;
 /** The markers of a state the studio could not read whole; state-shape.ts imports this module too. */
 const Shape = {
   Truncated: "__truncated",
@@ -1091,7 +1090,7 @@ type ProbeStates =
 
 /** What a probe reads: the drive's states, a demo's end state, or the throttle-bot race's — or why it cannot. */
 function probeStates(check: CheckLike, evidence: CheckEvidence | null | undefined): ProbeStates {
-  if (check.after === After.ThrottleBot) return raceStates(check, evidence);
+  if (check.after === ProbeAfter.ThrottleBot) return raceStates(check, evidence);
   if (!check.demo) return { state: evidence?.state, early: evidence?.stateEarly };
   const demo = evidence?.demos?.[check.demo];
   if (!demo) return { result: demoNotRun(check, evidence, check.demo) };

@@ -4120,8 +4120,8 @@ describe("the lead's later turns (wake loop)", () => {
         return { sessionId: "lead-1", summary: "finished" };
       },
       { providerPollMs: 200 },
-      (text, request) => {
-        judgeCalls.push(`${JSON.stringify((request as any).provenance)} ${text.replace(/\s+/g, " ").slice(0, 300)}`);
+      (text) => {
+        judgeCalls.push(text.replace(/\s+/g, " ").slice(0, 300));
         throw new EngineError("auth", "fake-delegate", disabled);
       },
     );

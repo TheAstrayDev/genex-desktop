@@ -12,7 +12,7 @@ import { clip, CLIP_QUOTE, CLIP_REASON } from "../text.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 
 /** The undone rounds a brief carries fixes from, newest kept. */
-export const MAX_CARRIED_ROUNDS = 3;
+const MAX_CARRIED_ROUNDS = 3;
 
 /** One check an undone round flipped: its id and what it asks, in the judge's words where it has them. */
 export interface CarriedCheck {
@@ -48,7 +48,7 @@ function checkWords(spec: { checks?: AnyRecord[] } | null | undefined, id: strin
 }
 
 /** The fixes a just-settled round leaves to carry over, or null when it was kept or demonstrated none. */
-export function carriedFrom(round: AnyRecord, spec: { checks?: AnyRecord[] } | null | undefined): CarriedFix | null {
+function carriedFrom(round: AnyRecord, spec: { checks?: AnyRecord[] } | null | undefined): CarriedFix | null {
   if (round.won || round.challengerBroken) return null;
   if (!CARRIED_FROM.includes(String(round.verdictSource))) return null;
   const flips: string[] = round.comparison?.flips ?? [];

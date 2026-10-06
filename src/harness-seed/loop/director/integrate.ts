@@ -500,7 +500,6 @@ function fixNext(night: Night): string {
   return "the integrated build does not run — fix it in your worktree (git log shows what came in) before anything else";
 }
 
-/** What a merge asks of the lead next: look before building on it, put back what it lost, or repair it. */
 /**
  * A worker whose kept work is now on the integration branch — and, for a conflict worker, the
  * worker whose work it merged — counts in the first wave the art director waits for (art-direction.ts).
@@ -511,6 +510,7 @@ function markIntegrated(night: Night, worker: Worker): void {
   if (merged) merged.integrated = true;
 }
 
+/** What a merge asks of the lead next: look before building on it, put back what it lost, or repair it. */
 function nextAfterMerge(night: Night, health: Evidence, lost: readonly LostRegistration[]): string {
   if (health.ok) return "judge or look at integration before you build on it";
   const repair = lost.length ? WAVE_WORDS.lostNext : fixNext(night);

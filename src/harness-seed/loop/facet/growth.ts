@@ -32,7 +32,7 @@ export const STUCK_PRINCIPLE_CARDS = 3;
 const CONVINCING_SCORE = 3;
 
 /** The open rung's id on a ladder, unless a rung of the lead's already took it. */
-export const OPEN_RUNG_ID = "open";
+const OPEN_RUNG_ID = "open";
 
 /** What an open rung says until it is filled: how a brief, `worker_status` and the lead read it. */
 export const OPEN_RUNG_WHAT = "open — filled when reached by the reviewers' best in-scope structural step";
@@ -119,7 +119,7 @@ export function withStuckPrinciples<L extends AnyRecord | null | undefined>(
  * The critic's move candidates, best first: its stuck grow principles, then its `biggest` when that
  * is a grow principle inside the ask still short of convincing, then its other grow gaps, worst first.
  */
-export function criticCandidates(liveness: AnyRecord | null | undefined): AnyRecord[] {
+function criticCandidates(liveness: AnyRecord | null | undefined): AnyRecord[] {
   const grow: AnyRecord[] = liveness?.grow ?? [];
   const biggest = (liveness?.principles ?? []).find((p: AnyRecord) => p.key === liveness?.biggest);
   const named = biggest?.kind === PrincipleKind.Grow && shortOfConvincing(biggest) ? [biggest] : [];
