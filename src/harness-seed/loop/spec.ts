@@ -22,6 +22,11 @@ import { criticFor, inputProbesFor, isGameKind, normalizeGameTraits, wantsEyeCam
 import { isRecord } from "./json.ts";
 import { hasText } from "./text.ts";
 import { DEFAULT_CAMERA } from "./cameras.ts";
+import { demoOfFrame, isPassFrame } from "./pass-frames.ts";
+import { ProbeAfter } from "./throttle-bot.ts";
+// A namespace for what kinds.ts gained later: a seed upgrade keeps a kinds.ts the agent edited, and
+// a named import it lacks would stop this file loading.
+import * as kinds from "./kinds.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
 
 /** The most checks one facet's board carries. */
@@ -102,6 +107,8 @@ export interface Check {
   tol?: number;
   target?: number;
   demo?: string;
+  /** A probe that reads the state a run the evidence pass makes itself left (`ProbeAfter`). */
+  after?: string;
   name?: string;
   /** [x0, y0, x1, y1] as fractions of the frame. */
   crop?: [number, number, number, number];
@@ -447,7 +454,9 @@ const KIND_FIELDS: Record<CheckKind, (raw: AnyRecord, camera: string) => AnyReco
     const demo = String(raw.demo ?? "")
       .trim()
       .slice(0, CHECK_DEMO_CHARS);
-    return { expr: String(raw.expr ?? "").trim(), ...(demo ? { demo } : {}) };
+    // `after` reads a run the pass makes itself (the throttle-only bot's race); only its own words.
+    const after = (Object.values(ProbeAfter) as unknown[]).includes(raw.after) ? { after: raw.after } : {};
+    return { expr: String(raw.expr ?? "").trim(), ...(demo ? { demo } : {}), ...after };
   },
   [CheckKind.Demo]: (raw) => ({
     name: String(raw.name ?? raw.demo ?? "")
@@ -669,11 +678,17 @@ export function normalizeMilestones(list: unknown): Milestone[] {
   return out;
 }
 
-/** The demo one check depends on: a `demo` check's own name, or a probe's `demo` scope. */
-export function demoNameOf(check: { kind?: string; name?: unknown; demo?: unknown } | null | undefined): string {
+/**
+ * The demo one check depends on: a `demo` check's own name, a probe's `demo` scope, or the demo
+ * whose end frame (`demo:<name>`) a picture check looks at — a vision check on `demo:rival-battle`
+ * whose demo the cap dropped could never be asked (NFS run, 2026-10-06).
+ */
+export function demoNameOf(
+  check: { kind?: string; name?: unknown; demo?: unknown; camera?: unknown } | null | undefined,
+): string {
   if (check?.kind === "demo") return String(check.name ?? "");
   if (check?.kind === "probe") return String(check.demo ?? "");
-  return "";
+  return demoOfFrame(check?.camera);
 }
 
 /**
@@ -766,8 +781,9 @@ function addNote(check: Check, sentence: string): void {
  */
 function noteUnregistered(check: Check, { cameras, demos }: ValidationContext): void {
   const camera = check.camera;
+  // A frame the pass takes itself (a demo's end, the drive's corner) is no camera to register.
   const unregisteredCamera =
-    Array.isArray(cameras) && camera && !cameras.includes(camera) && !camera.startsWith("eye:");
+    Array.isArray(cameras) && camera && !cameras.includes(camera) && !camera.startsWith("eye:") && !isPassFrame(camera);
   if (unregisteredCamera) addNote(check, `camera "${camera}" is not registered yet — register it in config.cameras`);
   const demoNamed = demoNameOf(check);
   const unregisteredDemo = Array.isArray(demos) && demoNamed && !demos.includes(demoNamed);
@@ -974,6 +990,20 @@ export const HARNESS_CHECKS: Record<string, AnyRecord & { expr?: string; note: s
     needs: ["flow.playing"],
     note: "harness-owned: after begin the game is in play (state().flow.playing) — the front-end hands the player the controls",
   },
+  // The NFS run (2026-10-06): a bot that only holds the throttle won the race in both games — the
+  // Genex build in 3:46.6, the hand-built one in 1:49.98. The evidence pass races that bot when the
+  // board carries this check (evidence.ts `raceThrottleBot`: the throttle held, the game's racing
+  // line steering, never a brake) and the probe reads the state the race left. A game that reports
+  // no `race.position` is not asked (`needs`); a race the pass did not run is unmeasured.
+  "throttle-bot-loses": {
+    kind: CheckKind.Probe,
+    weight: CheckWeight.Normal,
+    origin: CheckOrigin.Harness,
+    after: ProbeAfter.ThrottleBot,
+    expr: "race.position > 1",
+    needs: ["race.position"],
+    note: "harness-owned: a bot that only holds the throttle (steered by the game's racing line, never braking) must not win the race — report race.position (1 = leading) and race.finished in state()",
+  },
 };
 
 /** The harness checks that only hold once the game is in play: off the front-end owner's board. */
@@ -982,7 +1012,13 @@ const IN_PLAY_CHECKS: ReadonlySet<string> = new Set([
   "hud-coverage",
   "keys-move-player",
   "look-turns-camera",
+  "throttle-bot-loses",
 ]);
+
+/** The kind's throttle, from a kinds.ts that may predate `throttleFor` (an edited copy an upgrade kept). */
+function throttleOf(game: AnyRecord | null): string[] {
+  return typeof kinds.throttleFor === "function" ? kinds.throttleFor(game) : [];
+}
 
 /** The `hud-coverage` body for a HUD whose kind allows `budget` of the frame. */
 function hudCoverage(budget: number): AnyRecord {
@@ -1023,12 +1059,29 @@ function deltaPathsIn(expr: unknown): string[] {
   return [...new Set(found)].slice(0, MAX_DELTA_PATHS);
 }
 
+/** The harness checks a board of this game carries, by id, before the front-end owner's are left off. */
+function harnessCheckIds(game: AnyRecord | null, { owner, screen }: { owner: boolean; screen: boolean }): string[] {
+  const traits = normalizeGameTraits(game);
+  // `screen: false` — a game the user brought with its own UI (DOM menus, its own HUD) keeps
+  // it; the one-screen checks describe the template's screen, not this game's.
+  const driven = traits.keyboardMove || traits.mouseLook;
+  return [
+    ...(screen && traits.hud ? ["no-dom-ui", "single-hud", "hud-coverage", "hud-overlap"] : []),
+    ...(owner && traits.mouseLook ? ["look-turns-camera"] : []),
+    ...(owner && traits.keyboardMove ? ["keys-move-player"] : []),
+    ...(owner && driven ? ["reaches-play"] : []),
+    // A kind with a throttle (a racer, a craft) races the throttle-only bot on the entry owner's board.
+    ...(owner && throttleOf(game).length ? ["throttle-bot-loses"] : []),
+  ];
+}
+
 /**
  * The harness-owned checks a facet carries, conditional on what the plan says the game IS:
  * the screen checks on every facet of a game with a HUD (any facet can paint a second one, or
  * crowd the frame), the input checks on the facet that owns main.js and on the integration
  * facet (they own the player) when the game is mouse-looked / keyboard-moved, and with them
- * `reaches-play`. Existing ids are replaced by the harness definition, never duplicated.
+ * `reaches-play` — and, for a kind with a throttle, `throttle-bot-loses`. Existing ids are
+ * replaced by the harness definition, never duplicated.
  *
  * Every trait is off until something declares it (loop/kinds.ts), so a game nobody described
  * carries no harness check at all: the four checks describe the template's screen and the
@@ -1053,15 +1106,7 @@ export function withHarnessChecks<S extends { checks?: Check[] }>(
   const traits = normalizeGameTraits(game);
   const owner = ownsMain || role === "integration";
   const probes = inputProbesFor(game) ?? {};
-  // `screen: false` — a game the user brought with its own UI (DOM menus, its own HUD) keeps
-  // it; the one-screen checks describe the template's screen, not this game's.
-  const driven = traits.keyboardMove || traits.mouseLook;
-  const wanted = [
-    ...(screen && traits.hud ? ["no-dom-ui", "single-hud", "hud-coverage", "hud-overlap"] : []),
-    ...(owner && traits.mouseLook ? ["look-turns-camera"] : []),
-    ...(owner && traits.keyboardMove ? ["keys-move-player"] : []),
-    ...(owner && driven ? ["reaches-play"] : []),
-  ].filter((id) => !keepsFrontEnd || !IN_PLAY_CHECKS.has(id));
+  const wanted = harnessCheckIds(game, { owner, screen }).filter((id) => !keepsFrontEnd || !IN_PLAY_CHECKS.has(id));
   const overrides: Record<string, AnyRecord> = {
     "look-turns-camera": inputProbe(probes.look, "look-turns-camera"),
     "keys-move-player": inputProbe(probes.move, "keys-move-player"),
@@ -1117,12 +1162,19 @@ function metricWords(c: Check): string {
   return `metric on ${c.camera}: ${c.expr} → ${better} is better (ratchet, tol ${c.tol ?? METRIC_TOLERANCE}${target})`;
 }
 
+/** Which state a probe reads, for a brief: a demo's end, the throttle-only bot's race, or the drive's. */
+function probeScopeWords(c: Check): string {
+  if (c.demo) return ` on the state left by demo "${c.demo}"`;
+  if (c.after === ProbeAfter.ThrottleBot) return " on the state a throttle-only bot's race left";
+  return "";
+}
+
 /** What each kind of check measures, as a brief's line says it. */
 const CHECK_WORDS: Record<CheckKind, (c: Check) => string> = {
   [CheckKind.Scene]: (c) => `scene: ${c.js}`,
   [CheckKind.Pixel]: (c) => `pixel on ${c.camera}: ${c.expr}`,
   [CheckKind.Metric]: metricWords,
-  [CheckKind.Probe]: (c) => `probe${c.demo ? ` on the state left by demo "${c.demo}"` : ""}: ${c.expr}`,
+  [CheckKind.Probe]: (c) => `probe${probeScopeWords(c)}: ${c.expr}`,
   [CheckKind.Demo]: (c) =>
     `demo "${c.name}"${c.expr && c.expr !== "ok" ? ` then ${c.expr}` : " runs to its end state"}`,
   [CheckKind.Vision]: (c) =>
@@ -1372,11 +1424,24 @@ function ridingLine(game: AnyRecord | null, screen: boolean): string {
   );
   if (!riding.length)
     return `No harness-owned checks ride on this game's board — declare hud, mouseLook or keyboardMove in game if it has them.`;
+  return `Already on this game's board (harness-owned, do not re-declare): ${riding.join(", ")}.${ridingWords(riding, hudBudgetFor(game))}`;
+}
+
+/** What the harness checks riding on a board ask, a sentence each, for the planner. */
+function ridingWords(riding: readonly string[], budget: number | null): string {
   const screenRides = riding.includes("no-dom-ui") || riding.includes("single-hud");
   const inputRides = riding.includes("look-turns-camera") || riding.includes("keys-move-player");
-  const budget = hudBudgetFor(game);
   const hudRides = riding.includes("hud-coverage") && budget !== null;
-  return `Already on this game's board (harness-owned, do not re-declare): ${riding.join(", ")}.${screenRides ? " Every visible element is drawn into the canvas — no DOM UI, one HUD." : ""}${hudRides ? ` The HUD covers at most ${Math.round(budget * 100)}% of the frame and its items do not overlap.` : ""}${inputRides ? " The input checks and reaches-play ride on the facet that owns main." : ""}`;
+  return [
+    screenRides ? " Every visible element is drawn into the canvas — no DOM UI, one HUD." : "",
+    hudRides
+      ? ` The HUD covers at most ${Math.round((budget ?? 0) * 100)}% of the frame and its items do not overlap.`
+      : "",
+    inputRides ? " The input checks and reaches-play ride on the facet that owns main." : "",
+    riding.includes("throttle-bot-loses")
+      ? " On the facet that owns main, a bot that only holds the throttle must not win the race (throttle-bot-loses: report race.position and race.finished)."
+      : "",
+  ].join("");
 }
 
 /**

@@ -298,6 +298,11 @@ export interface StudioConfig {
   flow?: () => FlowPhase;
   /** From where `reset` leaves the game straight into play: synchronous, deterministic, no wall clock. */
   begin?: () => void;
+  /**
+   * A racing game's racing line: the steering a driver on it would apply now, -1 full left … 1
+   * full right, read every frame while the harness's assist is on. A pure read of the game's state.
+   */
+  steer?: () => number;
   canvas?: HTMLCanvasElement;
   /** The game's scene graph, renderer and camera — whatever library they come from. */
   scene?: unknown;
@@ -334,6 +339,13 @@ export interface StudioApi {
   demo(name: string): { ok: true; demo: string; result: unknown } | { ok: false; available: string[] };
   /** Past the title, menu and countdown into play via `config.begin`, left paused; `ok: false` without one. */
   begin(): { ok: true; flow: GameFlow | null } | { ok: false; reason: string };
+  /** The steering `config.steer` asks for now, clamped to -1…1; `ok: false` without one. */
+  steer(): { ok: true; steer: number } | { ok: false; reason: string };
+  /**
+   * The racing-line assist on (`{ steer: true }`) or off: `config.steer` steers through the arrow
+   * and A/D keys, held for the share of frames the line asks, until switched off or `seed()`.
+   */
+  assist(options: { steer: boolean } | boolean): { ok: true; steer: boolean } | { ok: false; reason: string };
   /** The critic's hands: key names (`KeyW`, `w`) and mouse deltas in pixels. */
   injectInput(input: {
     down?: string[];

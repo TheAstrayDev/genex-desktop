@@ -18,8 +18,8 @@ look and move probes read, the eye cameras it wants, its critic and its play scr
 OFF until the planner, the director or `studio.json`'s nested `game` block declares it, so a game
 nobody described carries no harness input check at all; a declared kind supplies its traits and an
 explicit boolean beside it wins. The harness drives that kind's play script before every
-judgement (racing and flight then hold W/ArrowUp through the rest of the drive, `cruise`, released
-before the cameras; a declared script holds nothing; a front-end kept for its owner, `begin:false`,
+judgement (racing and flight then hold W/ArrowUp through the rest of the drive, `cruise`, steered by
+the game's racing line when it has one and released before the cameras; a declared script holds nothing; a front-end kept for its owner, `begin:false`,
 is pressed by nothing, not even a declared script), and `gameLine(run.game)` is the first line of
 every judge call (for a kept front-end it says nothing was pressed and `[dead-input]` does not apply). A game with a title and no `__studio.begin()` may declare `start.keys`. Two critics, not one:
 `place` for a world a player walks through and `screen` for a board, a puzzle or a builder.
@@ -282,6 +282,19 @@ another size (clamped to 1920×1200) until its release, never Live, the stand-in
 handing the lease to a session puts it back at the facet size, so size it again afterwards
 (`preview.status` `viewSize` is the size it is at now); a pass given `viewport` sizes its leased window
 before it loads. Every pass records the cameras the game registers (`registeredCameras`).
+
+What a drive shows the judges (`loop/evidence.ts`). A held throttle steers by the game's own
+racing line when the template's `config.steer` exists (`__studio.assist`, recorded as `drive`);
+otherwise nothing steers, as before. A racer's drive watches `player.yaw` after its third step and
+photographs the first turn faster than 20°/s as `drive:corner` (`loop/pass-frames.ts`), a frame
+every camera list keeps (`corner` records it or why there is none). A look runs every demo a check names — a vision check
+on `demo:<name>` included — and at most 12 more, demos the compared build lacks first; the judge
+and the builder's next prompt name any it left out (`demoCap`), never as a defect. A pass asked for `challenge` (a board
+carrying `throttle-bot-loses`, every round, or the art director's look) races a bot that holds
+only the kind's throttle, steered by the line, never braking, from `seed` in 5 s steps until
+`race.finished` or six simulated minutes; the probe (`after`, `loop/throttle-bot.ts`) reads the state it ends on, and a game
+reporting no `race.position` is not asked. Judges read the steering, corner and race as fact lines
+(`loop/judge-facts.ts`).
 
 What a probe reads. The studio bounds `__studio.state()` by structure, never by cutting its text
 (`main/preview-page-scripts.ts` `boundStudioState`): a state whose JSON fits 48,000 characters

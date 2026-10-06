@@ -62,16 +62,6 @@ const DEG = Math.PI / 180;
 const MOUSE_KEYS = ["Mouse1", "Mouse3", "Mouse2"];
 /** The screen flash fades by this factor per simulation step. */
 const FLASH_DECAY = 0.86;
-/**
- * The keys the racing-line assist holds to steer (`assist()`), in both spellings a game may read:
- * the arrow, and the letter as a key event carries it (`KeyA`, `a`, `A`).
- */
-const STEER_KEYS = Object.freeze({
-  left: Object.freeze(["ArrowLeft", "KeyA", "a", "A"]),
-  right: Object.freeze(["ArrowRight", "KeyD", "d", "D"]),
-});
-/** The assist holds a steer key on a frame once its owed lock reaches half a frame's worth. */
-const STEER_THRESHOLD = 0.5;
 
 /**
  * @param {{
@@ -84,7 +74,6 @@ const STEER_THRESHOLD = 0.5;
  *   reset?: (seed: number) => void,
  *   flow?: () => string,
  *   begin?: () => void,
- *   steer?: () => number,
  *   canvas?: HTMLCanvasElement,
  *   scene?: unknown,
  *   renderer?: unknown,
@@ -108,11 +97,6 @@ export function installStudio(config) {
   let rafHandle = 0;
   const fpsSamples = [];
   const heldKeys = new Set();
-  /**
-   * The racing-line assist while the harness has it on (`assist()`), else null: the lock it owes,
-   * carried frame to frame so half a lock holds a steer key on half the frames.
-   */
-  let assist = null;
   const look = { x: 0, y: 0 };
   const wheel = { x: 0, y: 0 };
   const pointer = { x: 0.5, y: 0.5 };
@@ -389,44 +373,12 @@ export function installStudio(config) {
     return throughCaptureShim(url, photographRecord(url, before, after));
   }
 
-  /**
-   * The steering the game's racing line asks for now (`config.steer`), clamped to -1 (full left)
-   * … 1 (full right); a game with none, or a line that throws, is answered so — never thrown.
-   */
-  function steerNow() {
-    if (typeof config.steer !== "function") return { ok: false, reason: "this game has no config.steer" };
-    let value;
-    try {
-      value = Number(config.steer());
-    } catch (error) {
-      return { ok: false, reason: `config.steer threw: ${String(error?.message ?? error)}` };
-    }
-    if (!Number.isFinite(value)) return { ok: false, reason: "config.steer returned no number" };
-    return { ok: true, steer: Math.max(-1, Math.min(1, value)) };
-  }
-
-  /** Which way the assist steers this frame, or null: the lock owed, a key held once it adds up to half. */
-  function assistSide() {
-    const line = steerNow();
-    assist.credit += line.ok ? line.steer : 0;
-    if (assist.credit >= STEER_THRESHOLD) {
-      assist.credit -= 1;
-      return "right";
-    }
-    if (assist.credit <= -STEER_THRESHOLD) {
-      assist.credit += 1;
-      return "left";
-    }
-    return null;
-  }
-
   function stepOnce() {
     if (typeof config.update !== "function") return;
     config.update(fixedStepMs / 1000, {
       rng,
       frame,
-      // The assist steers through the keys a player holds, never instead of them.
-      keys: assist ? withAssistKeys(heldKeys, assistSide()) : heldKeys,
+      keys: heldKeys,
       look: consumeLook(),
       wheel: consumeWheel(),
       pointer: { x: pointer.x, y: pointer.y, locked: locked() },
@@ -618,8 +570,6 @@ export function installStudio(config) {
       accumulator = 0;
       fpsSamples.length = 0;
       heldKeys.clear();
-      // A reset game is never steered by a look that has ended.
-      assist = null;
       look.x = 0;
       look.y = 0;
       hud.flashAlpha = 0;
@@ -698,33 +648,6 @@ export function installStudio(config) {
       renderAll();
       // As state() does: a game that reports no flow answers none, not a phase it never named.
       return { ok: true, flow: typeof config.flow === "function" ? flowNow() : null };
-    },
-
-    /**
-     * The racing line (`config.steer`): the steering a driver on it would apply now, -1 full left …
-     * 1 full right — `{ ok: true, steer }`, or `{ ok: false, reason }` for a game with none.
-     */
-    steer() {
-      return steerNow();
-    },
-
-    /**
-     * The racing-line assist: `assist({ steer: true })` lets `config.steer` steer through the same
-     * keys a player holds (arrows and A/D), holding them for the share of frames the line asks,
-     * until `assist({ steer: false })` or `seed()`. The harness's drive and its throttle-only bot
-     * hold the throttle with it on, so a car follows its road instead of the first wall.
-     */
-    assist(options) {
-      const on = options === true || options?.steer === true;
-      if (!on) {
-        assist = null;
-        return { ok: true, steer: false };
-      }
-      if (typeof config.update !== "function")
-        return { ok: false, reason: "this game runs its own loop (no config.update): there is no frame to steer in" };
-      if (typeof config.steer !== "function") return { ok: false, reason: "this game has no config.steer" };
-      assist = { credit: 0 };
-      return { ok: true, steer: true };
     },
 
     /**
@@ -928,14 +851,6 @@ export function installStudio(config) {
   renderAll();
   if (typeof config.update === "function") rafHandle = requestAnimationFrame(loop);
   return api;
-}
-
-/** The keys a player holds, plus the steer keys the racing-line assist holds this frame (`side`). */
-function withAssistKeys(held, side) {
-  if (!side) return held;
-  const keys = new Set(held);
-  for (const key of STEER_KEYS[side]) keys.add(key);
-  return keys;
 }
 
 /** The draw calls the page has made so far, as the studio's hook counts them; null without one. */

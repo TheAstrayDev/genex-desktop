@@ -59,6 +59,12 @@ export interface GameKind {
    */
   cruise?: string[];
   /**
+   * The drive watches for a corner and photographs the turn-in (`drive:corner`, evidence.ts): a
+   * course has corners, and what a player sees in one is what a frame taken wherever the drive
+   * ended almost never shows.
+   */
+  corners?: boolean;
+  /**
    * The share of the frame a HUD of this kind may cover (`hud-coverage`, loop/hud-budget.ts):
    * only kinds with a HUD carry one.
    */
@@ -190,6 +196,7 @@ export const GAME_KINDS: Record<string, GameKind> = {
     critic: "place",
     script: RACING_EXERCISE,
     cruise: THROTTLE,
+    corners: true,
     hudBudget: 0.18,
   },
   flight: {
@@ -277,6 +284,21 @@ export function cruiseFor(game: AnyRecord | null | undefined): string[] {
   const { kind, playScript } = normalizeGameTraits(game);
   if (playScript) return [];
   return [...((kind ? GAME_KINDS[kind]?.cruise : null) ?? [])];
+}
+
+/**
+ * The throttle of a kind that has one, whatever script its plan wrote: what the throttle-only bot
+ * holds through its race (evidence.ts), and what puts `throttle-bot-loses` on a board (spec.ts).
+ */
+export function throttleFor(game: AnyRecord | null | undefined): string[] {
+  const { kind } = normalizeGameTraits(game);
+  return [...((kind ? GAME_KINDS[kind]?.cruise : null) ?? [])];
+}
+
+/** Does the drive of this kind watch for a corner to photograph (`GameKind.corners`)? */
+export function cornersFor(game: AnyRecord | null | undefined): boolean {
+  const { kind } = normalizeGameTraits(game);
+  return Boolean(kind && GAME_KINDS[kind]?.corners);
 }
 
 /** A pointer at a spot: a click (which may name its button) or a move (which needs both coordinates). */

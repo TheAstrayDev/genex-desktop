@@ -427,11 +427,22 @@ function resumedPrompt(p: PromptInput): string {
 /** How the last build went: accepted, lost (and where its code is kept), or nothing yet. */
 function lastAttemptLine(lastAttempt: AnyRecord | null): string {
   if (!lastAttempt) return "";
+  const unseen = unseenDemosLine(lastAttempt.skippedDemos);
   if (lastAttempt.won)
-    return `Your last build was ACCEPTED${lastAttempt.flips.length ? ` (flipped: ${lastAttempt.flips.join(", ")})` : ""}.`;
+    return `Your last build was ACCEPTED${lastAttempt.flips.length ? ` (flipped: ${lastAttempt.flips.join(", ")})` : ""}.${unseen}`;
   const kept = lastAttempt.flips.length ? ` (it did flip ${lastAttempt.flips.join(", ")} — keep that)` : "";
   const retained = lastAttempt.branch ? `. Its code is retained on ${lastAttempt.branch}` : "";
-  return `Your last build LOST: ${lastAttempt.why || "no check flipped"}${kept}${retained}. The worktree is back on the accepted build.`;
+  return `Your last build LOST: ${lastAttempt.why || "no check flipped"}${kept}${retained}. The worktree is back on the accepted build.${unseen}`;
+}
+
+/**
+ * The demos the last round's look registered but did not photograph (the look's cap): a builder
+ * whose new demo was never seen once spent four rounds on a move no judge could look at (NFS run).
+ */
+function unseenDemosLine(skipped: unknown): string {
+  const names = Array.isArray(skipped) ? skipped.map(String).filter(Boolean) : [];
+  if (!names.length) return "";
+  return ` Its look did not photograph the demos ${names.join(", ")} (a look runs every demo a check names, and only so many more) — name one in a check (a demo check, or a vision check on demo:<name>) to have it photographed every round.`;
 }
 
 /** Identity checks first. */

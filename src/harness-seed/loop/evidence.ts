@@ -24,9 +24,10 @@ import { PageMethod } from "./page-contract.ts";
 import { PreviewConsoleSource, PreviewGone } from "./preview-gone.ts";
 import { isElidedStub, isKeepPath, isTruncatedState, stateCutOf } from "./state-shape.ts";
 import { clip } from "./text.ts";
-import { SECOND_MS, sleep } from "./time.ts";
+import { MINUTE_MS, SECOND_MS, sleep } from "./time.ts";
 import { isRecord } from "./json.ts";
 import { DEFAULT_CAMERA } from "./cameras.ts";
+import { CORNER_CAMERA, isPassFrame } from "./pass-frames.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type { CheckEvidence } from "./checks.ts";
 
@@ -61,6 +62,12 @@ export interface Evidence extends CheckEvidence {
   machineKilled?: boolean;
   /** The cameras the game registers (`__studio.cameras()`), whatever the pass photographed; null when it never said. */
   registeredCameras?: string[] | null;
+  /** Whether the game's racing line steered the held throttle — only for a drive that held one. */
+  drive?: { steered: boolean };
+  /** The racer's turn-in the drive photographed (`drive:corner`), or why there is none — only for a kind with corners. */
+  corner?: { seen: boolean; atMs?: number; turnDegPerSecond?: number; unreadable?: boolean };
+  /** The throttle-only bot's race — only when the pass was asked to race it. */
+  challenge?: AnyRecord;
   // biome-ignore lint/suspicious/noExplicitAny: every other reading of the pass, read by name where it is used.
   [field: string]: any;
 }
@@ -101,6 +108,13 @@ export interface GatherOptions {
   audio?: boolean;
   maxDemos?: number;
   requiredDemos?: string[];
+  /**
+   * The demos the build this one is compared with registers: under the cap, a demo this build
+   * added runs before the ones the other already showed (the NFS run's `contact` never did).
+   */
+  knownDemos?: string[] | null;
+  /** Race the throttle-only bot after the demos (`raceThrottleBot`): a board carries `throttle-bot-loses`, or a ship look. */
+  challenge?: boolean;
   userView?: boolean;
   scaffold?: boolean;
   setup?: AnyRecord | null;
@@ -120,6 +134,8 @@ interface Look extends GatherOptions {
   audio: boolean;
   maxDemos: number;
   requiredDemos: string[];
+  knownDemos: string[] | null;
+  challenge: boolean;
   userView: boolean;
   scaffold: boolean;
   inheritedConsole: string[];
@@ -171,6 +187,35 @@ const PLAY_WAIT_STEP_MS = 240;
 const PLAY_WAIT_MAX_MS = 12 * SECOND_MS;
 /** How much of what `__studio.begin()` answered when it refused a warning quotes. */
 const BEGIN_REASON_CHARS = 160;
+/**
+ * The demos a look runs beyond the ones checks name, unless its caller says otherwise. It was three:
+ * the NFS run's racer registered ten, and the `contact` demo its rivals worker built to show its
+ * move was never photographed while four rounds were judged without it.
+ */
+const DEMOS_PER_LOOK = 12;
+/**
+ * The drive's corner (`drive:corner`): steps before this one are the controls' own swerve and the
+ * line taking the car back; a heading turning faster than this (radians per second, about 20°/s)
+ * is a corner, not a lane change.
+ */
+const CORNER_SETTLE_STEPS = 3;
+const CORNER_TURN_RAD_PER_S = 0.35;
+const DEGREES_PER_RADIAN = 180 / Math.PI;
+/**
+ * The throttle-only bot's race (`raceThrottleBot`): stepped this long at a time, for at most this
+ * much racing — the Genex build's bot won in 3:46.6. The time keeps it affordable: about a minute
+ * of a page's own stepping at most, and only when a board carries the check or a ship look asks.
+ */
+const CHALLENGE_STEP_MS = 5 * SECOND_MS;
+const CHALLENGE_MAX_MS = 6 * MINUTE_MS;
+/** The state paths the bot's race is read by: kept whole when the state is over the studio's budget. */
+const RACE_PATHS = ["race.position", "race.finished"];
+/** Why the throttle-only bot did not race: the words a probe's reason and a judge read. */
+const MESSAGE = {
+  botNoRace: "the game reports no race.position in state() — there is no race to win",
+  botNoThrottle: "this kind of game has no throttle to hold",
+  botNoPlay: "the race never reached play after begin()",
+} as const;
 /** A pass without a spec photographs at most this many cameras. */
 const MAX_CAMERAS = 6;
 /** The harness's own viewpoints, asked of a game that declares fewer than two. */
@@ -721,8 +766,10 @@ export async function gatherEvidence(
     eyes = true,
     motion = 0,
     audio = true,
-    maxDemos = 3,
+    maxDemos = DEMOS_PER_LOOK,
     requiredDemos = [],
+    knownDemos = null,
+    challenge = false,
     userView = true,
     scaffold = false,
     setup = undefined,
@@ -731,6 +778,7 @@ export async function gatherEvidence(
     viewport = null,
   }: GatherOptions,
 ): Promise<Evidence> {
+  const kept = Array.isArray(keepPaths) ? keepPaths.map(String) : [];
   // The pass's own state, phase to phase: its arguments, then what each phase found for the
   // phases after it.
   const look: Look = {
@@ -748,11 +796,14 @@ export async function gatherEvidence(
     audio,
     maxDemos,
     requiredDemos,
+    knownDemos: Array.isArray(knownDemos) ? knownDemos.map(String) : null,
+    challenge: challenge === true,
     userView,
     scaffold,
     setup,
     inheritedConsole,
-    keepPaths: Array.isArray(keepPaths) ? keepPaths.map(String) : [],
+    // The bot's race is read by its position and finish: cut last, like the board's own paths.
+    keepPaths: challenge === true ? [...new Set([...kept, ...RACE_PATHS])] : kept,
     viewport,
   };
   for (const phase of LOOK_OPENING) {
@@ -781,7 +832,9 @@ export async function gatherEvidence(
  */
 async function handBack(look: Look): Promise<void> {
   const { ctx, h } = look;
-  const movedPastFrontEnd = look.play?.via === PlayVia.Begin || look.play?.via === PlayVia.Keys;
+  // The bot's race ends wherever it ended — a results screen, mid-race at the time limit.
+  const raced = look.challengeRace?.ran === true;
+  const movedPastFrontEnd = raced || look.play?.via === PlayVia.Begin || look.play?.via === PlayVia.Keys;
   if (movedPastFrontEnd && !look.handle)
     await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Seed, arg: look.seed, ...h }).catch(() => {});
   await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Start, ...h }).catch(() => {});
@@ -810,6 +863,7 @@ const LOOK_PHASES: Array<(look: Look) => Promise<LookEnd>> = [
   photographCameras,
   photographUserView,
   runDemos,
+  runChallenge,
   weighFrames,
   readLateStatus,
   readConsole,
@@ -1134,6 +1188,29 @@ function cruiseOf(game: AnyRecord | null | undefined): string[] {
   return typeof kinds.cruiseFor === "function" ? kinds.cruiseFor(game) : [];
 }
 
+/** The throttle the bot holds, whatever script the plan wrote, from a kinds.ts that may predate it. */
+function throttleOf(game: AnyRecord | null | undefined): string[] {
+  return typeof kinds.throttleFor === "function" ? kinds.throttleFor(game) : [];
+}
+
+/** Whether the drive of this kind watches for a corner, from a kinds.ts that may predate it. */
+function cornersOf(game: AnyRecord | null | undefined): boolean {
+  return typeof kinds.cornersFor === "function" ? kinds.cornersFor(game) : false;
+}
+
+/**
+ * The racing-line assist on or off (`__studio.assist`, the template's `config.steer`): whether the
+ * game's own line steers now. A game without one answers that it has none, and an older studio.js
+ * has no such verb at all: either way the drive is today's — the throttle held, nothing steering.
+ */
+async function steerByLine(look: Look, on: boolean): Promise<boolean> {
+  const { ctx, h } = look;
+  const answer = await ctx
+    .call(HostMethod.PreviewCall, { method: PageMethod.Assist, arg: { steer: on }, ...h })
+    .catch(() => null);
+  return isRecord(answer) && answer.ok === true && answer.steer === true;
+}
+
 /**
  * The controls the drive presses. A kept front-end (`setup.begin === false`) is pressed by
  * nothing: the kind's exercise would start a title that takes any key on its throttle, and a
@@ -1150,6 +1227,10 @@ function driveScriptOf(look: Look): unknown {
  * throttle through the rest of the drive (`cruise`), released before the cameras: a racer
  * photographed after thirty seconds of coasting is a parked car. Both sides of every comparison
  * get the same inputs.
+ *
+ * The cruise steers by the game's own racing line when it has one (`config.steer`): the NFS run's
+ * drive held the throttle and steered nothing, and every drive ended with the car against a wall.
+ * A racer's drive also watches its heading for a corner to photograph (`watchCorner`).
  */
 async function driveGame(look: Look): Promise<void> {
   const { ctx, h, run } = look;
@@ -1157,13 +1238,24 @@ async function driveGame(look: Look): Promise<void> {
   // A menu is never held on the throttle: the front-end's own worker, or a game that never got into play.
   const onMenu = Boolean(look.play && !look.play.reached);
   const cruise = onMenu ? [] : cruiseOf(run?.game);
-  if (cruise.length) await ctx.call(HostMethod.PreviewInput, { actions: [{ type: "down", keys: cruise }], ...h });
+  look.cornerWatch = !onMenu && cornersOf(run?.game) ? newCornerWatch() : null;
+  if (cruise.length) {
+    await ctx.call(HostMethod.PreviewInput, { actions: [{ type: "down", keys: cruise }], ...h });
+    look.drive = { steered: await steerByLine(look, true) };
+  }
   try {
     await stepThroughDrive(look);
   } finally {
-    if (cruise.length)
-      await ctx.call(HostMethod.PreviewInput, { actions: [{ type: "up", keys: cruise }], ...h }).catch(() => {});
+    await releaseCruise(look, cruise);
   }
+  look.corner = cornerReport(look);
+}
+
+/** Let go of the cruise: the line's steering, then the throttle. */
+async function releaseCruise(look: Look, cruise: string[]): Promise<void> {
+  if (!cruise.length) return;
+  if (look.drive?.steered) await steerByLine(look, false);
+  await look.ctx.call(HostMethod.PreviewInput, { actions: [{ type: "up", keys: cruise }], ...look.h }).catch(() => {});
 }
 
 /**
@@ -1184,7 +1276,113 @@ async function stepThroughDrive(look: Look): Promise<void> {
       }
     }
     await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Step, arg: DRIVE_STEP_MS, ...h });
+    await watchCorner(look, i);
   }
+}
+
+// ── the drive's corner ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The player's heading, read page-side after a drive step: `state().player.yaw` in radians, or
+ * null when the game reports none. One small answer, not the whole state over the wire.
+ */
+export const CORNER_PROBE = `(() => {
+  /* studio corner probe */
+  try {
+    var s = window.__studio;
+    var state = s && typeof s.state === "function" ? s.state() : null;
+    var player = state && state.player;
+    var yaw = player ? player.yaw : null;
+    return { yaw: typeof yaw === "number" && isFinite(yaw) ? yaw : null };
+  } catch (err) {
+    return null;
+  }
+})()`;
+
+/** What the drive has seen of a racer's heading so far, and the corner once it photographed one. */
+interface CornerWatch {
+  /** The heading after the last step, radians; null before the first read. */
+  yaw: number | null;
+  /** The fastest turn seen after the settle, radians per second. */
+  maxTurn: number;
+  /** The first read answered nothing: the game reports no heading, and the drive stops asking. */
+  unreadable: boolean;
+  /** The turn-in the drive photographed: when, and how fast the heading was turning. */
+  corner: { atMs: number; turn: number } | null;
+}
+
+const newCornerWatch = (): CornerWatch => ({ yaw: null, maxTurn: 0, unreadable: false, corner: null });
+
+/** The heading the probe read, or null when the game reports none. */
+async function readHeading(look: Look): Promise<number | null> {
+  const { ctx, h } = look;
+  const answer = await ctx.call(HostMethod.PreviewEvaluate, { expression: CORNER_PROBE, ...h }).catch(() => null);
+  const yaw = isRecord(answer) ? answer.yaw : null;
+  return typeof yaw === "number" && Number.isFinite(yaw) ? yaw : null;
+}
+
+/** The signed change from one heading to the next, wrapped to a half turn either way. */
+const headingChange = (from: number, to: number): number => Math.atan2(Math.sin(to - from), Math.cos(to - from));
+
+/**
+ * After drive step `step`: read the heading, and when it is turning like a corner (and the controls'
+ * own swerve is behind), photograph the turn-in once — what the corner warnings, the braking and
+ * the line look like, which the frame wherever the drive ended almost never shows (NFS run).
+ */
+async function watchCorner(look: Look, step: number): Promise<void> {
+  const watch: CornerWatch | null = look.cornerWatch;
+  if (!watch) return;
+  if (watch.unreadable || watch.corner) return;
+  const yaw = await readHeading(look);
+  if (yaw === null) {
+    watch.unreadable = watch.yaw === null;
+    return;
+  }
+  const previous = watch.yaw;
+  watch.yaw = yaw;
+  if (previous === null || step < CORNER_SETTLE_STEPS) return;
+  const turn = Math.abs(headingChange(previous, yaw)) / (DRIVE_STEP_MS / SECOND_MS);
+  watch.maxTurn = Math.max(watch.maxTurn, turn);
+  if (turn < CORNER_TURN_RAD_PER_S) return;
+  watch.corner = { atMs: (step + 1) * DRIVE_STEP_MS, turn };
+  await photographCorner(look);
+}
+
+/** The turn-in as the game renders it, filed as `drive:corner`; a lost frame is a thinner look, never a failure. */
+async function photographCorner(look: Look): Promise<void> {
+  const { ctx, h, prefix, run } = look;
+  try {
+    // A motion frame may have left the lens on the player's eye: the corner is the game's own view.
+    if (look.motionCamera)
+      await ctx.call(HostMethod.PreviewCall, { method: PageMethod.DebugCamera, arg: DEFAULT_CAMERA, ...h });
+    const shot = await ctx.call(HostMethod.PreviewScreenshot, {
+      runId: run.runId,
+      label: `${prefix}/screenshots/drive-corner`,
+      surface: "canvas",
+      ...h,
+    });
+    look.cornerShot = {
+      camera: CORNER_CAMERA,
+      path: shot.path,
+      bytes: shot.bytes,
+      base64: shot.base64,
+      stats: shot.stats ?? null,
+      surface: photographed(shot),
+    };
+  } catch {
+    look.cornerShot = null;
+  }
+}
+
+/** What the drive says of corners (`evidence.corner`): the turn-in it photographed, the fastest turn it saw, or that it could not tell. */
+function cornerReport(look: Look): AnyRecord | null {
+  const watch: CornerWatch | null = look.cornerWatch;
+  if (!watch) return null;
+  if (watch.unreadable) return { seen: false, unreadable: true };
+  const { corner } = watch;
+  if (!corner || !look.cornerShot)
+    return { seen: false, turnDegPerSecond: Math.round(watch.maxTurn * DEGREES_PER_RADIAN) };
+  return { seen: true, atMs: corner.atMs, turnDegPerSecond: Math.round(corner.turn * DEGREES_PER_RADIAN) };
 }
 
 /**
@@ -1413,7 +1611,10 @@ async function chooseCameras(look: Look): Promise<void> {
   look.registeredCameras = null;
   if (!look.bootedFor) cameraNames.push(DEFAULT_CAMERA);
   else if (Array.isArray(cameras) && cameras.length > 0) {
-    for (const name of [DEFAULT_CAMERA, ...cameras.map(String)]) addCamera(cameraNames, name);
+    // A facet's camera that is a demo's end or the drive's corner is a frame the pass takes on its
+    // own, never a viewpoint to ask debugCamera for (nor one "not registered in config.cameras").
+    const viewpoints = cameras.map(String).filter((name) => !isPassFrame(name));
+    for (const name of [DEFAULT_CAMERA, ...viewpoints]) addCamera(cameraNames, name);
     for (const name of wantEyes) addCamera(cameraNames, name);
     look.registeredCameras = await registeredCameraNames(look);
   } else {
@@ -1590,22 +1791,32 @@ async function photographUserView(look: Look): Promise<LookEnd> {
   }
 }
 
+/** The most demos beyond the check-named ones a look with this cap runs: one at the least. */
+const demoBudget = (maxDemos: number): number => (Number.isFinite(maxDemos) ? Math.max(1, maxDemos) : Infinity);
+
 /**
  * Which demos run, in order, and which the cap leaves out. Every demo a check names runs, always;
- * the cap applies only to the unreferenced remainder. A cap that silently dropped check-named
- * demos made the harness report "ADS never engages" for a feature it never looked at.
+ * the cap applies only to the unreferenced remainder, and in it a demo the compared build does not
+ * register (`known`) comes first — a builder registers a demo to show its move. A cap that silently
+ * dropped check-named demos made the harness report "ADS never engages" for a feature it never
+ * looked at, and one that dropped the newest made the NFS run judge `contact` without its frame.
  */
 function demosToRun(
   registered: string[],
   requiredDemos: readonly unknown[] | null | undefined,
   maxDemos: number,
+  known: readonly string[] | null = null,
 ): { toRun: string[]; skipped: string[] } {
   const required = new Set((requiredDemos ?? []).map(String));
+  const shown = known === null ? null : new Set(known);
+  const added = (n: string): boolean => shown !== null && !shown.has(n);
+  const rest = registered.filter((n: string) => !required.has(n));
   const ordered: string[] = [
     ...registered.filter((n: string) => required.has(n)),
-    ...registered.filter((n: string) => !required.has(n)),
+    ...rest.filter(added),
+    ...rest.filter((n: string) => !added(n)),
   ];
-  const budget = Number.isFinite(maxDemos) ? Math.max(1, maxDemos) : Infinity;
+  const budget = demoBudget(maxDemos);
   const toRun: string[] = [];
   const skipped: string[] = [];
   let extra = 0;
@@ -1670,24 +1881,108 @@ async function runDemo(look: Look, name: string): Promise<void> {
  * switch: the demo composes its own view).
  */
 async function runDemos(look: Look): Promise<LookEnd> {
-  const { ctx, h, maxDemos, requiredDemos } = look;
+  const { ctx, h, knownDemos, maxDemos, requiredDemos } = look;
   look.demos = {} as Record<string, AnyRecord>;
   look.demoStates = {} as Record<string, AnyRecord>;
   look.demoShots = [] as Shot[];
   look.registeredDemos = null;
   const skippedDemos: string[] = [];
   look.skippedDemos = skippedDemos;
+  look.demoCap = null;
   if (!look.bootedFor) return;
   try {
     const names = await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Demos, ...h });
     if (!Array.isArray(names)) return;
     look.registeredDemos = names.map(String);
-    const { toRun, skipped } = demosToRun(look.registeredDemos, requiredDemos, maxDemos);
+    const { toRun, skipped } = demosToRun(look.registeredDemos, requiredDemos, maxDemos, knownDemos);
     skippedDemos.push(...skipped);
+    // The cap that left them out, for the judge's line and the builder's next prompt: the harness's
+    // limit, never a defect of the build (so not a warning a judge may name as the gap).
+    if (skipped.length) look.demoCap = demoBudget(maxDemos);
     for (const name of toRun) await runDemo(look, name);
   } catch {
     /* a game predating the demo contract simply has none */
   }
+}
+
+/**
+ * The throttle-only bot's race (`throttle-bot-loses`), after the demos because it moves the game
+ * to wherever the race ends. Asked for by a board that carries the check, or a ship look; a race
+ * that throws is a reading the pass could not take, never a voided challenger.
+ */
+async function runChallenge(look: Look): Promise<LookEnd> {
+  look.challengeRace = null;
+  if (!look.challenge || !look.bootedFor) return;
+  look.challengeRace = await raceThrottleBot(look).catch((err: unknown) => ({
+    ran: false,
+    reason: `the race could not be driven: ${(err as Error)?.message ?? err}`,
+  }));
+}
+
+/** The race block a game reports in `state()`, when it reports a position to win. */
+function raceOf(state: unknown): AnyRecord | null {
+  const race = isRecord(state) ? state.race : null;
+  return isRecord(race) && typeof race.position === "number" ? race : null;
+}
+
+/**
+ * A bot that holds the throttle, lets the game's racing line steer when it has one, and never
+ * brakes, from the game's first screen through its race (NFS run: it won both games). Stepped in
+ * `CHALLENGE_STEP_MS` until the game says the race is finished or `CHALLENGE_MAX_MS` of racing
+ * have passed; the state it ends on is what `throttle-bot-loses` reads.
+ */
+async function raceThrottleBot(look: Look): Promise<AnyRecord> {
+  const { ctx, h, run, seed } = look;
+  if (!raceOf(look.state)) return { ran: false, reason: MESSAGE.botNoRace };
+  const throttle = throttleOf(run?.game);
+  if (!throttle.length) return { ran: false, reason: MESSAGE.botNoThrottle };
+  await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Seed, arg: seed, ...h });
+  await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Pause, ...h });
+  const early = await startRace(look);
+  if (!early) return { ran: false, reason: MESSAGE.botNoPlay };
+  await ctx.call(HostMethod.PreviewInput, { actions: [{ type: "down", keys: throttle }], ...h });
+  const steered = await steerByLine(look, true);
+  try {
+    const { state, ms } = await driveRace(look);
+    const race = raceOf(state);
+    return {
+      ran: true,
+      state,
+      early,
+      simulatedMs: ms,
+      finished: race?.finished === true,
+      position: race?.position ?? null,
+      steered,
+    };
+  } finally {
+    if (steered) await steerByLine(look, false);
+    await ctx.call(HostMethod.PreviewInput, { actions: [{ type: "up", keys: throttle }], ...h }).catch(() => {});
+  }
+}
+
+/** Into the race from the game's first screen, the way the drive gets into play: its state there, or null when it never got there. */
+async function startRace(look: Look): Promise<unknown> {
+  const { ctx } = look;
+  const first = await ctx.call(HostMethod.PreviewState, stateParams(look));
+  const flow = flowOf(first);
+  if (!flow || flow.playing) return first;
+  await enterPlay(look);
+  const { state } = await waitForPlay(look);
+  return flowOf(state)?.playing === true ? state : null;
+}
+
+/** Step the race until it is finished or the bot's time is up: the last state, and the racing it took. */
+async function driveRace(look: Look): Promise<{ state: unknown; ms: number }> {
+  const { ctx, h } = look;
+  let ms = 0;
+  let state: unknown = null;
+  while (ms < CHALLENGE_MAX_MS) {
+    await ctx.call(HostMethod.PreviewCall, { method: PageMethod.Step, arg: CHALLENGE_STEP_MS, ...h });
+    ms += CHALLENGE_STEP_MS;
+    state = await ctx.call(HostMethod.PreviewState, stateParams(look));
+    if (raceOf(state)?.finished === true) break;
+  }
+  return { state, ms };
 }
 
 /**
@@ -1872,6 +2167,15 @@ function sayNoFrame(look: Look): void {
   );
 }
 
+/** What the drive measured beyond the frames, each only when it was measured at all. */
+function drivenReadings(look: Look): AnyRecord {
+  return {
+    ...(look.drive ? { drive: look.drive } : {}),
+    ...(look.corner ? { corner: look.corner } : {}),
+    ...(look.challengeRace ? { challenge: look.challengeRace } : {}),
+  };
+}
+
 /** The pass's answer, never a bare colon. */
 async function reportLook(look: Look): Promise<LookEnd> {
   const { consoleErrors, demoShots, demoStates, demos, missingCameras, motionFrames, problems, shots } = look;
@@ -1886,9 +2190,14 @@ async function reportLook(look: Look): Promise<LookEnd> {
       emptyScene: look.emptyScene,
       problems,
       warnings,
-      // Demo end-frames join the evidence after the honesty guards — a demo that legitimately
-      // ends on a frame matching a camera shot must not read as a dead debugCamera.
-      shots: [...shots, ...demoShots, ...(look.userViewShot ? [look.userViewShot] : [])],
+      // Demo end-frames and the drive's corner join the evidence after the honesty guards — a demo
+      // that legitimately ends on a frame matching a camera shot must not read as a dead debugCamera.
+      shots: [
+        ...shots,
+        ...(look.cornerShot ? [look.cornerShot] : []),
+        ...demoShots,
+        ...(look.userViewShot ? [look.userViewShot] : []),
+      ],
       demos: Object.keys(demos).length ? demos : null,
       // The state each demo left behind, for probes scoped to a demo.
       demoStates: Object.keys(demoStates).length ? demoStates : null,
@@ -1897,6 +2206,8 @@ async function reportLook(look: Look): Promise<LookEnd> {
       registeredDemos: look.registeredDemos,
       registeredCameras: look.registeredCameras ?? null,
       skippedDemos,
+      // How many unnamed demos the look ran at most — only when it left some out.
+      ...(look.demoCap ? { demoCap: look.demoCap } : {}),
       state: look.state,
       stateEarly: look.stateEarly,
       // The last five, for a judge and a builder to read in a prompt...
@@ -1929,6 +2240,9 @@ async function reportLook(look: Look): Promise<LookEnd> {
       // killed, reports exactly what it always did.
       ...(look.play ? { play: look.play } : {}),
       ...(look.machineKilled ? { machineKilled: true } : {}),
+      // The drive's readings: whether the racing line steered it, the corner it photographed, and
+      // the throttle-only bot's race (judge-facts.ts words each one; `throttle-bot-loses` reads the race).
+      ...drivenReadings(look),
     },
   };
 }

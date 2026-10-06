@@ -14,7 +14,7 @@ game's controls and viewpoints, replace `phase: "empty"`. Five rules; tables in 
    fonts at frame-fraction anchors, the middle kept for play (coverage and overlap are measured); no DOM, no second HUD or canvas; names are scene sprites; input from `ctx.keys`/`ctx.look`/`ctx.wheel` in `update()`.
 4. **Tag everything, make it measurable.** Tag every object (`userData.tag`), a camera per mechanic; probes
    report what a player notices, `state()` stays small, `config.demos` reach what the walk cannot. The game
-   opens on its title, starts on a key and MUST declare `config.begin`/`config.flow`, or judges see the title.
+   opens on its title, starts on a key and MUST declare `config.begin`/`config.flow`, or judges see the title. A racer also gives `config.steer` (its racing line, -1…1) and reports `race: {position, finished}`.
 5. **Deterministic, textured, modelled.** Randomness only from the `rng` in `update()` or a
    generator seeded in `reset(seed)`; time only from `dt`. `references/` is for you to LOOK at.
    Materials come from `src/materials.js` and foliage from `src/foliage.js`. Use procedural geometry,

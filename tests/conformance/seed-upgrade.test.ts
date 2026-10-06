@@ -1758,6 +1758,46 @@ describe("seed upgrade across goal-directed generation", () => {
 });
 
 /**
+ * The judges' evidence after the NFS run (the corner frame, the racing line, the throttle-only bot)
+ * added names: the frames a pass takes itself and the bot's probe scope come from modules of their
+ * own (loop/pass-frames.ts, loop/throttle-bot.ts), and the new words of kinds.ts and
+ * judge-facts.ts are read by namespace, so a current part beside one older copy still links.
+ * kinds.ts is not in the vintage: its tables are read as the harness loads, which a stand-in made
+ * of functions cannot answer whatever this change did.
+ */
+describe("seed upgrade across the drive's evidence", () => {
+  const vintage = JSON.parse(
+    readFileSync(fileURLToPath(new URL("../fixtures/seed-exports-pre-drive-evidence.json", import.meta.url)), "utf8"),
+  ) as { modules: Record<string, string[]> };
+  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
+
+  it("any one of the parts it changed, kept from before by an agent that edited it, still loads the harness", async () => {
+    const unlinked: string[] = [];
+    for (const [rel, names] of Object.entries(vintage.modules)) {
+      const root = await tmpDir("seed-drive-");
+      const ws = path.join(root, "workspace");
+      const manifest = path.join(root, "manifest.json");
+      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
+      await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
+      await applySeed({
+        seedDir: shipped,
+        workspaceDir: ws,
+        manifestFile: manifest,
+        backupDir: path.join(root, "backup"),
+      });
+      try {
+        const main = (await import(pathToFileURL(path.join(ws, "loop", "main.ts")).href)) as { createStudio?: unknown };
+        if (typeof main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
+      } catch (err) {
+        unlinked.push(`${rel}: ${(err as Error).message}`);
+      }
+    }
+    assert.deepEqual(unlinked, []);
+  });
+});
+
+/**
  * The review fixes after b07810e added names some parts import from others. Any part they changed
  * may be one the agent edited and a seed upgrade keeps: each new name comes from a module of its
  * own, or is read by namespace, so a current part beside one older copy still links.
