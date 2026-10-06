@@ -554,6 +554,38 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       assert.ok(card.split("\n").length <= CARD_MAX_LINES, `the card is ${card.split("\n").length} lines`);
   });
 
+  it("P7b. a goal build's card and brief say the art director's blocker and visible defects are required finishing, never optional polish, and its nits stay optional", () => {
+    const goal = wakeDigest(facts({ card: { ...facts().card, direction: false } }));
+    const card = goal.slice(goal.indexOf("BUILD CARD")).split("\n\n")[0]!;
+    assert.match(card, /do not continue optional polish/, "optional polish is still not the goal build's work");
+    assert.match(card, /art director's blocker and visible defects[^\n]*not optional polish/);
+    assert.match(card, /nits stay optional/);
+    assert.ok(card.split("\n").length <= CARD_MAX_LINES, `the card is ${card.split("\n").length} lines`);
+
+    const now = Date.now();
+    const brief = directorBrief({
+      run: {
+        runId: "run_g",
+        project: "skate",
+        goal: "a plaza to skate",
+        engine: "claude-code",
+        budgets: { completionPolicy: "goal" },
+      },
+      shape: { entry: "index.html", main: "src/main.js", build: null },
+      ownShape: false,
+      capacity: { max: 6, free: 5, memory: { freeMb: 9000 } },
+      skill: "# playbook",
+      softDeadline: now + HOUR_MS,
+      finalDeadline: now + 2 * HOUR_MS,
+      integrationWorktree: "/w",
+      baseCommit: "abcdef1234567890",
+      loop: DirectorLoop.Wake,
+    } as never);
+    const time = brief.split("\n").find((line) => line.startsWith("TIME:"))!;
+    assert.match(time, /Report blockers instead of optional polish/);
+    assert.match(time, /art director's blocker and visible defects[^\n]*not optional polish/);
+  });
+
   it("P8. a worker from before a pause is brought in by a worker for a lead, and by a merge in its worktree for a director with its own hands", () => {
     const prior = {
       lastCommit: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",

@@ -272,7 +272,10 @@ export async function contractOnPlan(night: Night): Promise<string | null> {
   const committed = await commitContract(night, spec);
   if ("error" in committed) return CONTRACT_GATE.notCommitted(committed.error);
   const missing = await missingAt(ctx, integrationWorktree, committed.commit, allPaths(spec));
-  return contractCommittedWords(committed.commit, missing, { lead: Boolean(night.lead) });
+  return contractCommittedWords(committed.commit, missing, {
+    lead: Boolean(night.lead),
+    worktree: integrationWorktree,
+  });
 }
 
 /**

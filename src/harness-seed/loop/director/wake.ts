@@ -75,6 +75,7 @@ import { cutShortWake, midTurnUserSays } from "./live-prompts.ts";
 import { artDirectionBlock, ART_SKIPPED } from "./art-direction-prompts.ts";
 import { workingGoal } from "../goal-prompts.ts";
 import { runScope } from "../scope.ts";
+import { FacetStage, isFinishing } from "../facet/stage.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { DelegateResult } from "../../types/host-api.d.ts";
 import type { RestoredWake } from "./journal.ts";
@@ -568,6 +569,8 @@ function digestWorker(worker: Worker, now: number): DigestWorker {
     lastLook: line.lastLook,
     stoppedBecause: line.stoppedBecause,
     ideas: latestIdeas(worker),
+    // A finishing worker says its stage: its reviewers' next big step is not its work.
+    ...(isFinishing(worker.spec) ? { stage: FacetStage.Finish } : {}),
   };
 }
 
@@ -594,8 +597,11 @@ function workersLimitFacts(state: NightState, now: number): WorkersLimitFacts | 
   return { engine: limit.engine, kind: limit.kind, liftsAt };
 }
 
-/** The run, its kind and its plan, for the build card. */
-function cardFacts(night: Night): CardFacts {
+/**
+ * The run, its kind and its plan, for the build card — and, once a wake said the finish mark, that
+ * the build is in its finish stage, so the card changes and the next wake carries it again.
+ */
+function cardFacts(night: Night, finishing = false): CardFacts {
   const { run, state } = night;
   // What the run will not build rides on the card beside the clipped goal (loop/scope.ts).
   const cut = runScope(run)?.cut ?? [];
@@ -609,6 +615,7 @@ function cardFacts(night: Night): CardFacts {
       : null,
     lead: Boolean(night.lead),
     ...(cut.length ? { cut } : {}),
+    ...(finishing ? { finishing } : {}),
   };
 }
 
@@ -644,7 +651,7 @@ function digestFacts(
     finishRequested: wake.finishSaid,
     finishMarkAt: finishMarkView(night, wake, said.now),
     ...(wake.finishMarkSaid ? { finishMarkPassed: true } : {}),
-    card: cardFacts(night),
+    card: cardFacts(night, wake.finishMarkSaid),
   };
 }
 

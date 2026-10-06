@@ -167,8 +167,8 @@ itself and keeps the memory file its brief names current.)
   not delivered" is the worker choosing something else: say the move again with `worker_steer move=`
   or let it go. A rung the judge finds built climbs by itself; one missed three judged rounds is set
   aside so the ladder moves on.
-- Every wake shows each part's next big step as its reviewers see it. When one inside SCOPE is
-  bigger than your next rung, make it the next rung with `worker_steer move=`. Steer the big picture
+- Before the finish mark every wake shows each building part's next big step as its reviewers see
+  it. When one inside SCOPE is bigger than your next rung, make it the next rung with `worker_steer move=`. Steer the big picture
   — a direction, a priority, the next big step; a single defect is the worker's ledger.
 - Restarting a part you stopped? `worker_start replaces=<the old id>`, so Builds shows one part.
   `worker_stop` costs the worker only its remaining time (its edits are committed, nothing rolls

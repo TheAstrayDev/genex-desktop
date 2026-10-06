@@ -18,6 +18,49 @@ export const NO_PART = "no part — yours";
 export const FINISH_MARK_RULE =
   "From here no new parts or systems: finish what exists. worker_steer stage=finish on each running owner of a part with defects (or, for a finished part, worker_start stage=finish replaces=<its id> owns=<its files> from=integration, which takes that part's defects on its board); a finish round may win on polish. Integrate, then judge ship=yes again.";
 
+/**
+ * What a goal build's card and brief say of the art director's defects: a goal build reports
+ * blockers instead of optional polish, and the art director's blocker and visible defects are not
+ * that polish — its look turns a goal build's first finish back with them.
+ */
+export const SHIP_DEFECTS_NOT_POLISH =
+  "The art director's blocker and visible defects are required finishing, not optional polish; its nits stay optional.";
+
+/** What a ship defect on a worker's board is, as its steer says it. */
+export interface ShipSteerFacts {
+  /** The defect's words, as its check names it. */
+  defect: string;
+  /** The question's id on the worker's board. */
+  checkId: string;
+  severity: string;
+  /** The review's verdict: ship, not ship, or none read. */
+  ship: boolean | null;
+  /** The worker finishes its part (`stage=finish`): the defects are its round's work, not beside a move. */
+  finishing: boolean;
+}
+
+/** How the steer opens, by the review's verdict: a build the art director would ship never reads as one it would not. */
+function steerOpening(ship: boolean | null): string {
+  if (ship === false) return "The art director looked at the whole game and would not ship it with this, in your part";
+  if (ship === true) return "The art director would ship the game, but a player notices this in your part";
+  return "The art director named this in your part";
+}
+
+/**
+ * What the owner of a ship defect is told when it lands on its board, by the review's verdict and
+ * the defect's severity: a nit is optional polish that decides nothing; a blocker or a visible
+ * defect must be gone before the part is done — a finisher's round's work, and for a worker still
+ * building, beside its move, never ahead of it.
+ */
+export function shipSteer({ defect, checkId, severity, ship, finishing }: ShipSteerFacts): string {
+  if (severity === DefectSeverity.Nit) {
+    const when = finishing ? "take it if this round has room" : "never ahead of your move";
+    return `The art director noticed a nit in your part: "${defect}" (${checkId} on your board). It is optional polish — ${when}; it decides nothing.`;
+  }
+  const work = finishing ? "it is this round's work" : "fix it beside your move, never instead of it";
+  return `${steerOpening(ship)}: "${defect}" (${severity}). It is on your board as ${checkId} and must be gone before your part is done — ${work}.`;
+}
+
 /** What to do next when the art director would ship the build. */
 const SHIP_YES_NEXT =
   "The art director would ship this build: hand any nits left to their owners with stage=finish, or finish.";

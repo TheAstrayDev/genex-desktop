@@ -698,6 +698,46 @@ describe("the lead's judge ship=yes (director/tools.ts)", () => {
     );
   });
 
+  it("AD-4e. the art director's word to an owner follows its verdict and the defect's severity: a nit is optional polish, a build it would ship never reads as one it would not, and a build-stage worker is never told to fix it ahead of its move", async () => {
+    const reviews: unknown[] = [
+      {
+        ship: true,
+        defects: [
+          { what: "the lap counter sits a hair too high", camera: "default", part: "hud", severity: "nit" },
+          { what: "the bridge seams show as the car crosses", camera: "chase", part: "track", severity: "visible" },
+        ],
+        strengths: ["the dusk light"],
+        reason: "a demo as it stands",
+      },
+      SHIP_NO,
+    ];
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: () => replying(reviews.shift())() } });
+    night.state.workers.set("hud", loopWorker("hud"));
+    const finishing = { ...loopWorker("track").spec, stage: FacetStage.Finish };
+    night.state.workers.set("track", loopWorker("track", { spec: finishing }));
+    const told = (id: string): string => night.state.workers.get(id).steering.at(-1) ?? "";
+
+    await night.judge({ target: "integration", ship: "yes" });
+    const nit = told("hud");
+    assert.match(nit, /lap counter/);
+    assert.match(nit, /optional/, "a nit is optional polish");
+    assert.doesNotMatch(nit, /would not ship/, "the art director would ship this build");
+    assert.doesNotMatch(nit, /this iteration/, "a build-stage worker keeps its move");
+    const visible = told("track");
+    assert.match(visible, /bridge seams/);
+    assert.match(visible, /would ship/);
+    assert.doesNotMatch(visible, /would not ship/);
+    assert.doesNotMatch(visible, /optional/, "a defect a player notices is the finisher's work");
+
+    await night.judge({ target: "integration", ship: "yes" });
+    const blocker = told("hud");
+    assert.match(blocker, /speed digits/);
+    assert.match(blocker, /would not ship/);
+    assert.doesNotMatch(blocker, /optional/);
+    assert.doesNotMatch(blocker, /this iteration/, "a build-stage worker is not told to put it ahead of its move");
+  });
+
   it("AD-10. judge ship=yes looks at one build alone: with a start picture it makes no blind call and leaves no pick, and ship=yes against a build is refused in one line", async () => {
     const host = fakeHost();
     const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
@@ -869,6 +909,28 @@ describe("the finish mark (director/budgets.ts, wake.ts, art-direction.ts)", () 
     assert.match(idle, /no new parts or systems/);
     assert.match(idle, /stage=finish/);
     assert.match(idle, /judge ship=yes/);
+  });
+
+  it("AD-3d. past the finish mark a wake offers no reviewer's next big step, names a finishing worker's stage, and a timed build's card says the finish stage instead of spending the time building", async () => {
+    const host = fakeHost();
+    const { night } = fakeNight(host, { answers: { [HostMethod.EngineComplete]: replying(SHIP_NO) } });
+    const proposed = [{ iteration: 1, won: true, ideas: ["reviewer: rivals that race as a pack"] }];
+    night.state.workers.set("hud", loopWorker("hud", { iterations: proposed }));
+    const finishing = { ...loopWorker("track").spec, stage: FacetStage.Finish };
+    night.state.workers.set("track", loopWorker("track", { spec: finishing }));
+    const mark = night.clock.softDeadline - finishMarkMs(night.run, 4 * HOUR_MS)!;
+    const { talk, turns } = lead((turn) => {
+      if (turn === 2) night.state.finished = true;
+      return { ok: true, sessionId: "lead-1", turns: 1 };
+    });
+    await runWakeLoop(night, talk, BRIEF, fakeClock(mark - 2 * MINUTE_MS));
+
+    assert.equal(turns.length, 2, turns.map((t) => t.prompt.slice(0, 160)).join("\n---\n"));
+    const atMark = turns[1]!.prompt;
+    assert.doesNotMatch(atMark, /next big step|rivals that race as a pack/, "no new system offered past the mark");
+    assert.match(atMark, /- worker track \(track\): running · stage finish/);
+    assert.doesNotMatch(atMark, /spend the working time building/);
+    assert.match(atMark, /BUILD CARD:[\s\S]*finish stage[^\n]*no new parts or systems/);
   });
 
   it("AD-3c. a timed build that slept through its finish mark and its wrap-up wraps up without the art director's pass", async () => {

@@ -9,6 +9,8 @@ import { shortSha } from "../git.ts";
 import { limitWords } from "../outage.ts";
 import { clip, clipMarked } from "../text.ts";
 import { minutes } from "../time.ts";
+import { FacetStage } from "../facet/stage.ts";
+import { SHIP_DEFECTS_NOT_POLISH } from "./art-direction-prompts.ts";
 import { LEAD_CARD_RULE, LEAD_FRESH_START, LEAD_INTEGRATE_SWAP } from "./lead-session-prompts.ts";
 import { DirectorTool } from "./tool-specs.ts";
 import { HEARTBEAT_MS, NoteKind, WakeCause, WrapCause } from "./wake-schedule.ts";
@@ -59,6 +61,8 @@ export interface DigestWorker {
   fromBefore?: string;
   /** What its reviewers propose for the part next: the judge's big move, the critic's biggest fix. */
   ideas?: string[];
+  /** Its stage when it finishes its part (facet/stage.ts): absent, it builds. */
+  stage?: string;
 }
 
 /** How many workers run, and how many the machine allows at once (the user's Maximum concurrent workers). */
@@ -82,6 +86,8 @@ export interface CardFacts {
    * its own hands, such as a kept director.ts from before one session drives — it keeps its memory file.
    */
   lead?: boolean;
+  /** The build is past its finish mark (a wake said it): the card names the finish stage. Absent: not yet. */
+  finishing?: boolean;
 }
 
 /** The workers' engine's limit, as the digest names it. */
@@ -243,10 +249,16 @@ function healthWords(healthy: boolean | null): string {
   return "not run";
 }
 
-/** One worker in a line, with no worktree path. */
-function workerLine(w: DigestWorker): string {
+/**
+ * One worker in a line, with no worktree path. Its reviewers' next big step is a build-stage rung:
+ * past the finish mark (`pastMark`), or for a worker finishing its part, it is not shown, so no
+ * wake reads as leave to start a new system.
+ */
+function workerLine(w: DigestWorker, pastMark = false): string {
+  const finishing = w.stage === FacetStage.Finish;
   const parts = [
     w.state,
+    finishing ? `stage ${FacetStage.Finish}` : "",
     w.minutesLeft === undefined ? "" : `${w.minutesLeft} min left`,
     w.round === undefined ? "" : `round ${w.round}`,
     w.accepted === undefined ? "" : `${w.accepted} accepted`,
@@ -258,7 +270,8 @@ function workerLine(w: DigestWorker): string {
     w.stoppedBecause ? `stopped because: ${w.stoppedBecause}` : "",
     w.fromBefore ?? "",
   ].filter(Boolean);
-  const ideas = w.ideas?.length ? `\n  next big step, as its reviewers see it — ${w.ideas.join(" | ")}` : "";
+  const shown = pastMark || finishing ? [] : (w.ideas ?? []);
+  const ideas = shown.length ? `\n  next big step, as its reviewers see it — ${shown.join(" | ")}` : "";
   return `- worker ${w.id} (${w.title}): ${parts.join(" · ")}${ideas}`;
 }
 
@@ -277,11 +290,11 @@ function roomLine(room: WorkerRoom | null | undefined, pastMark = false): string
 }
 
 /** The workers, running ones first, at most `DIGEST_MAX_WORKERS` of them. */
-function workerLines(workers: readonly DigestWorker[]): string[] {
+function workerLines(workers: readonly DigestWorker[], pastMark = false): string[] {
   const ordered = [...workers].sort(
     (a, b) => Number(b.minutesLeft !== undefined) - Number(a.minutesLeft !== undefined),
   );
-  const shown = ordered.slice(0, DIGEST_MAX_WORKERS).map(workerLine);
+  const shown = ordered.slice(0, DIGEST_MAX_WORKERS).map((w) => workerLine(w, pastMark));
   const more = ordered.length - DIGEST_MAX_WORKERS;
   return more > 0
     ? [...shown, `- and ${more} more workers — worker_status lists every one, those from before a pause too`]
@@ -303,7 +316,7 @@ function standsSection(facts: DigestFacts): string {
     `- integration: ${integrationHead ? shortSha(integrationHead) : "no commit yet"}, last health pass ${healthWords(facts.integrationHealthy)}`,
     defects.length ? `- defects nobody owns: ${defects.join(" | ")}` : "",
     roomLine(facts.room, facts.finishMarkPassed === true),
-    ...workerLines(facts.workers),
+    ...workerLines(facts.workers, facts.finishMarkPassed === true),
     facts.priorLine ?? "",
     planWindowUntil === null
       ? ""
@@ -315,9 +328,27 @@ function standsSection(facts: DigestFacts): string {
     .join("\n");
 }
 
-/** The build card: what a compacted session must still know — the run, its rule, its plan, its clock and the rules. */
-/** The build card a wake digest carries: the run, its kind, its plan and its clock. */
-export function buildCard({ card, softDeadline, finalDeadline }: DigestFacts): string {
+/** A timed build's completion rule, before its finish mark and from it on. */
+const TIMED_RULE = {
+  building:
+    "- An explicit duration commission: spend the working time building, testing and improving; finish in the wrap-up, or when the user asks.",
+  finishing:
+    "- An explicit duration commission in its finish stage: no new parts or systems — the owners finish theirs (stage=finish), integrate, judge ship=yes; finish in the wrap-up, or when the user asks.",
+} as const;
+
+/** A goal build's completion rule: optional polish is not its work, and the art director's defects are not optional polish. */
+const GOAL_RULE = `- Finish when the required goal is verified and integrated. Remaining time is a safety ceiling, not a target. If a required prerequisite is blocked, preserve progress and report it; do not continue optional polish. ${SHIP_DEFECTS_NOT_POLISH}`;
+
+/** The card's completion rule: a goal build's, or a timed build's for the stage it is in. */
+function completionRule({ card, finishMarkPassed }: DigestFacts): string {
+  if (!card.direction) return GOAL_RULE;
+  // The digest's own fact too: a caller that stamps no `finishing` on the card still reads the finish stage.
+  return card.finishing === true || finishMarkPassed === true ? TIMED_RULE.finishing : TIMED_RULE.building;
+}
+
+/** The build card a wake digest carries: what a compacted session must still know — the run, its kind, its plan, its clock and the rules. */
+export function buildCard(facts: DigestFacts): string {
+  const { card, softDeadline, finalDeadline } = facts;
   const plan = card.plan
     ? `- Plan: ${clip(card.plan.summary, PLAN_CHARS)} — parts: ${card.plan.parts.join(", ") || "none named"}`
     : "- Plan: none yet — call plan before your first worker.";
@@ -326,9 +357,7 @@ export function buildCard({ card, softDeadline, finalDeadline }: DigestFacts): s
     `- Run ${card.runId} on "${card.project}": ${clip(card.goal, GOAL_CHARS)}`,
     // The goal is clipped here; what the run will not build is not (loop/scope.ts `cut`).
     ...(card.cut?.length ? [`- Cut — not this build: ${card.cut.join("; ")}`] : []),
-    card.direction
-      ? "- An explicit duration commission: spend the working time building, testing and improving; finish in the wrap-up, or when the user asks."
-      : "- Finish when the required goal is verified and integrated. Remaining time is a safety ceiling, not a target. If a required prerequisite is blocked, preserve progress and report it; do not continue optional polish.",
+    completionRule(facts),
     plan,
     `- Deadlines: the wrap-up starts at ${utc(softDeadline)}; the run ends at ${utc(finalDeadline)}.`,
     ...CARD_RULES,

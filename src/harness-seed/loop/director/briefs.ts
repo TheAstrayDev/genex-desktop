@@ -1,4 +1,4 @@
-import { durationCommission } from "./commission.ts";
+import { durationCommission, goalCommission } from "./commission.ts";
 import { MAX_WORKERS, workerWindows } from "./budgets.ts";
 /**
  * The briefs the night's sessions open with, as the model reads them: the director's own, the
@@ -20,6 +20,7 @@ import { WAKE_BRIEF, wakeTools } from "./wake-prompts.ts";
 import { DirectorLoop } from "./wake-schedule.ts";
 import { workingGoal } from "../goal-prompts.ts";
 import { DIRECTOR_SCOPE_RULE, scopeLines } from "../scope-prompts.ts";
+import { SHIP_DEFECTS_NOT_POLISH } from "./art-direction-prompts.ts";
 import type { AnyRecord, Run } from "../../types/harness.d.ts";
 // Type-only: erased at runtime, so this module still imports no part of the night.
 import type { Worker } from "./night.ts";
@@ -225,6 +226,19 @@ function rulesThatNeverMove(run: Run, loop: DirectorLoop, leads: boolean): strin
 }
 
 /**
+ * When the run is done, as the TIME line says it: a timed build spends its duration; any other
+ * finishes once verified and skips optional polish — and a goal commission, whose first finish the
+ * art director turns back with its defects (art-direction.ts `shipFinishGate`), hears that those
+ * defects are not that polish.
+ */
+function completionWords(run: Run): string {
+  if (durationCommission(run)) return "The selected duration is working time; finish in wrap-up.";
+  const words =
+    "Finish once required outcomes are verified; time is a ceiling. Report blockers instead of optional polish.";
+  return goalCommission(run) ? `${words} ${SHIP_DEFECTS_NOT_POLISH}` : words;
+}
+
+/**
  * The brief the director's session opens with: who it is, what the run is about, the tools,
  * the playbook (skills/director.md — SkillOpt trains it), the rules that never move.
  */
@@ -259,7 +273,7 @@ export function directorBrief({
     shapeLine(ownShape, shape),
     requestedStateLine(run.setup),
     ``,
-    `TIME: ${minutes(finalDeadline - Date.now())} minutes in all. Your session ends at ${new Date(softDeadline).toISOString().slice(11, 16)} UTC (${minutes(softDeadline - Date.now())} minutes from now); the last ${minutes(finalDeadline - softDeadline)} minutes are reserved for wrapping up. ${durationCommission(run) ? "The selected duration is working time; finish in wrap-up." : "Finish once required outcomes are verified; time is a ceiling. Report blockers instead of optional polish."}`,
+    `TIME: ${minutes(finalDeadline - Date.now())} minutes in all. Your session ends at ${new Date(softDeadline).toISOString().slice(11, 16)} UTC (${minutes(softDeadline - Date.now())} minutes from now); the last ${minutes(finalDeadline - softDeadline)} minutes are reserved for wrapping up. ${completionWords(run)}`,
     whereLine({ gameFolder: lead?.gameFolder ?? null, integrationWorktree, baseCommit }),
     `CAPACITY: ${pool}. ${CAPACITY_RULE}`,
     nestedLine(nestedRepos, leads),

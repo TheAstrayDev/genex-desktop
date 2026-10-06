@@ -461,6 +461,18 @@ describe("the contract on the integration branch, and the gate a loop worker pas
     assert.equal(await contractOnPlan(night as never), null, "the same contract again commits nothing");
   });
 
+  it("tells a lead, which builds with its own hands in the integration worktree, to write the stubs there itself and commit — a single worker is the other way", async () => {
+    const { repo, head } = await integrationRepo();
+    const { night } = stubNight(repo, head, plan());
+    night.lead = { folder: "/games/apex", chatSession: true };
+    const said = String(await contractOnPlan(night as never));
+    assert.match(said, /Stubs still to write before their loop workers start: src\/car\.js/);
+    const stubs = said.slice(said.indexOf("Stubs still to write"));
+    assert.match(stubs, /yourself in the integration worktree/);
+    assert.ok(stubs.includes(repo), "named by its full path");
+    assert.ok(stubs.indexOf("yourself") < stubs.indexOf("mode=single"), "its own commit comes first, a worker second");
+  });
+
   it("refuses a loop worker without a contract twice, then writes one from the plan's seams", async () => {
     const { repo, head } = await integrationRepo();
     await commitFiles(repo, { "src/car.js": "export {};\n" });

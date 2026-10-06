@@ -53,21 +53,34 @@ export const CONTRACT_GATE = {
     `worker "${id}" owns= would reach other parts' modules (${claims.map((c) => `${c.own} → ${c.path}, ${c.owner}'s`).join("; ")}): leave owns= empty to take its contract modules, or name only its own files`,
 } as const;
 
-/** What `plan` adds to its answer once the contract is committed: where it is, and the stubs still to write. */
+/**
+ * Who writes the stubs. Every director has hands in the integration worktree: a lead (the chat's
+ * own session, lead-session-prompts.ts `LEAD_BRIEF`) edits it by its full path from the game folder
+ * — named here when known — and a director whose cwd it is edits it in place. Its own commit is the
+ * short way (no-op exports need no worker's window, session and health pass); a worker the other.
+ */
+function stubHands(lead: boolean, worktree: string | undefined): string {
+  if (!lead)
+    return "write them with your own hands in the integration worktree and commit, or start one worker with mode=single to write them and integrate it";
+  const where = worktree ? ` (${worktree})` : "";
+  return `write them yourself in the integration worktree${where} by its full path and commit there (git -C), or start one worker with mode=single from=integration to write them and integrate it`;
+}
+
+/**
+ * What `plan` adds to its answer once the contract is committed: where it is, and the stubs still
+ * to write. `worktree` is the integration worktree a lead reaches by its full path.
+ */
 export function contractCommittedWords(
   commit: string,
   missing: readonly string[],
-  { lead = false, derived = false }: { lead?: boolean; derived?: boolean } = {},
+  { lead = false, derived = false, worktree }: { lead?: boolean; derived?: boolean; worktree?: string } = {},
 ): string {
   const what = derived
     ? `No contract was given, so the harness wrote one from the plan's owns into ${ARCHITECTURE_FILE}`
     : `The module contract is committed on integration as ${ARCHITECTURE_FILE}`;
   const at = `${what} (${shortSha(commit)}); loop workers fork from it or later.`;
   if (!missing.length) return at;
-  const hands = lead
-    ? "start one worker with mode=single from=integration to write them, then integrate it"
-    : "write them with your own hands in the integration worktree and commit, or start one worker with mode=single to write them and integrate it";
-  return `${at} Stubs still to write before their loop workers start: ${missing.join(", ")} — ${hands}.`;
+  return `${at} Stubs still to write before their loop workers start: ${missing.join(", ")} — ${stubHands(lead, worktree)}.`;
 }
 
 /** One module as the contract file lists it. */

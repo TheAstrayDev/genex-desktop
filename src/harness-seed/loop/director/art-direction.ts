@@ -31,7 +31,8 @@ import * as contractParts from "./module-contract.ts";
 import * as ruleParts from "./rules.ts";
 import { list, slug } from "./args.ts";
 import { contractAloneOnStart } from "./contract-gate.ts";
-import { ART_SKIPPED, shipFinishRefusal, shipGateSkipped } from "./art-direction-prompts.ts";
+import { isFinishing } from "../facet/stage.ts";
+import { ART_SKIPPED, shipFinishRefusal, shipGateSkipped, shipSteer } from "./art-direction-prompts.ts";
 import { BuildTarget } from "./night.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
@@ -240,8 +241,16 @@ function shelve(ledger: ShelvedDefect[], defect: { text: string; owner: string }
   if (!ledger.some((d) => d.text === defect.text)) ledger.push({ ...defect, from: ART_DIRECTOR, at: Date.now() });
 }
 
-/** Put a ship question on a running worker's board and tell it: rules.ts's board when it has one, its router otherwise. */
-function onBoard(night: Night, worker: Worker & { spec: AnyRecord }, route: ShipRoute): void {
+/**
+ * Put a ship question on a running worker's board and tell it — in words that follow the review's
+ * verdict (`ship`) and the defect's severity — rules.ts's board when it has one, its router otherwise.
+ */
+function onBoard(
+  night: Night,
+  worker: Worker & { spec: AnyRecord },
+  route: ShipRoute,
+  ship: boolean | null = null,
+): void {
   const { note, state } = night;
   const put = (ruleParts as { putOnBoard?: typeof ruleParts.putOnBoard }).putOnBoard;
   if (typeof put !== "function") {
@@ -253,7 +262,13 @@ function onBoard(night: Night, worker: Worker & { spec: AnyRecord }, route: Ship
   }
   if (!put(worker.spec, route.check)) return;
   worker.steering.push(
-    `The art director looked at the whole game and would not ship it with this, in your part: "${route.check.defect}". It is on your board now as ${route.check.id} — fix it this iteration.`,
+    shipSteer({
+      defect: String(route.check.defect),
+      checkId: route.check.id,
+      severity: route.defect.severity,
+      ship,
+      finishing: isFinishing(worker.spec),
+    }),
   );
   note(
     `worker ${worker.id}: the art director's defect is on its board — "${clip(route.check.defect, CLIP_QUOTE)}"`,
@@ -291,7 +306,7 @@ export function routeShipDefects(
   for (const route of routes) {
     const worker = ownerOf(state.workers, route.part, state.plan);
     if (takesShipDefects(worker)) {
-      onBoard(night, worker, route);
+      onBoard(night, worker, route, review.ship ?? null);
       continue;
     }
     const owner = route.part ?? LEAD_OWNS;
@@ -353,7 +368,7 @@ export function takeShelvedShipDefects(night: Night, worker: Worker): ShipRoute[
   for (const entry of shelved) {
     const defect = shelvedShipDefect(night, part, entry.text);
     const route = { part, defect, check: shipCheck({ checks: worker.spec.checks ?? [] }, defect) };
-    onBoard(night, worker, route);
+    onBoard(night, worker, route, night.state.lastShip?.ship ?? null);
     if (!onItsBoard(worker, route.check)) continue;
     ledger.splice(ledger.indexOf(entry), 1);
     taken.push(route);

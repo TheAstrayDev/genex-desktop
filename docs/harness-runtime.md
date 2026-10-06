@@ -330,7 +330,7 @@ A plan whose parts loop two or more (a part marked `"mode":"single"` does not co
 module contract before its loop workers start: `plan contract=` names each module's file, owner
 part, API, and the shared files one part owns (`director/module-contract.ts`). The harness commits it as
 `docs/MODULE-CONTRACT.md` on the integration branch (its own file: a game's `docs/ARCHITECTURE.md` is never touched); a loop worker starts only from a commit that holds
-it, with its own modules there (stubs written by the lead or a single worker), and a seam that leaves
+it, with its own modules there (stubs the lead writes and commits in the integration worktree itself, or a single worker), and a seam that leaves
 other parts' modules alone. With no seam named it owns its contract modules (`director/contract-gate.ts`).
 After two refusals for a missing contract the harness writes one from the plan's seams. The
 contract's commit stands where its parent stood: on the run's starting point it is a starting point
@@ -603,10 +603,15 @@ judge again, and when the close still owes a blind judge against the start there
 both and the finish closes without the art director. The
 lead is woken with the defects by part and the rule from there: no new parts, `worker_steer
 stage=finish` on each owner, integrate, `judge ship=yes` again. Every later wake repeats it: the
-time line says the build is past the mark, the room for workers offers only finish workers, and
-the idle question asks to finish what exists instead of a next feature. Each defect on the integration
+time line says the build is past the mark, the room for workers offers only finish workers, the
+idle question asks to finish what exists instead of a next feature, no worker line shows its
+reviewers' next big step (a finishing worker's never does, and its line says `stage finish`), and a
+timed build's card says its finish stage. A goal build's card and brief say the art director's
+blocker and visible defects are required finishing, not the optional polish it skips. Each defect on the integration
 branch becomes a director-origin vision check on its running owner's board (the part's worker, or
-the running worker that replaced it; its fix is a strong flip), or a ledger line under its finished
+the running worker that replaced it; its fix is a strong flip), and its owner is told in words that
+follow the verdict and severity (a nit is optional polish; a blocker or visible defect must be gone
+before the part is done, beside a building worker's move), or a ledger line under its finished
 part or the lead. A loop worker started on that part later (its id, `replaces` chain or goal) takes
 the part's ledger lines onto its board the same way, so a finish worker ends only once each
 blocker or visible defect is gone. A review with a verdict replaces the earlier reviews' questions
