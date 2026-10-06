@@ -46,6 +46,7 @@ import { FacetStage, FINISH_POLISH_NOTES, stageOf } from "./facet/stage.ts";
 import { FINISH_RUBRIC_FALLBACK, FINISH_STAGE_LINE } from "./facet/stage-prompts.ts";
 import { isRecord } from "./json.ts";
 import { DEFAULT_CAMERA, hasOwnStyle } from "./cameras.ts";
+import { judgedOnMotion } from "./motion-intent.ts";
 import type { CheckResult, ReferenceStats, Scoreboard } from "./checks.ts";
 import { unmeasured } from "./checks.ts";
 import type { Violation } from "./review.ts";
@@ -962,9 +963,6 @@ export function describeStyleDistances(
     : "";
 }
 
-/** Words in a facet's intent that make its feel something only motion shows. */
-const MOTION_WORDS = /\b(motion|feel|movement|animation|walk|run|jump|swing|recoil|physics)\b/i;
-
 /** The cameras a taste judge sees on each side: `default` and at most two more of the facet's own, plus one eye. */
 function tasteCameras(cameras: string[] | null, facet: AnyRecord | null | undefined): string[] {
   const spec: string[] = (cameras ?? facet?.cameras ?? []).filter(
@@ -976,12 +974,9 @@ function tasteCameras(cameras: string[] | null, facet: AnyRecord | null | undefi
   return [...own, ...(eye ? [eye] : [])];
 }
 
-/** A facet with a play check, an intent about motion, or a play result on the board is judged on motion too. */
+/** A facet with a play check, an intent about motion, or a play result on the board is judged on motion too (loop/motion-intent.ts). */
 function tasteWantsMotion(facet: AnyRecord | null | undefined, board: Scoreboard | null): boolean {
-  const playChecked = (facet?.checks ?? []).some((c: AnyRecord) => c.kind === CheckKind.Play);
-  const aboutMotion = MOTION_WORDS.test(String(facet?.intent ?? facet?.brief ?? ""));
-  const playOnBoard = Object.values(board ?? {}).some((e) => e.kind === CheckKind.Play);
-  return playChecked || aboutMotion || playOnBoard;
+  return judgedOnMotion(facet, board);
 }
 
 /** A candidate's motion strip cut to its first, middle and last frames. */
@@ -1034,17 +1029,19 @@ export function tasteImages({
 /**
  * Both builds' pictures within `room`, cut alike (P14-F7): cutting the list's tail dropped build
  * B's motion first, so a judge saw one side move and not the other. The same cameras on both
- * sides come first; the motion strips go in only when both fit.
+ * sides come first; the motion strips go in only when both sides have one of the same length
+ * and both fit — a build whose evidence has no strip (a re-look that took none) means neither
+ * side moves, whatever the room.
  */
 function fairCut(
   { a, b, motion }: { a: MessageImage[]; b: MessageImage[]; motion: { a: MessageImage[]; b: MessageImage[] } },
   room: number,
 ): MessageImage[] {
-  const all = [...a, ...b, ...motion.a, ...motion.b];
+  const strips = motion.a.length === motion.b.length ? [...motion.a, ...motion.b] : [];
+  const all = [...a, ...b, ...strips];
   if (all.length <= room) return all;
   const perSide = Math.min(a.length, b.length, Math.floor(Math.max(0, room) / 2));
   const stills = [...a.slice(0, perSide), ...b.slice(0, perSide)];
-  const strips = motion.a.length === motion.b.length ? [...motion.a, ...motion.b] : [];
   return stills.length + strips.length <= room ? [...stills, ...strips] : stills;
 }
 

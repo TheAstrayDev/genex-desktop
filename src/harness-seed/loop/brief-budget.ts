@@ -90,8 +90,12 @@ interface RecipeForFile {
   checkIds?: readonly string[];
 }
 
+/** What RECIPES.md says on a round that picked none, so an earlier round's recipes are not read again. */
+const NO_RECIPES = "# Recipes for this round\n\nNo recipes apply this round. BRIEF.md is the whole brief.\n";
+
 /** `.studio/RECIPES.md`: every retrieved recipe whole, its intent, its sketch and how to port it. */
 export function renderRecipesFile(hits: readonly RecipeForFile[] | null | undefined): string {
+  if (!hits?.length) return NO_RECIPES;
   const lines = [
     "# Recipes for this round",
     "",

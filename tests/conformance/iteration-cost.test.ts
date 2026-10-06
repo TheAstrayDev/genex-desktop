@@ -24,6 +24,8 @@ import { briefWithMovedSections } from "../../src/harness-seed/loop/facet/prompt
 import { writeBrief } from "../../src/harness-seed/loop/facet/phases/brief.ts";
 import { runFacetLoop } from "../../src/harness-seed/loop/facet-loop.ts";
 import { openRound, rebaselineIncumbent } from "../../src/harness-seed/loop/facet/phases/gate.ts";
+import { nameTheFix } from "../../src/harness-seed/loop/facet/phases/plan.ts";
+import { StopCode } from "../../src/harness-seed/loop/outcomes.ts";
 import { MACHINE_PRESSURE_POLL_MS, ROUND_MIN_FREE_MB } from "../../src/harness-seed/loop/facet/admission.ts";
 import { MIN_FREE_MB } from "../../src/harness-seed/loop/director/budgets.ts";
 import { MOTION_FRAMES } from "../../src/harness-seed/loop/facet/policy.ts";
@@ -33,6 +35,9 @@ import { PreviewService } from "../../src/main/core/previews.ts";
 import { unservedPreviews, type CoreInternals } from "../../src/main/core/internals.ts";
 import type { StudioCore } from "../../src/main/studio-core.ts";
 import type { PreviewPort } from "../../src/substrate/preview-port.ts";
+import { TEMPLATE_SHAPE } from "../../src/substrate/project-shape.ts";
+import { captureArgs } from "../../src/substrate/engines/capture-args.ts";
+import { executeLocalTool, LocalTool, localToolDefinitions } from "../../src/substrate/engines/local-session-tools.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -240,6 +245,28 @@ describe("a brief with a budget", () => {
     assert.equal(BriefCut.Lessons, "lessons");
   });
 
+  it("a game of its own gets no bench rule and no blank line in its rules", () => {
+    const brief = (template: boolean) =>
+      renderBrief({
+        run: { runId: "r", goal: "g" },
+        spec: { id: "hud", title: "HUD", intent: "dials", checks: [] },
+        iteration: 3,
+        board: {},
+        template,
+        screen: template,
+        maxChars: 50_000,
+      } as never);
+    const rules = (text: string) => {
+      const start = text.indexOf("## Rules that do not change");
+      const end = text.indexOf("\n\n", start);
+      return text.slice(start, end === -1 ? undefined : end);
+    };
+    const own = rules(brief(false));
+    assert.match(own, /HARNESS:/, `the whole rules list is one block: ${own}`);
+    assert.doesNotMatch(own, /bench\//);
+    assert.match(rules(brief(true)), /bench\/hud\.html/);
+  });
+
   it("moves an older brief's rules block before its earlier rounds", () => {
     const old = [
       "# Brief",
@@ -349,6 +376,83 @@ describe("recipes that fit this game", () => {
     const file = await readFile(path.join(dir, ".studio", "RECIPES.md"), "utf8");
     assert.match(file, /fps\.hands-in-frame/);
     assert.match(String(round.brief), /\.studio\/RECIPES\.md/);
+  });
+});
+
+describe("THE FIX's recipe fits this game too", () => {
+  /** The loop `nameTheFix` reads, with a gap the judge has named three times. */
+  function fixLoop(recipes: unknown[], kind: string) {
+    return {
+      appendRun: async () => {},
+      emitLoopState: () => {},
+      facet: { id: "cockpit", title: "Cockpit" },
+      policy: { fixAfterSameGap: 2, fixLosesAfter: 3 },
+      run: { runId: "run_fix", project: "rally" },
+      game: { kind },
+      legacy: false,
+      spec: { checks: [] },
+      recipes,
+      gapStreak: { text: "the crosshair should hide while the driver aims down the sights", count: 3, losses: 0 },
+      currentFix: null,
+    };
+  }
+
+  it("a racing loop's fix sentence about a crosshair pins no first-person recipe", async () => {
+    const recipes = await loadRecipes(seedDir);
+    const racing = fixLoop(recipes, "racing");
+    await nameTheFix(racing as never, { iteration: 4 } as never);
+    assert.equal(
+      (racing.currentFix as { recipe: { id: string } | null } | null)?.recipe?.id ?? null,
+      null,
+      "a first-person viewmodel sketch is not THE FIX's recipe for a racing game",
+    );
+    const shooter = fixLoop(recipes, "first-person");
+    await nameTheFix(shooter as never, { iteration: 4 } as never);
+    assert.equal(
+      (shooter.currentFix as { recipe: { id: string } | null } | null)?.recipe?.id,
+      "fps.crosshair-off-in-ads",
+    );
+  });
+});
+
+describe("RECIPES.md follows the round", () => {
+  it("a round with no recipes leaves no earlier round's recipes to read", async () => {
+    const recipes = await loadRecipes(seedDir);
+    const dir = await tmpDir("studio-brief-");
+    const first = briefLoop({
+      dir,
+      recipes,
+      checks: [{ id: "hands-present", kind: "scene", js: "count('hands') >= 1", weight: "identity" }],
+    });
+    await writeBrief(first.loop as never, first.round as never);
+    assert.match(await readFile(path.join(dir, ".studio", "RECIPES.md"), "utf8"), /fps\.hands-in-frame/);
+    const later = briefLoop({ dir, recipes, checks: [{ id: "sky-tone", kind: "pixel" }] });
+    await writeBrief(later.loop as never, later.round as never);
+    assert.deepEqual(later.round.injected, []);
+    assert.doesNotMatch(
+      await readFile(path.join(dir, ".studio", "RECIPES.md"), "utf8"),
+      /fps\.hands-in-frame/,
+      "the file the builder was pointed at earlier no longer carries recipes this round did not pick",
+    );
+  });
+});
+
+describe("a taste judge never sees one side move", () => {
+  it("shows the motion strip on both builds or on neither", async () => {
+    const { tasteImages } = await import("../../src/harness-seed/loop/judge.ts");
+    const shots = ["default", "chase"].map((camera) => ({ camera, base64: "aGk=" }));
+    const challenger = { ok: true, shots, motion: Array.from({ length: 6 }, () => ({ base64: "aGk=" })) };
+    const incumbent = { incumbent: true, evidence: { ok: true, shots, motion: [] } };
+    const images = tasteImages({
+      run: { runId: "r", reference: { name: "none", frames: [] } } as never,
+      facet: { id: "handling", intent: "the car's feel when it turns", cameras: ["default", "chase"], checks: [] },
+      A: challenger as never,
+      B: incumbent as never,
+      cameras: ["default", "chase"],
+      max: 12,
+    });
+    const motion = (tag: string) => images.filter((image) => image.label?.startsWith(`${tag} / MOTION`)).length;
+    assert.equal(motion("BUILD A"), motion("BUILD B"), images.map((image) => image.label).join("; "));
   });
 });
 
@@ -464,6 +568,66 @@ describe("memory admission before a round", () => {
     }
   });
 
+  it("a stop or a wrap-up asked during the wait ends it at the next poll, with no build", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+    // Asked before the wait: no poll is slept at all.
+    const early = admissionLoop(t, () => ({ memory: { freeMb: 70 } }));
+    early.loop.finishRequested = (async () => ({ by: "director", reason: "stopped by the director" })) as never;
+    const earlyResult: Record<string, unknown> = {};
+    early.loop.result = earlyResult;
+    assert.equal(await openRound(early.loop as never, { iteration: 2 } as never), "stop");
+    assert.deepEqual(early.slept, [], "a worker already told to stop does not wait for memory");
+    assert.equal(earlyResult.stopCode, StopCode.FinishRequested);
+    assert.ok(!early.events.some((e) => e.type === RunEvent.FacetBuildStarted));
+    // Asked two polls into the wait: the next poll ends it, not memory or the 4 h deadline.
+    const late = admissionLoop(t, () => ({ memory: { freeMb: 70 } }));
+    late.loop.deadline = Date.now() + 4 * 60 * 60_000;
+    late.loop.finishRequested = (async () =>
+      late.slept.length >= 2
+        ? { by: "director", reason: "stopped by the director: the build is wrapping up" }
+        : false) as never;
+    const lateResult: Record<string, unknown> = {};
+    late.loop.result = lateResult;
+    assert.equal(await openRound(late.loop as never, { iteration: 2 } as never), "stop");
+    assert.equal(late.slept.length, 2, `the wait ends at the poll after the stop (${late.slept.length} slept)`);
+    assert.equal(lateResult.stopCode, StopCode.FinishRequested);
+    assert.ok(!late.events.some((e) => e.type === RunEvent.FacetBuildStarted));
+    // The user's stop (a cancelled context) mid-wait: the round never opens.
+    const cancelled = admissionLoop(t, () => ({ memory: { freeMb: 70 } }));
+    cancelled.loop.sleepFor = async (ms: number) => {
+      cancelled.slept.push(ms);
+      t.mock.timers.tick(ms);
+      cancelled.loop.ctx.cancelled = true;
+    };
+    const cancelledResult: Record<string, unknown> = {};
+    cancelled.loop.result = cancelledResult;
+    assert.equal(await openRound(cancelled.loop as never, { iteration: 2 } as never), "stop");
+    assert.equal(cancelled.slept.length, 1);
+    assert.equal(cancelledResult.stopCode, StopCode.UserStop);
+    assert.ok(!cancelled.events.some((e) => e.type === RunEvent.FacetBuildStarted));
+  });
+
+  it("says why it is idle while it waits: the status line and the loop's phase", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+    let answer = 0;
+    const freeMb = [70, 3_000];
+    const { loop } = admissionLoop(t, () => ({ memory: { freeMb: freeMb[answer++] } }));
+    const statuses: string[] = [];
+    const phases: string[] = [];
+    loop.ctx.setStatus = ((line: string) => {
+      statuses.push(line);
+    }) as never;
+    Object.assign(loop, { emitLoopState: (phase: string) => phases.push(phase) });
+    await openRound(loop as never, { iteration: 2 } as never);
+    assert.ok(
+      statuses.some(
+        (line) => /waiting for memory/.test(line) && line.includes("70 MB") && line.includes(`${ROUND_MIN_FREE_MB}`),
+      ),
+      statuses.join(" | "),
+    );
+    assert.deepEqual(phases, ["waiting for memory"], "the director's run_status reads the loop's phase");
+  });
+
   it("stops waiting at the facet's deadline and lets the clock gate stop the round", async (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
     const { loop, events, slept } = admissionLoop(t, () => ({ memory: { freeMb: 10 } }));
@@ -477,7 +641,7 @@ describe("memory admission before a round", () => {
 });
 
 describe("a re-baseline measures what the board reads", () => {
-  async function rebaseline(checks: unknown[]) {
+  async function rebaseline(checks: unknown[], facetFields: Record<string, unknown> = {}) {
     const recorder = ctxRecorder({
       unknown: { value: null },
       handlers: {
@@ -485,7 +649,7 @@ describe("a re-baseline measures what the board reads", () => {
         "preview.screenshot": () => ({ path: "/tmp/x.jpg", bytes: 10, base64: "", stats: null }),
       },
     });
-    const spec = { id: "hud", title: "HUD", checks, cameras: ["default"] };
+    const spec = { id: "hud", title: "HUD", checks, cameras: ["default"], ...facetFields };
     const loop = {
       legacy: false,
       previewLock: async () => () => {},
@@ -511,17 +675,25 @@ describe("a re-baseline measures what the board reads", () => {
     return { motion, audio };
   }
 
-  it("a scene-and-vision facet's re-look takes no motion strip and no audio probe", async () => {
+  it("a scene-and-vision facet's re-look takes no motion strip, and keeps the audio both sides show", async () => {
     const quiet = await rebaseline([
       { id: "dials", kind: "scene", js: "count('dial') > 0" },
       { id: "reads", kind: "vision", ask: "the dials read" },
     ]);
-    assert.deepEqual(quiet, { motion: 0, audio: 0 });
+    // The audio probe is one page call after the drive, and the taste judge reads both builds'
+    // audio lines: a re-look without it would put the probe on the challenger's side only.
+    assert.deepEqual(quiet, { motion: 0, audio: 1 });
     const moving = await rebaseline([{ id: "drift", kind: "play", ask: "the car drifts" }]);
     assert.equal(moving.motion, MOTION_FRAMES, "a facet judged on play still gets its strip");
-    assert.equal(moving.audio, 0);
-    const heard = await rebaseline([{ id: "engine-note", kind: "scene", js: "audio().rms > 0.01" }]);
-    assert.equal(heard.audio, 1, "a check that reads audio() gets the probe");
+    const demo = await rebaseline([{ id: "lap", kind: "demo", ask: "one lap" }]);
+    assert.equal(demo.motion, MOTION_FRAMES, "a demo check still gets its strip");
+  });
+
+  it("keeps the strip for a facet the taste judge watches move: an intent about feel, no play check", async () => {
+    const feel = await rebaseline([{ id: "dials", kind: "scene", js: "count('dial') > 0" }], {
+      intent: "the car's feel when it turns",
+    });
+    assert.equal(feel.motion, MOTION_FRAMES, "the taste judge shows motion for this intent, so both sides need it");
   });
 });
 
@@ -559,9 +731,10 @@ describe("a fast self-look at a bench page", () => {
       consoleEntries: () => [],
       status: () => ({ project: "hud", url: loads.length ? `game://hud/${loads.at(-1)!.entry}` : "", loadError: null }),
     } as unknown as PreviewPort;
+    let games: unknown[] = [];
     const core = {
       emit: () => {},
-      games: { list: async () => [], dirFor: () => root },
+      games: { list: async () => games, dirFor: () => root },
       builds: { ensure: async () => ({ ok: true, output: root }) },
     } as unknown as StudioCore;
     const service = new PreviewService(core, unservedPreviews() as CoreInternals);
@@ -573,7 +746,17 @@ describe("a fast self-look at a bench page", () => {
         path.join(outside, "shots"),
         session as never,
       );
-    return { root, outside, loads, studioCalls, capture };
+    /** The game turns out to have its own build: the preview serves the bundler's output. */
+    const built = () => {
+      games = [
+        {
+          name: "hud",
+          built: true,
+          shape: { ...TEMPLATE_SHAPE, build: "npm run build", own: true, kind: "three-vite" },
+        },
+      ];
+    };
+    return { root, outside, loads, studioCalls, capture, built };
   }
 
   it("refuses a page outside the workspace, a link out of it, a script and a missing page, and loads nothing", async () => {
@@ -637,6 +820,21 @@ describe("a fast self-look at a bench page", () => {
     assert.deepEqual(turns[0]?.selfCapture?.cameras, ["chase"]);
   });
 
+  it("refuses a bench page for a game served from its build output, and loads nothing", async () => {
+    const { loads, capture, built } = await benchCapture();
+    built();
+    const answer = await capture()({ page: "bench/hud.html" } as never);
+    assert.match(answer, /build output/i, answer);
+    assert.doesNotMatch(answer, /your build failed to load/);
+    assert.deepEqual(loads, []);
+  });
+
+  it("a grant whose cameras are not a list shoots the default view instead of failing", async () => {
+    const { capture } = await benchCapture();
+    const answer = await capture({ cameras: "chase" })({});
+    assert.match(answer, /^Captured your CURRENT build/, answer);
+  });
+
   it("captures only the part's own cameras when the grant names them", async () => {
     const { capture } = await benchCapture();
     const answer = await capture({ cameras: ["chase"] })({});
@@ -644,5 +842,52 @@ describe("a fast self-look at a bench page", () => {
     assert.doesNotMatch(answer, /c1_top\.jpg|c1_dash\.jpg/);
     const asked = await capture({ cameras: ["chase"] })({ cameras: "top" });
     assert.match(asked, /c\d+_top\.jpg/, "a camera the builder names still wins");
+  });
+});
+
+describe("every builder engine can look at a bench page", () => {
+  it("passes a named page on, and leaves an empty one out: the game is captured", () => {
+    const table: Array<[Record<string, unknown>, Record<string, unknown>]> = [
+      [{ page: "bench/hud.html" }, { page: "bench/hud.html" }],
+      [{ page: "" }, {}],
+      [{ page: "   " }, {}],
+      [{ page: null }, {}],
+      [{ page: 7 }, {}],
+      [
+        { cameras: "chase", page: "bench/hud.html" },
+        { cameras: "chase", page: "bench/hud.html" },
+      ],
+      [{ cameras: "" }, {}],
+      [{}, {}],
+    ];
+    for (const [args, want] of table) assert.deepEqual(captureArgs(args), want, JSON.stringify(args));
+  });
+
+  it("a local session's capture takes a page and hands it to the studio", async () => {
+    const asked: Array<Record<string, unknown>> = [];
+    const request = {
+      onCapture: async (args: Record<string, unknown>) => {
+        asked.push(args);
+        return "captured";
+      },
+    };
+    const definitions = localToolDefinitions(request as never, false);
+    const capture = definitions.find((tool) => tool.name === LocalTool.Capture);
+    assert.ok(
+      (capture?.parameters as { properties?: Record<string, unknown> } | undefined)?.properties?.page,
+      "the schema names page",
+    );
+    const context = { request } as never;
+    await executeLocalTool(
+      { id: "1", name: LocalTool.Capture, arguments: { page: "bench/hud.html" } } as never,
+      definitions,
+      context,
+    );
+    await executeLocalTool(
+      { id: "2", name: LocalTool.Capture, arguments: { page: "" } } as never,
+      definitions,
+      context,
+    );
+    assert.deepEqual(asked, [{ page: "bench/hud.html" }, {}]);
   });
 });

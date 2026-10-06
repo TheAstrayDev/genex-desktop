@@ -21,6 +21,7 @@ import { stopSignal, tooLateToStart } from "../rules.ts";
 import { MOTION_FRAMES } from "../policy.ts";
 import { roundFields } from "../record.ts";
 import { admitRound } from "../admission.ts";
+import { judgedOnMotion } from "../../motion-intent.ts";
 import type { Check } from "../../spec.ts";
 
 /** The round's gate — a stop, the clock, a round that would not fit, fair share — and its opening: the status, the event, the user's steering. */
@@ -30,8 +31,13 @@ export async function openRound(loop: FacetLoop, round: FacetRound): Promise<Rou
     stopWith(result, StopCode.UserStop, "stopped by the user");
     return RoundFlow.Stop;
   }
-  // Memory first: a machine short of it waits here, and the gates below then see the clock it cost.
+  // Memory first: a machine short of it waits here, and the gates below then see the clock it
+  // cost. A stop ends the wait at its next poll, so the cancel and finish gates answer it.
   await admitRound(loop, round.iteration);
+  if (ctx.cancelled) {
+    stopWith(result, StopCode.UserStop, "stopped by the user");
+    return RoundFlow.Stop;
+  }
   round.finishing = stopSignal(await finishRequested(loop.iterationsThisRound));
   if (round.finishing) {
     stopWith(result, StopCode.FinishRequested, round.finishing.reason);
@@ -190,21 +196,22 @@ export async function rebaselineIncumbent(loop: FacetLoop, round: FacetRound): P
   }
 }
 
-/** A scene or probe check whose JS calls the page's `audio()` helper: what the audio probe is for. */
-const READS_AUDIO = /\baudio\s*\(/;
-
 /**
- * What a re-look over the merged incumbent records beyond the frames: the motion strip only for a
- * facet judged on play or a demo, the audio probe only for a check that reads audio. Every
- * re-baseline used to drive a strip and probe the sound whatever the board measured, and the
- * re-score reads only the board's checks, so leaving out what none of them reads changes no verdict.
+ * What a re-look over the merged incumbent records beyond the frames. The motion strip only for a
+ * facet judged on play or a demo, or one the taste judge watches move (loop/motion-intent.ts):
+ * every re-baseline used to drive a strip whatever the facet was judged on. The new evidence is
+ * the incumbent's side of the next blind A/B, so it keeps whatever the challenger's side will
+ * show there — the strip for a facet about feel, and the audio probe (one page call after the
+ * drive), whose line the judge reads for both builds.
  */
-function mergedLookExtras(checks: readonly Check[]): { motion: number; audio: boolean } {
+function mergedLookExtras(loop: FacetLoop): { motion: number; audio: boolean } {
+  const { board, facet, spec } = loop;
+  const checks: readonly Check[] = spec.checks;
   const moving = checks.some((check) => check.kind === CheckKind.Play || check.kind === CheckKind.Demo);
-  const hearing = checks.some((check) => READS_AUDIO.test(String(check.js ?? "")));
+  const watched = judgedOnMotion(facet, board) || judgedOnMotion(spec, board);
   return {
-    motion: moving || demosNamedByChecks(checks).length > 0 ? MOTION_FRAMES : 0,
-    audio: hearing,
+    motion: moving || watched || demosNamedByChecks(checks).length > 0 ? MOTION_FRAMES : 0,
+    audio: true,
   };
 }
 
@@ -220,7 +227,7 @@ async function lookAtMergedIncumbent(loop: FacetLoop, round: FacetRound, worktre
     labelPrefix: `facet_${facet.id}/iter_${round.iterationId}/merged-incumbent`,
     cameras: spec.cameras,
     eyes: true,
-    ...mergedLookExtras(spec.checks),
+    ...mergedLookExtras(loop),
     requiredDemos: demosNamedByChecks(spec.checks),
     keepPaths: statePathsNamedByChecks(spec.checks),
     setup: facetSetup,

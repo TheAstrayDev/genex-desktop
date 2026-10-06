@@ -720,17 +720,18 @@ export function checksFromDefects(
 /**
  * The craft recipe worth handing a builder alongside a check somebody just wrote — a judge's
  * new vision check, a milestone's check. Only a real overlap counts: below CRAFT_ADOPT_SCORE
- * two words in common is a coincidence, and a wrong recipe costs an iteration.
+ * two words in common is a coincidence, and a wrong recipe costs an iteration. `kind` is the
+ * game's kind: a recipe for other kinds of game reaches it only on its own check.
  */
 export function craftForNewCheck(
   recipes: readonly Recipe[] | null | undefined,
   newCheck: CheckWords | null | undefined,
-  { min = CRAFT_ADOPT_SCORE, limit = 1 }: { min?: number; limit?: number } = {},
+  { min = CRAFT_ADOPT_SCORE, limit = 1, kind = null }: { min?: number; limit?: number; kind?: string | null } = {},
 ): Array<{ recipe: Recipe; score: number }> {
   const hits: Array<{ recipe: Recipe; score: number }> = [];
   for (const recipe of recipes ?? []) {
     if (!isCraftRecipe(recipe)) continue;
-    const score = scoreRecipe(recipe, newCheck);
+    const score = scoreRecipe(recipe, newCheck, { kind });
     if (score >= min) hits.push({ recipe, score });
   }
   return hits.sort((a, b) => b.score - a.score || (a.recipe.id < b.recipe.id ? -1 : 1)).slice(0, limit);
@@ -1167,7 +1168,7 @@ function briefRules(
       ? `- Determinism: rng from update(), no Math.random, no wall clock.`
       : `- Determinism: the studio seeds Math.random and owns the clock for this page, so the same seed replays the same run — take time from the delta your own loop already computes, never from a second clock of your own.`,
     `- Capture (${toolCall(roleEngine(run, RoleKey.Builder), "capture")}) after every meaningful change and LOOK before you finish; write what you tried and why in ${facetNotes(spec.id)}.`,
-    template ? benchRule(spec.id) : "",
+    ...(template ? [benchRule(spec.id)] : []),
     `- A line beginning \`HARNESS:\` in ${facetNotes(spec.id)} is read by the loop, not by the next builder: use it to say a check cannot pass as written (name the check id) or that a camera cannot see what it asks — the planner re-points the check instead of you burning iterations.`,
     resumed
       ? `- You are resuming your own session: you remember your previous attempt — change the mechanism where a check keeps failing, do not re-tune the same numbers.`

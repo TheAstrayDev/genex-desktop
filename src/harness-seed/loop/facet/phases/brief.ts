@@ -58,15 +58,16 @@ export async function writeBrief(loop: FacetLoop, round: FacetRound): Promise<Ro
 /**
  * `.studio/RECIPES.md` beside the brief: the retrieved recipes whole, so BRIEF.md names them and
  * points there. Only for a delegated builder, which reads files; a direct engine gets the brief
- * inline and keeps the sketches in it. Null when nothing was written, and the brief then keeps them.
+ * inline and keeps the sketches in it. Null when no recipe was written, and the brief then keeps
+ * them. A round that picked none still rewrites the file, saying so: a resumed builder remembers
+ * an earlier round's pointer and must not port recipes this round did not choose.
  */
 async function writeRecipesFile(loop: FacetLoop, round: FacetRound): Promise<string | null> {
   const { delegated, workdir } = loop;
-  if (!delegated || !workdir || !round.injectedWithFix.length) return null;
-  const written = await writeWorktreeFile(workdir, RECIPES_FILE, renderRecipesFile(round.injectedWithFix)).catch(
-    () => null,
-  );
-  return written ? RECIPES_FILE_PATH : null;
+  if (!delegated || !workdir) return null;
+  const hits = round.injectedWithFix;
+  const written = await writeWorktreeFile(workdir, RECIPES_FILE, renderRecipesFile(hits)).catch(() => null);
+  return written && hits.length ? RECIPES_FILE_PATH : null;
 }
 
 /**

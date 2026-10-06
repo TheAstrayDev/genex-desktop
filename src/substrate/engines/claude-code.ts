@@ -70,6 +70,7 @@ import {
   StudioTool,
   studioToolName,
 } from "./studio-tool-prompts.ts";
+import { captureArgs } from "./capture-args.ts";
 import {
   abortControllerFor,
   CHECKPOINT_NOTE_CHARS,
@@ -2057,10 +2058,7 @@ function captureTool(kit: McpKit, onCapture: NonNullable<DelegateRequest["onCapt
     },
     async (args: { cameras?: string; page?: string }) => {
       try {
-        const text = await onCapture({
-          ...(args?.cameras ? { cameras: String(args.cameras) } : {}),
-          ...(args?.page !== undefined ? { page: String(args.page) } : {}),
-        });
+        const text = await onCapture(captureArgs(args));
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
         // The tool reports failure as a result marked failed — a thrown capture must not end the build.

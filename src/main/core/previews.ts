@@ -116,6 +116,8 @@ const MESSAGE = {
   benchNotHtml: "it is not a .html page",
   benchOutside: "it is outside this workspace",
   benchMissing: "there is no such file",
+  benchBuilt:
+    "this game is served from its build output, not from this workspace, so a bench page cannot load; capture the game",
   benchCaptured: (entry: string, workspace: string) => `Captured the bench page ${entry} (workspace ${workspace}):`,
   benchAfter:
     "Read the image files above to actually look at them. The window shows the bench page now: the computer tool loads your game again on its next action. Capture the game itself before you finish.",
@@ -208,8 +210,12 @@ function camerasForShot(
   known: readonly string[],
 ): string[] {
   if (bench) return camerasToCapture(asked, []);
-  const own = sc.cameras?.length ? sc.cameras.join(",") : undefined;
-  return camerasToCapture(asked ?? own, known);
+  // The grant comes from the agent-editable seed: anything but a list of names is no grant.
+  const granted: unknown = sc.cameras;
+  const own = Array.isArray(granted)
+    ? granted.filter((camera): camera is string => typeof camera === "string" && camera !== "").join(",")
+    : "";
+  return camerasToCapture(asked ?? (own || undefined), known);
 }
 
 /** The capture tool's answer: what was shot, the console's errors, the load's note and what the window shows now. */
@@ -718,6 +724,20 @@ export class PreviewService {
   }
 
   /**
+   * A bench page for this project, or the sentence that refuses it. The page is served from the
+   * workspace itself, so a game the preview serves from elsewhere (its build's output, a serve
+   * folder) is refused up front: the page is not there, and a failed load would read as a broken
+   * build.
+   */
+  async #benchFor(project: string, root: string, page: string): Promise<{ entry: string } | { refusal: string }> {
+    const descriptor = (await this.#core.games.list().catch(() => [] as GameProject[])).find((g) => g.name === project);
+    const shape = descriptor?.shape ?? TEMPLATE_SHAPE;
+    const servedElsewhere = descriptor?.built === true || shape.build !== null || (shape.serve ?? ".") !== ".";
+    if (servedElsewhere) return { refusal: MESSAGE.benchRefused(page, MESSAGE.benchBuilt) };
+    return benchEntry(root, page);
+  }
+
+  /**
    * Builder eyes: renders the contractor's own workspace in a pooled hidden preview and saves
    * frames it can Read mid-turn — the counter to a whole run of coding blind (44% acceptance).
    * One lease per call, held only for the seconds of the capture, so three parallel facets and
@@ -738,7 +758,7 @@ export class PreviewService {
     let sequenceSeeded = false;
     return async ({ cameras, page } = {}) => {
       // A bench page is checked before anything is touched: a refused one loads nothing.
-      const bench = page === undefined ? null : await benchEntry(currentRoot(), String(page));
+      const bench = page === undefined ? null : await this.#benchFor(sc.project, currentRoot(), String(page));
       if (bench && "refusal" in bench) return bench.refusal;
       const outDir = iterationDir(outBase, sc.iteration);
       await ensureDir(outDir);

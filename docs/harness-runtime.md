@@ -288,9 +288,7 @@ arrives byte for byte; past that, the largest lists, then the object holding the
 when its weight is spread over many medium lists), become `{__elided, length, chars}` stubs, the
 root names them under `__cut`, and any `keep` paths a `preview.state` caller sends are cut last
 (`loop/state-shape.ts` `statePathsNamedByChecks` names a board's; the facet's look, its rebaseline
-and a spike send them as `gatherEvidence` `keepPaths`, and the pass warns naming what was cut). A
-rebaseline takes the motion strip only for a play or demo check and the audio probe only for a
-check that calls `audio()`.
+and a spike send them as `gatherEvidence` `keepPaths`, and the pass warns naming what was cut).
 `len()`, `has()`, truthiness, `!= null` and a list's or string's `.length` read a stub as the value
 it stands for. Any other read of a stub or inside one — in the late state, or in the early state a
 `delta()` reads — and any probe over an older studio's text-cut `{__truncated}` state, is
@@ -351,7 +349,9 @@ prompt.
 
 A loop worker's round first waits while the machine has less than `ROUND_MIN_FREE_MB` free
 (`loop/facet/admission.ts`, one `facet_machine_pressure` per wait; a failed `preview.capacity`
-never holds it). `.studio/BRIEF.md` stays within `BRIEF_MAX_CHARS` (12,000) with the moved
+never holds it). While it waits, its status line and its loop's phase (`waiting for memory`, in
+the director's `run_status`) say why, and a stop, a wrap-up or a cancel ends the wait at the next
+poll. `.studio/BRIEF.md` stays within `BRIEF_MAX_CHARS` (12,000) with the moved
 sections in (`loop/brief-budget.ts`, `facet/brief-fit.ts`): six review violations and a count,
 liveness and integration cut at a word, notes kept as their newest words, and over budget the
 lessons, style distances, diff stats, recipe text and optional polish leave in that order. The
@@ -360,11 +360,15 @@ stay, the rules ahead of the earlier rounds. A delegated builder's retrieved rec
 whole to `.studio/RECIPES.md`; the brief keeps their titles and intents, and only THE FIX's recipe
 keeps its sketch inline. Retrieval keeps to the run's game kind (a recipe's optional `kinds`; none
 means every kind), needs `CRAFT_ADOPT_SCORE` unless the recipe is the check's own, and takes exact
-matches only for a first round's unscored checks. A builder's `capture` shoots its part's own
+matches only for a first round's unscored checks, and THE FIX's recipe keeps to the game kind
+too. A builder's `capture` (Claude Code, Codex and local sessions alike) shoots its part's own
 cameras unless it names others, and `page=bench/<part>.html` loads a bench page (an existing `.html`
-file inside the workspace, by real path; anything else is refused and nothing loads) through the
-served root with no setup. A rebaseline after an integration merge takes the motion strip only for
-a play or demo check and the audio probe only for a check that calls `audio()`.
+file inside the workspace, by real path; anything else, or any page of a game served from its
+build output, is refused and nothing loads) through the served root with no setup. A rebaseline
+after an integration merge takes the motion strip only for a play or demo check or a facet the
+taste judge watches move (`loop/motion-intent.ts`), and always the audio probe, so both sides of
+the next blind A/B carry the same evidence; the taste judge shows motion strips only when both
+builds have one.
 
 ## Acceptance evidence
 

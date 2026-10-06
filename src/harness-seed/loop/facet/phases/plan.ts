@@ -243,7 +243,9 @@ export async function nameTheFix(loop: FacetLoop, round: FacetRound): Promise<Ro
     // library already knows how to close is named in THE FIX and injected below, so the
     // builder ports it instead of inventing a fourth way.
     const fixCheck = checksFromDefects([gap.text], { limit: 1 })[0] ?? null;
-    fix.recipe = fixCheck ? (craftForNewCheck(loop.recipes, fixCheck)[0]?.recipe ?? null) : null;
+    // Only a recipe for this kind of game: THE FIX's recipe keeps its sketch inline in BRIEF.md.
+    const kind = typeof loop.game?.kind === "string" ? loop.game.kind : null;
+    fix.recipe = fixCheck ? (craftForNewCheck(loop.recipes, fixCheck, { kind })[0]?.recipe ?? null) : null;
     loop.currentFix = fix;
     await appendRun(RunEvent.FacetFix, {
       runId: run.runId,

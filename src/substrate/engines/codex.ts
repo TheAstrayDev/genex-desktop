@@ -101,6 +101,7 @@ import {
   StudioTool,
   studioToolName,
 } from "./studio-tool-prompts.ts";
+import { captureArgs } from "./capture-args.ts";
 import { JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
@@ -1074,10 +1075,7 @@ export class CodexEngine implements Engine {
       return CHECKPOINT_TOOL.reply;
     }
     if (name === StudioTool.Capture && request.onCapture) {
-      return request.onCapture({
-        ...(args.cameras ? { cameras: String(args.cameras) } : {}),
-        ...(args.page !== undefined ? { page: String(args.page) } : {}),
-      });
+      return request.onCapture(captureArgs(args));
     }
 
     if (request.onLiveTool && (request.liveTools ?? []).some((tool) => tool.name === name)) {
