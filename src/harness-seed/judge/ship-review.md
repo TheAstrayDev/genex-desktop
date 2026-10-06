@@ -29,7 +29,14 @@ List every distinct defect a player would notice, worst first. For each one:
   or `nit` (only a close look finds it).
 
 `ship` is true only when nothing a player would notice stands in the way: no blocker and nothing
-visible you would be embarrassed by. Name what already works in `strengths`.
+visible you would be embarrassed by.
+
+## Do not regress
+
+Name in `doNotRegress` up to eight things that already work and must stay, a few words each
+("night lighting", "rain on the windscreen", "the speedometer reads at a glance"), best first.
+Every builder is handed this list and every round's taste judge holds them to it: a build that
+loses one has regressed.
 
 Reply with JSON only:
-{"ship":true|false,"defects":[{"what":"…","camera":"…","part":"<a PARTS id>"|null,"severity":"blocker"|"visible"|"nit"}],"strengths":["…"],"reason":"…"}
+{"ship":true|false,"defects":[{"what":"…","camera":"…","part":"<a PARTS id>"|null,"severity":"blocker"|"visible"|"nit"}],"doNotRegress":["…"],"reason":"…"}

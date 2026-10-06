@@ -102,6 +102,11 @@ export const WakeCause = {
    * here the owners finish their parts. A timed build's timer, or a goal build idle with no review.
    */
   FinishMark: "finish_mark",
+  /**
+   * The art director's regular look at the whole game while workers build (art-direction.ts
+   * `shipLookAt`): its defects go to their owners, and the build stage goes on.
+   */
+  ShipLook: "ship_look",
 } as const;
 export type WakeCause = (typeof WakeCause)[keyof typeof WakeCause];
 /** Why one wake happened: a kind of line, or a cause of its own. */
@@ -175,6 +180,8 @@ export interface WakeView {
   wakesAt: readonly number[];
   /** When the finish mark is due, while it is ahead of the wrap-up and not yet said (absent: none). */
   finishMarkAt?: number | null;
+  /** When the art director's regular look at the whole game is due (absent: none). */
+  shipLookAt?: number | null;
 }
 
 /** When to wake the lead, and why. */
@@ -229,6 +236,10 @@ function userCandidates(view: WakeView): Candidate[] {
 const markAheadOfWrapUp = (view: WakeView): view is WakeView & { finishMarkAt: number } =>
   !view.wrapping && typeof view.finishMarkAt === "number" && view.now < view.softDeadline;
 
+/** The art director's regular look, like the mark, only in working time: the wrap-up has no room for it. */
+const lookAheadOfWrapUp = (view: WakeView): view is WakeView & { shipLookAt: number } =>
+  !view.wrapping && typeof view.shipLookAt === "number" && view.now < view.softDeadline;
+
 /** The studio's own reasons: the idle ask, and the timers. */
 function timerCandidates(view: WakeView): Candidate[] {
   const out: Candidate[] = [];
@@ -237,6 +248,8 @@ function timerCandidates(view: WakeView): Candidate[] {
   if (view.planWindowEndsAt !== null) add(view.planWindowEndsAt, WakeCause.PlanWindow, false);
   if (!view.wrapping) add(view.softDeadline, WakeCause.WrapUp, false);
   if (markAheadOfWrapUp(view)) add(view.finishMarkAt, WakeCause.FinishMark, false);
+  // Uncapped: busy workers fill the hourly cap with rounds, and the look is what they were missing.
+  if (lookAheadOfWrapUp(view)) add(view.shipLookAt, WakeCause.ShipLook, false);
   if (view.workersLimitLiftsAt !== null) add(view.workersLimitLiftsAt, WakeCause.WorkersLimitLifted, true);
   if (view.running > 0) add(view.asleepSince + HEARTBEAT_MS, WakeCause.Heartbeat, true);
   return out;

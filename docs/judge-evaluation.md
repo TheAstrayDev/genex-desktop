@@ -28,7 +28,10 @@ The art director's ship review (`judge/ship-review.md`, `loop/ship-review.ts`) i
 absolute judge: one build and no pair, at 1600×900. Evaluate it on single builds that reviewers
 label ship or not, each decisive defect with the plan part that owns it and its severity; a
 malformed reply must stay no verdict, never a "no", and a camera it was not shown is dropped. It is
-never put beside another build's frames.
+never put beside another build's frames. Its `doNotRegress` list (at most eight short names of
+what already works) becomes the taste judge's regression guard: evaluate the taste judge on pairs
+where the accepted build loses one listed item and must be called a regression, and on pairs that
+keep every item, whose verdicts must not change.
 
 A finish-stage round's taste judge reads `judge/taste-finish.md` after its usual rubric
 (`taste-veto.md`): polish is the work, the build a player would rather ship wins, and it lists up

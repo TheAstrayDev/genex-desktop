@@ -45,6 +45,7 @@ import { DirectorTool, headSynced } from "./tool-specs.ts";
 import { passDeadline } from "./wake-schedule.ts";
 import { workingGoal } from "../goal-prompts.ts";
 import type { LastJudge, Night, Worker } from "./night.ts";
+import type { LastShip } from "./art-direction.ts";
 import type { CheckResult } from "../checks.ts";
 import type { Evidence, Shot } from "../evidence.ts";
 import type { ShipReview } from "../ship-review.ts";
@@ -524,15 +525,25 @@ async function compareJudged(night: Night, pass: JudgePass): Promise<Worker | nu
 const unreadShip = (why: unknown): ShipReview => ({
   ship: null,
   defects: [],
-  strengths: [],
+  doNotRegress: [],
   reason: String((why as Error)?.message ?? why).slice(0, CLIP_REASON),
   parse: JudgeParse.Invalid,
 });
 
 /**
+ * The do-not-regress list the run keeps after a review on integration: a review with a verdict
+ * replaces it, and one nobody could read leaves the last list standing.
+ */
+function doNotRegressAfter(last: LastShip | null | undefined, review: ShipReview): string[] {
+  if (typeof review.ship !== "boolean") return last?.doNotRegress ?? [];
+  return review.doNotRegress ?? [];
+}
+
+/**
  * The art director's absolute look (`ship=yes`, loop/ship-review.ts) at the build this pass saw at
- * `SHIP_VIEW`: ship or not, the defects grouped by the plan part that owns them, and what next. On
- * the integration branch its defects go to their owners (art-direction.ts) and its word is kept as
+ * `SHIP_VIEW`: ship or not, the defects grouped by the plan part that owns them, what already works
+ * and must stay, and what next. On the integration branch its defects go to their owners and its
+ * do-not-regress list to every running loop worker (art-direction.ts), and its word is kept as
  * `state.lastShip` for that head, which the journal carries across a Resume.
  */
 async function shipStep(night: Night, pass: JudgePass): Promise<void> {
@@ -551,13 +562,14 @@ async function shipStep(night: Night, pass: JudgePass): Promise<void> {
   const onIntegration = target.root === integrationWorktree;
   if (onIntegration) {
     routeShipDefects(night, review);
-    state.lastShip = { head, ship: review.ship, defects: review.defects, at: Date.now() };
+    const doNotRegress = doNotRegressAfter(state.lastShip, review);
+    state.lastShip = { head, ship: review.ship, defects: review.defects, doNotRegress, at: Date.now() };
   }
   out.ship = {
     ship: review.ship,
     defects: review.defects,
     defectsByPart: defectsByPart(review.defects),
-    strengths: review.strengths,
+    doNotRegress: review.doNotRegress ?? [],
     reason: review.reason,
     next: shipNext(review),
     ...(review.judged ? { judged: review.judged } : {}),

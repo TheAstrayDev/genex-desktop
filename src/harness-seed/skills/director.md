@@ -207,6 +207,15 @@ itself and keeps the memory file its brief names current.)
 
 ## The finish stage
 
+- The art director does not wait for the mark: while loop workers build, the studio has it look at
+  the whole integrated game once the first wave is in (every running loop worker merged once, or
+  after 90 working minutes), then every 90 working minutes on a head it has not reviewed — never
+  within 30 minutes before a timed run's mark. You are woken with its defects, already on their
+  owners' boards as building work, and its DO NOT REGRESS list, which every worker's brief and
+  taste judge carry. It is no finish mark: the build stage goes on.
+- A goal run's wakes say how many required outcomes are verified on the current revision. Only
+  `playtest goal=<id>` verifies one; when the studio asks you to verify, playtest each the build
+  should meet now.
 - The finish mark comes once: in a timed run when the last 30% of working time begins (30 to 120
   minutes; a run under 90 minutes has none); in a goal run when you idle a second time, or call
   `finish`, with no ship review on the head. At the mark the art director looks at the whole

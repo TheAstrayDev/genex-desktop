@@ -98,6 +98,17 @@ export interface CardFacts {
   goalCommission?: boolean;
 }
 
+/**
+ * A goal build's required outcomes on the current revision (progress.ts `outcomeTally`), while some
+ * are unverified, and whether this wake nudges the lead to verify them.
+ */
+export interface OutcomeFacts {
+  verified: number;
+  required: number;
+  unverified: readonly string[];
+  nudge: boolean;
+}
+
 /** The workers' engine's limit, as the digest names it. */
 export interface WorkersLimitFacts {
   engine: string;
@@ -138,6 +149,8 @@ export interface DigestFacts {
   finishMarkAt?: number | null;
   /** The finish mark was said: from here every wake repeats its rule (no new parts). Absent: not yet. */
   finishMarkPassed?: boolean;
+  /** A goal build's required outcomes while some are unverified: said on every wake. Absent: none to say. */
+  outcomes?: OutcomeFacts | null;
   card: CardFacts;
   /** The paragraph this wake ends on: carry on, what next, or the wrap-up. */
   closing: string;
@@ -164,6 +177,7 @@ export const REASON_WORDS = {
   [WakeCause.WorkersLimitLifted]: "the workers' engine limit has reset",
   [WakeCause.IdleAsk]: "nothing is running",
   [WakeCause.FinishMark]: "the finish mark — the art director looked at the whole game",
+  [WakeCause.ShipLook]: "the art director's regular look at the whole game",
 } as const satisfies Record<WakeReason, string>;
 
 /** The one line a finish request adds to the user's part of a digest. */
@@ -315,6 +329,24 @@ function workersLimitLine(limit: WorkersLimitFacts): string {
   return `- the workers' engine (${limit.engine}) hit its ${limitWords(limit.kind)} — ${resets}`;
 }
 
+/** A goal build's required outcomes in one line, on every wake while some are unverified. */
+function outcomesLine(outcomes: OutcomeFacts | null | undefined): string {
+  if (!outcomes) return "";
+  const { required, unverified, verified } = outcomes;
+  return `- required outcomes: ${verified}/${required} verified on this revision — not verified yet: ${unverified.join(", ")}`;
+}
+
+/**
+ * The nudge to verify a goal build's outcomes (progress.ts `verifyNudgeDue`): every so often, and
+ * after each ship review, while some are unverified — a lead that never playtests never finishes.
+ */
+function verifyNudge(outcomes: OutcomeFacts | null | undefined): string {
+  if (!outcomes?.nudge) return "";
+  const { required, unverified } = outcomes;
+  const asks = unverified.map((id) => `playtest goal=${id}`).join(", ");
+  return `VERIFY THE OUTCOMES: ${unverified.length} of ${required} required outcomes are not verified on this revision. For each one the integrated build should meet now, verify it on integration (${asks}): a goal build finishes only on outcomes a playtest verified, and a worker's kept rounds verify none. One that fails names what its owner must still build.`;
+}
+
 /** Where the night stands: the clock, the integration head, the workers, the plan window, the user. */
 function standsSection(facts: DigestFacts): string {
   const { defects, integrationHead, now, planWindowUntil, workersLimit } = facts;
@@ -322,6 +354,7 @@ function standsSection(facts: DigestFacts): string {
     "WHERE THE RUN STANDS:",
     timeLine(facts),
     `- integration: ${integrationHead ? shortSha(integrationHead) : "no commit yet"}, last health pass ${healthWords(facts.integrationHealthy)}`,
+    outcomesLine(facts.outcomes),
     defects.length ? `- defects nobody owns: ${defects.join(" | ")}` : "",
     roomLine(facts.room, facts.finishMarkPassed === true),
     ...workerLines(facts.workers, facts.finishMarkPassed === true),
@@ -391,6 +424,7 @@ export function wakeDigest(facts: DigestFacts, includeCard = true): string {
     happenedSection(facts.happened),
     standsSection(facts),
     includeCard ? buildCard(facts) : "",
+    verifyNudge(facts.outcomes),
     facts.closing,
   ]
     .filter(Boolean)

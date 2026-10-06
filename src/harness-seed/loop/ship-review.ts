@@ -5,7 +5,9 @@
  * good. This one sees the whole game: every frame the evidence pass took of a camera the game
  * registered, the player's eyes and each demo's end, then the motion strip and the reference, and
  * answers ship or not with each defect typed to the plan part that owns it (`part`, kept only when
- * it is one of the parts it was given — membership, never words) and how much it matters.
+ * it is one of the parts it was given — membership, never words) and how much it matters. It also
+ * names what already works and must stay (`doNotRegress`, the Midnight Apex review's "do not
+ * regress" list), which every builder and its taste judge are then held to.
  *
  * It asks through the same judge plumbing as every other judge (judge.ts `askJudgeFor`: retries,
  * the fallback engine, the evaluation pin, the judge's record), with the workspace's own rubric
@@ -18,7 +20,9 @@ import { hudBudgetFor } from "./hud-budget.ts";
 import { JudgeParse } from "./judge-provenance.ts";
 import { workingGoal } from "./goal-prompts.ts";
 import { scopeLines } from "./scope-prompts.ts";
-import { clip, CLIP_QUOTE, CLIP_REASON } from "./text.ts";
+import { clip, CLIP_REASON } from "./text.ts";
+// Its own module, not text.ts: a workspace that kept an older text.ts still links this one.
+import { clipWords } from "./word-clip.ts";
 import {
   BUILD_OUTPUT,
   framesLine,
@@ -36,8 +40,10 @@ export const SHIP_REVIEW_IMAGES = 14;
 export const SHIP_VIEW = { width: 1600, height: 900 } as const;
 /** The most defects one review keeps, worst first. */
 const MAX_SHIP_DEFECTS = 16;
-/** The most strengths one review keeps. */
-const MAX_STRENGTHS = 6;
+/** The most items one review's do-not-regress list keeps. */
+export const MAX_DO_NOT_REGRESS = 8;
+/** How much of one do-not-regress item is kept: a short name ("rain on the windscreen"), cut at a word. */
+export const DO_NOT_REGRESS_CHARS = 80;
 /** How much of a camera's name a defect keeps. */
 const CAMERA_CHARS = 60;
 /** How much of the build's state and its warnings the question carries. */
@@ -73,7 +79,12 @@ export interface ShipDefect {
 export interface ShipReview {
   ship: boolean | null;
   defects: ShipDefect[];
-  strengths: string[];
+  /**
+   * What already works in the whole game and must stay, as short names ("night lighting"): every
+   * loop worker's brief and its taste judge carry the latest list, and a build that loses an item
+   * has regressed.
+   */
+  doNotRegress: string[];
   reason: string;
   parse: JudgeParse;
   /** How the verdict was made (judge.ts), when a judge answered. */
@@ -215,6 +226,19 @@ function defectOf(raw: unknown, partIds: ReadonlySet<string>, cameras: ReadonlyS
 }
 
 /**
+ * A judge's do-not-regress list as the review keeps it: at most `MAX_DO_NOT_REGRESS` short names,
+ * each cut at a word. A rubric the workspace kept from before the list asks for `strengths`, which
+ * name what already works too, so those stand in for it.
+ */
+export function doNotRegressOf(raw: AnyRecord | null | undefined): string[] {
+  const named: unknown = Array.isArray(raw?.doNotRegress) ? raw.doNotRegress : raw?.strengths;
+  return (Array.isArray(named) ? named : [])
+    .map((item: unknown) => clipWords(String(item ?? "").trim(), DO_NOT_REGRESS_CHARS))
+    .filter(Boolean)
+    .slice(0, MAX_DO_NOT_REGRESS);
+}
+
+/**
  * The review as a judge's JSON reads: ship a real yes or no, or no verdict at all. `cameras`, when
  * given, are the only cameras a defect may name (`shownCameras`); any other is dropped.
  */
@@ -225,17 +249,19 @@ export function readShipReview(
 ): ShipReview {
   const reason = clip(String(raw?.reason ?? ""), CLIP_REASON);
   if (!raw || raw.unusable === true || typeof raw.ship !== "boolean")
-    return { ship: null, defects: [], strengths: [], reason: reason || "unreadable answer", parse: JudgeParse.Invalid };
+    return {
+      ship: null,
+      defects: [],
+      doNotRegress: [],
+      reason: reason || "unreadable answer",
+      parse: JudgeParse.Invalid,
+    };
   const ids = new Set(parts.map((part) => part.id));
   const defects = (Array.isArray(raw.defects) ? raw.defects : [])
     .map((defect: unknown) => defectOf(defect, ids, cameras))
     .filter((defect: ShipDefect | null): defect is ShipDefect => defect !== null)
     .slice(0, MAX_SHIP_DEFECTS);
-  const strengths = (Array.isArray(raw.strengths) ? raw.strengths : [])
-    .map((s: unknown) => clip(String(s ?? "").trim(), CLIP_QUOTE))
-    .filter(Boolean)
-    .slice(0, MAX_STRENGTHS);
-  return { ship: raw.ship, defects, strengths, reason, parse: JudgeParse.Valid };
+  return { ship: raw.ship, defects, doNotRegress: doNotRegressOf(raw), reason, parse: JudgeParse.Valid };
 }
 
 /**
@@ -248,7 +274,7 @@ export async function shipReview(ctx: HarnessCtx, ask: ShipAsk): Promise<ShipRev
     return {
       ship: null,
       defects: [],
-      strengths: [],
+      doNotRegress: [],
       reason: "this workspace keeps an older judge.ts",
       parse: JudgeParse.Invalid,
     };

@@ -141,6 +141,11 @@ export interface FacetSpec {
   craft: string[];
   milestones: Milestone[];
   budgetShare: number;
+  /**
+   * What already works in the whole game and must stay, as the art director last named it
+   * (director/art-direction.ts): the brief shows it, and the taste judge calls losing one a regression.
+   */
+  doNotRegress?: string[];
   [field: string]: unknown;
 }
 

@@ -755,8 +755,11 @@ export interface BriefOptions {
   entryMain?: string;
   ownShape?: boolean;
   build?: string | null;
-  /** The part; `ownsScreen` / `screenOwner` (loop/screen-owner.ts) name who draws the screen. */
-  spec: Pick<FacetSpec, "id" | "title" | "intent" | "identity" | "owns" | "checks"> & ScreenOwnerSpec;
+  /**
+   * The part; `ownsScreen` / `screenOwner` (loop/screen-owner.ts) name who draws the screen, and
+   * `doNotRegress` what the art director says already works in the whole game.
+   */
+  spec: Pick<FacetSpec, "id" | "title" | "intent" | "identity" | "owns" | "checks" | "doNotRegress"> & ScreenOwnerSpec;
   iteration: number;
   board?: Scoreboard | null;
   comparison?: { flips?: string[]; regressions?: string[] } | null;
@@ -859,6 +862,7 @@ function renderBriefSections(
     ...(finishing ? finishSection(polish, finishRules(spec, screen && template)) : moveSection(move)),
     ...fixSection(fix, template, finishing),
     ...scoreboardSection(board, comparison, spec),
+    ...doNotRegressSection(spec.doNotRegress),
     ...(integration ? [`## Integration`, clipWords(integration, BRIEF_INTEGRATION_CHARS), ``] : []),
     ...livenessSection(liveness, critic, finishing),
     ...(cuts.has(BriefCut.Style) ? [] : styleSection(style)),
@@ -901,6 +905,21 @@ function briefHeader(
     ``,
     `## Checks (the contract — verified by the harness every iteration)`,
     renderChecks(spec.checks),
+    ``,
+  ];
+}
+
+/**
+ * What the art director says already works in the whole game (director/art-direction.ts): every
+ * builder keeps it, and the round's taste judge calls losing one a regression. Nothing when no
+ * review has named any.
+ */
+function doNotRegressSection(doNotRegress: readonly string[] | undefined): string[] {
+  if (!doNotRegress?.length) return [];
+  return [
+    `## Do not regress — what already works in the whole game, as the art director last named it`,
+    ...doNotRegress.map((item) => `- ${item}`),
+    `A build that loses one of these where your part touches it has regressed: the taste judge rolls it back.`,
     ``,
   ];
 }

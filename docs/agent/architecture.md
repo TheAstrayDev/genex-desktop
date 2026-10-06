@@ -621,9 +621,9 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
 - Two or more looping parts need `plan contract=` (`director/contract-gate.ts`), committed as
   `docs/MODULE-CONTRACT.md` before loop workers fork; `integrate worker=a,b` is a wave (one health
   pass, `state.waveHead`); `loop/registry.ts` refuses lost registrations.
-- The finish mark (`budgets.ts` `finishMarkMs`) or `judge ship=yes` runs the art director
-  (`director/art-direction.ts`, `loop/ship-review.ts`): defects go to their parts' owners; it never
-  vetoes ([harness runtime](../harness-runtime.md)).
+- The finish mark (`budgets.ts` `finishMarkMs`), `shipLookAt` or `judge ship=yes` runs the art
+  director (`director/art-direction.ts`, `loop/ship-review.ts`): defects and `doNotRegress` reach
+  owners; it never vetoes ([harness runtime](../harness-runtime.md)).
 - `worker_start` may override `FACET_POLICY`; `loopDigest` puts each worker's phase, streaks and
   checks in the digests.
 - The session ends before the hard deadline (`wrapReserveMs`); the two closes are one function

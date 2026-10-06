@@ -1,5 +1,5 @@
 import { estimateTokens } from "../prompt.ts";
-import { reviewProgress } from "./progress.ts";
+import { outcomeTally, reviewProgress, verifyNudgeDue } from "./progress.ts";
 import { durationCommission, goalCommission } from "./commission.ts";
 /**
  * The director's wake loop. The lead ends its turn after every decision; between turns nothing
@@ -72,16 +72,24 @@ import {
   WrapCause,
 } from "./wake-schedule.ts";
 import { cutShortWake, midTurnUserSays } from "./live-prompts.ts";
-import { artDirectionBlock, ART_SKIPPED } from "./art-direction-prompts.ts";
+import { artDirectionBlock, ART_SKIPPED, shipLookBlock } from "./art-direction-prompts.ts";
 import { workingGoal } from "../goal-prompts.ts";
 import { runScope } from "../scope.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { DelegateResult } from "../../types/host-api.d.ts";
+import type { ArtDirection, LastShip } from "./art-direction.ts";
 import type { RestoredWake } from "./journal.ts";
 import type { LeadLine } from "./lead-line.ts";
 import type { Night, NightState, Worker } from "./night.ts";
-import type { CardFacts, DigestFacts, DigestWorker, WorkerRoom, WorkersLimitFacts } from "./wake-prompts.ts";
+import type {
+  CardFacts,
+  DigestFacts,
+  DigestWorker,
+  OutcomeFacts,
+  WorkerRoom,
+  WorkersLimitFacts,
+} from "./wake-prompts.ts";
 import type { TurnFacts, TurnVerdict, Wake, WakeReason, WakeView } from "./wake-schedule.ts";
 
 /**
@@ -181,6 +189,14 @@ export interface WakeState {
   finishMarkSaid: boolean;
   /** A goal build idle with no ship review on its head is owed its finish mark now (`TurnEnd.ArtDirection`). */
   finishMarkDue: boolean;
+  /** The working time the art director's next regular look is due at; null until its first (art-direction.ts `shipLookAt`). */
+  nextShipLookWorkedMs: number | null;
+  /** The art director's last review the loop has counted as a look (`noteShipLooks`). */
+  shipSeen: LastShip | null;
+  /** The working time the lead was last nudged to verify its outcomes; null before the first. */
+  verifyNudgedWorkedMs: number | null;
+  /** The art director's review (`LastShip.at`) the last nudge came after: a newer one is owed a nudge. */
+  verifyNudgedShipAt: number | null;
   /** The log's sequence number, and the time, the loop last saved the journal (a kept older night.ts counts only these). */
   journaledSeq: number;
   journaledAt: number;
@@ -236,6 +252,10 @@ function newWakeState(restored: RestoredWake = { idleAsked: false, wakesAt: [] }
     planWindowSaid: null,
     finishMarkSaid: restored.finishMarkSaid === true,
     finishMarkDue: false,
+    nextShipLookWorkedMs: restored.nextShipLookWorkedMs ?? null,
+    shipSeen: null,
+    verifyNudgedWorkedMs: restored.verifyNudgedWorkedMs ?? null,
+    verifyNudgedShipAt: null,
     journaledSeq: 0,
     journaledAt: 0,
     limitWaits: 0,
@@ -399,6 +419,17 @@ function finishMarkView(night: Night, wake: WakeState, now: number): number | nu
 }
 
 /**
+ * When the art director's regular look at the whole game wakes the lead (art-direction.ts
+ * `shipLookAt`) — whatever the lead is doing, so a lead kept busy by its workers is still told —
+ * or never: in the wrap-up, or on a night without the art director's regular look.
+ */
+function shipLookView(night: Night, wake: WakeState, now: number): number | null {
+  if (wake.wrapping || typeof night.shipLookAt !== "function") return null;
+  const finishMarkAt = finishMarkView(night, wake, now);
+  return night.shipLookAt({ nextAtWorkedMs: wake.nextShipLookWorkedMs, now, finishMarkAt });
+}
+
+/**
  * The wrap-up starts now: the working deadline moves up to this moment, so every clock the night
  * reads (run_status, `finish`, a new worker's budget) agrees that the working time is over.
  */
@@ -419,9 +450,23 @@ function settleTurn(night: Night, wake: WakeState, verdict: TurnVerdict, result:
   startWrapUp(night, wake, verdict.wrapCause ?? WrapCause.Deadline, now);
 }
 
+/**
+ * A review on integration the loop did not run itself — the lead's own `judge ship=yes`, the finish
+ * mark's or the finish gate's look — counts as the art director's look: the next regular one waits
+ * a whole period from it (art-direction.ts `shipLookAfter`), so two looks never come close together.
+ */
+function noteShipLooks(night: Night, wake: WakeState, now: number): void {
+  const last = night.state.lastShip ?? null;
+  if (last === wake.shipSeen) return;
+  wake.shipSeen = last;
+  if (last && typeof night.shipLookAfter === "function")
+    wake.nextShipLookWorkedMs = night.shipLookAfter({ now, looked: last.ship !== null });
+}
+
 /** Read the inbox while the lead rests: what the user said, a finish request, and steers addressed to a worker. */
 async function collect(night: Night, wake: WakeState, now: number): Promise<void> {
   const { inbox, routeUserSteers, state } = night;
+  noteShipLooks(night, wake, now);
   await reviewProgress(night, now);
   const untold = await inbox.steering(undefined, false, { onlyNew: true }).catch(() => []);
   wake.userWaiting = wake.owed.length > 0 || unheard(wake, untold).length > 0;
@@ -456,6 +501,7 @@ function wakeView(night: Night, wake: WakeState, now: number): WakeView {
     idleAsked: wake.idleAsked,
     wakesAt: wake.wakesAt,
     finishMarkAt: finishMarkView(night, wake, now),
+    shipLookAt: shipLookView(night, wake, now),
   };
 }
 
@@ -621,16 +667,53 @@ function cardFacts(night: Night, finishing = false): CardFacts {
   };
 }
 
+/** How much of the night's working time has gone by at `now`, on its own clock (a Resume's goes on from the time worked). */
+const workedAt = (night: Night, now: number): number => now - (night.clock?.started ?? night.started);
+
+/**
+ * A goal build's required outcomes for the digest while some are unverified (progress.ts
+ * `outcomeTally`), and whether this wake carries the nudge to verify them; null when there is
+ * nothing to say — a timed build, no outcomes yet, or every one verified.
+ */
+function outcomesNow(night: Night, nudge: boolean): OutcomeFacts | null {
+  const ledger = night.state.goals;
+  if (!ledger || isDirection(night)) return null;
+  const tally = outcomeTally(ledger, night.state.integrationHead);
+  return tally.unverified.length ? { ...tally, nudge } : null;
+}
+
+/**
+ * Is this wake owed the nudge to verify the outcomes (progress.ts `verifyNudgeDue`): every so much
+ * working time, and after each of the art director's reviews. Never in the wrap-up, which has its
+ * own rule. Owed, it is marked said.
+ */
+function nudgeNow(night: Night, wake: WakeState, now: number): boolean {
+  const ledger = night.state.goals;
+  if (!ledger || wake.wrapping || isDirection(night)) return false;
+  const shipAt = night.state.lastShip?.at ?? null;
+  const due = verifyNudgeDue({
+    tally: outcomeTally(ledger, night.state.integrationHead),
+    workedMs: workedAt(night, now),
+    nudgedWorkedMs: wake.verifyNudgedWorkedMs,
+    reviewedSince: shipAt !== null && shipAt !== wake.verifyNudgedShipAt,
+  });
+  if (!due) return false;
+  wake.verifyNudgedWorkedMs = workedAt(night, now);
+  wake.verifyNudgedShipAt = shipAt;
+  return true;
+}
+
 /**
  * The digest's facts, read from the night at the moment of the wake. The workers from before the
  * pause get their full lines only when `priorInFull` (a resumed night's first digest); every later
  * digest names them in one line — they do not change, and each line is a few hundred characters.
+ * A goal build's outcomes are named on every one, with the nudge to verify them when `nudge`.
  */
 function digestFacts(
   night: Night,
   wake: WakeState,
   said: Pick<DigestFacts, "now" | "reasons" | "userSays" | "finishNew" | "happened" | "closing">,
-  { priorInFull = false }: { priorInFull?: boolean } = {},
+  { priorInFull = false, nudge = false }: { priorInFull?: boolean; nudge?: boolean } = {},
 ): DigestFacts {
   const { finalDeadline, ledgerLines, state } = night;
   const priorLine = priorInFull ? null : priorWorkersSummary(night);
@@ -653,16 +736,28 @@ function digestFacts(
     finishRequested: wake.finishSaid,
     finishMarkAt: finishMarkView(night, wake, said.now),
     ...(wake.finishMarkSaid ? { finishMarkPassed: true } : {}),
+    outcomes: outcomesNow(night, nudge),
     // Only a timed build's card changes at the mark: a goal build's is not sent again for it.
     card: cardFacts(night, wake.finishMarkSaid && isDirection(night)),
   };
 }
 
+/**
+ * A wake the user is part of does not take the art director's regular look, which holds the turn
+ * for minutes: the look stays due and comes with the next wake.
+ */
+function userFirst(due: Wake): Wake {
+  if (!due.reasons.some((reason) => USER_WAKES.has(reason))) return due;
+  return { ...due, reasons: due.reasons.filter((reason) => reason !== WakeCause.ShipLook) };
+}
+
 /** The message that wakes the lead: the user's words, the news, the night, the card and the closing. */
-async function wakePrompt(night: Night, wake: WakeState, due: Wake, clock: WakeClock): Promise<string> {
+async function wakePrompt(night: Night, wake: WakeState, woken: Wake, clock: WakeClock): Promise<string> {
+  const due = userFirst(woken);
   // The art director looks before anything is read, so where its defects went is this wake's news.
-  const art = due.reasons.includes(WakeCause.FinishMark) ? await finishMarkBlock(night) : "";
+  const art = await artFor(night, wake, due.reasons, clock);
   const now = clock.now();
+  noteShipLooks(night, wake, now);
   const userSays = await tellUser(night, wake);
   const happened = readUnread(night);
   const finishNew = wake.finishNew;
@@ -672,7 +767,8 @@ async function wakePrompt(night: Night, wake: WakeState, due: Wake, clock: WakeC
     reasons: due.reasons,
   });
   const closing = [art, closingFor(night, wake, due.reasons, now)].filter(Boolean).join("\n\n");
-  const told = digestFacts(night, wake, { now, reasons: due.reasons, userSays, finishNew, happened, closing });
+  const said = { now, reasons: due.reasons, userSays, finishNew, happened, closing };
+  const told = digestFacts(night, wake, said, { nudge: nudgeNow(night, wake, now) });
   const director = night.journal.director;
   const card = JSON.stringify(told.card);
   const includeCard = director.lastWakeCard !== card;
@@ -694,6 +790,36 @@ async function wakePrompt(night: Night, wake: WakeState, due: Wake, clock: WakeC
   // What the lead has now been told is heard: a restart during its turn does not tell it again.
   await keepWake(night, wake, now);
   return prompt;
+}
+
+/**
+ * The art director's paragraph a wake carries: the finish mark's, which also covers a regular look
+ * due with it, or the regular look's (`regularLook`) — or none.
+ */
+function artFor(night: Night, wake: WakeState, reasons: readonly WakeReason[], clock: WakeClock): Promise<string> {
+  if (reasons.includes(WakeCause.FinishMark)) return finishMarkBlock(night);
+  if (reasons.includes(WakeCause.ShipLook)) return regularLook(night, wake, clock);
+  return Promise.resolve("");
+}
+
+/**
+ * The art director's regular look at the whole game (art-direction.ts `shipLookPass`): its defects
+ * go to their owners while they keep building, and the lead reads the verdict, the defects by part
+ * and what must not regress. A look that gave no review is tried again a shorter wait later; one
+ * that did is counted by `noteShipLooks`, as every review on integration is.
+ */
+async function regularLook(night: Night, wake: WakeState, clock: WakeClock): Promise<string> {
+  if (typeof night.shipLookPass !== "function") return "";
+  const before = night.state.lastShip ?? null;
+  const pass: ArtDirection = await night.shipLookPass().catch((err: unknown) => ({
+    head: night.state.integrationHead,
+    review: null,
+    skipped: String((err as Error)?.message ?? err),
+  }));
+  const reviewed = (night.state.lastShip ?? null) !== before;
+  if (!reviewed && typeof night.shipLookAfter === "function")
+    wake.nextShipLookWorkedMs = night.shipLookAfter({ now: clock.now(), looked: false });
+  return shipLookBlock(pass);
 }
 
 /**
@@ -1134,6 +1260,9 @@ export async function runWakeLoop(
     ? restoredWake(night.priorJournal?.director?.wake, clock.now())
     : undefined;
   const wake = newWakeState(restored);
+  // A review a Resume restored was counted, and nudged after, before the pause.
+  wake.shipSeen = night.state.lastShip ?? null;
+  wake.verifyNudgedShipAt = night.state.lastShip?.at ?? null;
   const kit: TurnKit = { talk, brief, clock, line };
   // This loop answers for what its lead hears of the chat: what it never hears goes back at the end.
   wake.line = line;
