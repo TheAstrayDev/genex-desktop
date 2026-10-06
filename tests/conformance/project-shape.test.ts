@@ -23,6 +23,7 @@ import {
   nestedRepos,
   readProjectShape,
   shippedHudGeneration,
+  shippedStudioGeneration,
   studioContractGeneration,
 } from "../../src/substrate/game-workspace.ts";
 import { bootBudget } from "../../src/substrate/preview-ready.ts";
@@ -1679,7 +1680,8 @@ describe("the contract upgrade", () => {
     "}",
   ].join("\n");
 
-  const m4Studio = () => readFile(path.join(repo, "tests", "fixtures", "studio-generation-4.js.txt"), "utf8");
+  const m4Studio = () =>
+    readFile(path.join(repo, "tests", "fixtures", "shipped", "studio-generation-4.js.txt"), "utf8");
   const firstHud = () => readFile(path.join(repo, "tests", "fixtures", "hud-generation-1.js.txt"), "utf8");
   const templateHud = () => readFile(path.join(repo, "src", "game-template", "src", "hud.js"), "utf8");
 
@@ -1707,6 +1709,13 @@ describe("the contract upgrade", () => {
     assert.equal(studioContractGeneration(shipped), 5, "the shipped contract is the current one");
     // The contract every game scaffolded since M4 holds: its HUD facade has no arc, panel or path.
     assert.equal(studioContractGeneration(await m4Studio()), 4);
+    // Only a copy the studio shipped may be replaced: the released one is, an edited one is not,
+    // and the current template is not an older shipped one.
+    assert.equal(shippedStudioGeneration(await m4Studio()), 4);
+    assert.equal(shippedStudioGeneration((await m4Studio()).replace(/\n/g, "\r\n")), 4, "line endings aside");
+    assert.equal(shippedStudioGeneration(`${await m4Studio()}// the main owner's probe\n`), null);
+    assert.equal(shippedStudioGeneration(shipped), null, "the current contract is not an older shipped one");
+    assert.equal(shippedStudioGeneration(null), null);
     // The HUD beside it: the shipped one is the current generation, never one an upgrade replaces.
     const hud = await templateHud();
     assert.equal(hudContractGeneration(hud), 2, "the shipped HUD is the current one");
@@ -1722,7 +1731,7 @@ describe("the contract upgrade", () => {
     );
   });
 
-  it("replaces a copy that predates M4 and leaves the current one alone", async () => {
+  it("replaces a shipped older copy, keeps an edited one and leaves the current one alone", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
@@ -1736,16 +1745,26 @@ describe("the contract upgrade", () => {
       materialsAdded: false,
     });
 
-    // The game a night really opens: scaffolded before M4, so its studio.js has inspect() and
-    // the hud facade and neither the borrowed eye camera nor the lazy ./hud.js facade.
+    // A copy shaped like a pre-M4 one that no studio shipped is somebody's edit: it stays.
     await writeFile(studio, preM4);
+    assert.deepEqual(await api["game.upgradeContract"]!({ project: "aged" } as never), {
+      upgraded: false,
+      edited: true,
+      generation: 3,
+      materialsAdded: false,
+    });
+    assert.equal(await readFile(studio, "utf8"), preM4);
+    assert.equal(await exists(path.join(dir, "src", "studio.v3.js")), false);
+
+    // The game a run really opens: scaffolded by a released Genex and never touched since.
+    await writeFile(studio, await m4Studio());
     const result = (await api["game.upgradeContract"]!({ project: "aged" } as never)) as {
       upgraded: boolean;
       backup: string;
     };
-    assert.equal(result.upgraded, true, "the pre-M4 copy is replaced");
-    assert.equal(result.backup, "src/studio.v3.js", "its predecessor is kept beside it, named for its vintage");
-    assert.equal(await readFile(path.join(dir, "src", "studio.v3.js"), "utf8"), preM4);
+    assert.equal(result.upgraded, true, "the shipped M4 copy is replaced");
+    assert.equal(result.backup, "src/studio.v4.js", "its predecessor is kept beside it, named for its vintage");
+    assert.equal(await readFile(path.join(dir, "src", "studio.v4.js"), "utf8"), await m4Studio());
     const upgraded = await readFile(studio, "utf8");
     assert.equal(studioContractGeneration(upgraded), 5);
     assert.match(upgraded, /returnCamera/, "the eye camera is given back — the bug M4 fixed");
@@ -1833,6 +1852,98 @@ describe("the contract upgrade", () => {
     for (const name of ["arc", "panel", "path", "image", "font"]) {
       assert.equal(typeof hud[name], "function", `__studio.hud.${name}`);
     }
+  });
+
+  /**
+   * The template invites the main owner to extend studio.js ("new probes, new cameras"). A copy
+   * anyone edited is theirs: replacing it drops their exports, and a main.js that imports one
+   * stops linking. It stays byte for byte, its HUD with it, and the answer says so.
+   */
+  it("keeps an edited M4 studio.js and its HUD, and says it was edited", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    await api["game.scaffold"]!({ name: "tuned", title: "Tuned" } as never);
+    const src = path.join(rig.core.layout.gamesRoot, "tuned", "src");
+    const edited = `${await m4Studio()}\nexport function myGameHelper() {\n  return 1;\n}\n`;
+    await writeFile(path.join(src, "studio.js"), edited);
+    await writeFile(path.join(src, "hud.js"), await firstHud());
+
+    assert.deepEqual(await api["game.upgradeContract"]!({ project: "tuned" } as never), {
+      upgraded: false,
+      edited: true,
+      generation: 4,
+      materialsAdded: false,
+      hud: { generation: 1, replaced: false },
+    });
+    assert.equal(await readFile(path.join(src, "studio.js"), "utf8"), edited, "the edited contract is untouched");
+    assert.equal(await exists(path.join(src, "studio.v4.js")), false, "no backup of a file nobody replaced");
+    // The HUD stays with the facade it was written for: a newer hud.js under an old facade
+    // would draw what the facade cannot forward.
+    assert.equal(await readFile(path.join(src, "hud.js"), "utf8"), await firstHud());
+    assert.equal(await exists(path.join(src, "hud.v1.js")), false);
+  });
+
+  it("recognises a shipped M4 studio.js checked out with CRLF line endings", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    await api["game.scaffold"]!({ name: "crlf", title: "Crlf" } as never);
+    const src = path.join(rig.core.layout.gamesRoot, "crlf", "src");
+    const crlf = (await m4Studio()).replace(/\n/g, "\r\n");
+    await writeFile(path.join(src, "studio.js"), crlf);
+    const result = (await api["game.upgradeContract"]!({ project: "crlf" } as never)) as Record<string, unknown>;
+    assert.equal(result.upgraded, true, "a shipped copy is replaced whatever its line endings");
+    assert.equal(await readFile(path.join(src, "studio.v4.js"), "utf8"), crlf, "the old copy is kept as it was");
+  });
+
+  it("writes no contract through a link, wherever the link points", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    const outside = await tmpDir("studio-contract-outside-");
+    const cases: Array<{ name: string; plant(src: string): Promise<void>; untouched: string[] }> = [
+      {
+        name: "studio.js is a link to a shipped copy outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "linked-studio.js"), await m4Studio());
+          await rm(path.join(src, "studio.js"));
+          await symlink(path.join(outside, "linked-studio.js"), path.join(src, "studio.js"));
+        },
+        untouched: ["linked-studio.js"],
+      },
+      {
+        name: "the backup's name is a link planted outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "precious.txt"), "precious");
+          await writeFile(path.join(src, "studio.js"), await m4Studio());
+          await symlink(path.join(outside, "precious.txt"), path.join(src, "studio.v4.js"));
+        },
+        untouched: ["precious.txt"],
+      },
+      {
+        name: "src is a link to a folder outside the game",
+        plant: async (src) => {
+          const elsewhere = path.join(outside, "elsewhere-src");
+          await cp(src, elsewhere, { recursive: true });
+          await writeFile(path.join(elsewhere, "studio.js"), await m4Studio());
+          await rm(src, { recursive: true });
+          await symlink(elsewhere, src);
+        },
+        untouched: ["elsewhere-src/studio.js"],
+      },
+    ];
+    for (const [index, hostile] of cases.entries()) {
+      const name = `contract${index}`;
+      await api["game.scaffold"]!({ name, title: name } as never);
+      await hostile.plant(path.join(rig.core.layout.gamesRoot, name, "src"));
+      const before = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      await api["game.upgradeContract"]!({ project: name } as never).catch(() => null);
+      const after = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      assert.deepEqual(after, before, `${hostile.name}: nothing outside the game changed`);
+      assert.equal(await exists(path.join(outside, "elsewhere-src", "studio.v4.js")), false, hostile.name);
+    }
+    assert.equal(await readFile(path.join(outside, "linked-studio.js"), "utf8"), await m4Studio());
   });
 
   it("never rewrites the HUD of a game the user brought", async () => {

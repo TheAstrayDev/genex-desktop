@@ -7,6 +7,7 @@
 import { DEFAULT_WALL_CLOCK_MS, MIN_DELEGATE_TIMEOUT_MS, PAGE_SEED } from "../config.ts";
 import { gatherEvidence } from "../evidence.ts";
 import { commitAll, GIT, gitAt, gitlinks, headOf, resetClean, shortSha } from "../git.ts";
+import { keptContractWords } from "../contract-kept.ts";
 import { HostMethod } from "../host-methods.ts";
 import { AttachedContract, StudioContract } from "../page-contract.ts";
 import { readDeclaredGame } from "../kinds.ts";
@@ -232,7 +233,7 @@ async function announceRunStart(
 
 /** The game, ready: scaffolded if new, on the current contract, loaded in the studio window. Answers its folder. */
 async function readyTheGame(night: Night): Promise<string> {
-  const { ctx, decision, run } = night;
+  const { ctx, decision, note, run } = night;
   await ctx.call(HostMethod.GameScaffold, { name: run.project, title: run.project });
   const upgraded = await ctx.call(HostMethod.GameUpgradeContract, { project: run.project }).catch(() => null);
   if (upgraded?.upgraded)
@@ -243,6 +244,12 @@ async function readyTheGame(night: Night): Promise<string> {
   // An edited older HUD stays and is said so; its generation rides on the run into every brief.
   const hud = noteHudUpgrade(run, upgraded);
   if (hud) await decision(hud.decision, hud.plain);
+  // An edited contract stays as it is: the lead hears which HUD calls its facade may lack.
+  const kept = keptContractWords(upgraded);
+  if (kept) {
+    await decision(kept.record, kept.plain);
+    note(kept.record);
+  }
   await ctx.call(HostMethod.PreviewLoad, { project: run.project }).catch(() => {});
   const games = await ctx.call(HostMethod.GameList, {}).catch(() => []);
   const projectDir = games.find((g: AnyRecord) => g.name === run.project)?.dir ?? null;

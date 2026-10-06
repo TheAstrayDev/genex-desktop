@@ -121,8 +121,51 @@ export function hudContractGeneration(source: string | null): number {
  */
 export function shippedHudGeneration(source: string | null): number | null {
   if (source === null) return null;
-  const digest = createHash("sha256").update(source.replace(/\r\n/g, "\n")).digest("hex");
-  return SHIPPED_HUD_DIGESTS[digest] ?? null;
+  return SHIPPED_HUD_DIGESTS[shippedDigest(source)] ?? null;
+}
+
+/**
+ * Every `src/studio.js` the studio shipped before the current contract generation, by the SHA-256
+ * of its text with LF line endings, and the generation it is. When `studioContractGeneration` of
+ * the template moves on, the outgoing file's digest joins this table, or every game scaffolded
+ * with it keeps it for good.
+ */
+const SHIPPED_STUDIO_DIGESTS: Readonly<Record<string, number>> = {
+  // Generation 1: the first contract and the four revisions before `inspect()`.
+  e8b340183c844107ab383cea0e2c01146fc9ba8d1dd258006fe18b684eb027ad: 1,
+  f1c7b794be11342132d323a9c0ff7b7e82d47c9facb8cd48f14bd297263c89ec: 1,
+  "6cecdcae53ea95824171084412ca5fef0ab97b505c5dec1c603c22241ab904cc": 1,
+  "4b05db6f5a84b2731d2c2bf616dfdbe90f7dbee5e57e243cac3d4e08d3ece826": 1,
+  "108ea3647d1e5c2ca19f458e46506c438262930b3b1ae53584a7214a756c5ad9": 1,
+  // Generation 2: `inspect()`, no HUD.
+  "1e5eba4f5dc902cf2e37f5771828997ec390b7d946e46f18d0b2df8b5f26a9b5": 2,
+  // Generation 3: the one-screen contract, in its three revisions.
+  "39280834f2d9b7dbc3062913b887ac7eccc39d7639c0b9e750f862d9a9616b4c": 3,
+  "8910ec523c731f8a46a2c010ad2a079fb3129fade999127f18492085c95b72ef": 3,
+  "0e434144f125652d1d313fd754875593dfc6200270313b68975fe49af287271e": 3,
+  // Generation 4: as Milestone 4 shipped it, after the Biome format, after the readability pass
+  // (the copy in Genex 0.1.0 through 0.1.3), and the two front-end revisions before the HUD facade
+  // grew arcs and panels.
+  f84776dfbfeda103c6a5679fe074f019b3e6cf5da2605e7ac701423811e3352b: 4,
+  "34918eb93990699fcac7b2c3f0d534984a5522cdb308112392e34c6a20ce8319": 4,
+  "3fa898dbff35227ae6815493b46ac252aa95ab7fe180150a10e05362a1ca2ece": 4,
+  "64dc5359ff81f8edd7ab815c2d48ca114db0a065dd95bb8a72df1dbccc4faf31": 4,
+  a7221ced2600350b8d8ade6dd6da421fe766132c611c5b6651fa7fad86ea9102: 4,
+};
+
+/**
+ * The generation of a `src/studio.js` that is byte for byte a copy the studio shipped (line endings
+ * aside), or null for a copy anyone edited. The template asks the main owner to extend the file, so
+ * only a shipped copy may be replaced: an edited one carries exports the game may import.
+ */
+export function shippedStudioGeneration(source: string | null): number | null {
+  if (source === null) return null;
+  return SHIPPED_STUDIO_DIGESTS[shippedDigest(source)] ?? null;
+}
+
+/** The SHA-256 a shipped-copy table keys a file by: its text with LF line endings. */
+function shippedDigest(source: string): string {
+  return createHash("sha256").update(source.replace(/\r\n/g, "\n")).digest("hex");
 }
 
 /**

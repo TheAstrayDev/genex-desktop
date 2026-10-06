@@ -73,6 +73,7 @@ export {
   hudContractGeneration,
   NO_CONTRACT_PROBLEM,
   shippedHudGeneration,
+  shippedStudioGeneration,
   studioContractGeneration,
 } from "./game-validation.ts";
 export {

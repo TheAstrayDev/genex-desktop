@@ -724,9 +724,9 @@ rows from `shape-words.ts` `openOptions`) lists candidates, runners, night block
 writes (`plannedWrites`); only its button calls `studio:project.adopt` with the row's `OpenChoice`. A nested game is adopted as the project;
 keeping the parent passes `template: false`. Adoption never writes the template's entry or pages
 beside a real entry; an own game gets `CLAUDE.md`/`NOTES.md` from `game-template/*.own.md`.
-`game.upgradeContract` replaces an older `src/studio.js` (`studioContractGeneration`) and an
-unedited shipped `src/hud.js` (`shippedHudGeneration`), kept as `<name>.v<generation>.js`;
-`hud` (an older HUD) is noted; an edited one narrows builders' HUD rule (`loop/held-hud.ts`).
+`game.upgradeContract` replaces only unedited shipped `src/studio.js`/`src/hud.js` copies older than the
+template's (kept as `<name>.v<generation>.js`); an edited contract keeps its HUD, and an edited
+older HUD is noted and narrows builders' HUD rule (`loop/held-hud.ts`).
 
 **Builds.** `preview.load`/`preview.reload` build through `GameBuilds`
 ([`src/main/game-build.ts`](../../src/main/game-build.ts)) and serve the output. A build never runs in
