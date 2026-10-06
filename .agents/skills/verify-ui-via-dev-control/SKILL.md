@@ -73,7 +73,8 @@ the result card and on the chat's paused line), `[data-onboarding-action="next|s
 welcome). `key` sends Arrow keys (all four), PageUp/PageDown, Home/End with real key codes, so
 sliders and segment groups move as they do under a keyboard. `runs --profile P` lists each open
 run and the open chat's newest (state, phase, clock, last record, stop reason, `resumable`); it
-reads only the profile's records and answers on a stale build or with the harness down.
+reads the profile's records, asks the window which chat is open, and answers on a stale build
+or with the harness down.
 
 ## Evidence
 

@@ -47,10 +47,12 @@ its `npm install -g` stays in the profile. A Claude Code sign-in leaves a
 removes; delete it in Keychain Access when you like.
 
 A live launch keeps the caller's environment except its agent session's own variables: the
-keys and endpoint it routes model calls through, Claude Code's and the Agent SDK's switches and
-nesting markers, and `ELECTRON_RUN_AS_NODE` ([live-env.ts](../scripts/studio-dev/live-env.ts), the
-list the eval lanes strip too). `CLAUDE_CONFIG_DIR` and `CODEX_HOME` stay: they are your choice of
-account. The start JSON names what it dropped (`envStripped`, never values). Start and status
+keys and endpoint it routes model calls through, Claude Code's and the Agent SDK's switches, the
+session's nesting, effort, context, timeout, MCP and OAuth markers, and `ELECTRON_RUN_AS_NODE`
+([live-env.ts](../scripts/studio-dev/live-env.ts); the eval lanes strip the same routing names and
+prefixes). `CLAUDE_CONFIG_DIR` and `CODEX_HOME` stay: they are your choice of account. A
+`CLAUDE_CODE_OAUTH_TOKEN` login is not carried into a live launch (it shows in `envStripped`);
+pick the account with `CLAUDE_CONFIG_DIR` instead. The start JSON names what it dropped (`envStripped`, never values). Start and status
 warn (`games-root-under-claude-folder`) when the profile's games sit under a `.claude` folder,
 as in a worktree under `.claude/`, where native Claude Write refuses or asks
 ([live acceptance](#full-regression-and-failure-evidence)).
@@ -405,7 +407,8 @@ Do not open DevTools while the development controller owns its debugger attachme
 `runs` (no parameters) lists every open run of the profile and the newest run of the chat the
 window shows: thread, project, state, journal phase and clock, worked time, its own newest record,
 the last close's stop reason, integration head and landing, and `resumable` (paused with a
-journal that is not done). It reads only the event log and journals ([runs.ts](../src/main/dev/runs.ts)),
+journal that is not done). It reads the event log and journals ([runs.ts](../src/main/dev/runs.ts))
+and asks the window which chat it shows,
 so like `status` and `stop` it answers on a stale build, under a sign-in sheet and while the
 harness is not ready. `key` gives Enter, Escape, Tab, Backspace, the four arrows, PageUp,
 PageDown, Home and End their real key codes.
@@ -419,7 +422,7 @@ source there until it ends: a stale build refuses every UI operation, and a rest
 Drive only through hooks: the welcome's `[data-onboarding-action="next"]`, then `"start"` (only
 `"skip"` means nothing is signed in: stop and ask; never sign in yourself); the home composer's
 `[aria-label="Model settings"]` role rows `[data-role]` and `[data-model-choice]`, the
-`[aria-label^="Effort:"]` slider (arrow keys), `[aria-label="Mode"]` with
+`[aria-label^="Effort:"]` pill, then arrow keys on `[data-effort-slider]`, `[aria-label="Mode"]` with
 `[aria-label="Loop time limit"] [data-value]`, and `textarea[aria-label="Prompt"]`. Answer a
 `[data-chat-question]`, plan review or permission card only as a recorded human intervention.
 Watch with `runs` and `status`; no new record for a long while, or a `lastFailure`, is the cue to
@@ -475,6 +478,9 @@ These automated cases do not establish OS credential restoration or hosted draft
 record actual isolated-app restarts and staging marker checks separately.
 
 Chat question changes: `node tests/e2e/run-chat-feedback-ui.mjs` uses the named `chat-feedback` fixture to check explicit choice submission, custom answers, restart restoration, model inheritance and compact results with learning links to Studio. `node tests/e2e/run-chat-ui.mjs` retains long-history, stream reconciliation, tool/worker and permission coverage; active runs also open Builds. `turn-loop.test.ts` checks question-to-answer provider-session continuation with successful turn endings, not only request receipt. These scripted providers do not certify live vendor behavior.
+
+`node tests/e2e/run-operator-hooks-ui.mjs` renders the production result card, chat Resume line
+and welcome, and checks the `data-run-resume` and `data-onboarding-action` hooks an operator presses.
 
 `node tests/e2e/run-results-ui.mjs` renders the production asset tiles, model dialog,
 chat outcome and learning components with local fixture media. It checks lazy model thumbnails,

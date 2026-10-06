@@ -139,6 +139,29 @@ describe("the runs a live profile's operator sees", () => {
     assert.equal(running.workedMs, 54 * 60_000);
   });
 
+  it("lists the active chat's last-started run, even when an older run was reopened after a newer one", async () => {
+    const events = [
+      record("t-reopen", 0, CustomEvent.RunStarted, { runId: "run_a" }),
+      record("t-reopen", 5, CustomEvent.RunFinished, { runId: "run_a", executionStatus: "completed" }),
+      record("t-reopen", 6, CustomEvent.RunStarted, { runId: "run_b" }),
+      record("t-reopen", 9, CustomEvent.RunFinished, { runId: "run_b", executionStatus: "completed" }),
+      record("t-reopen", 10, CustomEvent.RunStarted, { runId: "run_a" }),
+      record("t-reopen", 20, CustomEvent.RunFinished, { runId: "run_a", executionStatus: "completed" }),
+    ];
+    const { runs } = await listRuns(
+      {
+        listThreads: async () => [{ id: "t-reopen" }],
+        listEvents: async () => events,
+        readArtifact: async () => null,
+      },
+      { activeThread: "t-reopen", now: NOW },
+    );
+    assert.deepEqual(
+      runs.map((run) => run.runId),
+      ["run_a"],
+    );
+  });
+
   it("does not offer Resume for a paused run whose journal is gone or already done", async () => {
     for (const journal of [null, { phase: "done" }]) {
       const { records } = fixtureStore();

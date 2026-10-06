@@ -5,7 +5,14 @@
  */
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import type { ConversationRecord, EventEnvelope } from "../../shared/event-log.ts";
-import { type RunExecution, RunState, runExecutions, workedMs } from "../../shared/run-state.ts";
+import {
+  JournalPhase,
+  type RunExecution,
+  RunState,
+  runExecution,
+  runExecutions,
+  workedMs,
+} from "../../shared/run-state.ts";
 
 /** The most runs one answer lists. */
 const MAX_LISTED_RUNS = 24;
@@ -76,11 +83,13 @@ function runTrails(events: readonly EventEnvelope[]): Map<string, RunTrail> {
   return trails;
 }
 
-/** The runs of one thread worth listing: every open one, and the newest when the person is looking at it. */
-function listedRuns(executions: Map<string, RunExecution>, active: boolean): RunExecution[] {
-  const runs = [...executions.values()];
-  const newest = runs.at(-1);
-  return runs.filter((run) => run.state !== RunState.Finished || (active && run === newest));
+/**
+ * The runs of one thread worth listing: every open one, and the one the conversation is on (the
+ * last started, a reopened run included) when the person is looking at it.
+ */
+function listedRuns(events: readonly EventEnvelope[], active: boolean): RunExecution[] {
+  const current = active ? (runExecution(events)?.runId ?? null) : null;
+  return [...runExecutions(events).values()].filter((run) => run.state !== RunState.Finished || run.runId === current);
 }
 
 function clockOf(journal: Journal): DevRunClock | null {
@@ -127,7 +136,7 @@ async function describe(
     stopCode: text(close?.stopCode),
     integrationHead: text(close?.integrationHead),
     landed: typeof close?.landed === "boolean" ? close.landed : null,
-    resumable: run.state === RunState.Paused && journal !== null && phase !== "done",
+    resumable: run.state === RunState.Paused && journal !== null && phase !== JournalPhase.Done,
   };
 }
 
@@ -144,7 +153,7 @@ export async function listRuns(
   const runs: DevRun[] = [];
   for (const record of await records.listThreads()) {
     const events = await records.listEvents(record.id);
-    const listed = listedRuns(runExecutions(events), record.id === options.activeThread);
+    const listed = listedRuns(events, record.id === options.activeThread);
     if (listed.length === 0) continue;
     const trails = runTrails(events);
     const thread = { id: record.id, project: text(record.metadata?.project) };

@@ -56,6 +56,8 @@ app.whenReady().then(async()=>{
   assert.equal(r.morning.clicks,1);
   assert.deepEqual(r.morning.finished,[]);
   assert.equal(r.morning.resumeButtons,0);
+  // A card with no run id still offers Resume, but no hook that names no run.
+  assert.deepEqual(r.morning.unnamed,{hooks:[],resumeButtons:1});
   // Chat line: the paused run's Resume carries its id and calls resumeAutopilot with it; none while another run works.
   assert.deepEqual(r.line.offered.map(({tag,text,label,inFoot,value,title})=>({tag,text,label,inFoot,value,title})),[{...resume,value:'run_line',title:null}]);
   assert.deepEqual(r.line.calls,[['run_line']]);

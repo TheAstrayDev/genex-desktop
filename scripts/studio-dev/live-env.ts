@@ -5,8 +5,9 @@
  * sign-in. An operator often starts it from inside a coding-agent session, whose environment
  * routes that session's own model calls (an endpoint, a key, Claude Code's and the Agent SDK's
  * switches) and marks every child as nested in it; the app's agents would inherit all of it
- * (`substrate/child-env.ts` keeps same-vendor variables). These are the variables the eval lanes
- * strip from their children too (`scripts/evals/lanes/common.ts` builds its list from this one).
+ * (`substrate/child-env.ts` keeps same-vendor variables). The routing names and the Claude Code
+ * prefixes are shared with the eval lanes (`scripts/evals/lanes/common.ts` builds its list from
+ * them); the session markers below are dropped only here.
  * The account homes stay: CLAUDE_CONFIG_DIR and CODEX_HOME are the operator's explicit choice of
  * account, which an eval lane replaces with its own and a live launch keeps.
  */
@@ -28,8 +29,26 @@ export const ACCOUNT_HOME_ENV_NAMES: readonly string[] = ["CLAUDE_CONFIG_DIR", "
 export const NODE_MODE_ENV_NAMES: readonly string[] = ["ELECTRON_RUN_AS_NODE"];
 /** Prefixes of Claude Code's and the Agent SDK's own switches. */
 export const AGENT_SESSION_ENV_PREFIXES: readonly string[] = ["CLAUDE_CODE_", "CLAUDE_AGENT_"];
-/** What a Claude Code session sets for the commands it runs: that they run inside it, at its effort. */
-const AGENT_SESSION_MARKERS: readonly string[] = ["CLAUDECODE", "CLAUDE_EFFORT", "CLAUDE_PID"];
+/**
+ * What a Claude Code session sets for the commands it runs: that they run inside it, at its effort,
+ * with its context, timeout, MCP and OAuth switches and its tracing. A live launch drops them; the
+ * eval lanes keep their own list (it is part of `laneFlagsDigest`).
+ */
+const AGENT_SESSION_MARKERS: readonly string[] = [
+  "CLAUDECODE",
+  "CLAUDE_EFFORT",
+  "CLAUDE_PID",
+  "DISABLE_MICROCOMPACT",
+  "API_TIMEOUT_MS",
+  "MCP_CONNECTION_NONBLOCKING",
+  "MCP_SERVER_CONNECTION_BATCH_SIZE",
+  "AI_AGENT",
+  "BAGGAGE",
+  "USE_STAGING_OAUTH",
+  "USE_LOCAL_OAUTH",
+];
+/** Prefixes of a Claude Code session's further switches that only a live launch drops. */
+const LIVE_ONLY_SESSION_PREFIXES: readonly string[] = ["CLAUDE_PREVIEW_"];
 
 /** Every name a live launch drops; the prefixes drop whole families. */
 const LIVE_STRIPPED_NAMES: ReadonlySet<string> = new Set([
@@ -38,9 +57,12 @@ const LIVE_STRIPPED_NAMES: ReadonlySet<string> = new Set([
   ...AGENT_SESSION_MARKERS,
 ]);
 
+/** Every prefix a live launch drops. */
+const LIVE_STRIPPED_PREFIXES: readonly string[] = [...AGENT_SESSION_ENV_PREFIXES, ...LIVE_ONLY_SESSION_PREFIXES];
+
 /** Whether a live launch drops this variable of its caller's. */
 const liveStrips = (name: string): boolean =>
-  LIVE_STRIPPED_NAMES.has(name) || AGENT_SESSION_ENV_PREFIXES.some((prefix) => name.startsWith(prefix));
+  LIVE_STRIPPED_NAMES.has(name) || LIVE_STRIPPED_PREFIXES.some((prefix) => name.startsWith(prefix));
 
 /** The caller's environment for a live launch: everything but its agent session's variables. */
 export function liveLaunchEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

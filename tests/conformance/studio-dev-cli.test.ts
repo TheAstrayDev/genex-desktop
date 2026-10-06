@@ -126,6 +126,15 @@ const AGENT_SESSION_PARENT = {
   CLAUDE_AGENT_SDK_VERSION: "1.0.0",
   CLAUDE_EFFORT: "max",
   CLAUDE_PID: "4242",
+  CLAUDE_PREVIEW_CLASSIFIER_FLOOR: "0.5",
+  DISABLE_MICROCOMPACT: "1",
+  API_TIMEOUT_MS: "900000",
+  MCP_CONNECTION_NONBLOCKING: "true",
+  MCP_SERVER_CONNECTION_BATCH_SIZE: "8",
+  AI_AGENT: "claude-code",
+  BAGGAGE: "session=x",
+  USE_STAGING_OAUTH: "1",
+  USE_LOCAL_OAUTH: "1",
   ELECTRON_RUN_AS_NODE: "1",
 } as const;
 
@@ -145,6 +154,15 @@ test("a live launch does not hand the app the caller's agent-session variables",
     "CLAUDE_AGENT_SDK_VERSION",
     "CLAUDE_EFFORT",
     "CLAUDE_PID",
+    "CLAUDE_PREVIEW_CLASSIFIER_FLOOR",
+    "DISABLE_MICROCOMPACT",
+    "API_TIMEOUT_MS",
+    "MCP_CONNECTION_NONBLOCKING",
+    "MCP_SERVER_CONNECTION_BATCH_SIZE",
+    "AI_AGENT",
+    "BAGGAGE",
+    "USE_STAGING_OAUTH",
+    "USE_LOCAL_OAUTH",
     "ELECTRON_RUN_AS_NODE",
   ])
     assert.equal(env[name], undefined, `${name} must not reach a live app`);
@@ -198,6 +216,12 @@ test("a live games root under a .claude folder is warned about, through a link t
     ["link into a .claude tree", games(path.join(base, "plain/linked")), path.join(base, "repo/.claude")],
     ["a .claude-like name", games(path.join(base, "plain/.claude-old/x")), null],
     ["a name ending in .claude", games(path.join(base, "plain/notes.claude")), null],
+    ["a .Claude folder in another case", games(path.join(base, "repo/.Claude/x")), path.join(base, "repo/.Claude")],
+    [
+      "several missing folders below a link into a .claude tree",
+      games(path.join(base, "plain/linked/not/yet/made")),
+      path.join(base, "repo/.claude"),
+    ],
   ];
   for (const [name, root, at] of rows) {
     const warnings = gamesRootWarnings(root);

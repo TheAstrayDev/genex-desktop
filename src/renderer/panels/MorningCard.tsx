@@ -140,7 +140,7 @@ export function MorningCard({
         <Button
           key={action}
           title="Pick the build up where it left off"
-          data-run-resume={runId ?? ""}
+          data-run-resume={runId ?? undefined}
           onClick={() => onResume?.()}
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">

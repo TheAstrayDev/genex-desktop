@@ -134,6 +134,28 @@ export const ExecutionStatus = {
 export type ExecutionStatus = (typeof ExecutionStatus)[keyof typeof ExecutionStatus];
 
 /**
+ * Where a run's journal stands (`journal.phase`); a Resume reads it back. The harness writes these
+ * (its copy is `JournalPhase` in `loop/run-events.ts`): never rename a value.
+ */
+export const JournalPhase = {
+  /** The classic pipeline's one-part run. */
+  Single: "single",
+  /** A director night: the lead's own session. */
+  Director: "director",
+  Base: "base",
+  Facets: "facets",
+  Integrate: "integrate",
+  Ledger: "ledger",
+  IntegrationFacet: "integration-facet",
+  Verdict: "verdict",
+  Optimization: "optimization",
+  /** Stopped before it finished: a resume picks it up. */
+  Paused: "paused",
+  Done: "done",
+} as const;
+export type JournalPhase = (typeof JournalPhase)[keyof typeof JournalPhase];
+
+/**
  * What a run's budgets say ends it (`budgets.completionPolicy`): the judge's satisfaction, or its
  * time. The harness writes these (its copy is `CompletionPolicy` in `loop/completion-policy.ts`):
  * never rename a value.

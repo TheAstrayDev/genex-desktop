@@ -44,7 +44,7 @@ import {
   HarnessState,
 } from "../shared/protocol.ts";
 import { EngineId } from "../shared/providers.ts";
-import { RunState } from "../shared/run-state.ts";
+import { JournalPhase, RunState } from "../shared/run-state.ts";
 import { credentialEnvValues, redactTokens, secretRedactor } from "../shared/redact.ts";
 import { ActivityIndex, feedsActivity, type StudioActivityItem } from "../shared/studio-activity.ts";
 import {
@@ -2111,7 +2111,7 @@ export class StudioCore {
         phase?: string;
       } | null;
       if (!journal) continue;
-      if (journal.phase === "done") throw new Error(MESSAGE.runAlreadyFinished(runId));
+      if (journal.phase === JournalPhase.Done) throw new Error(MESSAGE.runAlreadyFinished(runId));
       // A rewind stopping this chat's build waits for it to close: a Resume must not restart it.
       this.#rewind.assertNotRewinding(thread.id);
       await this.host.dispatch({ type: DispatchActionType.AutopilotResume, threadId: thread.id, runId });

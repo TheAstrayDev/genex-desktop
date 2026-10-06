@@ -47,9 +47,9 @@ const buttonText = (text: string) =>
 
 async function morningCard() {
   let resumed = 0;
-  const card = (paused: boolean) => (
+  const card = (paused: boolean, runId: string | null = "run_paused") => (
     <MorningCard
-      runId="run_paused"
+      runId={runId}
       rounds={3}
       kept={1}
       undone={2}
@@ -72,7 +72,11 @@ async function morningCard() {
   const clicks = resumed;
   render(card(false));
   await settle();
-  return { paused, clicks, finished: resumes(), resumeButtons: buttonText("Resume") };
+  const finished = { hooks: resumes(), resumeButtons: buttonText("Resume") };
+  render(card(true, null));
+  await settle();
+  const unnamed = { hooks: resumes(), resumeButtons: buttonText("Resume") };
+  return { paused, clicks, finished: finished.hooks, resumeButtons: finished.resumeButtons, unnamed };
 }
 
 async function resumeLine() {

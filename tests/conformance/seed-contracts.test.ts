@@ -46,6 +46,7 @@ import { EngineId } from "../../src/shared/providers.ts";
 import {
   CompletionPolicy,
   ExecutionStatus,
+  JournalPhase,
   VerdictPass,
   VerdictRule,
   recordedRunLoop,
@@ -388,6 +389,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("has the same run execution statuses", () => {
     assert.deepEqual(seedRunEvents.ExecutionStatus, ExecutionStatus);
+  });
+
+  it("names a run journal's phases as the harness writes them", () => {
+    assert.deepEqual(seedRunEvents.JournalPhase, JournalPhase);
   });
 
   it("has the same engine ids", () => {
