@@ -16,8 +16,8 @@ import {
 import { redactDeep } from "../shared/redact.ts";
 import { scrubForLog } from "./logs.ts";
 
-/** Where reports go. The route belongs to genex.games's API, beside the Genex plugin's. */
-export const FEEDBACK_URL = "https://api.genex.games/api/feedback";
+/** Where reports go: genex.games's API, beside the desktop's build-metrics route. */
+export const FEEDBACK_URL = "https://api.genex.games/api/desktop/feedback";
 /** One send, including genex.games's answer. */
 export const FEEDBACK_TIMEOUT_MS = 20 * SECOND_MS;
 /** How many of the open chat's newest events a report carries. */
@@ -29,6 +29,10 @@ export const FEEDBACK_CHAT_MAX_CHARS = 256 * 1024;
  * URL). It also bounds the scrubber, whose email pattern slows with the length of an unbroken word.
  */
 export const FEEDBACK_STRING_MAX_CHARS = 2_000;
+/** The most characters of the diagnostics report genex.games takes; past it, the middle goes. */
+export const FEEDBACK_DIAGNOSTICS_MAX_CHARS = 128 * 1024;
+/** How much of the report's start (versions, paths, providers) a clipped report keeps. */
+const DIAGNOSTICS_HEAD_CHARS = 16 * 1024;
 
 /** Why a report was not sent, and how a clipped string ends. */
 const MESSAGE = {
@@ -36,9 +40,10 @@ const MESSAGE = {
   tooLong: `Feedback can be at most ${FEEDBACK_TEXT_MAX_CHARS} characters.`,
   refused: (status: number) => `genex.games did not take the feedback (HTTP ${status}).`,
   clipped: (rest: number) => `… [${rest} more characters]`,
+  cut: (count: number) => `\n… [${count} characters cut] …\n`,
 } as const;
 
-/** What genex.games receives at `POST /api/feedback`, as JSON. */
+/** What genex.games receives at `POST /api/desktop/feedback`, as JSON. */
 export interface FeedbackReport {
   text: string;
   screen: FeedbackScreen;
@@ -100,9 +105,20 @@ function chatLines(events: EventEnvelope[], home: string): string {
   return lines.slice(first).join("\n");
 }
 
+/**
+ * The diagnostics report within {@link FEEDBACK_DIAGNOSTICS_MAX_CHARS}: its start (versions, paths,
+ * providers) and its newest log lines stay, and the middle goes.
+ */
+function clippedDiagnostics(text: string): string {
+  if (text.length <= FEEDBACK_DIAGNOSTICS_MAX_CHARS) return text;
+  const room = FEEDBACK_DIAGNOSTICS_MAX_CHARS - DIAGNOSTICS_HEAD_CHARS;
+  const marker = MESSAGE.cut(text.length - FEEDBACK_DIAGNOSTICS_MAX_CHARS);
+  return text.slice(0, DIAGNOSTICS_HEAD_CHARS) + marker + text.slice(text.length - (room - marker.length));
+}
+
 /** What the switches attach; nothing is read for a switch that is off. */
 async function attachedLogs(draft: FeedbackDraft, sources: FeedbackSources): Promise<FeedbackReport["logs"]> {
-  const diagnostics = draft.appLogs ? await sources.diagnostics() : undefined;
+  const diagnostics = draft.appLogs ? clippedDiagnostics(await sources.diagnostics()) : undefined;
   const events = draft.chatId ? await sources.chatEvents(draft.chatId, FEEDBACK_CHAT_EVENTS) : undefined;
   return {
     ...(diagnostics === undefined ? {} : { diagnostics }),

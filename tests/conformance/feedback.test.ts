@@ -9,6 +9,7 @@ import path from "node:path";
 import {
   FEEDBACK_CHAT_EVENTS,
   FEEDBACK_CHAT_MAX_CHARS,
+  FEEDBACK_DIAGNOSTICS_MAX_CHARS,
   FEEDBACK_STRING_MAX_CHARS,
   FEEDBACK_URL,
   type FeedbackReport,
@@ -120,6 +121,19 @@ describe("send feedback", () => {
     await sendFeedback(draft({ appLogs: true, screen: FeedbackScreen.Home }), sources);
     assert.deepEqual(chatsRead, []);
     assert.deepEqual(posted[0]?.report.logs, { diagnostics: DIAGNOSTICS });
+  });
+
+  it("keeps the diagnostics' start and newest end when they are too long to send", async () => {
+    const { sources, posted } = rig();
+    const head = "Genex 1.2.3 (packaged)\nProviders\n";
+    const tail = "\n  newest log line";
+    sources.diagnostics = async () => `${head}${"l".repeat(FEEDBACK_DIAGNOSTICS_MAX_CHARS)}${tail}`;
+    await sendFeedback(draft({ appLogs: true }), sources);
+    const sent = posted[0]?.report.logs?.diagnostics ?? "";
+    assert.ok(sent.length <= FEEDBACK_DIAGNOSTICS_MAX_CHARS, "within genex.games's cap");
+    assert.ok(sent.startsWith(head), "the versions and providers stay");
+    assert.ok(sent.endsWith(tail), "the newest log lines stay");
+    assert.match(sent, /characters cut/);
   });
 
   it("attaches both when both are switched on", async () => {
