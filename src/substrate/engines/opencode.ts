@@ -64,6 +64,11 @@ const COMPLETE_TIMEOUT_MS = 15 * MINUTE_MS;
 const KILL_GRACE_MS = 3 * SECOND_MS;
 /** How much of stderr is kept to explain an exit the event stream never explained. */
 const STDERR_TAIL_CHARS = 4_000;
+/**
+ * The provider statuses that refuse the request itself (a model a ChatGPT plan does not run, a
+ * model gone): no wait or retry helps, another model might.
+ */
+const MODEL_REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 404]);
 /** Where OpenCode refreshes its model catalogs; opened beside the provider's own hosts. */
 const CATALOG_HOSTS = ["models.dev", "models.opencode.ai"] as const;
 
@@ -77,6 +82,8 @@ const MESSAGE = {
   NoTools: "OpenCode's one-shot answers take no studio tools",
   NoCompact: "OpenCode compacts its own sessions",
   Stopped: (code: number | null) => `OpenCode exited with ${code}`,
+  ModelRefused: (model: string, words: string) =>
+    `The provider refused ${model} (${words}). Pick another model, then send again.`,
   NoAnswer: "OpenCode gave no answer",
   JudgeTimedOut: (minutes: number) => `the judge did not answer within ${minutes} min`,
 } as const;
@@ -259,7 +266,7 @@ export class OpenCodeEngine implements Engine {
     }
     if (request.signal?.aborted || run.deadlineHit)
       return metered(partialDelegateResult(this.id, interruption(request.signal?.aborted), partial()));
-    if (run.failure) return this.#failedEnding(run.failure, partial);
+    if (run.failure) return this.#failedEnding(run.failure, partial, request.model);
     return completed(this.id, run, startedAt, request.model, recordedCalls(bridge, request));
   }
 
@@ -480,12 +487,19 @@ export class OpenCodeEngine implements Engine {
   #failedEnding(
     failure: { message: string; status: number | null },
     partial: () => PartialDelegateState,
+    model: string | undefined,
   ): DelegateResult {
     const error = failureError(this.id, failure);
     if (error.kind !== EngineFailureKind.Other) throw error;
-    return metered(
-      partialDelegateResult(this.id, { stopReason: StopReason.Error, errorText: failure.message }, partial()),
-    );
+    const errorText = this.#refusedModelText(failure, model) ?? failure.message;
+    return metered(partialDelegateResult(this.id, { stopReason: StopReason.Error, errorText }, partial()));
+  }
+
+  /** A picked model the provider refused, by its name and with the provider's words; null for anything else. */
+  #refusedModelText(failure: { message: string; status: number | null }, model: string | undefined): string | null {
+    if (!model || failure.status === null || !MODEL_REFUSED_STATUSES.has(failure.status)) return null;
+    const label = this.#catalog.models().find((row) => row.id === model)?.label ?? model;
+    return MESSAGE.ModelRefused(label, failure.message);
   }
 }
 

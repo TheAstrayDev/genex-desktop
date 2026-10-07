@@ -136,8 +136,12 @@ denies for that sandbox only (`SandboxOptions.ownHome`), and only the picked mod
 browser sign-in hosts) and OpenCode's catalogs (`models.dev`, `models.opencode.ai`) are reachable.
 `OPENCODE_CONFIG_CONTENT` sets every permission to allow or deny, never ask, denies web fetch and other folders to a build, and lets a read-only session run only the
 studio bridge (`node .studio/bridge/tool.mjs`), which carries the studio's tools as it does for Codex.
-A provider's HTTP status in an `error` event decides the failure kind, as for OpenRouter. Recorded
-streams: `tests/fixtures/transcripts/opencode-*` (OpenCode 1.18).
+A provider's HTTP status in an `error` event decides the failure kind, as for OpenRouter; a 400 or
+404 for a picked model ends the build saying which model the provider refused and to pick another.
+OpenCode lists every OpenAI model even on a ChatGPT sign-in, where OpenAI refuses some, so while
+Codex is signed in the picker starts OpenCode's GPT models with the ones Codex lists
+(`runnableModels` in `renderer/model-lineup.ts`). Recorded streams:
+`tests/fixtures/transcripts/opencode-*` (OpenCode 1.18).
 
 Residual risk: the CLI must read its sign-ins and its bash tool shares its sandbox, so an OpenCode
 session can read OpenCode's own `auth.json`, and its commands can reach the provider host the session

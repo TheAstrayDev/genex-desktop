@@ -4,8 +4,8 @@
  * The provider's default model is always listed.
  */
 import { type JSX, useId, useState } from "react";
-import { latestModels, modelName, shownModels } from "../model-lineup.ts";
-import { useModelPicker } from "../state/hooks.ts";
+import { latestModels, modelName, runnableModels, shownModels } from "../model-lineup.ts";
+import { useEngines, useModelPicker } from "../state/hooks.ts";
 import { pickerModelSet, pickerModelsReset } from "../state/model-picker.ts";
 import { studio } from "../state/studio.ts";
 import type { EngineDescriptor } from "../types.ts";
@@ -29,10 +29,14 @@ interface PickerRow {
   locked: boolean;
 }
 
-function pickerRows(engine: EngineDescriptor, choices: Readonly<Record<string, boolean>>): PickerRow[] {
+function pickerRows(
+  engine: EngineDescriptor,
+  choices: Readonly<Record<string, boolean>>,
+  runnable: ReadonlySet<string>,
+): PickerRow[] {
   const models = engine.models.filter((model) => model.id !== DEFAULT_MODEL);
-  const latest = latestModels(engine.id, models);
-  const shown = shownModels(engine.id, models, choices);
+  const latest = latestModels(engine.id, models, runnable);
+  const shown = shownModels(engine.id, models, choices, runnable);
   return models.map((model) => ({
     id: model.id,
     name: modelName(engine.id, model),
@@ -69,7 +73,8 @@ export function PickerModels({ engine, name }: { engine: EngineDescriptor; name:
   const choices = useModelPicker((state) => state.choices[engine.id] ?? NO_CHOICES);
   const [olderOpen, setOlderOpen] = useState(false);
   const olderId = useId();
-  const rows = pickerRows(engine, choices);
+  const engines = useEngines((state) => state.list);
+  const rows = pickerRows(engine, choices, runnableModels(engine.id, engines));
   if (rows.length === 0) return null;
   const store = studio().modelPicker;
   const change = (row: PickerRow) => (shown: boolean) =>

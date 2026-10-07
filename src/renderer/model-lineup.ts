@@ -8,6 +8,7 @@
  * time, then the rest in the order the provider lists them. Settings choices (`state/model-picker.ts`) override the rule per model; the provider's
  * default always shows.
  */
+import { EngineStatusCode } from "../shared/engine-descriptor.ts";
 import { EngineId } from "../shared/providers.ts";
 
 /** A catalog row as the lineup reads it. */
@@ -82,10 +83,13 @@ function vendorRead(model: LineupModel): (Read & { vendor: string }) | undefined
  * A long catalog's models, best first: each vendor's newest GPT or Claude in turn (a vendor at a
  * time, in the order the catalog first names them), then every model it cannot read, as listed.
  */
-function newestFirst(listed: readonly LineupModel[]): LineupModel[] {
+function newestFirst(listed: readonly LineupModel[], runnable: ReadonlySet<string>): LineupModel[] {
+  const vouched = new Set([...runnable].map((id) => id.slice(0, id.indexOf("/"))));
   const byVendor = new Map<string, Read[]>();
   for (const read of listed.map(vendorRead)) {
-    if (read) byVendor.set(read.vendor, [...(byVendor.get(read.vendor) ?? []), read]);
+    // A vendor whose runnable models are known offers only those.
+    const refused = read && vouched.has(read.vendor) && !runnable.has(read.model.id);
+    if (read && !refused) byVendor.set(read.vendor, [...(byVendor.get(read.vendor) ?? []), read]);
   }
   const queues = [...byVendor.values()].map((reads) =>
     reads.toSorted((a, b) => Number(isNewer(b.lineage, a.lineage)) - Number(isNewer(a.lineage, b.lineage))),
@@ -97,7 +101,33 @@ function newestFirst(listed: readonly LineupModel[]): LineupModel[] {
       if (read) ranked.push(read.model);
     }
   }
+  // Once some models are known to run, nobody vouches for the rest: they wait under Older models.
+  if (runnable.size > 0 && ranked.length > 0) return ranked;
   return [...ranked, ...listed.filter((model) => !ranked.includes(model))];
+}
+
+/** No models vouched for: a long catalog's own rule. */
+const NOBODY: ReadonlySet<string> = new Set();
+/** The engine that says which of another engine's vendor models run for this person, and the vendor. */
+const RUNNABLE_SOURCE: Partial<Record<string, { engine: string; vendor: string }>> = {
+  [EngineId.OpenCode]: { engine: EngineId.Codex, vendor: "openai" },
+};
+
+/**
+ * The `vendor/model` ids a long catalog is known to run for this person: for OpenCode, the GPT
+ * models a ChatGPT plan runs, as a signed-in Codex lists them (OpenAI refuses others on a plan,
+ * though OpenCode lists them). Empty when nobody can say.
+ */
+export function runnableModels(
+  engine: string,
+  engines: readonly { id: string; status: { code: string }; models: readonly LineupModel[] }[],
+): ReadonlySet<string> {
+  const source = RUNNABLE_SOURCE[engine];
+  const plan = source && engines.find((candidate) => candidate.id === source.engine);
+  if (!source || plan?.status.code !== EngineStatusCode.Ready) return NOBODY;
+  return new Set(
+    plan.models.filter((model) => model.id !== DEFAULT_MODEL).map((model) => `${source.vendor}/${model.id}`),
+  );
 }
 
 /**
@@ -123,12 +153,16 @@ function preferred(kept: Read | undefined, next: Read): Read {
 }
 
 /** The ids the picker shows by default, in the provider's order. */
-export function latestModels(engine: string, models: readonly LineupModel[]): Set<string> {
+export function latestModels(
+  engine: string,
+  models: readonly LineupModel[],
+  runnable: ReadonlySet<string> = NOBODY,
+): Set<string> {
   const listed = models.filter((model) => model.id !== DEFAULT_MODEL);
   const firstFew = FIRST_FEW[engine];
   if (firstFew !== undefined)
     return new Set(
-      newestFirst(listed)
+      newestFirst(listed, runnable)
         .slice(0, firstFew)
         .map((model) => model.id),
     );
@@ -152,8 +186,9 @@ export function shownModels(
   engine: string,
   models: readonly LineupModel[],
   choices: Readonly<Record<string, boolean>> = {},
+  runnable: ReadonlySet<string> = NOBODY,
 ): Set<string> {
-  const latest = latestModels(engine, models);
+  const latest = latestModels(engine, models, runnable);
   const shown = (model: LineupModel) => model.providerDefault === true || (choices[model.id] ?? latest.has(model.id));
   return new Set(models.filter((model) => model.id !== DEFAULT_MODEL && shown(model)).map((model) => model.id));
 }

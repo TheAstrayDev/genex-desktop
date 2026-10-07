@@ -376,3 +376,36 @@ test("metered engines sit in groups of their own, never among local models, and 
     "one row to set it up, not a model list",
   );
 });
+
+test("OpenCode on a ChatGPT plan lists the GPT models Codex says the plan runs, not newer ones OpenAI refuses", () => {
+  const ready = { code: "ready", detail: "Fixture ready" } as const;
+  const engines: EngineDescriptor[] = [
+    {
+      id: "codex",
+      label: "Codex",
+      kind: "delegated",
+      status: ready,
+      defaultModel: null,
+      models: [model("gpt-6-luna", "GPT-6-Luna")],
+    },
+    {
+      id: "opencode",
+      label: "OpenCode",
+      kind: "delegated",
+      status: ready,
+      supportsSessions: true,
+      defaultModel: null,
+      models: [model("openai/gpt-6-luna", "GPT-6 Luna"), model("openai/gpt-6.1-sol", "GPT-6.1 Sol")],
+    },
+  ];
+  const listed = (all: EngineDescriptor[]) =>
+    toChoices(all)
+      .filter((choice) => choice.key.startsWith("opencode::") && !choice.hidden)
+      .map((choice) => choice.key);
+  assert.deepEqual(listed(engines), ["opencode::default", "opencode::openai/gpt-6-luna"]);
+  assert.deepEqual(
+    listed([{ ...engines[0]!, status: { code: "needs_login", detail: "" } }, engines[1]!]),
+    ["opencode::default", "opencode::openai/gpt-6-luna", "opencode::openai/gpt-6.1-sol"],
+    "without a Codex sign-in to ask, the newest are listed too",
+  );
+});

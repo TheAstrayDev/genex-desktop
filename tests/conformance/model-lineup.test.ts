@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { latestModels, modelName, shownModels } from "../../src/renderer/model-lineup.ts";
+import { latestModels, modelName, runnableModels, shownModels } from "../../src/renderer/model-lineup.ts";
 import { EngineId } from "../../src/shared/providers.ts";
 
 const row = (id: string, label: string, resolvedModel?: string, providerDefault?: boolean) => ({
@@ -129,5 +129,38 @@ test("a metered catalog starts with the newest GPT and Claude, a vendor at a tim
     [...latestModels(EngineId.OpenCode, unread)],
     ["google/gemini-x", "opencode/big-pickle"],
     "ids it cannot read keep the catalog's order",
+  );
+});
+
+test("OpenCode on a ChatGPT plan starts with the GPT models the plan runs, as Codex lists them", () => {
+  const codex = (code: string) => ({
+    id: EngineId.Codex,
+    status: { code },
+    models: [row("default", "Default"), row("gpt-6-luna", "GPT-6-Luna"), row("gpt-5.6-terra", "GPT-5.6-Terra")],
+  });
+  const runnable = runnableModels(EngineId.OpenCode, [codex("ready")]);
+  assert.deepEqual([...runnable], ["openai/gpt-6-luna", "openai/gpt-5.6-terra"]);
+  assert.equal(runnableModels(EngineId.OpenCode, [codex("needs_login")]).size, 0, "no Codex sign-in, no word on it");
+  assert.equal(runnableModels(EngineId.OpenRouter, [codex("ready")]).size, 0, "an API key runs every model");
+
+  const listed = [
+    row("openai/gpt-5.3-codex-spark", "GPT-5.3 Codex Spark"),
+    row("openai/gpt-6-luna", "GPT-6 Luna"),
+    row("openai/gpt-6.1-sol", "GPT-6.1 Sol"),
+    row("opencode/big-pickle", "Big Pickle"),
+  ];
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenCode, listed, runnable)],
+    ["openai/gpt-6-luna"],
+    "a newer GPT the plan refuses, or a model nobody vouches for, never fills a slot",
+  );
+  assert.equal(
+    shownModels(EngineId.OpenCode, listed, { "openai/gpt-6.1-sol": true }, runnable).has("openai/gpt-6.1-sol"),
+    true,
+  );
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenCode, listed)],
+    ["openai/gpt-6.1-sol", "openai/gpt-6-luna"],
+    "with no word from Codex, the newest",
   );
 });

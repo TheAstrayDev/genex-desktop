@@ -8,7 +8,7 @@ import { ReasoningEffort } from "../shared/model-preferences.ts";
 import { resolveRoles } from "../shared/model-roles.ts";
 import { EngineId, isMetered } from "../shared/providers.ts";
 import { modelKey, parseModelKey } from "./model-key.ts";
-import { modelBase, modelName, shownModels } from "./model-lineup.ts";
+import { modelBase, modelName, runnableModels, shownModels } from "./model-lineup.ts";
 import type { EngineDescriptor } from "./types.ts";
 import type { ModelChoice, RoleRecord } from "./ui/ModelMenu.tsx";
 import { MODEL_PICKER_WORDS } from "./words.ts";
@@ -52,14 +52,20 @@ function groupLabel(engine: EngineDescriptor): string {
  * (model-lineup.ts, and the person's Settings `picker` choices).
  */
 export function toChoices(engines: EngineDescriptor[], picker: PickerChoices = {}): ModelChoice[] {
-  return engines.flatMap((engine) => engineChoices(engine, picker[engine.id]));
+  return engines.flatMap((engine) => engineChoices(engine, picker[engine.id], runnableModels(engine.id, engines)));
 }
 
-function engineChoices(engine: EngineDescriptor, picker: PickerChoices[string] | undefined): ModelChoice[] {
+function engineChoices(
+  engine: EngineDescriptor,
+  picker: PickerChoices[string] | undefined,
+  runnable: ReadonlySet<string>,
+): ModelChoice[] {
   const ready = isEngineReady(engine);
   if (isLocalModelEngine(engine)) return ready ? engine.models.map((model) => localChoice(engine, model)) : [];
   const models =
-    engine.kind === EngineKind.Direct ? apiModelChoices(engine, picker) : subscriptionModelChoices(engine, picker);
+    engine.kind === EngineKind.Direct
+      ? apiModelChoices(engine, picker)
+      : subscriptionModelChoices(engine, picker, runnable);
   if (models.length > 0) return models;
   return [subscriptionRow(engine, ready)];
 }
@@ -91,10 +97,14 @@ function localChoice(engine: EngineDescriptor, model: EngineModel): ModelChoice 
  * default model lists that model in place of the provider-default row; without one, the default
  * row stays and says what the catalog is doing.
  */
-function subscriptionModelChoices(engine: EngineDescriptor, picker: PickerChoices[string] | undefined): ModelChoice[] {
+function subscriptionModelChoices(
+  engine: EngineDescriptor,
+  picker: PickerChoices[string] | undefined,
+  runnable: ReadonlySet<string>,
+): ModelChoice[] {
   const concrete = engine.models.filter((model) => model.id !== DEFAULT_MODEL);
   const listed = concrete.some((model) => model.providerDefault) ? concrete : [defaultRow(engine), ...concrete];
-  const shown = shownModels(engine.id, concrete, picker);
+  const shown = shownModels(engine.id, concrete, picker, runnable);
   return listed.map((model) => subscriptionChoice(engine, model, model.id === DEFAULT_MODEL || shown.has(model.id)));
 }
 

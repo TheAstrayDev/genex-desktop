@@ -336,6 +336,30 @@ describe("OpenCode sessions", () => {
     assert.deepEqual(recorded.failure, { message: "Forbidden: request blocked", status: 403 });
   });
 
+  it("says to pick another model when the provider refuses the one picked", async () => {
+    const refusing = (status: number) =>
+      replay([
+        {
+          type: "error",
+          sessionID: "ses_y",
+          error: { name: "APIError", data: { message: "Bad Request: not supported", statusCode: status } },
+        },
+      ]);
+    const cwd = await game();
+    for (const status of [400, 404]) {
+      const { engine } = await engineWith(() => refusing(status));
+      await engine.refreshModels(true);
+      const result = await engine.delegate({ cwd, prompt: "x", model: "opencode/big-pickle" });
+      assert.equal(result.stopReason, "error", `${status} is the build's outcome, never a wait`);
+      assert.match(result.errorText ?? "", /Big Pickle/, "the model by its name");
+      assert.match(result.errorText ?? "", /Bad Request: not supported/, "the provider's own words");
+      assert.match(result.errorText ?? "", /another model/);
+    }
+    const { engine } = await engineWith(() => refusing(400));
+    const unpicked = await engine.delegate({ cwd, prompt: "x" });
+    assert.equal(unpicked.errorText, "Bad Request: not supported", "with no pick there is no model to blame");
+  });
+
   it("hands back what a stopped or timed-out session did, with the id Continue resumes", async () => {
     const hang: OpenCodeExec = async function* (invocation) {
       yield { type: "text", sessionID: "ses_long", part: { type: "text", text: "Working on it" } };
