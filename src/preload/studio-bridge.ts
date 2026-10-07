@@ -186,6 +186,7 @@ function studioCalls(bridge: BridgeCalls) {
     settings: () => invoke("studio:settings"),
     setSettings: (patch) => invoke("studio:settings.set", patch),
     diagnostics: () => invoke("studio:diagnostics"),
+    sendFeedback: (draft) => invoke("studio:feedback.send", draft),
     licenses: () => invoke("studio:licenses"),
     runSharingStatus: () => invoke("studio:run-sharing.status"),
     setRunSharing: (on) => invoke("studio:run-sharing.set", { on }),
