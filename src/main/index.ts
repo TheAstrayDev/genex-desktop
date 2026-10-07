@@ -1075,6 +1075,7 @@ function registerIpc(studio: StudioCore): void {
     terminals,
     accessibilityEnabled: () => app.isAccessibilitySupportEnabled(),
     shellPath: async () => (await toolchain()).path,
+    openExternal: (url) => shell.openExternal(url),
   });
   registerThreadsIpc(handle, {
     core: studio,

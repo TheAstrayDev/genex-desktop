@@ -34,11 +34,11 @@ export function openCodeRowState(
   const code = engine.status.code;
   if (local.installing) return OpenCodeRowState.Installing;
   if (code === EngineStatusCode.NotInstalled) return OpenCodeRowState.NotInstalled;
-  const connected = code === EngineStatusCode.Ready && signedIn(engine.account);
-  if (connected) return OpenCodeRowState.Connected;
-  const waitsForSignIn = code === EngineStatusCode.Ready || code === EngineStatusCode.NeedsLogin;
-  if (local.signingIn && waitsForSignIn) return OpenCodeRowState.SigningIn;
-  if (code === EngineStatusCode.Ready) return OpenCodeRowState.FreeOnly;
+  // A sign-in runs in the row itself, so it shows (with its Cancel) even beside an earlier one.
+  const canSignIn = code === EngineStatusCode.Ready || code === EngineStatusCode.NeedsLogin;
+  if (local.signingIn && canSignIn) return OpenCodeRowState.SigningIn;
+  if (code === EngineStatusCode.Ready)
+    return signedIn(engine.account) ? OpenCodeRowState.Connected : OpenCodeRowState.FreeOnly;
   if (code === EngineStatusCode.NeedsLogin) return OpenCodeRowState.SignedOut;
   return OpenCodeRowState.Unreachable;
 }

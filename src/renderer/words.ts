@@ -1485,6 +1485,7 @@ export const METERED_PROVIDER_WORDS = {
     freeOnlyLine: "No provider signed in. OpenCode's free models run without an account.",
     signingIn: "Choose a provider below and finish signing in. OpenCode keeps the sign-in.",
     cancelSignIn: "Cancel",
+    openSignInPage: "Open sign-in page",
     addProvider: "Sign in to another provider…",
     addProviderLine: "OpenCode keeps each sign-in",
     update: "Update OpenCode",

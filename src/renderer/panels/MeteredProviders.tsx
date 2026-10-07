@@ -6,7 +6,7 @@
  * straight to main, which checks it with OpenRouter and keeps it in the OS secret store; it is
  * never shown again, and the field forgets it the moment it is sent.
  */
-import { type JSX, lazy, Suspense, useState } from "react";
+import { type JSX, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type EngineStatus, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { TerminalKind, type TerminalSession } from "../../shared/terminal.ts";
@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu.tsx";
 import { Icon } from "../ui/icons.tsx";
+import { prefersReducedMotion } from "../ui/media-queries.ts";
 import { Pending } from "../ui/Pending.tsx";
 import { METERED_PROVIDER_WORDS, problemWords } from "../words.ts";
 import { OpenCodeRowState, openCodeRowState } from "./opencode-row.ts";
@@ -148,6 +149,8 @@ type OpenCodeActions = {
   recheck: () => void;
   signIn: () => void;
   cancelSignIn: () => void;
+  /** Open the sign-in page OpenCode printed, when it printed one. */
+  openSignInPage: (() => void) | null;
   update: () => void;
 };
 
@@ -203,14 +206,34 @@ function openCodeSigningInView(act: OpenCodeActions): RowView {
     tone: RowTone.Busy,
     status: WORDS.signingIn,
     line: WORDS.openCode.signingIn,
-    actions: <Button onClick={act.cancelSignIn}>{WORDS.openCode.cancelSignIn}</Button>,
+    actions: (
+      <>
+        {act.openSignInPage && (
+          <Button variant="default" onClick={act.openSignInPage}>
+            {WORDS.openCode.openSignInPage}
+          </Button>
+        )}
+        <Button onClick={act.cancelSignIn}>{WORDS.openCode.cancelSignIn}</Button>
+      </>
+    ),
   };
 }
 
 /** The sign-in's terminal inside the row, so Settings stays open while OpenCode asks its questions. */
 function SignInTerminal({ session, onError }: { session: TerminalSession; onError: (error: string) => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  // The row may sit below the fold: bring the sign-in's questions into view once it starts.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per sign-in session
+  useEffect(() => {
+    box.current?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }, [session.id]);
   return (
-    <div data-keeps-escape data-sign-in-terminal className="h-72 min-h-0 overflow-hidden rounded-lg border border-line">
+    <div
+      ref={box}
+      data-keeps-escape
+      data-sign-in-terminal
+      className="h-72 min-h-0 overflow-hidden rounded-lg border border-line"
+    >
       <Suspense fallback={<Pending label={WORDS.signingIn} className="px-3 text-xs" />}>
         <TerminalView session={session} visible onError={onError} />
       </Suspense>
@@ -282,6 +305,7 @@ function OpenCodeRow({
     recheck: () => void run(recheck),
     signIn,
     cancelSignIn,
+    openSignInPage: terminal?.signInPage ? () => void run(() => window.studio.terminalOpenLink(terminal.id)) : null,
     update: () => void install.update(),
   });
   return (

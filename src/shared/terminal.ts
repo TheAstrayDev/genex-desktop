@@ -33,6 +33,8 @@ export interface TerminalSession {
   command?: string;
   /** A finished command session's last lines of output: plain text, credentials redacted. */
   output?: string[];
+  /** It printed a sign-in page the host can open; the address itself stays in main. */
+  signInPage?: boolean;
 }
 
 export type TerminalEvent =

@@ -132,6 +132,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:terminal.ack": "terminalAcknowledge",
   "studio:terminal.stop": "terminalStop",
   "studio:terminal.remove": "terminalRemove",
+  "studio:terminal.open-link": "terminalOpenLink",
   "studio:codex-login.state": "codexLoginState",
   "studio:codex-login.cancel": "codexLoginCancel",
   "studio:codex-login.dismiss": "codexLoginDismiss",
@@ -315,6 +316,7 @@ export interface StudioInvokePayloads {
   "studio:terminal.ack": { id: string; count: number };
   "studio:terminal.stop": { id: string };
   "studio:terminal.remove": { id: string };
+  "studio:terminal.open-link": { id: string };
   "studio:codex-login.state": undefined;
   "studio:codex-login.cancel": undefined;
   "studio:codex-login.dismiss": undefined;

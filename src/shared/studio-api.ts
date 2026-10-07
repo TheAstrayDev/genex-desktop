@@ -359,6 +359,8 @@ export interface StudioApi {
   terminalAcknowledge(id: string, count: number): Promise<void>;
   terminalStop(id: string): Promise<void>;
   terminalRemove(id: string): Promise<void>;
+  /** Open, in the browser, the sign-in page this terminal session printed (none: nothing opens). */
+  terminalOpenLink(id: string): Promise<void>;
   onTerminal(listener: (event: import("./terminal.ts").TerminalEvent) => void): () => void;
   onClaudeLogin(listener: (state: ClaudeLoginState) => void): () => void;
   codexLoginState(): Promise<CodexLoginState>;

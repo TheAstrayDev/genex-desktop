@@ -125,7 +125,8 @@ limit, 429 a rate limit. Errors are redacted before they are logged.
 **OpenCode** ([opencode.ts](../src/substrate/engines/opencode.ts)) is a delegated engine that runs
 `opencode run --format json --pure` with the brief on stdin, resumed by `--session`. OpenCode keeps
 its own sign-ins (`opencode auth login`, which Sign in runs in a terminal inside its Settings row,
-never the dock, so Settings stays open) and the studio never reads them: it is Ready once `opencode models --verbose` lists a model. OpenCode lists its
+never the dock, so Settings stays open; when it prints an https page, main keeps the address and the
+row offers Open sign-in page, `studio:terminal.open-link`) and the studio never reads them: it is Ready once `opencode models --verbose` lists a model. OpenCode lists its
 own free models to anyone, so while those are all it lists the account is `none` and the Settings
 row reads Free models only with Sign in first; the free models still run. It has no sandbox of
 its own, so each session runs in `ProcessSandbox`: the workspace (a scratch folder when read-only)

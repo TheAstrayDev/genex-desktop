@@ -297,6 +297,7 @@ function terminalCalls(bridge: BridgeCalls) {
     terminalAcknowledge: (id, count) => invoke("studio:terminal.ack", { id, count }),
     terminalStop: (id) => invoke("studio:terminal.stop", { id }),
     terminalRemove: (id) => invoke("studio:terminal.remove", { id }),
+    terminalOpenLink: (id) => invoke("studio:terminal.open-link", { id }),
     onTerminal: (listener) => subscribe("studio:terminal", listener),
   } satisfies Partial<StudioApi>;
 }

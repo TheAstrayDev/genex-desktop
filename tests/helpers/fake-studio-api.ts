@@ -118,6 +118,7 @@ const METHODS = [
   "terminalAcknowledge",
   "terminalStop",
   "terminalRemove",
+  "terminalOpenLink",
   "onTerminal",
   "onClaudeLogin",
   "codexLoginState",

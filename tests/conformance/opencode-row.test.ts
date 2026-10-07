@@ -32,8 +32,8 @@ describe("OpenCode's row", () => {
     assert.equal(openCodeRowState(engine(EngineStatusCode.NeedsLogin), signingIn), OpenCodeRowState.SigningIn);
     assert.equal(
       openCodeRowState(engine(EngineStatusCode.Ready, LoginSource.System), signingIn),
-      OpenCodeRowState.Connected,
-      "another provider's sign-in, started from Connected, keeps the row connected",
+      OpenCodeRowState.SigningIn,
+      "another provider's sign-in, started from Connected, runs in the row with its Cancel",
     );
   });
 
