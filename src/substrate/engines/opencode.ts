@@ -64,8 +64,8 @@ const COMPLETE_TIMEOUT_MS = 15 * MINUTE_MS;
 const KILL_GRACE_MS = 3 * SECOND_MS;
 /** How much of stderr is kept to explain an exit the event stream never explained. */
 const STDERR_TAIL_CHARS = 4_000;
-/** Where OpenCode refreshes its model catalog; opened beside the provider's own host. */
-const MODELS_DEV_HOST = "models.dev";
+/** Where OpenCode refreshes its model catalogs; opened beside the provider's own hosts. */
+const CATALOG_HOSTS = ["models.dev", "models.opencode.ai"] as const;
 
 /** What this engine says to the person. */
 const MESSAGE = {
@@ -139,7 +139,7 @@ export class OpenCodeEngine implements Engine {
   readonly #listModels: (() => Promise<string>) | undefined;
   readonly #resolveCli: () => Promise<{ ready: boolean; path?: string; version?: string; detail: string }>;
   readonly #lockRecovery: string | undefined;
-  #hosts = new Map<string, string | null>();
+  #hosts = new Map<string, string[]>();
   /** Whether the last listing named a model some provider's sign-in runs, not only OpenCode's free ones. */
   #signedIn = false;
 
@@ -201,8 +201,10 @@ export class OpenCodeEngine implements Engine {
     binary: string | undefined,
   ): Promise<{ models: EngineModel[]; source: typeof ModelCatalogSource.Provider }> {
     const stdout = this.#listModels ? await this.#listModels() : await listOpenCodeModels(binary);
-    const listed = parseOpenCodeModels(stdout);
-    this.#hosts = new Map(listed.map((model) => [model.row.id, model.host]));
+    // A signed-in provider's models first: the picker starts with the first few it is given.
+    const parsed = parseOpenCodeModels(stdout);
+    const listed = [...parsed.filter((model) => !model.anonymous), ...parsed.filter((model) => model.anonymous)];
+    this.#hosts = new Map(listed.map((model) => [model.row.id, model.hosts]));
     this.#signedIn = listed.some((model) => !model.anonymous);
     return { models: listed.map((model: OpenCodeModel) => model.row), source: ModelCatalogSource.Provider };
   }
@@ -432,8 +434,8 @@ export class OpenCodeEngine implements Engine {
 
   /** The hosts a session may reach: its model's provider, or every listed provider when OpenCode picks. */
   #domains(model: string | undefined): string[] {
-    const hosts = model ? [this.#hosts.get(model) ?? null] : [...this.#hosts.values()];
-    return [...new Set([...hosts.filter((host): host is string => Boolean(host)), MODELS_DEV_HOST])];
+    const hosts = model ? (this.#hosts.get(model) ?? []) : [...this.#hosts.values()].flat();
+    return [...new Set([...hosts, ...CATALOG_HOSTS])];
   }
 
   async #sandboxOptions(

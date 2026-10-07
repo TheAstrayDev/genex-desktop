@@ -130,9 +130,10 @@ own free models to anyone, so while those are all it lists the account is `none`
 row reads Free models only with Sign in first; the free models still run. It has no sandbox of
 its own, so each session runs in `ProcessSandbox`: the workspace (a scratch folder when read-only)
 plus OpenCode's state and cache are writable, its own data folder is exempt from the credential
-denies for that sandbox only (`SandboxOptions.ownHome`), and only the picked model's provider host
-and `models.dev` are reachable. `OPENCODE_CONFIG_CONTENT` sets every permission to allow or deny,
-never ask, denies web fetch and other folders to a build, and lets a read-only session run only the
+denies for that sandbox only (`SandboxOptions.ownHome`), and only the picked model's provider hosts
+(the address OpenCode lists, or for a built-in provider listed with none, its known API and
+browser sign-in hosts) and OpenCode's catalogs (`models.dev`, `models.opencode.ai`) are reachable.
+`OPENCODE_CONFIG_CONTENT` sets every permission to allow or deny, never ask, denies web fetch and other folders to a build, and lets a read-only session run only the
 studio bridge (`node .studio/bridge/tool.mjs`), which carries the studio's tools as it does for Codex.
 A provider's HTTP status in an `error` event decides the failure kind, as for OpenRouter. Recorded
 streams: `tests/fixtures/transcripts/opencode-*` (OpenCode 1.18).

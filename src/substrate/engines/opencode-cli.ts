@@ -22,6 +22,31 @@ const MODEL_LINE = /^([\w.@-]+)\/(\S+)$/;
 const DEPRECATED = "deprecated";
 /** OpenCode's own provider (OpenCode Zen): it lists its free models to anyone, signed in or not. */
 const OWN_PROVIDER = "opencode";
+/**
+ * Where a built-in provider answers when OpenCode's listing names no address (its AI SDK's
+ * default), plus the hosts its browser sign-in uses (a ChatGPT plan answers on chatgpt.com and
+ * refreshes its token on auth.openai.com). A provider missing here reaches only its listed address.
+ */
+const PROVIDER_HOSTS: Readonly<Record<string, readonly string[]>> = {
+  openai: ["api.openai.com", "chatgpt.com", "auth.openai.com"],
+  anthropic: ["api.anthropic.com"],
+  google: ["generativelanguage.googleapis.com"],
+  "google-vertex": ["*.googleapis.com"],
+  "google-vertex-anthropic": ["*.googleapis.com"],
+  "amazon-bedrock": ["*.amazonaws.com"],
+  azure: ["*.openai.azure.com", "*.cognitiveservices.azure.com"],
+  "azure-cognitive-services": ["*.cognitiveservices.azure.com"],
+  "github-copilot": ["api.github.com"],
+  cerebras: ["api.cerebras.ai"],
+  cohere: ["api.cohere.com"],
+  deepinfra: ["api.deepinfra.com"],
+  groq: ["api.groq.com"],
+  mistral: ["api.mistral.ai"],
+  perplexity: ["api.perplexity.ai"],
+  togetherai: ["api.together.xyz"],
+  xai: ["api.x.ai"],
+  vercel: ["ai-gateway.vercel.sh"],
+};
 
 const MESSAGE = {
   Malformed: "OpenCode's model list could not be read.",
@@ -47,8 +72,8 @@ interface ListedModel {
 /** A model OpenCode can run, and the host its provider answers on (for the sandbox's network). */
 export interface OpenCodeModel {
   row: EngineModel;
-  /** The provider API's host (`opencode.ai`, `api.anthropic.com`), or null when the listing names none. */
-  host: string | null;
+  /** The hosts its provider answers on (`opencode.ai`; `api.openai.com` and its sign-in's), for the sandbox. */
+  hosts: string[];
   /** One of OpenCode's own free models, which it runs with no sign-in at all. */
   anonymous: boolean;
 }
@@ -74,6 +99,12 @@ function apiHost(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/** The hosts a provider answers on: the address its listing names, and its built-in hosts. */
+function providerHosts(provider: string, url: unknown): string[] {
+  const listed = apiHost(url);
+  return [...new Set([...(listed ? [listed] : []), ...(PROVIDER_HOSTS[provider] ?? [])])];
 }
 
 /** The reasoning variants a model offers (`--variant`), in the order OpenCode lists them. */
@@ -111,7 +142,7 @@ export function openCodeModel(listed: ListedModel): OpenCodeModel | null {
     note: priceNote(provider, input, output),
   };
   const anonymous = provider === OWN_PROVIDER && input === 0 && output === 0;
-  return { row, host: apiHost(listed.api?.url), anonymous };
+  return { row, hosts: providerHosts(provider, listed.api?.url), anonymous };
 }
 
 /**

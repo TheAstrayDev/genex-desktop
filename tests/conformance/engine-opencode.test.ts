@@ -75,7 +75,7 @@ describe("OpenCode's model list", () => {
     assert.equal(pickle?.row.supportsThinking, true);
     assert.equal(pickle?.row.efforts, undefined, "no variants, no dial");
     assert.equal(pickle?.row.note, "opencode · Free");
-    assert.equal(pickle?.host, "opencode.ai", "the provider's host, for the sandbox's network");
+    assert.deepEqual(pickle?.hosts, ["opencode.ai"], "the provider's host, for the sandbox's network");
     assert.ok(
       listed.every((model) => model.anonymous),
       "OpenCode's own free models run with no sign-in at all",
@@ -84,13 +84,27 @@ describe("OpenCode's model list", () => {
     assert.equal(ling?.row.defaultEffort, "low");
   });
 
+  it("reaches a built-in provider that lists no address on its SDK's hosts, and its browser sign-in's", () => {
+    const builtIn = (provider: string) =>
+      parseOpenCodeModels(
+        `${provider}/m\n${JSON.stringify({ id: "m", providerID: provider, capabilities: { toolcall: true } }, null, 2)}`,
+      )[0]?.hosts;
+    assert.deepEqual(
+      builtIn("openai"),
+      ["api.openai.com", "chatgpt.com", "auth.openai.com"],
+      "a ChatGPT sign-in answers on chatgpt.com and refreshes on auth.openai.com",
+    );
+    assert.deepEqual(builtIn("anthropic"), ["api.anthropic.com"]);
+    assert.deepEqual(builtIn("unheard-of"), [], "an unknown provider with no address reaches nothing new");
+  });
+
   it("skips what it cannot run, and refuses a listing that is not one", () => {
     const entry = (fields: Record<string, unknown>) =>
       `p/m\n${JSON.stringify({ id: "m", providerID: "p", capabilities: { toolcall: true }, ...fields }, null, 2)}`;
     assert.deepEqual(parseOpenCodeModels(entry({ capabilities: { toolcall: false } })), []);
     assert.deepEqual(parseOpenCodeModels(entry({ status: "deprecated" })), []);
-    assert.equal(parseOpenCodeModels(entry({ api: { url: "http://insecure.example/v1" } }))[0]?.host, null);
-    assert.equal(parseOpenCodeModels(entry({ api: { url: "not a url" } }))[0]?.host, null);
+    assert.deepEqual(parseOpenCodeModels(entry({ api: { url: "http://insecure.example/v1" } }))[0]?.hosts, []);
+    assert.deepEqual(parseOpenCodeModels(entry({ api: { url: "not a url" } }))[0]?.hosts, []);
     assert.deepEqual(parseOpenCodeModels(""), [], "an empty listing is nothing signed in, not an error");
     assert.equal(parseOpenCodeModels(entry({}))[0]?.anonymous, false, "another provider's model needs its sign-in");
     const zen = (cost: Record<string, unknown>) =>
@@ -162,6 +176,17 @@ describe("OpenCode's account", () => {
   it("is OpenCode's own sign-in once it lists a provider's model", async () => {
     assert.equal((await account(signedIn(await fixture("opencode-models-1.18.txt")))).source, "system");
   });
+
+  it("lists a signed-in provider's models before its own free ones, so the picker starts with them", async () => {
+    const root = await tmpDir("opencode-account-");
+    const listing = signedIn(await fixture("opencode-models-1.18.txt"));
+    const engine = new OpenCodeEngine({ scratchRoot: root, resolveCli: ready, listModels: async () => listing });
+    await engine.refreshModels(true);
+    assert.deepEqual(
+      (await engine.models()).map((model) => model.id),
+      ["anthropic/claude-x", "opencode/big-pickle", "opencode/ling-3.0-flash-fin-free"],
+    );
+  });
 });
 
 describe("OpenCode sessions", () => {
@@ -205,7 +230,11 @@ describe("OpenCode sessions", () => {
     assert.equal(config.permission.webfetch, "deny");
     assert.equal(config.autoupdate, false);
     assert.equal(invocation?.env.OPENCODE_DISABLE_AUTOUPDATE, "1");
-    assert.deepEqual(invocation?.domains, ["opencode.ai", "models.dev"], "only the model's own provider is reachable");
+    assert.deepEqual(
+      invocation?.domains,
+      ["opencode.ai", "models.dev", "models.opencode.ai"],
+      "only the model's own provider and OpenCode's catalogs are reachable",
+    );
   });
 
   it("resumes by session id, and asks a model for an effort only when it offers that variant", async () => {
