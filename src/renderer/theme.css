@@ -2828,12 +2828,16 @@ button.chat-header-title:hover {
 .terminal-dock[hidden] {
   display: none;
 }
-.terminal-dock .xterm {
+/* The dock's terminals and a sign-in's terminal in Settings fill their box in the app's colours. */
+:is(.terminal-dock, [data-sign-in-terminal]) .xterm {
   height: 100%;
 }
-.terminal-dock .xterm-viewport {
+:is(.terminal-dock, [data-sign-in-terminal]) .xterm-viewport {
   background-color: var(--background);
   overscroll-behavior: contain;
+}
+.xterm .xterm-scrollable-element > .scrollbar > .slider {
+  border-radius: 99px;
 }
 
 /* Only current work animates. History and disclosures mount without entrance choreography. */

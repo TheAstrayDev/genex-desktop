@@ -113,8 +113,10 @@ export function createLoginControllers({
         file: cli.path,
         args: ["auth", "login"],
         cwd: os.tmpdir(),
-        // Its own sign-in: OpenCode's settings, no other vendor's variables and no credential.
-        env: childEnv(cli.env, { base: "contractor", vendor: "opencode" }),
+        // Its own sign-in: OpenCode's settings, no other vendor's variables and no credential. Its
+        // provider list comes from the catalog it already has: a refresh can stall for minutes
+        // before the first question, and the engine refreshes the models itself after.
+        env: childEnv(cli.env, { base: "contractor", vendor: "opencode", set: { OPENCODE_DISABLE_MODELS_FETCH: "1" } }),
         title: "OpenCode sign-in",
         kind: TerminalKind.OpenCodeLogin,
         onExit: () => {

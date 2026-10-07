@@ -403,6 +403,11 @@ describe("both sign-in paths go through the controllers", () => {
     assert.equal(opened[0]?.kind, "opencode-login");
     assert.equal(opened[0]?.env.ANTHROPIC_API_KEY, undefined, "no other vendor's key reaches the sign-in");
     assert.equal(opened[0]?.env.OPENCODE_CONFIG, "/oc.json");
+    assert.equal(
+      opened[0]?.env.OPENCODE_DISABLE_MODELS_FETCH,
+      "1",
+      "the provider list never waits on a catalog download that can stall",
+    );
     exit?.(0);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(signedIn, 1);
