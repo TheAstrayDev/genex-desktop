@@ -90,12 +90,15 @@ test("Settings choices override the rule, and the provider default always shows"
   );
 });
 
-test("a catalog with no versions to read lists every model, but OpenRouter's hundreds start with its first eight", () => {
+test("the metered catalogs start with their first few: OpenRouter's three, OpenCode's two beside its default", () => {
   const listed = Array.from({ length: 20 }, (_, index) => row(`vendor/m${index}`, `M${index}`));
-  assert.equal(latestModels(EngineId.OpenCode, listed).size, 20);
   assert.deepEqual(
     [...latestModels(EngineId.OpenRouter, listed)],
-    listed.slice(0, 8).map((model) => model.id),
+    listed.slice(0, 3).map((model) => model.id),
+  );
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenCode, [row("default", "Default"), ...listed])],
+    listed.slice(0, 2).map((model) => model.id),
   );
   assert.equal(shownModels(EngineId.OpenRouter, listed, { "vendor/m15": true }).has("vendor/m15"), true);
   assert.equal(shownModels(EngineId.OpenRouter, listed, { "vendor/m0": false }).has("vendor/m0"), false);

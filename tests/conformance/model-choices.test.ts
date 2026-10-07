@@ -338,7 +338,7 @@ test("metered engines sit in groups of their own, never among local models, and 
       status: { code: "ready", detail: "Fixture ready" },
       supportsSessions: true,
       defaultModel: null,
-      models: [model("opencode/big-pickle", "Big Pickle"), model("anthropic/claude-x", "Claude X")],
+      models: ids.map((id) => model(id)),
     },
   ];
   const choices = toChoices(metered);
@@ -348,7 +348,7 @@ test("metered engines sit in groups of their own, never among local models, and 
   assert.ok(!openRouter.some((choice) => choice.key === "openrouter::default"), "OpenRouter picks no model for anyone");
   assert.equal(
     openRouter.filter((choice) => !choice.hidden).length,
-    8,
+    3,
     "only the first few are listed until Settings says more",
   );
   assert.equal(resolveChoice(choices, "openrouter::vendor/model-29")?.hidden, true);
@@ -363,7 +363,11 @@ test("metered engines sit in groups of their own, never among local models, and 
     openCode.some((choice) => choice.key === "opencode::default"),
     "OpenCode runs its own default model",
   );
-  assert.ok(openCode.every((choice) => !choice.hidden));
+  assert.equal(
+    openCode.filter((choice) => !choice.hidden).length,
+    3,
+    "OpenCode's default and its first two, until Settings says more",
+  );
 
   const signedOut = toChoices([{ ...metered[0]!, status: { code: "needs_login", detail: "no key" }, models: [] }]);
   assert.deepEqual(
