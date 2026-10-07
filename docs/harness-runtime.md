@@ -186,7 +186,8 @@ file in the agent's memory (`RecoveryService.noteSeedMoves`), taken back once th
 longer defines the moved code. A renamed name or module (`substrate/seed-renames.ts`) is carried
 into the agent's files instead: before the pass, a kept or agent-written module has its old names
 rewritten, the original backed up, and an edited copy of a renamed module moves to its new path;
-`applySeed` lists them (`renamed`).
+`applySeed` lists them (`renamed`). An old name that is also an English word changes only in code,
+never in a comment, string or pattern, so the agent's own prose comes through every boot as written.
 
 Scheduled for removal: the long turn (`directorLoop: "turn"`, `STUDIO_DIRECTOR_LOOP=turn`, its
 `wait` tool, continuation prompts and `.studio/DIRECTOR.md` memory), the way back from the wake

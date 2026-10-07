@@ -14,7 +14,8 @@ every user's workspace, where in-app engines read them.
   When you move exported code from one seed file to another, add the move to `SEED_MOVES` in
   `substrate/seed-upgrade.ts` so a kept copy of the old file is reported (`moved`). When you
   rename an exported name or a module, add it to `substrate/seed-renames.ts`: the upgrade rewrites
-  the old name in the agent's kept files, or the harness stops loading.
+  the old name in the agent's kept files, or the harness stops loading. An old name that is also an
+  English word goes in its `ENGLISH_NAMES` too, so prose keeps it.
 - It is TypeScript run by type stripping: the in-app agent edits it at runtime, and the harness
   runs it under Electron's Node (`ELECTRON_RUN_AS_NODE`) with no build step, so erasable syntax
   only and `.ts` import specifiers. Keep it dependency-free. It is its own strict project

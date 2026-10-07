@@ -116,7 +116,7 @@ describe("the rename in one module's source", () => {
   it("leaves English, look-alike names and other modules alone, and comments keep their English", () => {
     const untouched = [
       "// what tonight's Night taught us",
-      " * the Night it led, tonight",
+      "/**\n * the Night it led, tonight\n */",
       'const prompt = "a race at night";',
       "const knightMove = midnight + nightly;",
       'import { nightly } from "./nightly.ts";',
@@ -124,6 +124,30 @@ describe("the rename in one module's source", () => {
     ];
     for (const line of untouched) assert.equal(renameInSource("loop/director/x.ts", line), line, line);
     assert.equal(renameInSource("loop/x.ts", "// bindNight and closeTheNight"), "// bindLoopRun and closeTheLoopRun");
+  });
+
+  it("keeps English in strings, template text and patterns, and renames the code beside it", () => {
+    const before = [
+      'const title = "Night falls on the track"; const run: Night = night;',
+      "const brief = `Race tonight.",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: module source with a template in it
+      "Night mode: ${night.tonight.map((r) => `${r.part} tonight`).length} laps`;",
+      "const quote = /[\"'`]/; const word = /\\bNight\\b/g; let next: Night;",
+      'type Counters = Pick<NightData, "tonight">; // the counters tonight',
+      "const half = night.rounds / 2; const tally: Night[] = [];",
+      'const share = parts[0]! / total; const named = !/"Night"/.test(title); let mine: Night;',
+    ].join("\n");
+    const after = [
+      'const title = "Night falls on the track"; const run: LoopRun = night;',
+      "const brief = `Race tonight.",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: module source with a template in it
+      "Night mode: ${night.runLedger.map((r) => `${r.part} tonight`).length} laps`;",
+      "const quote = /[\"'`]/; const word = /\\bNight\\b/g; let next: LoopRun;",
+      'type Counters = Pick<LoopRunData, "runLedger">; // the counters tonight',
+      "const half = night.rounds / 2; const tally: LoopRun[] = [];",
+      'const share = parts[0]! / total; const named = !/"Night"/.test(title); let mine: LoopRun;',
+    ].join("\n");
+    assert.equal(renameInSource("loop/director/x.ts", before), after);
   });
 
   it("finds nothing to rename in a workspace on the current names, every module of it edited", async () => {
