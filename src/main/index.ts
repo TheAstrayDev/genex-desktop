@@ -144,6 +144,7 @@ import { TerminalKind } from "../shared/terminal.ts";
 import {
   flagValue,
   hasFlag,
+  linuxSecretStorageSwitches,
   quitsWhenLastWindowCloses,
   StudioFlag,
   testLaunchChromiumSwitches,
@@ -273,6 +274,12 @@ const isSmoke = hasFlag(StudioFlag.Smoke);
 for (const [name, value] of testLaunchChromiumSwitches({
   platform: process.platform,
   testLaunch: isSmoke || isSelfTest,
+}))
+  app.commandLine.appendSwitch(name, value);
+for (const [name, value] of linuxSecretStorageSwitches({
+  platform: process.platform,
+  env: process.env,
+  hasPasswordStoreSwitch: app.commandLine.hasSwitch("password-store"),
 }))
   app.commandLine.appendSwitch(name, value);
 // Controlled read gates for the isolated UI acceptance only; never populated in normal use.

@@ -54,7 +54,7 @@ Enabled, connected, authenticated and service-ready are separate facts.
 Worker session activity carries role/run/task identity and cannot replace the orchestrator's
 phase. Reply text streams are thread/delegation-scoped and reconciled to durable messages;
 tool completion alone does not imply that a build or its independent checks passed.
-Plugin rows put account state beneath the description and one aligned recovery/settings button beside the toggle. Recovery unlocks saved authorization or begins browser sign-in; status polling never unlocks credentials. Optional connections remain opt-in.
+Plugin rows put account state beneath the description and one aligned recovery/settings button beside the toggle. Recovery unlocks saved authorization or begins browser sign-in; status polling never unlocks credentials. A recovery the locked secret store refuses says why (for example, no system keyring is running). Optional connections remain opt-in.
 An idle plugin backend is lazy, not failed. MCP readiness and tool counts belong to the selected
 project's transport; another project's successful connection is not evidence of readiness here.
 A plugin's missing account or required setting is a global setup requirement, so it remains
@@ -133,7 +133,9 @@ Genex Connect advances one account flow without an extra Studio confirmation: ex
 when required, and host-owned completion polling. Closing its panel does not discard the flow.
 An already unlocked account is leased in memory to Genex's backend and declared MCP transports;
 restarting a child does not independently reread Keychain. A successful connection/unlock records host-owned remember intent. On app restart, enabled installed plugins with that intent restore the saved encrypted credential once. Explicit re-enable or reinstall also restores that saved authorization once, without browser sign-in. A refused OS unlock remains failed until another explicit action; duplicate enable requests and status polling never retry. Explicit disconnect clears remember intent before credential deletion. Older installations establish intent on their next successful Connect/Unlock.
-Studio never resets Keychain. Legitimate OS consent remains possible.
+Studio never resets Keychain. Legitimate OS consent remains possible. On Linux, non-KDE sessions
+use the Secret Service backend and KDE keeps KWallet; without OS-backed encryption the
+connection remains locked and credentials are never stored through Electron's `basic_text` fallback.
 
 Coding uses the selected subscription/local provider. Signing in enables Genex asset generation,
 charged to the connected Genex account; there is no separate Studio spending setup.

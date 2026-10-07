@@ -1066,14 +1066,13 @@ with a managed local runtime; core has no special Blender tool.
   removed games). It turns old-root games into aliases so names and threads hold; the sandbox gains
   write access to the new root.
 - **Secrets.** `SecretStore` ([`src/substrate/secrets.ts`](../../src/substrate/secrets.ts)) is
-  Keychain-backed through safeStorage and fails closed without OS encryption, raising
-  `SecretStorageUnavailableError` with a `SecretStorageIssue` code. On Linux, safeStorage's
-  `basic_text` backend (no keyring or wallet) counts as locked: its key is public. A value the
-  current key cannot decrypt (the app's safeStorage key is named after the app, so values saved
-  as "AI Game Studio" are unreadable as Genex) reads as missing, so the Genex account and MCP
-  connectors ask to be connected again; a store locked right now still throws. Plaintext
-  backends exist only for tests. Settings writes, the coding-CLI override and connector files use atomic
-  writes ([`src/substrate/fsx.ts`](../../src/substrate/fsx.ts)).
+  Keychain-backed through safeStorage and fails closed, raising `SecretStorageUnavailableError` with
+  a `SecretStorageIssue` code. On Linux, `basic_text` (a public key) or a backend that cannot start
+  reports `NoKeyring`; startup asks for the Secret Service outside KDE (`linuxSecretStorageSwitches`).
+  A value the current key cannot decrypt reads as missing; a store locked right now still throws.
+  Cookie encryption uses the same store, so a session whose keyring stays locked at login prompts on
+  each launch. Plaintext backends are tests only. Settings, coding-CLI override and connector files
+  use atomic writes ([`src/substrate/fsx.ts`](../../src/substrate/fsx.ts)).
 - **Skill inventory.** `studio:skills.list` resolves the host's harness workspace, returns bounded
   active skill text, excludes symlinks and `.best.md` archives and never takes a root from the
   renderer.

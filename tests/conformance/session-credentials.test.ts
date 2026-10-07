@@ -6,7 +6,8 @@ import path from "node:path";
 import http from "node:http";
 import { SessionCredentials } from "../../src/substrate/session-credentials.ts";
 import { GenexTools } from "../../src/plugins/genex/adapter.ts";
-import { SecretStore, electronBackend } from "../../src/substrate/secrets.ts";
+import { SecretStorageUnavailableError, SecretStore, electronBackend } from "../../src/substrate/secrets.ts";
+import { SecretStorageIssue } from "../../src/shared/secret-storage.ts";
 
 test("background reads never unlock; concurrent explicit unlocks share one read", async () => {
   let reads = 0;
@@ -44,6 +45,36 @@ test("cancelled unlock stays failed across refreshes and retries only explicitly
   assert.equal(reads, 1);
   await assert.rejects(credentials.unlock());
   assert.equal(reads, 2);
+});
+
+test("a locked secret store names its cause when unlock or save is refused", async () => {
+  const refused = () => {
+    throw new SecretStorageUnavailableError(SecretStorageIssue.NoKeyring);
+  };
+  const credentials = new SessionCredentials({
+    get: async () => refused(),
+    set: async () => refused(),
+    clear: async () => {},
+  });
+  await assert.rejects(credentials.unlock(), /could not be unlocked.*Start GNOME Keyring or KWallet/s);
+  assert.equal(credentials.state, "failed");
+  assert.match(credentials.takeRefusal()?.message ?? "", /Start GNOME Keyring or KWallet/);
+  assert.equal(credentials.takeRefusal(), null, "a refusal is taken once");
+  await assert.rejects(credentials.set("fixture"), /save failed.*Start GNOME Keyring or KWallet/s);
+  credentials.lock();
+  assert.equal(credentials.takeRefusal(), null, "a lock forgets the refusal");
+});
+
+test("a plain storage failure leaves no refusal to pass on", async () => {
+  const credentials = new SessionCredentials({
+    get: async () => {
+      throw new Error("cancelled");
+    },
+    set: async () => {},
+    clear: async () => {},
+  });
+  await assert.rejects(credentials.unlock(), /Automatic retries are paused/);
+  assert.equal(credentials.takeRefusal(), null);
 });
 
 test("disconnect prevents an in-flight unlock from restoring a token", async () => {

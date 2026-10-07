@@ -36,7 +36,7 @@ const MESSAGE = {
 const LOCKED_MESSAGE = {
   [SecretStorageIssue.OsCredentialsDisabled]: "OS credential access is disabled for this process.",
   [SecretStorageIssue.EncryptionUnavailable]: "OS encryption is unavailable; secret storage remains locked.",
-  [SecretStorageIssue.NoKeyring]: "No OS keyring is available; secret storage remains locked.",
+  [SecretStorageIssue.NoKeyring]: "No system keyring is running. Start GNOME Keyring or KWallet, then restart Studio.",
 } as const satisfies Record<SecretStorageIssue, string>;
 
 /** The secret store is locked, and `issue` says why; nothing was written. */
@@ -76,8 +76,11 @@ export interface SafeStorage {
 export function safeStorageBackend(safeStorage: SafeStorage): CryptoBackend {
   const unavailable = (): SecretStorageIssue | null => {
     assertOsCredentialsAllowed();
+    // `getSelectedStorageBackend` exists only on Linux, and names the backend chosen, not one that started.
+    const onLinux = safeStorage.getSelectedStorageBackend !== undefined;
     if (safeStorage.getSelectedStorageBackend?.() === LINUX_PLAINTEXT_BACKEND) return SecretStorageIssue.NoKeyring;
-    return safeStorage.isEncryptionAvailable() ? null : SecretStorageIssue.EncryptionUnavailable;
+    if (safeStorage.isEncryptionAvailable()) return null;
+    return onLinux ? SecretStorageIssue.NoKeyring : SecretStorageIssue.EncryptionUnavailable;
   };
   return {
     name: "electron-safeStorage",

@@ -52,6 +52,17 @@ describe("secret store backends", () => {
     assert.deepEqual(await readdir(dir), []);
   });
 
+  it("reports NoKeyring, not EncryptionUnavailable, when a selected Linux backend cannot start", async () => {
+    const backend = safeStorageBackend(fakeSafeStorage({ backend: "gnome_libsecret", available: false }));
+    const dir = await emptyDir();
+    await rejectsWith(SecretStore.open(dir, { backend }), SecretStorageIssue.NoKeyring);
+    await rejectsWith(
+      SecretStore.open(await emptyDir(), { backend, allowPlaintext: true }),
+      SecretStorageIssue.NoKeyring,
+    );
+    assert.deepEqual(await readdir(dir), []);
+  });
+
   it("refuses basic_text even when the caller would accept plaintext", async () => {
     const backend = safeStorageBackend(fakeSafeStorage({ backend: "basic_text" }));
     await rejectsWith(
