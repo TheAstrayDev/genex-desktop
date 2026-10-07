@@ -263,7 +263,7 @@ describe("a chat's own Claude session asks the person", () => {
   });
 
   it("a read-only brief stays read-only, whatever else it carries", async () => {
-    // Upstream's read-only sessions (a waking night's lead, the coordinator, a playtester) are never
+    // Upstream's read-only sessions (a waking run's lead, the coordinator, a playtester) are never
     // the person's own: the host hands them no `permissions` (a lead the person talks to gets
     // `leadAsks`, below), and the engine keeps them read-only anyway.
     const { fn, seen } = fakeQuery();
@@ -840,7 +840,7 @@ describe("a chat's own Claude session asks the person", () => {
  */
 describe("a build's lead asks from the chat's mode, and the host answers", () => {
   const leadRequest = (extra: Record<string, unknown> = {}) => ({
-    prompt: "lead the night",
+    prompt: "lead the run",
     cwd: "/tmp/game-workspace",
     readOnly: true,
     resume: "chat-session",

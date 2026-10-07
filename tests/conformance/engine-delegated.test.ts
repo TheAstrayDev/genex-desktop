@@ -286,7 +286,7 @@ describe("claude code delegated engine", () => {
   });
 
   it("turns a weekly cap into usage_limit — the run must end, not wait", async () => {
-    // The wording the CLI actually used the night a run burned every facet's strikes on it.
+    // The wording the CLI actually used the run a run burned every facet's strikes on it.
     const root = await tmpDir("studio-engine-");
     const { fn } = fakeQuery([], {
       throwOn: new Error("You've hit your weekly limit · resets Sep 1 at 10am (Europe/Belgrade)"),
@@ -608,7 +608,7 @@ describe("claude code delegated engine", () => {
   });
 
   /**
-   * One session: a waking night's lead is its chat's own session, resumed in the game folder where
+   * One session: a waking run's lead is its chat's own session, resumed in the game folder where
    * that session lives, with the integration worktree it leads readable and no hands of its own.
    */
   it("resumes a read-only lead in the game folder, with the build it leads readable and nothing to write with", async () => {
@@ -617,7 +617,7 @@ describe("claude code delegated engine", () => {
     const game = "/tmp/game-workspace";
     const build = "/tmp/studio-scratch/autopilot/run_lead/integration";
     await engine.delegate({
-      prompt: "lead the night",
+      prompt: "lead the run",
       cwd: game,
       readOnly: true,
       resume: "chat-session",

@@ -56,7 +56,7 @@ export const VerdictRule = {
 } as const;
 export type VerdictRule = (typeof VerdictRule)[keyof typeof VerdictRule];
 
-/** The rules of a build judged with nothing before it: a night from an empty game, or a start nobody could photograph. */
+/** The rules of a build judged with nothing before it: a run from an empty game, or a start nobody could photograph. */
 const NOTHING_TO_COMPARE: ReadonlySet<string> = new Set([VerdictRule.FirstBuild, VerdictRule.NoStart]);
 
 /** Whether a verdict's build had nothing to be compared with, so it was judged on its own. */
@@ -140,7 +140,7 @@ export type ExecutionStatus = (typeof ExecutionStatus)[keyof typeof ExecutionSta
 export const JournalPhase = {
   /** The classic pipeline's one-part run. */
   Single: "single",
-  /** A director night: the lead's own session. */
+  /** A director run: the lead's own session. */
   Director: "director",
   Base: "base",
   Facets: "facets",
@@ -176,7 +176,7 @@ export function isCompletionPolicy(value: unknown): value is CompletionPolicy {
 /**
  * How long a run has worked since its working time began: the stretches it ran, never a pause or
  * the hours the app was closed under it. The harness counts its budget the same way (its journal's
- * `nightClock`), so a resumed build goes on from the time it worked, not from its first start.
+ * `loopRunClock`), so a resumed build goes on from the time it worked, not from its first start.
  */
 export interface RunWorked {
   /** The working time of its closed stretches, in ms. */

@@ -1,5 +1,5 @@
 /**
- * The director's rules: everything the night decides by rule, with no night of its own — the
+ * The director's rules: everything the run decides by rule, with no run of its own — the
  * plan and worker specs it compiles, the monitor's findings, the landing sentences, the defect
  * router.
  *
@@ -10,7 +10,7 @@
  * (tool-specs.ts), the digests a wait and a status answer with (digests.ts) and the briefs the
  * sessions open with (briefs.ts).
  *
- * It imports no part of the night, so the parts can use it without an import cycle.
+ * It imports no part of the run, so the parts can use it without an import cycle.
  */
 import { shortSha } from "../git.ts";
 import { Side } from "../judge.ts";
@@ -45,8 +45,8 @@ import { visionRefusalWords } from "../vision-prompts.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { Check, FacetSpec } from "../spec.ts";
-// Type-only: erased at runtime, so rules.ts still imports no part of the night.
-import type { Worker } from "./night.ts";
+// Type-only: erased at runtime, so rules.ts still imports no part of the run.
+import type { Worker } from "./loop-run.ts";
 
 export { list, namedTitle, num, parseJson, slug, withoutFrames, yes } from "./args.ts";
 export {
@@ -123,12 +123,12 @@ const PART_DONE = 6;
 const PART_QUOTED = 80;
 
 /**
- * The run's own starting points: the empty scaffold a from-scratch night began on, and the
+ * The run's own starting points: the empty scaffold a from-scratch run began on, and the
  * commit its base stage accepted. A blank picture on one of these is the stage's honest output,
  * so every pass that looks at one looks as the harness's base pass (the only pass gauntlet lets
- * off blankness), and the close does not count one as a night's work.
+ * off blankness), and the close does not count one as a run's work.
  *
- * The base commit comes back on a resume too: a night killed before any worker merged resumes
+ * The base commit comes back on a resume too: a run killed before any worker merged resumes
  * standing on its own empty base, and a set that had forgotten it refused every worker with
  * "the build does not run" — the failure the base stage exists to prevent.
  */
@@ -150,7 +150,7 @@ export function startingHeads({
 /**
  * What the landing can honestly claim about the build it made live. A health pass says the
  * build loads; only a blind pick over the build the user had says it is better. The first
- * director night landed on "it loaded" and reported "the judge had passed it"; the second could
+ * director run landed on "it loaded" and reported "the judge had passed it"; the second could
  * have reported a pick over another worker's dead end — or a yes to any question at all — as
  * the same thing, because nothing recorded what the comparison had been against.
  *
@@ -313,9 +313,9 @@ function planParts(workers: unknown): { parts: PlanPart[]; error?: undefined } |
 }
 
 /**
- * The night's plan, compiled (M3.8). The first director night had none: five workers started at
+ * The run's plan, compiled (M3.8). The first director run had none: five workers started at
  * 16:25 on a 900-character decision card and a gitignored file, and the morning's Builds page
- * showed ten parts, half of them red, with no page saying what the night set out to do. The
+ * showed ten parts, half of them red, with no page saying what the run set out to do. The
  * plan is now an object the harness holds the director to — the ids here are the ids
  * `worker_start` is called with — and one card in the user's chat.
  *
@@ -657,7 +657,7 @@ function notVerifiedWords(base: AnyRecord | null, forkedFrom: string | null): st
  * and the requested-state probe added, everything validated — and then read once against the
  * state the fork point actually reports (`base`, cached by whoever last looked at that commit).
  *
- * The dry run is the difference between a contract and a wish. The first director night wrote
+ * The dry run is the difference between a contract and a wish. The first director run wrote
  * thirteen probes over `state.<facet>.<field>`, started five workers on them and read
  * `missing: …` on every board for six hours. Here a path the build does not report comes back
  * as `unsatisfiable` with the keys it does have, and rides into the builder's brief as a note.

@@ -227,7 +227,7 @@ edits (`skill-edits.ts`) — and the seed keeps its own. `tests/conformance/seed
 and `tests/conformance/providers.test.ts` replay the same inputs through both copies. Other
 two-copy rules: the ownership glob ([`src/substrate/ownership.ts`](../../src/substrate/ownership.ts)
 and the seed's `loop/review.ts`), and the engine-export refusal (`ENGINE_EXPORT_REFUSAL` in
-[`shape-words.ts`](../../src/shared/shape-words.ts) and the seed's `nightRefusal`). See the
+[`shape-words.ts`](../../src/shared/shape-words.ts) and the seed's `loopRunRefusal`). See the
 [seed contract recipe](recipes.md#seed-contract). `verify:architecture` fails any new import
 cycle in `src`; [`scripts/boundary-allowlist.json`](../../scripts/boundary-allowlist.json) is empty
 and must stay so.
@@ -255,7 +255,7 @@ conversation in `ChatConversation.tsx`. First launch is `onboarding/` (pure
 decisions in `state.ts`, the canvas art in `art.ts`).
 
 **Words.** Every user-facing label derived from harness vocabulary — statuses, verdict sources,
-stop reasons, tool names, the night's headline, `problemWords` — lives in
+stop reasons, tool names, the run's headline, `problemWords` — lives in
 [`src/renderer/words.ts`](../../src/renderer/words.ts). No other renderer file translates a verdict
 source or status literal or renders a raw harness status, run id or sha
 (`tests/conformance/words.test.ts`). The ported rail files (`ui/kit.tsx`, `ui/icons.tsx`,
@@ -329,7 +329,7 @@ Explicit Studio messages bypass game coordinators: `loop/studio-chat.ts` calls `
 with no tools, a bounded window, current attachments and host-owned `studio.context`; it never
 delegates or edits games, settings or harness files, and a blank reply is a durable error.
 
-**Stage, Live's gate and morning card.** While a night runs the stage stays where the user left
+**Stage, Live's gate and morning card.** During a run the stage stays where the user left
 it, and Live changes only through the user's own loads (the renderer's IPC, and `show_build` /
 `land_build` answering a still unanswered message of the person's, `ChatPermissionService.awaitsAnswer`,
 while Live, holding that game, is out of sight, `PreviewService.liveOutOfSight`; otherwise a show
@@ -342,7 +342,7 @@ uncommitted sizes and times) moved since Live loaded it, or a build Live is not 
 its commit), emits `live.behind`; the person's Reload (`reloadLive`) applies it and any live load
 that succeeded clears it. The event says which build Live shows (`shows`, whichever path
 loaded it), and the stage reads the whole state on mount (`studio:live.behind`). The renderer
-(`stage.ts`, `stage/live-behind.ts`) adds the night's newest healthy build Live does not show and
+(`stage.ts`, `stage/live-behind.ts`) adds the run's newest healthy build Live does not show and
 a shown build found broken, applies what main holds when Live is not watched, and swaps only the
 empty scaffold's first healthy build by itself. Live preview candidates load in a staging preview
 first; a candidate and a session never borrow Live when the pool is full, and a session never
@@ -439,7 +439,7 @@ to the judges' engine. A worker's `usage_limit`/`rate_limit` becomes `state.work
 message's picks with `withRoles`, planned on the session's model; the coordinator's keeps the
 build's (`reopenedRun`). An unready provider's remembered pick is kept; a Loop send with it is
 refused (`requireAvailableRoles`). Stored roles are versioned; another preset table's record is
-replaced once. `tests/conformance/director-cross-engine.test.ts` runs a crossed night end to end.
+replaced once. `tests/conformance/director-cross-engine.test.ts` runs a crossed run end to end.
 
 **One engine voice.** `toolCall(engine, name)` and `toolSyntax(engine)` in the seed's
 `loop/model-roles.ts` are the only place the harness branches on the engine (Claude reads
@@ -468,7 +468,7 @@ The harness is TypeScript run by type stripping, dependency-free, with `.ts` imp
 the [harness runtime guide](../harness-runtime.md) and [src notes](../../src/AGENTS.md#harness-seed).
 Its modes (director, autopilot, facet loop, gauntlet, spike) share primitives from `loop/git.ts`,
 `evidence.ts`, `build-turn.ts`, `config.ts` and `outcomes.ts`. The two largest are folders:
-`loop/director/` (the night's parts) and `loop/facet/` (the facet loop's state, policy and
+`loop/director/` (the run's parts) and `loop/facet/` (the facet loop's state, policy and
 scoring, one `phases/*.ts` file per round phase); model-facing text sits in sibling
 `*-prompts.ts` modules.
 
@@ -526,13 +526,13 @@ healthy. The wedge watchdog ignores time the Mac was asleep (a tick more than th
 resets the silence clock) and a host call in flight; page and record calls end at their deadline
 (`substrate/rpc-deadlines.ts`). Three exits in five minutes or ten silent minutes trigger recovery.
 
-**A harness child dying mid-night** is repaired without an app restart (`onUnexpectedExit`,
+**A harness child dying mid-run** is repaired without an app restart (`onUnexpectedExit`,
 [feature map](feature-map.md)): StudioCore aborts every delegation, `run.settled` per open run
-frees the idle watch, and the reborn loop closes each night as paused (`openRuns`) for `core/auto-resume.ts`
+frees the idle watch, and the reborn loop closes each run as paused (`openRuns`) for `core/auto-resume.ts`
 ([automatic resume](../harness-runtime.md#automatic-resume)). A run a quit or
 crash interrupted is repaired at boot as paused, keyed on its journal artifact; its synthetic
 `run_finished` claims a build only when the head moved off the base, and Resume goes on from that
-journal ([the full journal](#the-night-director-workers-and-judging)). The Mac is held awake from
+journal ([the full journal](#the-run-director-workers-and-judging)). The Mac is held awake from
 `run.keepawake` until `run.settled`.
 
 **Learned changes** are applied, listed and undone by the host
@@ -544,7 +544,7 @@ reverses its diff alone, recording `self_change_undone`. Rewinds restore `librar
 `rollbackTo` refuses during a run, contractor or user turn. `StudioSettings.learning` gates
 automatic apply, the sweep, the architect and `studio:skillopt.start`; the harness asks `learning.enabled` first.
 
-## The night: director, workers and judging
+## The run: director, workers and judging
 
 The harness loop in [`src/harness-seed/loop/`](../../src/harness-seed/loop/). Product behavior is in
 the [builds and live product page](../product/builds-live.md); the chat's lifecycle is
@@ -565,7 +565,7 @@ whose `state().flow` is not in play (except `begin: false` and the playtester), 
 `run.setup`; evidence replays, seeds, begins. Typed facets carry `requested-state`. No
 scout on a completion-only engine; a failed one is a card.
 
-**Director.** On a session-capable engine Autopilot is one session's night (`loop/director.ts`,
+**Director.** On a session-capable engine Autopilot is one session's run (`loop/director.ts`,
 `loop/director/`); `run.classic` and completion-only engines take the programmed pipeline. The
 director leads the integration worktree (at the base commit, or the prior integration head on a
 resume) — the long turn's from inside it, a waking lead read-only (one session, below) — with its
@@ -578,24 +578,24 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
 - `worker_start` refuses until `plan` was called (`autopilot_plan_review`, kept on
   `journal.director.plan`); `replaces=<id>` marks a restart. With a plan to review, the first
   `worker_start` answers at once and the user's answer or the window's end wakes the lead
-  (`night.waking`). After a Resume a pre-pause worker's id is refused unless `from=` is that worker.
+  (`run.waking`). After a Resume a pre-pause worker's id is refused unless `from=` is that worker.
 - The wake loop (`loop/director/wake.ts`, rules `wake-schedule.ts`, words `wake-prompts.ts`): the
   director ends its turn after each decision and the harness resumes the session with a digest
   (the user's words verbatim, what happened, where the run stands). The user, finish and a
   worker steer wake at once, worker news after 5 s; timers cover the plan window, wrap-up, the
-  workers' limit and a 20-minute heartbeat; at most 30 wakes an hour. An idle night asks once,
+  workers' limit and a 20-minute heartbeat; at most 30 wakes an hour. An idle run asks once,
   then wraps up (a goal build after the art director's look); each wake appends `director_continued`.
-- The full journal (`loop/director/journal.ts`): each save writes the night's record on
+- The full journal (`loop/director/journal.ts`): each save writes the run's record on
   `journal.director` (clock with `workedMs`, plan, ledger, health, workers' limit, recent log,
-  workers, wake state). A Resume gets the working time left (`nightClock`, paused time excluded), a
-  reopen (`director/reopen.ts`) a fresh clock, and reads the rest back (`restoreNight`,
-  `night.priorWorkers`, `RESUMED AT`).
+  workers, wake state). A Resume gets the working time left (`loopRunClock`, paused time excluded), a
+  reopen (`director/reopen.ts`) a fresh clock, and reads the rest back (`restoreLoopRun`,
+  `run.priorWorkers`, `RESUMED AT`).
 - `run.directorLoop: "turn"` (or `STUDIO_DIRECTOR_LOOP`) keeps the long turn until its removal
   gate ([harness runtime](../harness-runtime.md)).
-- User steering reaches the director as USER SAYS once per steer and night; a steer addressed to a
+- User steering reaches the director as USER SAYS once per steer and run; a steer addressed to a
   worker goes to it (`routeUserSteers`), an immediate one through `engine.interrupt {cwd}`.
 - Live chat (`loop/live-chat.ts`, `director/lead-line.ts`) and one session
-  (`director/lead-session.ts`, `conflict-worker.ts`, `after-night.ts`, `reopen-run.ts`, the host's
+  (`director/lead-session.ts`, `conflict-worker.ts`, `after-loop-run.ts`, `reopen-run.ts`, the host's
   `#leadRoot`): the lead is the chat's own session, which answers again after the close
   ([live chat](../conversation-coordinator.md#live-chat-during-a-build),
   [after the build](../conversation-coordinator.md#after-the-build-the-same-session)).
@@ -628,9 +628,9 @@ The studio forwards each tool call to the harness (`HarnessHost.dispatch`, `dire
 - `worker_start` may override `FACET_POLICY`; `loopDigest` puts each worker's phase, streaks and
   checks in the digests.
 - The session ends before the hard deadline (`wrapReserveMs`); the two closes are one function
-  (`closeTheNight`).
+  (`closeTheLoopRun`).
 
-**Refs and the user's repository.** Everything a night must find later lives on the studio's refs:
+**Refs and the user's repository.** Everything a run must find later lives on the studio's refs:
 `refs/studio/runs/<runId>/integration`, `.../workers/<facetId>` (moved to every accepted commit and
 again before teardown), `.../attempts/<facet>/<n>` (`-stopped` for a stopped round),
 `.../spikes/<facet>/<id>` and `refs/studio/snap/<id>` (`loop/repo.ts`, `snapshots.ts`). One committer
@@ -690,13 +690,13 @@ to its `-stopped` ref and recorded `facet_stopped` with no verdict and no rollba
 copies the nested tree into every worktree; with the user's consent (`AdoptOptions.versionNested`)
 it is converted in a deterministic commit. `landBuild` applies the same conversion before merging
 ([feature map](feature-map.md)). `integrate` fails when a merge still holds the path as a gitlink
-(`unversionedNested`), and the night's landing stops with `nested-not-versioned`.
+(`unversionedNested`), and the run's landing stops with `nested-not-versioned`.
 
 **Game kinds and evidence.** `loop/kinds.ts` is the one table of eight kinds, with their traits
 (off until declared), probe axes, eye cameras, critic and play script;
 `gameLine(run.game)` heads every judge call. `run.game` comes from the plan, then the scout, then
 `studio.json`'s nested `game` block; the plan's declaration is written back once a
-night. `gatherEvidence` (`proveStep`, `reachPlay`, `classifyEvidenceFailure`) is in the
+run. `gatherEvidence` (`proveStep`, `reachPlay`, `classifyEvidenceFailure`) is in the
 [harness runtime guide](../harness-runtime.md). `library/checks.json` holds
 technical checks only; craft checks are `library/recipes` entries retrieved by failing check,
 named defect or plan. Own-shape games get own-shape briefs and review rules (`renderBrief`,
@@ -704,8 +704,8 @@ named defect or plan. Own-shape games get own-shape briefs and review rules (`re
 
 **Ledger and lessons.** `loop/ledger.ts` appends one record per outcome to
 `library/games/<game>.jsonl` in the harness workspace (never the user's repo); `deriveLessons` writes
-`library/games/<game>.md`, and the next night carries the top five as `LAST TIME ON THIS GAME`.
-`ledgerFromEvents` backfills from an older night's log, never fatally. The ledger always
+`library/games/<game>.md`, and the next run carries the top five as `LAST TIME ON THIS GAME`.
+`ledgerFromEvents` backfills from an older run's log, never fatally. The ledger always
 writes; SkillOpt keeps its own gate.
 
 ## Projects, builds and previews
@@ -717,12 +717,12 @@ entry filename, and recorded in `studio.json` on first open: `main`, `build`, `s
 (`three-vite`, `three-modules`, `canvas2d`, `phaser`, `engine-export`, `own-script`) and `own`. A
 folder is the studio's template only with both `contractVersion` in `studio.json` and the vendored
 three import map. `findGameRoot` looks one folder down. An `engine-export` game can be played and
-photographed but never starts a night.
+photographed but never starts a run.
 
 **Opening a folder.** New game's Open existing and home's Open a folder… are the UI's way in.
 `studio:project.pick` and `studio:project.inspect` (candidates, preflight) write nothing. The
 Open Game sheet ([`src/renderer/panels/OpenGameSheet.tsx`](../../src/renderer/panels/OpenGameSheet.tsx),
-rows from `shape-words.ts` `openOptions`) lists candidates, runners, night blockers and planned
+rows from `shape-words.ts` `openOptions`) lists candidates, runners, run blockers and planned
 writes (`plannedWrites`); only its button calls `studio:project.adopt` with the row's `OpenChoice`. A nested game is adopted as the project;
 keeping the parent passes `template: false`. Adoption never writes the template's entry or pages
 beside a real entry; an own game gets `CLAUDE.md`/`NOTES.md` from `game-template/*.own.md`.
@@ -1159,7 +1159,7 @@ Scope and commands are in [verification](verification.md). Suites that hold the 
 | UI events and custom events | `ui-events.test.ts` |
 | Seed copies and the provider table | `seed-contracts.test.ts`, `providers.test.ts` |
 | Engine voice and crossed roles | `engine-voice.test.ts`, `director-cross-engine.test.ts` |
-| One session: the lead is the chat's session | `director-one-session.test.ts`, `after-night.test.ts`, `reopen-run.test.ts`, `lead-sessions-host.test.ts` |
+| One session: the lead is the chat's session | `director-one-session.test.ts`, `after-loop-run.test.ts`, `reopen-run.test.ts`, `lead-sessions-host.test.ts` |
 | Renderer stores and words | `renderer-state.test.ts`, `words.test.ts` |
 | Harness loop incidents | `harness-incidents.test.ts` (`npm run verify:harness`) |
 | Boundaries and import cycles | `npm run verify:architecture` |

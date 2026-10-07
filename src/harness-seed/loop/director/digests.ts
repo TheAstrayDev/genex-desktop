@@ -1,7 +1,7 @@
 /**
  * What the director reads about its workers: one round as the report keeps it, one worker in
  * full (`run_status`, `worker_status`) or in a line (`wait`), its loop as a digest, and the
- * transitions in that loop worth waking for. Pure, with no night of their own.
+ * transitions in that loop worth waking for. Pure, with no run of their own.
  */
 import { summarizeScoreboard } from "../checks.ts";
 import { FACET_POLICY, ITERATION_HEADROOM } from "../facet-loop.ts";
@@ -15,8 +15,8 @@ import { Side } from "../judge.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
 import { isBeyondScope } from "../scope.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
-// Type-only: erased at runtime, so this module still imports no part of the night.
-import type { Worker } from "./night.ts";
+// Type-only: erased at runtime, so this module still imports no part of the run.
+import type { Worker } from "./loop-run.ts";
 
 /** How many entries of a list a digest shows before it says how many more there are. */
 const DIGEST_ENTRIES = 6;
@@ -111,8 +111,8 @@ function roundIdeas(record: RoundRecord): string[] {
 /**
  * What the run's report keeps of one worker round.
  *
- * The first night's report dropped `verdictSource` and the scoreboard on every one of its
- * twenty-one rounds, so `report.json` — the only durable record of a night — could say a round
+ * The first run's report dropped `verdictSource` and the scoreboard on every one of its
+ * twenty-one rounds, so `report.json` — the only durable record of a run — could say a round
  * was lost but never how it was judged or what it measured. They are kept now, beside the
  * round's own verdict record; the frames are not (the report is read, not looked at).
  */
@@ -153,7 +153,7 @@ function boundEntries(list: unknown): { shown: AnyRecord[]; more: number } {
 }
 
 /**
- * A worker's board, bounded. `run_status` carries every worker's whole board, and a night with
+ * A worker's board, bounded. `run_status` carries every worker's whole board, and a run with
  * six workers and forty checks each spent a quarter of its turns re-reading them. The counts,
  * `identityAllPass` and the first few failing checks are what a decision is made on; the rest
  * is a number, and `worker_status` still answers with all of it.
@@ -370,7 +370,7 @@ export function waitDigest(w: Worker, now = Date.now()): AnyRecord {
     accepted: w.iterations.filter((i: AnyRecord) => i.won).length,
     ...(board ? { passing: `${board.passing}/${board.total}` } : {}),
     // One line of the loop, and only the one a waiting director must act on: a gap the brief has
-    // made mandatory. `wait` is called dozens of times a night; the rest is on `run_status`.
+    // made mandatory. `wait` is called dozens of times a run; the rest is on `run_status`.
     ...(w.loop?.fix?.mandatory ? { mandatoryFix: clipOrNull(w.loop.fix.what, DIGEST_REASON) } : {}),
     ...monitorFields(w.monitor),
     ...(because ? { stoppedBecause: String(because).slice(0, DIGEST_STOPPED) } : {}),

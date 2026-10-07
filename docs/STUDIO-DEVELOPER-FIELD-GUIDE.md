@@ -249,8 +249,8 @@ passed, and nothing installs a package — the one fixture that builds links the
 `node_modules` and builds with esbuild. `--only <id>` and `--engine fixture|codex|claude` keep the
 inner loop under ten seconds; the full regression gate runs the whole set.
 
-`tests/conformance/director.test.ts` runs a whole night on the plain-Node rig, once per shape a
-night can take — every `it` in its own describe block, so the list is read there rather than
+`tests/conformance/director.test.ts` runs a whole run on the plain-Node rig, once per shape a
+run can take — every `it` in its own describe block, so the list is read there rather than
 counted here. They cover the finish and its landing; a game from scratch getting its base stage,
 and a starting point that could not be built; the fork gate refusing a base that does not run and
 exempting the run's own starting points; a game that cannot be judged until the contract is
@@ -258,8 +258,8 @@ installed, and a wiring session whose page still does not answer; a worker the l
 mid-round; a steer that interrupts a loop worker, a user steer addressed to one, and a steered
 single session; the director's own commit becoming the head it lands; a landing that conflicts
 with the user's own commits and changes nothing; a merge that carries nothing from a repository
-inside the game, and a consented one whose landing is left to the user; a night whose director
-dies of the engine's session limit; a night killed outright and then resumed; a reviewed plan
+inside the game, and a consented one whose landing is left to the user; a run whose director
+dies of the engine's session limit; a run killed outright and then resumed; a reviewed plan
 held for the user's go, and one the user answers in their own words; a worker's commit outliving
 its worktree; the restored `.studio/DIRECTOR.md`; and a close that looks through the studio's
 stand-in because the pool has none free, leaving the user's window alone. The head must be on
@@ -269,14 +269,14 @@ what the landing may claim, the run must pause where it can be picked up, and `s
 `tests/conformance/engine-limits.test.ts` covers limit classification, reset-time parsing and the
 inherited-console rule.
 
-The night's surface is verified by pure conformance suites and one real window.
+The run's surface is verified by pure conformance suites and one real window.
 `words.test.ts` is both a vocabulary test and a gate: it reads every `ctx.setStatus` literal
 out of `src/harness-seed/loop/*.ts` (a call it cannot read fails the test rather than being
 skipped) and asserts no run id, sha or ref survives translation, and that no renderer file but
-words.ts holds a translation. `morning-words`/`run-graph`/`build-progress` replay synthetic director and probe fixtures (`tests/fixtures/director-night.json` and
+words.ts holds a translation. `morning-words`/`run-graph`/`build-progress` replay synthetic director and probe fixtures (`tests/fixtures/director-loop-run.json` and
 `tests/fixtures/nested-probes.json`) and pin what the morning
 card, the Builds header and the stage say about it. `door.test.ts` covers the opening chat and
-the night's promised clock, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
+the run's promised clock, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
 the ported rail's tokens, and `run-controls.test.ts` the one-Stop rule across the whole
 renderer plus the keep-awake wiring in main. Behaviour that needs a window — the two chat Stop
 controls, immediate thread cancellation, the blocker held past the request, the morning card
@@ -292,10 +292,10 @@ the chat's `TOOL` line without a window.
 
 Milestones 2 and 3 added four suites of their own. `verdict.test.ts` pins the one record every
 judged build leaves (`loop/verdict.ts`) and the sentence it hands the screen — including that
-each pass of a real night writes one. `learning.test.ts` replays the first real night's journal
-and then two rig nights on one game: the ledger's records, the lessons they add up to, the briefs
+each pass of a real run writes one. `learning.test.ts` replays the first real run's journal
+and then two rig runs on one game: the ledger's records, the lessons they add up to, the briefs
 that carry them, the check that stops being written, the morning card's learned line, and what
-SkillOpt sees in a director's night. `engines.test.ts` covers external Claude login wiring and explicitly injected SDK paths.
+SkillOpt sees in a director's run. `engines.test.ts` covers external Claude login wiring and explicitly injected SDK paths.
 `external-cli.test.ts` covers discovery priority, spaces/symlinks, excluded project dependencies,
 missing Node, incompatible commands, override persistence, update/removal, and no SDK fallback.
 It also proves Stop kills an active diagnostic, both Claude SDK entry points refuse launch after
@@ -337,7 +337,7 @@ transport credentials from reports. No permanent monitor or performance threshol
 `npm run studio:dev -- start --profile ag-933 --fixture app-basics` builds current inputs
 into `.studio-dev/builds/<build-id>`, creates fresh owned fixture state and returns actual
 readiness/identity JSON. `npm run studio:dev -- fixtures` lists the named fixtures. Among them:
-build-graph (two sword-in-ice nights: folded tries, an undone step, a lead-merged unjudged round),
+build-graph (two sword-in-ice runs: folded tries, an undone step, a lead-merged unjudged round),
 first-launch (an empty library and the welcome; Claude Code needs a sign-in, Codex is not
 installed, and sign-in, links and downloads are refused as in every fixture) and notifications
 (six games; about four seconds after launch a question, a plan, a plugin permission, a sign-out

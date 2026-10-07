@@ -79,7 +79,7 @@ export async function buildChallenger(loop: FacetLoop, round: FacetRound): Promi
   // The turn ended mid-edit, so there is nothing here to judge: an evidence pass would
   // photograph a half-written game, the verdict would read "broken", the circuit breaker
   // would take a strike for it, and the rollback would erase work nobody asked to lose. One
-  // night lost four first-round iterations exactly that way and told the owner they had
+  // run lost four first-round iterations exactly that way and told the owner they had
   // stopped them. Instead: commit what is on disk, keep it on the round's `…-stopped` ref, leave
   // the worktree standing, record the round as `stopped`, and end the facet.
   if (round.buildEngineError?.stopReason === StopReason.Stopped) {

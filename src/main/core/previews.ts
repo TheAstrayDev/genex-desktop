@@ -1362,7 +1362,7 @@ export class PreviewService {
   /**
    * Make a build live: merge it into the game folder (the branch the user plays from) and load
    * it. Refuses a dirty game folder and a merge that conflicts — the user's edits are never
-   * overwritten from here, and since M2.7 nowhere else either: the night's own landing refuses
+   * overwritten from here, and since M2.7 nowhere else either: the run's own landing refuses
    * the same way and leaves the build on its ref for this button to land. A landing nobody on the
    * stage asked for (`offerLive`: a harness's `land_build` with no message of the person's waiting
    * on it) lands the same, and only offers the landed folder to Live's Reload.
@@ -1385,7 +1385,7 @@ export class PreviewService {
     const resolved = (await git(projectDir, ["rev-parse", "--verify", `${commit}^{commit}`]).catch(() => "")).trim();
     if (!resolved) throw new Error(MESSAGE.notInHistory(commit, project));
     // A build never brings Claude Code's project settings or hooks: the person's own session in
-    // the game loads them, and nothing a night or the harness made may choose them.
+    // the game loads them, and nothing a run or the harness made may choose them.
     const settings = await claudeFolderChanges(projectDir, "HEAD", resolved);
     if (settings.length) throw new Error(MESSAGE.claudeFolder(resolved.slice(0, 10), settings));
     // The dirty check first, and only then the conversion. Converting renames the nested game's

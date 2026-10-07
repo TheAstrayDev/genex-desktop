@@ -59,7 +59,7 @@ export function packStoredRoles(roles: RoleRecord): string {
  * A record whose crossed jobs (cross-provider roles) all name a subscription that is signed
  * in now. A job remembered on one that is not falls back to this engine's own default for
  * that job — the model in the slot was that other engine's, so it goes too — instead of a
- * night that dies on a login prompt at 3am. A record with nothing crossed is returned as is.
+ * run that dies on a login prompt at 3am. A record with nothing crossed is returned as is.
  */
 export function withAvailableEngines(roles: RoleRecord, available: string[]): RoleRecord {
   if (!roles.engines) return roles;

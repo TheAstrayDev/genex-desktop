@@ -305,7 +305,7 @@ export interface RunSpec {
   mode?: "autopilot";
   /**
    * The programmed pipeline on purpose: planner → base → facet loops → merge. A
-   * delegated engine's Autopilot is otherwise the director's — one session that decides the night.
+   * delegated engine's Autopilot is otherwise the director's — one session that decides the run.
    */
   classic?: boolean;
   /**

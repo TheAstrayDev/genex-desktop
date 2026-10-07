@@ -31,7 +31,7 @@ const message = (threadId: string, minute: number): EventEnvelope => ({
   data: { type: EventKind.Messages, messages: [{ role: "user", content: "make it faster" }] } as never,
 });
 
-/** Three games: a paused night, a finished one, and a night still running in another chat. */
+/** Three games: a paused run, a finished one, and a run still running in another chat. */
 function fixtureStore() {
   const threads = [
     { id: "t-paused", metadata: { project: "racer" } },

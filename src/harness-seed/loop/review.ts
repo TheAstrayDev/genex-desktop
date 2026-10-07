@@ -355,7 +355,7 @@ function writesEvidenceGlobal(text: string): boolean {
  * The studio's own evidence globals, on any shape of game. They are installed behind
  * accessors that ignore a write (M4.9a), so this is a second belt and not the defence: a
  * build that assigns to one is telling the studio what it drew instead of drawing it, and
- * a night that reads its own numbers back is judging nothing.
+ * a run that reads its own numbers back is judging nothing.
  */
 function evidenceWrites({ file, added }: FileReview): Violation[] {
   if (!isSourceFile(file)) return [];

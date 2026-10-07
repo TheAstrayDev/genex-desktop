@@ -630,7 +630,7 @@ test("the rewind fixture chat offers Rewind on every bubble, and its build-follo
     );
     const built = planRewind(events, [], "fixture-rewind-built");
     assert.ok(built.ok);
-    assert.deepEqual(built.builds, [{ runId: "fixture-rewind-night", landed: true }]);
+    assert.deepEqual(built.builds, [{ runId: "fixture-rewind-run", landed: true }]);
     const joined = planRewind(events, [], "fixture-rewind-joined");
     assert.ok(joined.ok && joined.joined);
   } finally {

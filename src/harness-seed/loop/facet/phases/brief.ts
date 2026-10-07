@@ -132,7 +132,7 @@ function briefInput(loop: FacetLoop, round: FacetRound) {
     style: styleInput(loop),
     flags: loop.flags,
     lessons,
-    // What earlier nights on this game cost. The director loads them once and hangs them on
+    // What earlier runs on this game cost. The director loads them once and hangs them on
     // the run so every worker's BRIEF.md carries the same five (loop/ledger.ts).
     gameLessons: run.gameLessons ?? [],
     move: loop.currentMove,

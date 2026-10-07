@@ -300,7 +300,7 @@ export interface DelegateOwnership {
 
 /**
  * The director's session: the run's integration worktree it orchestrates from (`root`). A waking
- * night's lead sits in the game folder instead and leads `root`, leaving the game's changes to its
+ * run's lead sits in the game folder instead and leads `root`, leaving the game's changes to its
  * workers: the host honours its grant only with `readOnly`, for this game's own run, and hands the
  * engine `root`'s checked real path (delegation.ts `#leadRoot`).
  */
@@ -312,7 +312,7 @@ export interface DelegateDirectorGrant {
   setup?: PreviewSetup | null;
   /**
    * The lead IS its chat's own session (one session): the session it answers with becomes the
-   * chat's bookmark (`contractor`), so the chat goes on in it after the night. Honoured only for a
+   * chat's bookmark (`contractor`), so the chat goes on in it after the run. Honoured only for a
    * lead in its game's folder.
    */
   chatSession?: boolean;
@@ -335,7 +335,7 @@ export interface LiveToolSpec extends StudioToolSpec {
 export interface HarnessDelegateParams {
   coordinator?: { runId: string; messageId?: string };
   /**
-   * The chat's own session after a night it led: the run's controls it keeps (`run_status`,
+   * The chat's own session after a run it led: the run's controls it keeps (`run_status`,
    * `show_build`, `land_build`, shared/coordinator.ts `RunControl`), answered by the host for this
    * run and message as the coordinator's tools are. Honoured only for the chat's own session.
    */
@@ -343,7 +343,7 @@ export interface HarnessDelegateParams {
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
-   * night's lead (a `director` session), whose turn is named by its run id instead.
+   * run's lead (a `director` session), whose turn is named by its run id instead.
    */
   chatTurn?: { messageId?: string };
   engine?: string;
@@ -1824,7 +1824,7 @@ export interface RunSpec {
   mode?: "autopilot";
   /**
    * The programmed pipeline on purpose: planner → base → facet loops → merge. A
-   * delegated engine's Autopilot is otherwise the director's — one session that decides the night.
+   * delegated engine's Autopilot is otherwise the director's — one session that decides the run.
    */
   classic?: boolean;
   /**

@@ -29,7 +29,7 @@ import {
   liveBehindWords,
   modelWords,
   moveWords,
-  nightWords,
+  loopRunWords,
   outageWords,
   pausedWords,
   planReviewWords,
@@ -85,7 +85,7 @@ function emittedStatuses(): string[] {
     [/facet\.title|target\.label/, "Crash damage"],
     [/iteration/, "3"],
     [/candidate\.id/, "state.contact.speedKept"],
-    [/skill\.slug/, "night-brief"],
+    [/skill\.slug/, "run-brief"],
     [/skills\.length|index/, "2"],
     [/Math\./, "30"],
   ];
@@ -179,8 +179,8 @@ describe("statusWords", () => {
     assert.equal(statusWords("run run_x · integrating facets").line, "Putting the parts together");
     assert.equal(statusWords("run run_x · iteration 4 — judging blind").line, "Round 4 · reviewing");
     assert.equal(statusWords("thinking").line, "Thinking");
-    assert.equal(statusWords("self-improving · night-brief (2/4)").line, "Improving its own craft · night-brief (2/4)");
-    assert.equal(statusWords("self-improving · night-brief (2/4)").short, "Improving");
+    assert.equal(statusWords("self-improving · run-brief (2/4)").line, "Improving its own craft · run-brief (2/4)");
+    assert.equal(statusWords("self-improving · run-brief (2/4)").short, "Improving");
     assert.deepEqual(statusWords("idle"), { line: "", short: "" });
     assert.deepEqual(statusWords(""), { line: "", short: "" });
   });
@@ -217,7 +217,7 @@ describe("statusWords", () => {
     const words = statusWords("run run_fixture123456 · Crash damage — deformation — iteration 3");
     assert.equal(words.line, "Crash damage — deformation · round 3");
     assert.doesNotMatch(words.line, /iteration/i);
-    // The night's two first steps, said as what they are for (M1.3, M2.6) — never as a stage name.
+    // The run's two first steps, said as what they are for (M1.3, M2.6) — never as a stage name.
     assert.equal(statusWords("run run_x · building the starting point").short, "Starting point");
     assert.deepEqual(statusWords("run run_x · making the game judgeable"), {
       line: "Connecting your game to the studio",
@@ -245,42 +245,42 @@ describe("statusWords", () => {
   });
 });
 
-describe("how a night reads when it is over", () => {
+describe("how a run reads when it is over", () => {
   it("says what became of the build, not whether a flag was set", () => {
-    // The first real night landed nothing and read "Stopped after 21 rounds"; a night that
+    // The first real run landed nothing and read "Stopped after 21 rounds"; a run that
     // lands its build read the same, because `victory` is a claim the lead rarely makes.
-    assert.equal(nightWords({ rounds: 21, landed: true }).headline, "Finished after 21 rounds · live in your game");
+    assert.equal(loopRunWords({ rounds: 21, landed: true }).headline, "Finished after 21 rounds · live in your game");
     assert.equal(
-      nightWords({
+      loopRunWords({
         rounds: 21,
         landed: false,
         stoppedBecause: "the session limit was reached; nothing was landed (land=no)",
       }).headline,
       "Finished after 21 rounds · not made live yet",
     );
-    assert.match(nightWords({ rounds: 21, landed: false, stoppedBecause: "land=no" }).because, /kept and playable/);
-    assert.match(nightWords({ rounds: 1, landed: true }).headline, /after 1 round ·/);
+    assert.match(loopRunWords({ rounds: 21, landed: false, stoppedBecause: "land=no" }).because, /kept and playable/);
+    assert.match(loopRunWords({ rounds: 1, landed: true }).headline, /after 1 round ·/);
     // An older log says nothing about landing: the headline claims nothing either.
     assert.equal(
-      nightWords({ rounds: 3, landed: null, stoppedBecause: "autopilot finished" }).headline,
+      loopRunWords({ rounds: 3, landed: null, stoppedBecause: "autopilot finished" }).headline,
       "Finished after 3 rounds",
     );
     // Flipped: no time-of-day words in the app's copy.
     assert.equal(
-      nightWords({ rounds: 3, landed: null, stoppedBecause: "autopilot finished" }).because,
+      loopRunWords({ rounds: 3, landed: null, stoppedBecause: "autopilot finished" }).because,
       "The build finished.",
     );
-    assert.equal(nightWords({ rounds: 0, landed: null }).headline, "Finished");
+    assert.equal(loopRunWords({ rounds: 0, landed: null }).headline, "Finished");
     assert.doesNotMatch(
-      nightWords({ rounds: 2, landed: false, stoppedBecause: "the director failed on run_fixture123456" }).because,
+      loopRunWords({ rounds: 2, landed: false, stoppedBecause: "the director failed on run_fixture123456" }).because,
       RUN_ID,
     );
   });
 
   it("promises a playable build only when there is one", () => {
-    // A night that merged nothing (an early stop, an unhealthy integration) used to read
+    // A run that merged nothing (an early stop, an unhealthy integration) used to read
     // "The build is kept and playable" over a card with no button on it at all.
-    const nothing = nightWords({
+    const nothing = loopRunWords({
       rounds: 4,
       landed: false,
       hasBuild: false,
@@ -291,14 +291,14 @@ describe("how a night reads when it is over", () => {
     assert.doesNotMatch(nothing.because, /playable/);
     assert.match(nothing.because, /as you left it/);
     assert.match(
-      nightWords({ rounds: 4, landed: false, hasBuild: true, stoppedBecause: "land=no" }).because,
+      loopRunWords({ rounds: 4, landed: false, hasBuild: true, stoppedBecause: "land=no" }).because,
       /kept and playable/,
     );
   });
 
-  it("calls a paused night paused, and says it can be picked up", () => {
-    // The engine's session limit ends the night at 105 minutes with `run_finished` + paused.
-    const paused = nightWords({
+  it("calls a paused run paused, and says it can be picked up", () => {
+    // The engine's session limit ends the run at 105 minutes with `run_finished` + paused.
+    const paused = loopRunWords({
       rounds: 21,
       landed: false,
       paused: true,
@@ -315,7 +315,7 @@ describe("how a night reads when it is over", () => {
   it("tells the owner what to fix when the provider stopped accepting the account, from the close's typed kind", () => {
     // A provider that took the account's access away ("Your organization has disabled Claude
     // subscription access…").
-    const lost = nightWords({
+    const lost = loopRunWords({
       rounds: 5,
       landed: false,
       paused: true,
@@ -329,7 +329,7 @@ describe("how a night reads when it is over", () => {
     assert.match(lost.because, /sign in again/i);
     assert.match(lost.because, /Resume/);
     assert.doesNotMatch(lost.because, /director|engine|nobody could check/);
-    const down = nightWords({ rounds: 5, landed: false, paused: true, hasBuild: true, pausedOn: "unavailable" });
+    const down = loopRunWords({ rounds: 5, landed: false, paused: true, hasBuild: true, pausedOn: "unavailable" });
     assert.match(down.because, /model provider stayed down/);
     for (const words of [lost, down]) assert.doesNotMatch(words.because, /\b(night|morning|overnight|tonight)\b/i);
     // The close's typed kind reaches the card: the chat's result entry carries it to the card's words.
@@ -359,12 +359,12 @@ describe("how a night reads when it is over", () => {
     assert.match(words.because, /stopped accepting this account/);
   });
 
-  it("does not tell the owner a night they stopped simply finished", () => {
-    const stopped = nightWords({ rounds: 6, landed: false, hasBuild: true, stoppedBecause: "stopped by the user" });
+  it("does not tell the owner a run they stopped simply finished", () => {
+    const stopped = loopRunWords({ rounds: 6, landed: false, hasBuild: true, stoppedBecause: "stopped by the user" });
     assert.equal(stopped.headline, "Stopped after 6 rounds · the build so far is kept");
     assert.equal(stopped.because, "Stopped. Everything built so far is kept.");
     // A stop the run can pick up again reads the same way — one word, not "paused" and "stopped".
-    const resumable = nightWords({
+    const resumable = loopRunWords({
       rounds: 6,
       landed: false,
       paused: true,
@@ -374,14 +374,14 @@ describe("how a night reads when it is over", () => {
     assert.equal(resumable.because, "Stopped. Everything built so far is kept.");
     assert.doesNotMatch(resumable.headline, /Paused/);
     assert.equal(
-      nightWords({ rounds: 6, landed: false, hasBuild: false, stoppedBecause: "stopped by the user" }).headline,
+      loopRunWords({ rounds: 6, landed: false, hasBuild: false, stoppedBecause: "stopped by the user" }).headline,
       "Stopped after 6 rounds",
     );
   });
 });
 
 describe("the morning card", () => {
-  const night = (over: Partial<Parameters<typeof morningWords>[0]> = {}) =>
+  const loopRun = (over: Partial<Parameters<typeof morningWords>[0]> = {}) =>
     morningWords({
       rounds: 21,
       kept: 10,
@@ -394,8 +394,8 @@ describe("the morning card", () => {
       ...over,
     });
 
-  it("offers Play it, and says the night's own report, when the build is live", () => {
-    const words = night({
+  it("offers Play it, and says the run's own report, when the build is live", () => {
+    const words = loopRun({
       landed: true,
       hasBuild: false,
       summary: "The river catches the light and moves.",
@@ -410,33 +410,33 @@ describe("the morning card", () => {
     // like one a judge chose.
     assert.match(words.because, /Made live, not reviewed better/);
     assert.equal(words.tally, "10 kept · 11 undone");
-    const judged = night({
+    const judged = loopRun({
       landed: true,
       hasBuild: false,
       landingLine: "made live, a judge preferred it",
       stoppedBecause: "the director finished the run",
     });
     assert.match(judged.because, /a reviewer preferred it/);
-    // An older night wrote no landing sentence: the card keeps the plain one.
-    const older = night({ landed: true, hasBuild: false, stoppedBecause: "the director finished the run" });
+    // An older run wrote no landing sentence: the card keeps the plain one.
+    const older = loopRun({ landed: true, hasBuild: false, stoppedBecause: "the director finished the run" });
     // Flipped: no time-of-day words in the app's copy.
     assert.equal(older.because, "This build is your game now — open Live to play it.");
   });
 
-  it("offers the build itself when the night merged one but did not make it live", () => {
-    const words = night();
+  it("offers the build itself when the run merged one but did not make it live", () => {
+    const words = loopRun();
     assert.deepEqual(words.actions, ["play-build"]);
     assert.match(words.because, /kept and playable/);
   });
 
-  it("offers nothing, and promises nothing, when the night merged nothing", () => {
-    const words = night({ hasBuild: false });
+  it("offers nothing, and promises nothing, when the run merged nothing", () => {
+    const words = loopRun({ hasBuild: false });
     assert.deepEqual(words.actions, []);
     assert.doesNotMatch(words.because, /playable/);
   });
 
-  it("puts Resume first on a paused night, and never calls it finished", () => {
-    const words = night({
+  it("puts Resume first on a paused run, and never calls it finished", () => {
+    const words = loopRun({
       paused: true,
       stoppedBecause:
         "the engine hit its usage cap before the director called finish (limit reached); the run is paused — Resume it when the limit resets; nothing was landed (land=no)",
@@ -448,15 +448,15 @@ describe("the morning card", () => {
     assert.equal(words.noReport, "It was paused before it could write up the build.");
   });
 
-  it("says the night wrote no report rather than printing the lead's own note", () => {
-    const words = night();
+  it("says the run wrote no report rather than printing the lead's own note", () => {
+    const words = loopRun();
     assert.equal(words.summary, null);
     // Flipped: no time-of-day words in the app's copy.
     assert.equal(words.noReport, "It ended before it could write up the build.");
   });
 
-  it("reads a night the owner stopped as stopped", () => {
-    const words = night({ stoppedBecause: "stopped by the user" });
+  it("reads a run the owner stopped as stopped", () => {
+    const words = loopRun({ stoppedBecause: "stopped by the user" });
     assert.match(words.headline, /^Stopped after 21 rounds/);
     assert.deepEqual(words.actions, ["play-build"]);
   });
@@ -537,7 +537,7 @@ describe("verdicts", () => {
     assert.equal(isKept("challenger"), true);
     assert.equal(isKept("incumbent"), false);
     assert.equal(isKept(null), false);
-    // The Nights strip used to label an undone round "Kept" because the harness had kept the
+    // The Runs strip used to label an undone round "Kept" because the harness had kept the
     // incumbent. From the user's side that is the opposite of what happened.
     assert.equal(verdictWords({ winner: "incumbent" }).word, "undone");
   });
@@ -573,9 +573,9 @@ describe("verdicts", () => {
     assert.doesNotMatch(stoppedWords("the director failed on run_fixture123456"), RUN_ID);
   });
 
-  it("keeps why the night ended when the landing clause is appended to it", () => {
+  it("keeps why the run ended when the landing clause is appended to it", () => {
     // Every close composes "<why>; <what happened to the build>". Matching the landing half
-    // anywhere in the string collapsed every non-landing night to four words and deleted the
+    // anywhere in the string collapsed every non-landing run to four words and deleted the
     // half a user can act on.
     assert.equal(
       stoppedWords("the director ran out of time without calling finish; nothing was landed (land=no)"),
@@ -638,7 +638,7 @@ describe("verdicts", () => {
 
 describe("the checks, counted", () => {
   it("separates a failing check from one nothing could measure", () => {
-    // Thirteen probes of the first real night read `missing: state.…` on builds that worked, and
+    // Thirteen probes of the first real run read `missing: state.…` on builds that worked, and
     // the card said "1 of 10 checks".
     assert.equal(checkCounts({ total: 10, passing: 1, unmeasured: 9 }), "Passed 1 · Couldn't measure 9");
     assert.equal(checkCounts({ total: 9, passing: 3, unmeasured: 4 }), "Passed 3 · Failed 2 · Couldn't measure 4");
@@ -648,7 +648,7 @@ describe("the checks, counted", () => {
   });
 
   it("counts the plan's checks, and the judge's own questions as notes beside them", () => {
-    // The night that motivated this: a part whose nine planned checks were mostly fine read
+    // The run that motivated this: a part whose nine planned checks were mostly fine read
     // "1 of 10" because the judge had grown three questions of its own onto the same board.
     assert.equal(
       checkCounts({
@@ -702,7 +702,7 @@ describe("the checks, counted", () => {
   });
 });
 
-describe("what the night says as it goes", () => {
+describe("what the run says as it goes", () => {
   const jargon = /\bfacet|\biteration|\bworktree|\bdirector\b|\bworker\b|\bthe harness\b|run_[0-9a-z]/i;
   const part = { facetId: "crumple", facetTitle: "Crash damage", iteration: 3 };
 
@@ -738,7 +738,7 @@ describe("what the night says as it goes", () => {
     const line = outageWords({ facetTitle: "Crash damage", phase: "judge", minutes: 8, attempt: 2 });
     assert.match(line, /the model provider is busy/);
     assert.doesNotMatch(line, /overloaded|Error|429/);
-    // No part named: the night itself is waiting, and it is still not called a run.
+    // No part named: the run itself is waiting, and it is still not called a run.
     // Flipped: no time-of-day words in the app's copy.
     assert.match(outageWords({ phase: "plan", minutes: 3, attempt: 1 }), /^this build:/);
   });
@@ -753,20 +753,20 @@ describe("what the night says as it goes", () => {
     assert.doesNotMatch(line, /repoint <check>/);
   });
 
-  it("reads the lead's own summary, and never asks for a go the night is not waiting for", () => {
+  it("reads the lead's own summary, and never asks for a go the run is not waiting for", () => {
     const held = planReviewWords({
-      summary: "Tonight: crash damage you can feel, on run_abc123 (5719bbb111).",
+      summary: "This run: crash damage you can feel, on run_abc123 (5719bbb111).",
       facets: [{ title: "Crash damage" }, { title: "Dirt" }],
       waitMinutes: 12,
     });
-    assert.match(held, /^Tonight: crash damage you can feel/);
+    assert.match(held, /^This run: crash damage you can feel/);
     assert.match(held, /The parts: Crash damage · Dirt\./);
     assert.match(held, /Say "go" to start it.*waits up to 12 min/);
     assert.doesNotMatch(held, RUN_ID, held);
     assert.doesNotMatch(held, /5719bbb111/, "no sha on a card the user reads");
     // Nobody asked to review this one: the builders are already starting, so "go" would be a lie.
     const building = planReviewWords({
-      summary: "Tonight: crash damage you can feel.",
+      summary: "This run: crash damage you can feel.",
       facets: [{ title: "Crash damage" }],
     });
     assert.doesNotMatch(building, /"go"/);
@@ -775,23 +775,23 @@ describe("what the night says as it goes", () => {
     // A lead that ends its summary without a full stop must not run into the studio's own
     // sentence: "…you can feel The parts:" was one card of two sentences glued together.
     const unpunctuated = planReviewWords({
-      summary: "Tonight: crash damage you can feel",
+      summary: "This run: crash damage you can feel",
       facets: [{ title: "Crash damage" }],
       waitMinutes: 12,
     });
     assert.match(unpunctuated, /you can feel\. The parts: Crash damage\./);
     assert.match(
-      planReviewWords({ summary: "Tonight: crash damage you can feel" }),
+      planReviewWords({ summary: "This run: crash damage you can feel" }),
       /you can feel\. Say what to change/,
     );
   });
 
-  it("names the kind the night decided this game is — the plan's other decision", () => {
+  it("names the kind the run decided this game is — the plan's other decision", () => {
     // The kind is written back into the user's studio.json, decides the controls the studio
     // drives before every judgement and which critic reads the build. The window meant for
     // objecting to the plan showed every part of it except that one.
     const named = planReviewWords({
-      summary: "Tonight: crash damage you can feel.",
+      summary: "This run: crash damage you can feel.",
       facets: [{ title: "Crash damage" }],
       game: { kind: "third-person" },
       waitMinutes: 12,
@@ -800,11 +800,11 @@ describe("what the night says as it goes", () => {
     assert.match(named, /Say "go" to start it/, "the kind sentence goes before the ask, not after it");
     // A plan that declared no kind says nothing rather than guessing one.
     const unnamed = planReviewWords({
-      summary: "Tonight: crash damage you can feel.",
+      summary: "This run: crash damage you can feel.",
       facets: [{ title: "Crash damage" }],
     });
     assert.doesNotMatch(unnamed, /treats this as/);
-    assert.doesNotMatch(planReviewWords({ summary: "Tonight.", game: { kind: null } }), /treats this as/);
+    assert.doesNotMatch(planReviewWords({ summary: "This run.", game: { kind: null } }), /treats this as/);
   });
 
   it("says on Reload what would change Live, in the user's own terms", () => {
@@ -820,7 +820,7 @@ describe("what the night says as it goes", () => {
     assert.equal(liveBehindLabel("changed", "added the jump"), "The game changed — reload to see it: added the jump");
   });
 
-  it("says a night was paused and resumed without printing its id", () => {
+  it("says a run was paused and resumed without printing its id", () => {
     assert.doesNotMatch(pausedWords(), RUN_ID);
     assert.doesNotMatch(pausedWords(), /paused/i);
     assert.equal(resumedWords(5), "picking up where it left off — 5 finished parts kept");
@@ -829,7 +829,7 @@ describe("what the night says as it goes", () => {
     assert.doesNotMatch(resumedWords(5), /facet/i);
   });
 
-  it("says what the night is, before it says how it is split", () => {
+  it("says what the run is, before it says how it is split", () => {
     assert.match(runStartWords({ name: "Dirt 5", kind: "direction" }), /Dirt 5/);
     // No reference: the rule still reaches the user, without a bar literally named "unnamed".
     assert.doesNotMatch(runStartWords({ name: "unnamed", kind: "bar" }), /unnamed/);

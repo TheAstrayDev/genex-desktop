@@ -610,7 +610,7 @@ async function keepRecipe(spike: SpikeRun): Promise<Recipe> {
     project: run.project,
   }) as Recipe;
   if (parsed.title) recipe.title = parsed.title.slice(0, CLIP_QUOTE);
-  // Tonight's round uses the technique either way; keeping it for later games is learning.
+  // This run's round uses the technique either way; keeping it for later games is learning.
   if (await learningOn(ctx)) await saveRecipe(ctx.workspace, recipe);
   return recipe;
 }

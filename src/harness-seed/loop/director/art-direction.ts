@@ -1,10 +1,10 @@
 /**
- * The art director's part of a night: one absolute look at the whole integrated game
+ * The art director's part of a run: one absolute look at the whole integrated game
  * (loop/ship-review.ts), the defects it names routed to the parts that own them, and the finish
  * mark that makes the look happen without the lead asking.
  *
- * Every judge of a night compared — a round against the one before, integration against the
- * start — and a night could win thirty rounds that way while nobody asked whether the game was
+ * Every judge of a run compared — a round against the one before, integration against the
+ * start — and a run could win thirty rounds that way while nobody asked whether the game was
  * good. At the finish mark (a timed build's last 30% of working time, `finishMarkMs`; a goal build
  * once, when its lead idles or finishes with no review on its head) the studio asks: would you
  * ship this as the user's demo today? The lead is woken with the answer and the defects by part,
@@ -22,8 +22,8 @@
  * must stay (`doNotRegress`): the latest list rides in every loop worker's spec, so its brief and
  * its taste judge hold the build to it.
  *
- * A new module, bound onto the night (director.ts `NIGHT_MODULES`): callers in older modules reach
- * it through the night and check that it is there. It reads budgets.ts and rules.ts by namespace,
+ * A new module, bound onto the run (director.ts `LOOP_RUN_MODULES`): callers in older modules reach
+ * it through the run and check that it is there. It reads budgets.ts and rules.ts by namespace,
  * so a kept older copy of either never stops it linking.
  */
 import { shortSha } from "../git.ts";
@@ -43,16 +43,16 @@ import { list, slug } from "./args.ts";
 import { contractAloneOnStart } from "./contract-gate.ts";
 import { isFinishing } from "../facet/stage.ts";
 import { ART_SKIPPED, shipFinishRefusal, shipGateSkipped, shipSteer } from "./art-direction-prompts.ts";
-import { BuildTarget } from "./night.ts";
+import { BuildTarget } from "./loop-run.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { ShipDefect, ShipPart, ShipReview } from "../ship-review.ts";
-import type { Night, Worker } from "./night.ts";
+import type { LoopRun, Worker } from "./loop-run.ts";
 import type { ShelvedDefect } from "./rules.ts";
 
 /**
  * This part serves a lead that is its chat's own session (one session): it builds in the integration
- * worktree by its full path and keeps no memory file. A night seats one only when every part it
+ * worktree by its full path and keeps no memory file. A run seats one only when every part it
  * depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
@@ -99,7 +99,7 @@ export interface LastShip {
 
 /** When the next regular look is due, as the wake loop keeps it, and the clocks it is read against. */
 export interface ShipCadence {
-  /** The working time the next look is due at; null until the first look of the night. */
+  /** The working time the next look is due at; null until the first look of the run. */
   nextAtWorkedMs: number | null;
   now: number;
   /** When the finish mark comes, while it is unsaid (wake.ts `finishMarkView`), or null. */
@@ -216,18 +216,18 @@ function shipCheck(board: { checks: AnyRecord[] }, defect: ShipDefect): Check {
 const isShipCheck = (check: AnyRecord): boolean => check?.askedBy === ART_DIRECTOR;
 
 /**
- * Nights whose finish look has begun: the finish mark's own pass, or a goal build's finish gate
+ * Runs whose finish look has begun: the finish mark's own pass, or a goal build's finish gate
  * (`artDirectionPass`). Its defects reach owners the lead has not flipped to `stage=finish` yet.
  */
-const finishLooked = new WeakSet<Night>();
+const finishLooked = new WeakSet<LoopRun>();
 
 /**
- * Is the night past its finish mark: its finish look has begun, or a wake said the mark (the
+ * Is the run past its finish mark: its finish look has begun, or a wake said the mark (the
  * journal keeps that across a Resume, wake.ts `journalWake`)? From there every owner of a ship
  * defect is told as a finisher, so no steer puts a move ahead of finishing what exists.
  */
-function pastFinishMark(night: Night): boolean {
-  return finishLooked.has(night) || night.journal?.director?.wake?.finishMarkSaid === true;
+function pastFinishMark(loopRun: LoopRun): boolean {
+  return finishLooked.has(loopRun) || loopRun.journal?.director?.wake?.finishMarkSaid === true;
 }
 
 /**
@@ -237,8 +237,8 @@ function pastFinishMark(night: Night): boolean {
  * and one more vision call a round. A question the newest review repeats word for word stays, with
  * its id. Answers the ids it took off, by worker.
  */
-function retireShipChecks(night: Night, routes: readonly ShipRoute[]): Map<string, string[]> {
-  const { state } = night;
+function retireShipChecks(loopRun: LoopRun, routes: readonly ShipRoute[]): Map<string, string[]> {
+  const { state } = loopRun;
   const retired = new Map<string, string[]>();
   for (const worker of state.workers.values()) {
     if (!takesShipDefects(worker) || !Array.isArray(worker.spec.checks)) continue;
@@ -298,12 +298,12 @@ function shelve(ledger: ShelvedDefect[], defect: { text: string; owner: string }
  * finish mark) — rules.ts's board when it has one, its router otherwise.
  */
 function onBoard(
-  night: Night,
+  loopRun: LoopRun,
   worker: Worker & { spec: AnyRecord },
   route: ShipRoute,
   ship: boolean | null = null,
 ): void {
-  const { note, state } = night;
+  const { note, state } = loopRun;
   const put = (ruleParts as { putOnBoard?: typeof ruleParts.putOnBoard }).putOnBoard;
   if (typeof put !== "function") {
     ruleParts.makeRouteDefect({ workers: state.workers, from: ART_DIRECTOR, ledger: state.ledger, note })(
@@ -319,7 +319,7 @@ function onBoard(
       checkId: route.check.id,
       severity: route.defect.severity,
       ship,
-      finishing: isFinishing(worker.spec) || pastFinishMark(night),
+      finishing: isFinishing(worker.spec) || pastFinishMark(loopRun),
     }),
   );
   note(
@@ -329,9 +329,9 @@ function onBoard(
 }
 
 /** Tell each worker which of the art director's earlier questions left its board. */
-function tellRetired(night: Night, retired: ReadonlyMap<string, string[]>): void {
+function tellRetired(loopRun: LoopRun, retired: ReadonlyMap<string, string[]>): void {
   for (const [id, gone] of retired) {
-    night.state.workers
+    loopRun.state.workers
       .get(id)
       ?.steering.push(
         `The art director looked at the whole game again: its earlier questions ${gone.join(", ")} are off your board — its newest review replaces them.`,
@@ -356,21 +356,21 @@ function giveDoNotRegress(worker: Worker & { spec: AnyRecord }, doNotRegress: re
  * running loop worker its do-not-regress list in place of the last one. Answers what went where.
  */
 export function routeShipDefects(
-  night: Night,
+  loopRun: LoopRun,
   review: Pick<ShipReview, "defects"> & Partial<Pick<ShipReview, "ship" | "doNotRegress">>,
 ): ShipRoute[] {
-  const { note, state } = night;
+  const { note, state } = loopRun;
   const routes = shipDefectsToChecks(review, state.workers, state.plan);
   // Only a review with a verdict replaces the last one's questions and list: one nobody could read leaves them.
   if (typeof review.ship === "boolean") {
-    tellRetired(night, retireShipChecks(night, routes));
+    tellRetired(loopRun, retireShipChecks(loopRun, routes));
     for (const worker of [...state.workers.values()].filter(takesShipDefects))
       giveDoNotRegress(worker, review.doNotRegress ?? []);
   }
   for (const route of routes) {
     const worker = ownerOf(state.workers, route.part, state.plan);
     if (takesShipDefects(worker)) {
-      onBoard(night, worker, route, review.ship ?? null);
+      onBoard(loopRun, worker, route, review.ship ?? null);
       continue;
     }
     const owner = route.part ?? LEAD_OWNS;
@@ -387,8 +387,8 @@ export function routeShipDefects(
  * The plan part a worker starting now builds: its own id, a worker it replaces (followed through
  * each replacement by its typed field), else its goal — whichever the plan names first.
  */
-function partStartedOn(night: Night, worker: Worker): string | null {
-  const { plan, workers } = night.state;
+function partStartedOn(loopRun: LoopRun, worker: Worker): string | null {
+  const { plan, workers } = loopRun.state;
   const parts = new Set(shipParts(plan).map((part) => part.id));
   const replaced: string[] = [];
   let next = worker.replaces;
@@ -404,8 +404,8 @@ function partStartedOn(night: Night, worker: Worker): string | null {
  * that part (severity and camera kept), else a visible one on the default camera — a defect the
  * art director named and nobody fixed is one a player notices until a look says it is gone.
  */
-function shelvedShipDefect(night: Night, part: string, text: string): ShipDefect {
-  const named = (night.state.lastShip?.defects ?? []).find(
+function shelvedShipDefect(loopRun: LoopRun, part: string, text: string): ShipDefect {
+  const named = (loopRun.state.lastShip?.defects ?? []).find(
     (defect) => defect.part === part && clip(defect.what, CLIP_REASON) === text,
   );
   return named ?? { what: text, camera: null, part, severity: DefectSeverity.Visible };
@@ -422,19 +422,19 @@ const onItsBoard = (worker: Worker & { spec: AnyRecord }, check: Check): boolean
  * round ends only once a blocker or visible defect is gone), and leaves the ledger. Any loop worker
  * starting takes the art director's latest do-not-regress list too. Answers the routes it took.
  */
-export function takeShelvedShipDefects(night: Night, worker: Worker): ShipRoute[] {
-  const { ledger } = night.state;
+export function takeShelvedShipDefects(loopRun: LoopRun, worker: Worker): ShipRoute[] {
+  const { ledger } = loopRun.state;
   if (!takesShipDefects(worker)) return [];
-  const doNotRegress = night.state.lastShip?.doNotRegress ?? [];
+  const doNotRegress = loopRun.state.lastShip?.doNotRegress ?? [];
   if (doNotRegress.length) giveDoNotRegress(worker, doNotRegress);
-  const part = partStartedOn(night, worker);
+  const part = partStartedOn(loopRun, worker);
   if (!part) return [];
   const shelved = ledger.filter((entry) => entry.from === ART_DIRECTOR && entry.owner === part);
   const taken: ShipRoute[] = [];
   for (const entry of shelved) {
-    const defect = shelvedShipDefect(night, part, entry.text);
+    const defect = shelvedShipDefect(loopRun, part, entry.text);
     const route = { part, defect, check: shipCheck({ checks: worker.spec.checks ?? [] }, defect) };
-    onBoard(night, worker, route, night.state.lastShip?.ship ?? null);
+    onBoard(loopRun, worker, route, loopRun.state.lastShip?.ship ?? null);
     if (!onItsBoard(worker, route.check)) continue;
     ledger.splice(ledger.indexOf(entry), 1);
     taken.push(route);
@@ -443,16 +443,16 @@ export function takeShelvedShipDefects(night: Night, worker: Worker): ShipRoute[
 }
 
 /** Has the integration branch anything beyond the run's starting point at `head`? */
-function movedBeyondStart(night: Night, head: string | null): head is string {
-  const { baseCommit, state } = night;
+function movedBeyondStart(loopRun: LoopRun, head: string | null): head is string {
+  const { baseCommit, state } = loopRun;
   if (!head || head === baseCommit || state.baseHeads.has(head)) return false;
   // The module contract written on the start alone is a document, not a build (contract-gate.ts).
-  return !contractAloneOnStart(night, head);
+  return !contractAloneOnStart(loopRun, head);
 }
 
 /** The art director's word on `head`, when its last look was at that head. */
-export function shipReviewOn(night: Night, head: string | null): LastShip | null {
-  const last = night.state.lastShip ?? null;
+export function shipReviewOn(loopRun: LoopRun, head: string | null): LastShip | null {
+  const last = loopRun.state.lastShip ?? null;
   if (!last || !head) return null;
   return last.head === head ? last : null;
 }
@@ -461,37 +461,37 @@ export function shipReviewOn(night: Night, head: string | null): LastShip | null
  * Is a goal build owed the art director's look: its integration has moved, nothing says it does
  * not load, and no review stands on its head. A timed build has its finish mark instead.
  */
-export function shipOwed(night: Night): boolean {
-  const { run, state } = night;
+export function shipOwed(loopRun: LoopRun): boolean {
+  const { run, state } = loopRun;
   const head = state.integrationHead;
-  if (!goalCommission(run) || !movedBeyondStart(night, head)) return false;
-  return state.healthByHead.get(head) !== false && !shipReviewOn(night, head);
+  if (!goalCommission(run) || !movedBeyondStart(loopRun, head)) return false;
+  return state.healthByHead.get(head) !== false && !shipReviewOn(loopRun, head);
 }
 
 /**
- * When a timed build reaches its finish mark (budgets.ts `finishMarkMs`, from the night's own
+ * When a timed build reaches its finish mark (budgets.ts `finishMarkMs`, from the run's own
  * clock so a Resume keeps it), or null — a goal build, a short one, or a kept budgets.ts without it.
  */
-export function finishMarkAt(night: Night): number | null {
+export function finishMarkAt(loopRun: LoopRun): number | null {
   const markMs = (budgetParts as { finishMarkMs?: typeof budgetParts.finishMarkMs }).finishMarkMs;
   if (typeof markMs !== "function") return null;
-  const clock = night.clock ?? { started: night.started, softDeadline: night.softDeadline };
-  const ms = markMs(night.run, clock.softDeadline - clock.started);
+  const clock = loopRun.clock ?? { started: loopRun.started, softDeadline: loopRun.softDeadline };
+  const ms = markMs(loopRun.run, clock.softDeadline - clock.started);
   return ms === null ? null : clock.softDeadline - ms;
 }
 
-/** When the night's working time began on its own clock: a Resume's goes on from the time already worked. */
-const workStarted = (night: Night): number => night.clock?.started ?? night.started;
+/** When the run's working time began on its own clock: a Resume's goes on from the time already worked. */
+const workStarted = (loopRun: LoopRun): number => loopRun.clock?.started ?? loopRun.started;
 
 /** The loop workers building now: those that take the art director's defects on their boards. */
-const buildingWorkers = (night: Night): Worker[] => [...night.state.workers.values()].filter(takesShipDefects);
+const buildingWorkers = (loopRun: LoopRun): Worker[] => [...loopRun.state.workers.values()].filter(takesShipDefects);
 
 /**
- * Is the night's first integration wave in: loop workers are building, and every one of them has
+ * Is the run's first integration wave in: loop workers are building, and every one of them has
  * had kept work merged into the integration branch (integrate.ts marks it `integrated`).
  */
-export function firstWaveIn(night: Night): boolean {
-  const building = buildingWorkers(night);
+export function firstWaveIn(loopRun: LoopRun): boolean {
+  const building = buildingWorkers(loopRun);
   return building.length > 0 && building.every((worker) => worker.integrated === true);
 }
 
@@ -499,11 +499,11 @@ export function firstWaveIn(night: Night): boolean {
  * Is there a whole game for the regular look to see: loop workers building, an integration beyond
  * the start that nothing says does not load, and no review standing on its head.
  */
-function lookable(night: Night): boolean {
-  const { state } = night;
+function lookable(loopRun: LoopRun): boolean {
+  const { state } = loopRun;
   const head = state.integrationHead;
-  if (!buildingWorkers(night).length || !movedBeyondStart(night, head)) return false;
-  return state.healthByHead.get(head) !== false && !shipReviewOn(night, head);
+  if (!buildingWorkers(loopRun).length || !movedBeyondStart(loopRun, head)) return false;
+  return state.healthByHead.get(head) !== false && !shipReviewOn(loopRun, head);
 }
 
 /**
@@ -513,10 +513,10 @@ function lookable(night: Night): boolean {
  * None within `SHIP_LOOK_GAP_MS` before an unsaid finish mark — the mark looks itself — and none
  * once the working time is over.
  */
-export function shipLookAt(night: Night, { nextAtWorkedMs, now, finishMarkAt }: ShipCadence): number | null {
-  if (now >= night.softDeadline || !lookable(night)) return null;
-  const started = workStarted(night);
-  const firstAt = firstWaveIn(night) ? now : started + SHIP_LOOK_EVERY_MS;
+export function shipLookAt(loopRun: LoopRun, { nextAtWorkedMs, now, finishMarkAt }: ShipCadence): number | null {
+  if (now >= loopRun.softDeadline || !lookable(loopRun)) return null;
+  const started = workStarted(loopRun);
+  const firstAt = firstWaveIn(loopRun) ? now : started + SHIP_LOOK_EVERY_MS;
   // A look already overdue happens now: it is now that must keep clear of the mark.
   const due = Math.max(now, nextAtWorkedMs === null ? firstAt : started + nextAtWorkedMs);
   const markLooks = finishMarkAt !== null && due >= finishMarkAt - SHIP_LOOK_GAP_MS;
@@ -528,16 +528,16 @@ export function shipLookAt(night: Night, { nextAtWorkedMs, now, finishMarkAt }: 
  * `SHIP_LOOK_EVERY_MS` after one the art director gave (the lead's own `judge ship=yes` and the
  * mark's count), `SHIP_LOOK_GAP_MS` after one it could not give.
  */
-export function shipLookAfter(night: Night, { now, looked }: { now: number; looked: boolean }): number {
-  return now - workStarted(night) + (looked ? SHIP_LOOK_EVERY_MS : SHIP_LOOK_GAP_MS);
+export function shipLookAfter(loopRun: LoopRun, { now, looked }: { now: number; looked: boolean }): number {
+  return now - workStarted(loopRun) + (looked ? SHIP_LOOK_EVERY_MS : SHIP_LOOK_GAP_MS);
 }
 
 /**
  * The studio's regular look at the whole game (`shipLookAt`): the art director's pass, whose
  * defects go to their owners while they keep building — no finish mark, and no finish stage.
  */
-export function shipLookPass(night: Night): Promise<ArtDirection> {
-  return artDirectionPass(night, { finishLook: false });
+export function shipLookPass(loopRun: LoopRun): Promise<ArtDirection> {
+  return artDirectionPass(loopRun, { finishLook: false });
 }
 
 /**
@@ -545,25 +545,25 @@ export function shipLookPass(night: Night): Promise<ArtDirection> {
  * and nothing says it does not load, the art director judges it (`judge ship=yes`, through the
  * studio's window when every other is taken, done by `ART_DIRECTION_JUDGE_MS`) and its defects go
  * to their owners. `how` lets the same look answer the close's own question (the finish gate).
- * From this look on the night is past its finish mark (`pastFinishMark`) — unless it is the
+ * From this look on the run is past its finish mark (`pastFinishMark`) — unless it is the
  * regular look (`finishLook: false`, `shipLookPass`). Answers the review, or why there was none.
  */
-export async function artDirectionPass(night: Night, how: ArtDirectionAsk = {}): Promise<ArtDirection> {
-  const { ctx, note, state } = night;
+export async function artDirectionPass(loopRun: LoopRun, how: ArtDirectionAsk = {}): Promise<ArtDirection> {
+  const { ctx, note, state } = loopRun;
   const { ask = {}, final = false, judgeMs = ART_DIRECTION_JUDGE_MS, finishLook = true } = how;
-  if (finishLook) finishLooked.add(night);
-  const head = (await night.syncHead().catch(() => null)) ?? state.integrationHead;
+  if (finishLook) finishLooked.add(loopRun);
+  const head = (await loopRun.syncHead().catch(() => null)) ?? state.integrationHead;
   if (ctx.cancelled) return { head, review: null, skipped: ART_SKIPPED.stopped };
-  if (!movedBeyondStart(night, head)) return { head, review: null, skipped: ART_SKIPPED.nothingNew };
+  if (!movedBeyondStart(loopRun, head)) return { head, review: null, skipped: ART_SKIPPED.nothingNew };
   if (state.healthByHead.get(head) === false) return { head, review: null, skipped: ART_SKIPPED.doesNotLoad };
   const judged = { ...ask, target: BuildTarget.Integration, against: Against.None, ship: "yes" };
   // `until` is read by the judge (tools.ts), which holds its calls to the wall clock: the same clock here.
-  await night
+  await loopRun
     .judge(judged, { borrow: true, final, until: Date.now() + judgeMs })
     .catch((err: unknown) =>
       note(`the art director could not judge ${shortSha(head)}: ${clip((err as Error)?.message ?? err, CLIP_REASON)}`),
     );
-  const review = shipReviewOn(night, head);
+  const review = shipReviewOn(loopRun, head);
   return { head, review, skipped: review ? null : ART_SKIPPED.notJudged };
 }
 
@@ -580,9 +580,9 @@ function finishGateJudgeMs(): number {
  * The judge the close still owes the head (tools.ts `closeJudgeAsk`): null when a judge on that
  * head already holds its word, undefined under a kept older tools.ts that cannot say.
  */
-function closeJudgeOwed(night: Night): AnyRecord | null | undefined {
-  if (typeof night.closeJudgeAsk !== "function") return undefined;
-  return night.closeJudgeAsk(night.state.integrationHead);
+function closeJudgeOwed(loopRun: LoopRun): AnyRecord | null | undefined {
+  if (typeof loopRun.closeJudgeAsk !== "function") return undefined;
+  return loopRun.closeJudgeAsk(loopRun.state.integrationHead);
 }
 
 /**
@@ -595,32 +595,32 @@ function closeJudgeOwed(night: Night): AnyRecord | null | undefined {
  * read on (a test's, or the wall clock). Answers the refusal, or null to close.
  */
 export async function shipFinishGate(
-  night: Night,
+  loopRun: LoopRun,
   userEnds: boolean,
   now: () => number = Date.now,
 ): Promise<string | null> {
-  const { ctx, note, state } = night;
+  const { ctx, note, state } = loopRun;
   const notOurs = userEnds || ctx.cancelled || state.shipFinishRefused === true;
-  const noTimeToAct = now() >= night.softDeadline;
+  const noTimeToAct = now() >= loopRun.softDeadline;
   if (notOurs || noTimeToAct) return null;
-  if (!shipOwed(night)) return null;
-  const owed = closeJudgeOwed(night);
+  if (!shipOwed(loopRun)) return null;
+  const owed = closeJudgeOwed(loopRun);
   if (owed === undefined) return null;
   if (owed && owed.against !== Against.None) {
     note(shipGateSkipped(state.integrationHead));
     return null;
   }
   const how = owed ? { ask: { question: owed.question }, final: true } : {};
-  const { review } = await artDirectionPass(night, { ...how, judgeMs: finishGateJudgeMs() });
+  const { review } = await artDirectionPass(loopRun, { ...how, judgeMs: finishGateJudgeMs() });
   if (review?.ship !== false) return null;
   state.shipFinishRefused = true;
-  await night.saveJournal();
+  await loopRun.saveJournal();
   return shipFinishRefusal(review);
 }
 
 /** What the report says of the art director's look at the head it closed on, or null when it looked at another. */
-export function shipReport(night: Night): AnyRecord | null {
-  const review = shipReviewOn(night, night.state.integrationHead);
+export function shipReport(loopRun: LoopRun): AnyRecord | null {
+  const review = shipReviewOn(loopRun, loopRun.state.integrationHead);
   if (!review) return null;
   return {
     head: review.head,

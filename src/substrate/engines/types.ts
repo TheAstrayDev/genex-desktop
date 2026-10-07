@@ -20,7 +20,7 @@ export type { EngineAccount, EngineStatus, EngineStatusCode } from "../../shared
  * Two kinds of builder, one interface, chosen per task and recorded in the log:
  *
  *  - **direct** (`complete`): the studio's own turn loop drives the model and executes tools
- *    itself. v1: Ollama through pi-ai. This is the unlimited overnight workhorse (D8).
+ *    itself. v1: Ollama through pi-ai. This is the unlimited unattended workhorse (D8).
  *  - **delegated** (`delegate`): a vendor harness does the whole build itself; we mirror its
  *    events into our log and improve the *brief* it reads. Two of them: Claude Code through the
  *    Agent SDK, and Codex through `codex exec` on a ChatGPT subscription. Each authenticates
@@ -112,7 +112,7 @@ export interface CompleteRequest {
   /**
    * Reasoning effort ("low" | "medium" | "high" | "max") for models that think. Local thinking
    * models default deep (Qwen3.8 ships at xhigh — minutes per answer); unattended runs set this
-   * low so an overnight loop iterates instead of meditating.
+   * low so an unattended loop iterates instead of meditating.
    */
   effort?: string;
   preferences?: ModelPreferences;
@@ -269,7 +269,7 @@ export interface DelegateRequest {
   playtest?: DelegatePlaytestGrant;
   /**
    * The director: the run's orchestrating session. Its cwd is the run's integration
-   * worktree (`root`) — or, for a waking night's lead, the game folder, leading that worktree; it gets the computer tool on a window of its own (`look` points that window at
+   * worktree (`root`) — or, for a waking run's lead, the game folder, leading that worktree; it gets the computer tool on a window of its own (`look` points that window at
    * any build of the run), capture, and the harness's run tools — workers, judges, playtests,
    * merges, finish — which the studio forwards to the harness process that owns them. The
    * serializable half; the studio injects the closures.
@@ -279,7 +279,7 @@ export interface DelegateRequest {
   onLiveTool?: (name: string, args: Record<string, unknown>) => Promise<LiveToolResult>;
   /**
    * A session that may look and talk but never edit or run commands (the playtester), unless it
-   * asks in the chat's mode (`leadAsks`: a waking night's lead, the run's coordinator).
+   * asks in the chat's mode (`leadAsks`: a waking run's lead, the run's coordinator).
    */
   readOnly?: boolean;
   /** Host-owned stable coordinator workspace; keep session cwd across chat turns. */

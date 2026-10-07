@@ -19,7 +19,7 @@ import type { WakeReason } from "./wake-schedule.ts";
 
 /**
  * This part serves a lead that is its chat's own session (one session): it builds in the integration
- * worktree by its full path and keeps no memory file. A night seats one only when every part it
+ * worktree by its full path and keeps no memory file. A run seats one only when every part it
  * depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
@@ -83,7 +83,7 @@ export interface CardFacts {
   /** What the run will not build (loop/scope.ts `cut`): absent or empty, the card has no such line. */
   cut?: string[];
   /**
-   * The lead is its chat's own session (one session, `night.lead`): it builds in the integration
+   * The lead is its chat's own session (one session, `run.lead`): it builds in the integration
    * worktree by its full path and keeps no memory file, and its card says so. Absent — a director
    * whose cwd is that worktree, such as a kept director.ts from before one session drives — it keeps
    * its memory file.
@@ -121,13 +121,13 @@ export interface WorkersLimitFacts {
 export interface DigestFacts {
   now: number;
   reasons: readonly WakeReason[];
-  /** The first line when it is not a wake's: a resumed night's first message (journal-prompts.ts). */
+  /** The first line when it is not a wake's: a resumed run's first message (journal-prompts.ts). */
   heading?: string;
   /** What the user said since the lead last heard them, oldest first, word for word. */
   userSays: readonly string[];
   /** The user asked to finish, and no message has said so yet. */
   finishNew: boolean;
-  /** The night's log since the lead last read it. */
+  /** The run's log since the lead last read it. */
   happened: readonly string[];
   softDeadline: number;
   finalDeadline: number;
@@ -139,7 +139,7 @@ export interface DigestFacts {
   workers: readonly DigestWorker[];
   /** Workers running and allowed at once; null when the studio could not say. */
   room?: WorkerRoom | null;
-  /** The workers from before a pause in one line, on every digest after a resumed night's first (journal.ts). */
+  /** The workers from before a pause in one line, on every digest after a resumed run's first (journal.ts). */
   priorLine?: string;
   /** When the plan window closes, while the builders still wait for the user. */
   planWindowUntil: number | null;
@@ -232,7 +232,7 @@ function userSection({ userSays, finishNew }: DigestFacts): string {
   return lines.join("\n");
 }
 
-/** The night's news since the lead last read it: the newest lines, and how many older ones were left out. */
+/** The run's news since the lead last read it: the newest lines, and how many older ones were left out. */
 function happenedSection(happened: readonly string[]): string {
   const shown = happened.slice(-DIGEST_MAX_LINES);
   const hidden = happened.length - shown.length;
@@ -347,7 +347,7 @@ function verifyNudge(outcomes: OutcomeFacts | null | undefined): string {
   return `VERIFY THE OUTCOMES: ${unverified.length} of ${required} required outcomes are not verified on this revision. For each one the integrated build should meet now, verify it on integration (${asks}): a goal build finishes only on outcomes a playtest verified, and a worker's kept rounds verify none. One that fails names what its owner must still build.`;
 }
 
-/** Where the night stands: the clock, the integration head, the workers, the plan window, the user. */
+/** Where the run stands: the clock, the integration head, the workers, the plan window, the user. */
 function standsSection(facts: DigestFacts): string {
   const { defects, integrationHead, now, planWindowUntil, workersLimit } = facts;
   return [
@@ -414,7 +414,7 @@ export function buildCard(facts: DigestFacts): string {
 
 /**
  * The message that wakes the lead: why, the user's words verbatim, what happened, where the
- * night stands, the build card, and this wake's closing paragraph — in that order, so what the
+ * run stands, the build card, and this wake's closing paragraph — in that order, so what the
  * user said is the first thing the lead reads.
  */
 export function wakeDigest(facts: DigestFacts, includeCard = true): string {
@@ -497,7 +497,7 @@ export function wrapLead(cause: WrapCause, wrapUp: string): string {
   return lead ? `${lead}\n${wrapUp}` : wrapUp;
 }
 
-/** Why a fresh session carries the night, in the words its first line gives (`freshStart`). */
+/** Why a fresh session carries the run, in the words its first line gives (`freshStart`). */
 export const SESSION_LOST_WHY = {
   resumeFailed: "the session could not be resumed",
   contextFull: "its context was full",
@@ -508,7 +508,7 @@ export const SESSION_LOST_WHY = {
 
 /**
  * What a fresh session is told when the lead's own was lost: the brief, the rules, its notes, the
- * night and the news — and, for a director with its own hands (`lead` absent), its memory file first.
+ * run and the news — and, for a director with its own hands (`lead` absent), its memory file first.
  */
 export function freshStart({
   why,
@@ -549,7 +549,7 @@ export function freshStart({
   ].join("\n\n");
 }
 
-/** How the night runs, said once in the first message (and again in a fresh one). */
+/** How the run works, said once in the first message (and again in a fresh one). */
 export function wakeRules({ heartbeatMinutes }: { heartbeatMinutes: number }): string {
   return [
     "HOW THIS RUN WORKS — ONE DECISION PER TURN:",

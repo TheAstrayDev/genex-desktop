@@ -146,7 +146,7 @@ export class EngineRegistry {
    *
    * Rate limits are the case that matters in v1: subscriptions throttle server-side and there is
    * no bill to cap, so the right answer is to keep building on the local engine rather than to
-   * stop the night's run.
+   * stop the run.
    */
   async fallbackFor(failed: string, error: Pick<EngineError, "kind">, needs: FallbackNeeds = {}): Promise<string[]> {
     if (error.kind === EngineFailureKind.ContextOverflow || error.kind === EngineFailureKind.Auth) return [];

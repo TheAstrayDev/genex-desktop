@@ -529,7 +529,7 @@ export function probeScope(state: unknown, early: unknown = null) {
   const aliased = !("state" in base);
   // The same alias, inside `has("…")` and `delta("…")`: their argument is a string the parser
   // never turns into a reference, so `state.props.moved` there resolved nowhere and scored a
-  // silent `false` — not `unmeasured` — for a whole night.
+  // silent `false` — not `unmeasured` — for a whole run.
   const at = (from: unknown, path: unknown): unknown =>
     lookup(from, aliased ? String(path).replace(/^state\./, "") : String(path));
   return {
@@ -728,7 +728,7 @@ function stateCutChars(state: unknown): number | null {
 /**
  * The dry run: read every probe expression against the state a build actually reports, before
  * anyone builds on it. A probe is the only check that names paths the game must expose, and
- * the first director night wrote thirteen of them against paths that never resolved — every
+ * the first director run wrote thirteen of them against paths that never resolved — every
  * board read `missing: state.…` on builds that worked, and nobody found out until morning.
  *
  * A ref that cannot be found is *unsatisfiable as written*: either the path is wrong or the
@@ -1353,7 +1353,7 @@ export function toScoreboard(results: readonly (CheckResult | null | undefined)[
  * check measures itself, so its first pass is a real win over nothing. A vision check's first
  * pass is one judge's first look, and a first look barely above a guess is not evidence: the
  * same answer against a measured "no" would not have flipped it either (settleVision). One
- * night kept a round on exactly this — a question grown the iteration before, never measured on
+ * run kept a round on exactly this — a question grown the iteration before, never measured on
  * the build it was grown from, answered "yes" at 0.5.
  */
 function firstMeasurementFlips(previous: CheckResult | undefined, entry: CheckResult | undefined): boolean {
@@ -1446,7 +1446,7 @@ export function metricImprovement(prev: { value?: number }, next: { value?: numb
  *
  * `stuck` is the other half of the same story: a *failing* check the judge answers under
  * `stuckConfidence` settles nothing either way — a repeated hedged "no", or a "yes" too weak to
- * flip. One night asked "is the live probe's speedKept reading gone?" of a JPEG twelve times and
+ * flip. One run asked "is the live probe's speedKept reading gone?" of a JPEG twelve times and
  * got 0.20 every time. The caller counts the flag; a question that cannot be answered from a
  * picture belongs in the ledger, not on the board.
  */

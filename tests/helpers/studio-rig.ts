@@ -56,7 +56,7 @@ export interface FakePreview extends PreviewPort {
   /**
    * What a `user-view` vs canvas diff reports. Kept apart from {@link FakePreview.diffNext}:
    * that one is 0.4 so a vision check sees a real change, and an evidence pass reading 0.4 here
-   * would keep a `user:view` frame and raise the mismatch warning on every rig night.
+   * would keep a `user:view` frame and raise the mismatch warning on every rig run.
    */
   userViewDiffNext: { diffFraction: number; meanAbsDiff: number; grid: number[]; compared: number };
   /** What `preview.pageUi` reports; null means a studio that cannot see outside the canvas. */

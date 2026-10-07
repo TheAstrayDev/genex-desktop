@@ -116,10 +116,10 @@ export function pinFixRecipe<
 /**
  * Is the work done? The contract is the identity checks the facet was started on — a
  * director's `done` list, the planner's identity features, the harness's own — and nothing
- * else. Checks the judge grows during the night are on the board and steer the next
+ * else. Checks the judge grows during the run are on the board and steer the next
  * iteration, but a facet that met its contract is finished even while the judge is still
  * naming polish; the alternative (every check, judge-grown included) is a worker that can
- * never stop, which is exactly what a night of 4-of-7 boards looked like.
+ * never stop, which is exactly what a run of 4-of-7 boards looked like.
  *
  * Returns the sentence for `stoppedBecause`, or null while there is still work to do.
  */
@@ -186,7 +186,7 @@ function roundCostEstimate(buildMs: number | null, afterMs: number | null, runMs
  *
  * `finishRequested` answers with a plain `true` — the old contract, and still what the user's
  * own wrap-up signal means — or with `{ by, reason }`. The director answers with itself,
- * because a night that stopped five workers to fix one shader must not tell the owner they did
+ * because a run that stopped five workers to fix one shader must not tell the owner they did
  * it. Returns null when nobody has asked.
  */
 export function stopSignal(answer: unknown): { by: string; reason: string } | null {
@@ -245,7 +245,7 @@ const SELF_MEASURING_KINDS: readonly string[] = [
  * vision check the planner or the harness wrote is part of the contract the build was accepted
  * against. A crop question the judge grew from its own defect list is neither: it was seeded
  * "fail" by the judge that wrote it, so its first "yes" is that judge agreeing with itself. One
- * night kept a round that way — a car that had got worse, kept because one grown question about
+ * run kept a round that way — a car that had got worse, kept because one grown question about
  * its trunk answered yes while the twin question about the same trunk still failed at 0.80.
  */
 export function strongFlips(
@@ -375,7 +375,7 @@ export interface MoveChoice {
  * spends its rounds on polish. It builds the taste judge's big move for the facet (`lastBigMove`) as
  * guidance, never mandatory, until the director steers a rung of its own. With nobody owning the
  * ladder the same growth candidates and then the planner name one — it is what stops polish-only
- * nights — and it is guidance until two accepted builds in a row have polished instead of moving.
+ * runs — and it is guidance until two accepted builds in a row have polished instead of moving.
  */
 export function chooseMove({
   spec = null,
@@ -471,7 +471,7 @@ function isOpenMove(move: AnyRecord, policy: FacetPolicy): boolean {
  * taste judge (a judge that did not answer gives the benefit of the doubt). `costsRound` is the
  * demotion of M3.3 — only a move somebody asked for (`mandatory`) can undo a round the judge
  * preferred; every other miss is `note`, which rides into the round's record and the director's
- * digest so the night can steer instead of the worker losing the work.
+ * digest so the run can steer instead of the worker losing the work.
  *
  * A move the judge saw already in the accepted build (`moveAlreadyPresent`) was delivered by an
  * earlier round: it is never missing, and its rung climbs whatever this round's fate. Asked

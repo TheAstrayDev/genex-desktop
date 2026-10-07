@@ -89,7 +89,7 @@ export async function announceLoss(loop: FacetLoop, round: FacetRound, lost: Los
   }
 }
 
-/** The builder's engine is out of usage — a cap that outlives the night: stop, and keep the half-built work. */
+/** The builder's engine is out of usage — a cap that outlives the run: stop, and keep the half-built work. */
 export async function stopOutOfUsage(loop: FacetLoop, round: FacetRound): Promise<RoundFlow> {
   const { engineId, result, worktree } = loop;
   const failure = round.buildEngineError;

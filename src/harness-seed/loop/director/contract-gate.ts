@@ -8,8 +8,8 @@
  * the modules the contract gives it exist there (stubs, written by the lead or a single worker),
  * and only with a seam that leaves the other parts' modules alone; with no seam named it owns its
  * contract modules (`contractAtFork`). A single session, a conflict worker and a plan with one
- * looping part are never held, nor is a night resumed from a journal written before this gate
- * until its lead commits a contract (`NightState.contractLegacy`). A lead that gives no contract is refused twice, and then the harness
+ * looping part are never held, nor is a run resumed from a journal written before this gate
+ * until its lead commits a contract (`LoopRunState.contractLegacy`). A lead that gives no contract is refused twice, and then the harness
  * writes one from the plan's own seams rather than stall the build (`contractBeforeFork`).
  *
  * The plan's vision (vision.ts) is committed in the same commit as docs/VISION.md, and held to the
@@ -17,7 +17,7 @@
  * twice by name, then the build goes on without one and the lead hears it. The contract freezes
  * interfaces; the vision is where the world's ambition lives, never frozen.
  *
- * Its functions take the night explicitly; they are not bound onto it. A new module: workers.ts
+ * Its functions take the run explicitly; they are not bound onto it. A new module: workers.ts
  * calls it, and a kept older workers.ts simply never does.
  */
 import { lstat, mkdir, realpath, writeFile } from "node:fs/promises";
@@ -50,7 +50,7 @@ import {
 } from "./module-contract.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
 import type { ModuleContract } from "./module-contract.ts";
-import type { Night } from "./night.ts";
+import type { LoopRun } from "./loop-run.ts";
 import type { RunVision } from "../vision.ts";
 
 /** "No contract" refusals a lead gets before the harness writes one from the plan's seams. */
@@ -68,8 +68,8 @@ const WRITE_REFUSED = {
   outside: "docs/ resolves outside the integration worktree",
 } as const;
 
-/** The contract a night holds its loop workers to: the commit that wrote it, and the contract itself. */
-export interface NightContract {
+/** The contract a run holds its loop workers to: the commit that wrote it, and the contract itself. */
+export interface LoopRunContract {
   commit: string;
   spec: ModuleContract;
   /**
@@ -94,12 +94,12 @@ export type ContractGate = { refusal: string } | { refusal?: undefined; owns: st
 
 /**
  * Is the worker never held to a contract: a single session, a conflict worker, a plan of one
- * looping part, a night resumed from before the gate whose lead has given none?
+ * looping part, a run resumed from before the gate whose lead has given none?
  */
-function exempt(night: Night, args: AnyRecord, mode: WorkerMode): boolean {
+function exempt(loopRun: LoopRun, args: AnyRecord, mode: WorkerMode): boolean {
   if (mode !== WorkerMode.Loop || conflictMergeOf(args)) return true;
-  if (night.state.contractLegacy === true) return true;
-  return !contractRequired(night.state.plan);
+  if (loopRun.state.contractLegacy === true) return true;
+  return !contractRequired(loopRun.state.plan);
 }
 
 /** Is this path a symbolic link (false when it does not exist)? */
@@ -199,8 +199,8 @@ export function holdsContract(
  * Stage and commit the studio's documents alone, whatever else is uncommitted there — only the ones
  * that changed, nothing when none did; why it could not, or null.
  */
-async function commitStudioDocs(night: Night, files: readonly string[], label: string): Promise<string | null> {
-  const { ctx, integrationWorktree } = night;
+async function commitStudioDocs(loopRun: LoopRun, files: readonly string[], label: string): Promise<string | null> {
+  const { ctx, integrationWorktree } = loopRun;
   const changed: string[] = [];
   for (const file of files)
     if (!(await gitSays(ctx, integrationWorktree, () => GIT.sameAsRev("HEAD", file), label))) changed.push(file);
@@ -216,19 +216,19 @@ async function commitStudioDocs(night: Night, files: readonly string[], label: s
 }
 
 /** Is `commit` the run's starting point: its original base, a base head, or a contract written on one? */
-function isStart(night: Night, commit: string | null): boolean {
-  const { state } = night;
+function isStart(loopRun: LoopRun, commit: string | null): boolean {
+  const { state } = loopRun;
   if (!commit) return false;
-  if (commit === night.baseCommit || state.baseHeads.has(commit)) return true;
+  if (commit === loopRun.baseCommit || state.baseHeads.has(commit)) return true;
   return state.contract?.commit === commit && state.contract.onStart === true;
 }
 
 /**
  * Is `head` the run's starting point with only the contract written on it? The close has nothing
- * to land there and the art director nothing to judge: docs/MODULE-CONTRACT.md is not the night's work.
+ * to land there and the art director nothing to judge: docs/MODULE-CONTRACT.md is not the run's work.
  */
-export function contractAloneOnStart(night: Night, head: string | null | undefined): boolean {
-  const contract = night.state.contract;
+export function contractAloneOnStart(loopRun: LoopRun, head: string | null | undefined): boolean {
+  const contract = loopRun.state.contract;
   return Boolean(head && contract?.onStart === true && contract.commit === head);
 }
 
@@ -237,8 +237,8 @@ export function contractAloneOnStart(night: Night, head: string | null | undefin
  * stood: a starting point stays one (a blank base stage is no broken game), and what the harness
  * knew of its parent — loads or not, the console it logs, what it reported — holds for it too.
  */
-function inheritStanding(night: Night, from: string, to: string): void {
-  const { state } = night;
+function inheritStanding(loopRun: LoopRun, from: string, to: string): void {
+  const { state } = loopRun;
   if (state.baseHeads.has(from)) state.baseHeads.add(to);
   const health = state.healthByHead.get(from);
   if (health !== undefined) state.healthByHead.set(to, health);
@@ -248,16 +248,16 @@ function inheritStanding(night: Night, from: string, to: string): void {
   if (seen !== undefined) state.evidenceByHead.set(to, seen);
 }
 
-/** The contract the night holds, with where it was written when that was the run's start, and the vision beside it. */
-function nightContract(
-  night: Night,
+/** The contract the run holds, with where it was written when that was the run's start, and the vision beside it. */
+function loopRunContract(
+  loopRun: LoopRun,
   commit: string,
   spec: ModuleContract,
   parent: string | null,
   vision: RunVision | null,
-): NightContract {
-  const onStart = isStart(night, parent);
-  const baseHead = Boolean(parent && night.state.baseHeads.has(parent));
+): LoopRunContract {
+  const onStart = isStart(loopRun, parent);
+  const baseHead = Boolean(parent && loopRun.state.baseHeads.has(parent));
   return {
     commit,
     spec,
@@ -267,8 +267,8 @@ function nightContract(
   };
 }
 
-/** The vision the night's plan carries, held to its shape; null when it has none. */
-const planVision = (night: Night): RunVision | null => restoreVision(night.state.plan?.vision);
+/** The vision the run's plan carries, held to its shape; null when it has none. */
+const planVision = (loopRun: LoopRun): RunVision | null => restoreVision(loopRun.state.plan?.vision);
 
 /** The documents the contract's commit writes: the contract, and the plan's vision when it has one. */
 function studioDocs(spec: ModuleContract, vision: RunVision | null, titles: Record<string, string>): StudioDoc[] {
@@ -279,16 +279,16 @@ function studioDocs(spec: ModuleContract, vision: RunVision | null, titles: Reco
 /**
  * Render the contract into its file (`ARCHITECTURE_FILE`) — and the plan's vision into `VISION_FILE`
  * — and commit them on the integration branch: the new head is protected, journalled and on the
- * record, and the night holds its loop workers to it. Answers the commit, or why there is none.
+ * record, and the run holds its loop workers to it. Answers the commit, or why there is none.
  */
 export async function commitContract(
-  night: Night,
+  loopRun: LoopRun,
   spec: ModuleContract,
 ): Promise<{ commit: string } | { error: string }> {
-  const { appendRun, ctx, integrationWorktree, journal, note, protectHead, run, saveJournal, state } = night;
+  const { appendRun, ctx, integrationWorktree, journal, note, protectHead, run, saveJournal, state } = loopRun;
   const label = `director:${run.runId}:module-contract`;
   const titles = Object.fromEntries((state.plan?.workers ?? []).map((part: AnyRecord) => [part.id, part.title]));
-  const vision = planVision(night);
+  const vision = planVision(loopRun);
   const docs = studioDocs(spec, vision, titles);
   // The commit the contract is written on: what the new head inherits its standing from.
   const parent = await headOf(ctx, integrationWorktree, { label }).catch(() => null);
@@ -296,7 +296,7 @@ export async function commitContract(
   const failed =
     written ??
     (await commitStudioDocs(
-      night,
+      loopRun,
       docs.map((doc) => doc.file),
       label,
     ));
@@ -305,10 +305,10 @@ export async function commitContract(
     return { error: failed };
   }
   const head = await headOf(ctx, integrationWorktree, { label });
-  state.contract = nightContract(night, head, spec, parent, vision);
+  state.contract = loopRunContract(loopRun, head, spec, parent, vision);
   state.contractError = null;
-  if (parent && head !== parent) inheritStanding(night, parent, head);
-  // A night resumed from before the gate is held from the contract its lead gave on.
+  if (parent && head !== parent) inheritStanding(loopRun, parent, head);
+  // A run resumed from before the gate is held from the contract its lead gave on.
   state.contractLegacy = false;
   if (head !== state.integrationHead) {
     state.integrationHead = head;
@@ -328,30 +328,30 @@ const allPaths = (spec: ModuleContract): string[] => [...spec.modules, ...spec.s
 
 /**
  * The plan's contract and vision, committed when the plan has two or more looping parts and either
- * is new or changed — a vision given after the contract is committed beside the contract the night
+ * is new or changed — a vision given after the contract is committed beside the contract the run
  * already holds: the sentence `plan` adds to its answer, or null when there was nothing to do.
  */
-export async function contractOnPlan(night: Night): Promise<string | null> {
-  const { ctx, integrationWorktree, state } = night;
+export async function contractOnPlan(loopRun: LoopRun): Promise<string | null> {
+  const { ctx, integrationWorktree, state } = loopRun;
   if (!contractRequired(state.plan)) return null;
   const spec: ModuleContract | null = state.plan?.contract ?? state.contract?.spec ?? null;
   if (!spec) return null;
-  const vision = planVision(night);
+  const vision = planVision(loopRun);
   const visionNew = Boolean(vision) && !sameVision(state.contract?.vision, vision);
   if (sameContract(state.contract?.spec, spec) && !visionNew) return null;
-  const committed = await commitContract(night, spec);
+  const committed = await commitContract(loopRun, spec);
   if ("error" in committed) return CONTRACT_GATE.notCommitted(committed.error);
   const missing = await missingAt(ctx, integrationWorktree, committed.commit, allPaths(spec));
   return contractCommittedWords(committed.commit, missing, {
-    lead: Boolean(night.lead),
+    lead: Boolean(loopRun.lead),
     worktree: integrationWorktree,
     vision: Boolean(vision),
   });
 }
 
 /** Is the contract on the branch, with the vision beside it (or waived after the lead's refusals)? */
-const foundationKept = (night: Night): boolean =>
-  Boolean(night.state.contract && (night.state.contract.vision || night.state.visionWaived));
+const foundationKept = (loopRun: LoopRun): boolean =>
+  Boolean(loopRun.state.contract && (loopRun.state.contract.vision || loopRun.state.visionWaived));
 
 /**
  * Before a loop worker's fork point is read: is there a contract to hold it to, and a vision beside
@@ -359,9 +359,9 @@ const foundationKept = (night: Night): boolean =>
  * from the plan's seams and commits it, and the build goes on without a vision the lead never gave,
  * so a lead that never writes them does not stall the build. Answers the refusal, or null.
  */
-export async function contractBeforeFork(night: Night, args: AnyRecord, mode: WorkerMode): Promise<string | null> {
-  const { note, state } = night;
-  if (exempt(night, args, mode) || foundationKept(night)) return null;
+export async function contractBeforeFork(loopRun: LoopRun, args: AnyRecord, mode: WorkerMode): Promise<string | null> {
+  const { note, state } = loopRun;
+  if (exempt(loopRun, args, mode) || foundationKept(loopRun)) return null;
   // A contract the lead gave that could not be committed is the lead's to give again; one the
   // harness derived is tried again below, so a cause since cleared does not stall every worker.
   if (state.contractError && state.plan?.contract) return CONTRACT_GATE.notCommitted(state.contractError);
@@ -370,10 +370,10 @@ export async function contractBeforeFork(night: Night, args: AnyRecord, mode: Wo
   if (refusals < CONTRACT_REFUSALS_BEFORE_DERIVED) {
     state.contractRefusals = refusals + 1;
     if (state.contract) return VISION_GATE.missing(parts.length);
-    return CONTRACT_GATE.none(parts.length, { vision: Boolean(planVision(night)) });
+    return CONTRACT_GATE.none(parts.length, { vision: Boolean(planVision(loopRun)) });
   }
   if (!state.contract) {
-    const derived = await deriveContract(night, parts);
+    const derived = await deriveContract(loopRun, parts);
     if (derived) return derived;
   }
   if (!state.contract?.vision) {
@@ -387,17 +387,20 @@ export async function contractBeforeFork(night: Night, args: AnyRecord, mode: Wo
  * The contract the harness writes from the plan's seams after the lead's refusals, committed:
  * the refusal when it could not be, or null.
  */
-async function deriveContract(night: Night, parts: ReturnType<typeof loopParts>): Promise<string | null> {
-  const { ctx, integrationWorktree, note } = night;
+async function deriveContract(loopRun: LoopRun, parts: ReturnType<typeof loopParts>): Promise<string | null> {
+  const { ctx, integrationWorktree, note } = loopRun;
   const named = [...new Set(parts.flatMap((part) => part.owns ?? []).map(contractPath))].filter(
     (file): file is string => file !== null,
   );
   const missing = new Set(await missingAt(ctx, integrationWorktree, "HEAD", named));
-  const committed = await commitContract(night, derivedContract(parts, new Set(named.filter((f) => !missing.has(f)))));
+  const committed = await commitContract(
+    loopRun,
+    derivedContract(parts, new Set(named.filter((f) => !missing.has(f)))),
+  );
   if ("error" in committed) return CONTRACT_GATE.derivedNotCommitted(committed.error);
   // Says the vision only when it was written beside it: a missing one is the gate's to say.
-  const vision = night.state.contract?.vision ? { vision: true } : {};
-  note(contractCommittedWords(committed.commit, [], { lead: Boolean(night.lead), derived: true, ...vision }));
+  const vision = loopRun.state.contract?.vision ? { vision: true } : {};
+  note(contractCommittedWords(committed.commit, [], { lead: Boolean(loopRun.lead), derived: true, ...vision }));
   return null;
 }
 
@@ -407,12 +410,12 @@ async function deriveContract(night: Night, parts: ReturnType<typeof loopParts>)
  * seam it starts with — its contract paths when it named none (null: what it asked for).
  */
 export async function contractAtFork(
-  night: Night,
+  loopRun: LoopRun,
   { id, args, mode, commit }: { id: string; args: AnyRecord; mode: WorkerMode; commit: string | null },
 ): Promise<ContractGate> {
-  const { ctx, integrationWorktree, state } = night;
+  const { ctx, integrationWorktree, state } = loopRun;
   const contract = state.contract;
-  if (exempt(night, args, mode) || !contract) return { owns: null };
+  if (exempt(loopRun, args, mode) || !contract) return { owns: null };
   const part = partOfWorker(state.plan, [id, args.replaces, args.goal]);
   const asked = list(args.owns);
   const claims = ownsClaimingOthers(asked, contract.spec, part);
@@ -430,16 +433,16 @@ export async function contractAtFork(
  * worker's plan part (what `contractAtFork` defaults its owns to). Empty for a worker the contract
  * does not hold, or when there is no contract yet.
  */
-export function contractSeam(night: Night, id: string, args: AnyRecord, mode: WorkerMode): string[] {
-  const contract = night.state.contract;
-  if (!contract || exempt(night, args, mode)) return [];
-  return pathsOwnedBy(contract.spec, partOfWorker(night.state.plan, [id, args.replaces, args.goal]));
+export function contractSeam(loopRun: LoopRun, id: string, args: AnyRecord, mode: WorkerMode): string[] {
+  const contract = loopRun.state.contract;
+  if (!contract || exempt(loopRun, args, mode)) return [];
+  return pathsOwnedBy(contract.spec, partOfWorker(loopRun.state.plan, [id, args.replaces, args.goal]));
 }
 
 /** A loop worker's brief with the contract's pointer, its own modules and the conventions — or as it was. */
-export function briefWithContract(night: Night, brief: string, candidates: readonly unknown[]): string {
-  const contract = night.state.contract;
+export function briefWithContract(loopRun: LoopRun, brief: string, candidates: readonly unknown[]): string {
+  const contract = loopRun.state.contract;
   if (!contract) return brief;
-  const part = partOfWorker(night.state.plan, candidates);
+  const part = partOfWorker(loopRun.state.plan, candidates);
   return `${brief}\n\n${contractPointer(contract.spec, modulesOwnedBy(contract.spec, part))}`;
 }

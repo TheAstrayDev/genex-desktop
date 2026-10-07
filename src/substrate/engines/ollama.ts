@@ -1,6 +1,6 @@
 /**
  * Local-model engine (Ollama is v1's primary workhorse,
- * because an unlimited overnight loop at zero marginal cost is the whole point of local).
+ * because an unlimited unattended loop at zero marginal cost is the whole point of local).
  *
  * Two pieces:
  *  - {@link OllamaClient}: the management API (detect, list, pull with progress, capabilities).

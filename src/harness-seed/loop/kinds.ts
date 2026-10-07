@@ -579,7 +579,7 @@ function declaresSomething(traits: GameTraits): boolean {
 }
 
 /**
- * Write the declared kind back into studio.json, once a night, read-modify-write. The file is
+ * Write the declared kind back into studio.json, once a run, read-modify-write. The file is
  * the user's; every key it already has survives, and a studio.json that cannot be read or
  * parsed is left exactly as it is rather than replaced by ours.
  */

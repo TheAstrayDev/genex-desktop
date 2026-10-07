@@ -59,7 +59,7 @@ export function pauseDecision(kind: unknown, said: string): { line: string; plai
   };
 }
 
-/** Why a night a provider loss paused ended, in the sentence its report keeps (`said` is the engine's own words). */
+/** Why a run a provider loss paused ended, in the sentence its report keeps (`said` is the engine's own words). */
 export function pauseEnding(kind: unknown, said: string): string {
   if (kind === EngineFailure.Auth)
     return `the engine lost its sign-in before the director called finish (${said}); the run is paused — sign in again (or have the admin turn access back on), then Resume`;
@@ -129,7 +129,7 @@ export function lostSignIn(runId: unknown, now = Date.now()): ProviderLoss | nul
   return null;
 }
 
-/** A night of run `runId` (re)starts — the user's Resume, or the studio's: its providers are trusted again. */
+/** A run of run `runId` (re)starts — the user's Resume, or the studio's: its providers are trusted again. */
 export function forgetProviderLosses(runId: unknown): void {
   if (typeof runId === "string") LOST_PROVIDERS.delete(runId);
 }

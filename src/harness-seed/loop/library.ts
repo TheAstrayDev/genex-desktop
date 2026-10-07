@@ -332,7 +332,7 @@ export async function saveRecipe(workspace: string, recipe: Recipe): Promise<str
   const dir = path.join(workspace, "library", "recipes");
   await mkdir(dir, { recursive: true });
   const { file: _file, ...body } = recipe;
-  // A seeded recipe keeps its shipped bytes; only what tonight learned about it is written.
+  // A seeded recipe keeps its shipped bytes; only what this run learned about it is written.
   if (body.origin === "seed") {
     const target = path.join(workspace, "library", RECIPE_STATE_FILE);
     const state = await loadRecipeState(workspace);
@@ -839,7 +839,7 @@ function renderBriefSections(
     /** The builder's own `HARNESS:` flags acknowledged by the loop. */
     flags = [],
     lessons = [],
-    /** What earlier nights on THIS game cost (loop/ledger.ts) — already one sentence each. */
+    /** What earlier runs on THIS game cost (loop/ledger.ts) — already one sentence each. */
     gameLessons = [],
     /** This iteration's structural move: `{ what, why?, milestoneId?, check?, mandatory?, ladder?, polishStreak?, escalated? }`. */
     move = null,
@@ -853,7 +853,7 @@ function renderBriefSections(
     critic = "place",
     /** false for a game the user brought: the determinism, one-input-path and Blender rules are the studio template's craft law, not this game's (M4.6). */
     template = true,
-    /** The night's declared game — kind, traits and play script (loop/kinds.ts). Its one line heads the brief the way it heads every judge call. */
+    /** The run's declared game — kind, traits and play script (loop/kinds.ts). Its one line heads the brief the way it heads every judge call. */
     game = null,
     /** "finish" for a worker finishing what exists: THE FINISH replaces THE MOVE, and the polish list is the work. */
     stage = null,
@@ -935,7 +935,7 @@ function doNotRegressSection(doNotRegress: readonly string[] | undefined): strin
   ];
 }
 
-/** What the user asked for tonight, above everything else. */
+/** What the user asked for this run, above everything else. */
 function steeringSection(steering: readonly string[]): string[] {
   if (!steering.length) return [];
   return [`## USER STEERING — obeys over everything below`, ...steering.map((s) => `- ${s}`), ``];
@@ -1250,7 +1250,7 @@ function benchRule(facetId: string): string {
 
 /**
  * The game's own lessons before the general ones: what this exact game cost last time beats
- * what some other game taught, and both sit below the steering the user gave tonight.
+ * what some other game taught, and both sit below the steering the user gave this run.
  */
 function lessonsSections(gameLessons: readonly string[], lessons: readonly string[]): string[] {
   const lines: string[] = [];

@@ -618,7 +618,7 @@ function endedWorkerTask(payload: AnyRecord, mined: number): ValidationTask | nu
   };
 }
 
-/** Whether the night ended with something the user can play is the only outcome that counts. */
+/** Whether the run ended with something the user can play is the only outcome that counts. */
 function landingTask(payload: AnyRecord, mined: number): ValidationTask | null {
   const landing = payload.landingResult;
   if (!landing) return null;
@@ -652,10 +652,10 @@ const TASK_MINERS: Partial<Record<string, TaskMiner>> = {
     evidence: { decision: payload.decision ?? "" },
     skills: ["facet-decomposition"],
   }),
-  // A director's night (director.ts) used to be nearly invisible here: the analyst saw its
-  // facet iterations and nothing else, so the one thing that cost the first real night — a
+  // A director's run (director.ts) used to be nearly invisible here: the analyst saw its
+  // facet iterations and nothing else, so the one thing that cost the first real run — a
   // fork point that did not run, which refused five builders before they started — taught
-  // nobody. These three are what the night itself decided, and they answer to the playbook.
+  // nobody. These three are what the run itself decided, and they answer to the playbook.
   [RunEvent.DirectorVerdict]: gateRefusalTask,
   [RunEvent.DirectorWorker]: endedWorkerTask,
   [RunEvent.RunFinished]: landingTask,

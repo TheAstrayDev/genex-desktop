@@ -140,7 +140,7 @@ describe("check expressions", () => {
     assert.equal(evaluateBoolean("state.player.x == player.x", scope).pass, true);
     assert.equal(evaluateBoolean("delta('foo.bar') == 1", scope).pass, true);
     // The same alias inside has() and delta(), whose argument is a string the parser never
-    // turns into a reference: `state.`-prefixed, these read a silent `false` for a whole night.
+    // turns into a reference: `state.`-prefixed, these read a silent `false` for a whole run.
     assert.equal(evaluateBoolean("delta('state.foo.bar') == 1", scope).pass, true);
     assert.equal(evaluateBoolean("has('state.player.x')", scope).pass, true);
     assert.equal(
@@ -166,7 +166,7 @@ describe("check expressions", () => {
     const { unsatisfiable, stateKeys } = dryRunChecks(checks as never, { state } as never);
     // `state.props.moved` resolves through the alias and `player.x` is really there; the two
     // paths the build does not report come back — the string one included, which used to pass
-    // the dry run clean and then score false on every iteration for the rest of the night.
+    // the dry run clean and then score false on every iteration for the rest of the run.
     assert.deepEqual(
       unsatisfiable.map((entry: { id: string; missing: string[] }) => [entry.id, entry.missing]),
       [
@@ -1473,7 +1473,7 @@ describe("judges that keep the right build", () => {
   });
 
   it("two wordings of one defect on one camera never grow twins", () => {
-    // The night's own pair: `defect-coupe-trunk-deck-reads-as-a-smoot` and its `-2` twin, which
+    // The run's own pair: `defect-coupe-trunk-deck-reads-as-a-smoot` and its `-2` twin, which
     // then answered differently — one "yes", one "no" at 0.80 — and the round was kept on the yes.
     const first = "coupe's trunk deck reads as a smooth red panel with no shutline or lamp detail";
     const second =
@@ -1541,7 +1541,7 @@ describe("judges that keep the right build", () => {
       pass: false,
       reason: "named by the judge",
     };
-    // The night's actual answers: "no, no readout is visible" at 0.20, twice.
+    // The run's actual answers: "no, no readout is visible" at 0.20, twice.
     const first = settleVision(failing, {
       id: "defect-probe-readout",
       kind: "vision",
@@ -1669,7 +1669,7 @@ describe("judges that keep the right build", () => {
     assert.equal(summary.grownPassing, 0);
     // What the round card, the round drawer, the judges' sheet and the chat all print.
     assert.equal(checkCounts(summary), "Passed 3 · Failed 2 · Couldn't measure 4 · 3 reviewer notes");
-    // A night from before the split still reads exactly as it did.
+    // A run from before the split still reads exactly as it did.
     assert.equal(checkCounts({ total: 12, passing: 3, unmeasured: 4 }), "Passed 3 · Failed 5 · Couldn't measure 4");
   });
 
@@ -2243,7 +2243,7 @@ describe("planner (decompose) over a stub substrate", () => {
  * The judge's bill (M3.10).
  *
  * Every picture question used to be its own Claude Code session — 81 of them on the first real
- * night, 774 seconds of wall clock, the same rubric re-uploaded each time. The questions about
+ * run, 774 seconds of wall clock, the same rubric re-uploaded each time. The questions about
  * one camera share a frame and a rubric, so they ride in one call. Nothing about the judge's
  * blindness changes: it is still a one-shot session that is never told which build it is looking
  * at, and each answer still lands on the board as a yes/no with a confidence.

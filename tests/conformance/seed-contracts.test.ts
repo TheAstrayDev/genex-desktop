@@ -30,7 +30,7 @@ import { SteerDelivery as seedSteerDelivery } from "../../src/harness-seed/loop/
 import * as seedTime from "../../src/harness-seed/loop/time.ts";
 import * as seedWakeSchedule from "../../src/harness-seed/loop/director/wake-schedule.ts";
 import { DelegationRefusal as seedDelegationRefusal } from "../../src/harness-seed/loop/director/lead-session.ts";
-import { RESUME_RUN as seedResumeRun } from "../../src/harness-seed/loop/after-night.ts";
+import { RESUME_RUN as seedResumeRun } from "../../src/harness-seed/loop/after-loop-run.ts";
 import { REOPEN_RUN as seedReopenRun } from "../../src/harness-seed/loop/reopen-run-prompts.ts";
 import { tools as seedGameTools } from "../../src/harness-seed/tools/game-tools.ts";
 import * as seedVerdict from "../../src/harness-seed/loop/verdict.ts";
@@ -115,8 +115,8 @@ const LOGS: Record<string, EventEnvelope[]> = {
     custom(5, "coordinator_message_queued", { messageId: "b", action: { text: "and ducks" } }),
     custom(6, "coordinator_message_steering", { messageId: "b", into: "a" }),
     custom(7, "coordinator_message_delivered", { messageId: "b", into: "a", how: "native" }),
-    user(8, "make it night"),
-    custom(9, "coordinator_message_queued", { messageId: "c", action: { text: "make it night" } }),
+    user(8, "make it run"),
+    custom(9, "coordinator_message_queued", { messageId: "c", action: { text: "make it run" } }),
     custom(10, "coordinator_message_steering", { messageId: "c", into: "a" }),
     custom(11, "coordinator_message_requeued", { messageId: "c" }),
     user(12, "and rain"),
@@ -159,7 +159,7 @@ describe("the coordinator contract (shared/coordinator.ts ↔ loop/run-inbox.ts)
     assert.equal(coordinator.isCoordinatorTool("delete_game"), false);
   });
 
-  it("the chat's own session after a night keeps the host's own tools: live run controls, and the resume it records", () => {
+  it("the chat's own session after a run keeps the host's own tools: live run controls, and the resume it records", () => {
     for (const tool of coordinator.runControlTools) assert.equal(coordinator.isCoordinatorTool(tool.name), true);
     assert.deepEqual(
       coordinator.runControlTools.map((tool) => tool.name),
@@ -545,7 +545,7 @@ describe("run budgets (shared/run-state.ts ↔ loop/chat-dispatch.ts)", () => {
   });
 });
 
-describe("how many workers a night may run (shared/builders.ts ↔ loop/director/budgets.ts)", () => {
+describe("how many workers a run may run (shared/builders.ts ↔ loop/director/budgets.ts)", () => {
   it("lets the lead run every worker the Maximum concurrent workers setting offers, and keeps the lead's own windows apart", async () => {
     const { LEAD_WINDOWS, MAX_BUILDERS, DEFAULT_BUILDERS } = await import("../../src/shared/builders.ts");
     const budgets = await import("../../src/harness-seed/loop/director/budgets.ts");

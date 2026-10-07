@@ -88,7 +88,7 @@ function assertWholeWords(brief: string, prefix: string, at: number): void {
   assert.ok(line.includes("…"), `the ${prefix} field was cut`);
 }
 
-/** A board, a contract and a history as large as a long night makes them. */
+/** A board, a contract and a history as large as a long run makes them. */
 function adversarialBrief() {
   const checks = Array.from({ length: 40 }, (_, i) => ({
     id: `chk-${String(i + 1).padStart(2, "0")}`,

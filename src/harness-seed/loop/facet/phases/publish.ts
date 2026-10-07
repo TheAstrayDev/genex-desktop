@@ -29,7 +29,7 @@ export async function publishRound(loop: FacetLoop, round: FacetRound): Promise<
   // Only this build's questions: a harness check it cannot answer is in no count, so in no list.
   round.applyingNow = (Object.values(round.attemptBoard) as AnyRecord[]).filter((e) => appliesToBuild(e, spec));
   round.unmeasuredNow = round.applyingNow.filter((e: AnyRecord) => !isMeasured(e));
-  // A check the judge grew tonight is not one the part was planned against. The verdict record
+  // A check the judge grew this run is not one the part was planned against. The verdict record
   // counts the two apart, so a card can stop reading a judge's own new question as a win.
   round.grownIds = grownCheckIds(spec, round.retiredGrown);
   round.record = {
@@ -65,7 +65,7 @@ export async function publishRound(loop: FacetLoop, round: FacetRound): Promise<
     liveness: livenessRecord(round.liveness),
     spike: spikeRecord(loop, round),
     ...pictureRecord(loop, round),
-    // The same record every other judge of the night writes: what was looked at, what was
+    // The same record every other judge of the run writes: what was looked at, what was
     // measured, what the judge saw, and one sentence saying why. `verdictSource` and the
     // scoreboard stay where they are — this is the shape the screen reads, not a replacement.
     verdict: roundVerdict(loop, round),
@@ -120,7 +120,7 @@ function scoreboardRecord(round: FacetRound): AnyRecord {
     // but it is not the part doing what it was asked, and the card must not say "+1".
     plannedFlips: flips.filter((id) => !round.grownIds.has(id)),
     regressions: round.comparison?.regressions ?? [],
-    // Which checks measured nothing, not just how many: the night ledger keeps these ids
+    // Which checks measured nothing, not just how many: the run ledger keeps these ids
     // and a check that has told nobody anything for three rounds stops being written
     // again (`rarelyMeasurable`). Without them that warning could never fire.
     unmeasuredChecks: (summary.unmeasuredChecks ?? []).map((c: AnyRecord) => c.id),
@@ -196,7 +196,7 @@ function pictureRecord(loop: FacetLoop, round: FacetRound): AnyRecord {
   };
 }
 
-/** The round's verdict record, in the one shape every judge of the night writes. */
+/** The round's verdict record, in the one shape every judge of the run writes. */
 function roundVerdict(loop: FacetLoop, round: FacetRound) {
   const board = Object.values(round.attemptBoard) as AnyRecord[];
   const satisfied = Boolean(round.verdict.satisfied);

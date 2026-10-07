@@ -58,7 +58,7 @@ import {
 } from "./contract-gate.ts";
 import { defaultWorkerId, priorFork, priorIdRefusal, priorWorkerIds } from "./journal.ts";
 import { LEAD_FORK_REFUSED, LEAD_START_DIRTY } from "./lead-session-prompts.ts";
-import { BuildTarget } from "./night.ts";
+import { BuildTarget } from "./loop-run.ts";
 import {
   compilePlan,
   compileWorkerSpec,
@@ -70,13 +70,13 @@ import {
 } from "./rules.ts";
 import { planHeldWords, planSetWords, WAKE_START_NEXT } from "./wake-prompts.ts";
 import { NoteKind } from "./wake-schedule.ts";
-import type { Night, StartingWorker, Worker } from "./night.ts";
+import type { LoopRun, StartingWorker, Worker } from "./loop-run.ts";
 import type { FacetSpec } from "../spec.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { DelegateOwnership } from "../../types/host-api.d.ts";
 
 /**
- * This part serves a lead that is its chat's own session and writes nothing (one session): a night
+ * This part serves a lead that is its chat's own session and writes nothing (one session): a run
  * seats one only when every part it depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
@@ -117,13 +117,13 @@ const STUDIO_CONTRACT = "src/studio.js";
 const MAX_EMPTY_INTERRUPTS = 2;
 
 /**
- * A worker's engine hit its limit. On a night whose workers
+ * A worker's engine hit its limit. On a run whose workers
  * run on the other subscription this is not the director's own limit and must not pause the
  * run: the director keeps its session, and run_status says which engine is out, since when
  * and for how long, so it can wait it out or do the work with its own hands.
  */
-export function noteWorkerLimit(night: Night, worker: Worker, limit: AnyRecord): void {
-  const { note, run, state } = night;
+export function noteWorkerLimit(loopRun: LoopRun, worker: Worker, limit: AnyRecord): void {
+  const { note, run, state } = loopRun;
   if (!limit || !isEngineLimit(limit.kind)) return;
   worker.limit = limit;
   state.workerLimit = {
@@ -154,8 +154,8 @@ export function noteWorkerLimit(night: Night, worker: Worker, limit: AnyRecord):
  * the first statement of that `finally` instead: when this returns, every worker either
  * finished its close-out or the window expired, and the sentence says which.
  */
-export async function settleWorkers(night: Night, ms = CLOSE_SETTLE_MS) {
-  const { state } = night;
+export async function settleWorkers(loopRun: LoopRun, ms = CLOSE_SETTLE_MS) {
+  const { state } = loopRun;
   const pending = [...state.workers.values()].filter((w) => w.settled !== true).map((w) => w.settle);
   if (!pending.length) return true;
   let timer = null;
@@ -175,10 +175,10 @@ export async function settleWorkers(night: Night, ms = CLOSE_SETTLE_MS) {
  * moment the worktree is removed, and one morning's report named a worker's `lastCommit`
  * that `git for-each-ref --contains` could not find anywhere. Written when the worker ends
  * and again immediately before the teardown, because the close's settle is bounded on
- * purpose: a loop still judging when the night's clock runs out must not lose its commits.
+ * purpose: a loop still judging when the run's clock runs out must not lose its commits.
  */
-export async function protectWorker(night: Night, worker: Worker) {
-  const { ctx, run } = night;
+export async function protectWorker(loopRun: LoopRun, worker: Worker) {
+  const { ctx, run } = loopRun;
   const label = `director:${run.runId}:protect:${worker.id}`;
   const head =
     (worker.worktree ? await headOf(ctx, worker.worktree, { label }).catch(() => null) : null) ??
@@ -197,8 +197,8 @@ export async function protectWorker(night: Night, worker: Worker) {
  * same entry files the reviewer will judge it by at the end of the round (reviewAttempt), so the
  * monitor never warns about a file the reviewer would allow, or miss one it reverts.
  */
-async function lookedFindings(night: Night, worker: Worker, status: string, label: string) {
-  const { ctx, ownShape, shape } = night;
+async function lookedFindings(loopRun: LoopRun, worker: Worker, status: string, label: string) {
+  const { ctx, ownShape, shape } = loopRun;
   const last = worker.monitor;
   if (last && status === (last.status ?? null)) return { files: last.files, violations: last.violations };
   // Only when something moved, and never the whole diff of a big game: a regex needs no context.
@@ -224,15 +224,15 @@ async function lookedFindings(night: Night, worker: Worker, status: string, labe
  * something only when what it sees has changed. The look never writes: `--no-optional-locks`
  * and no `git add`, so it cannot take the index lock from the worker's own commit.
  */
-export async function lookAtWorker(night: Night, worker: Worker, screens: AnyRecord | null | undefined) {
-  const { ctx, run } = night;
+export async function lookAtWorker(loopRun: LoopRun, worker: Worker, screens: AnyRecord | null | undefined) {
+  const { ctx, run } = loopRun;
   const label = `director:${run.runId}:monitor:${worker.id}`;
   const status = await gitAt(ctx, worker.worktree, GIT.statusReadOnly(MONITOR_STATUS_BYTES), { label }).catch(
     () => null,
   );
   // A worktree that would not answer (git busy, the worker being torn down): look again next tick.
   if (status === null) return;
-  const found = await lookedFindings(night, worker, status, label);
+  const found = await lookedFindings(loopRun, worker, status, label);
   const screen = (Array.isArray(screens) ? screens : []).find((s) => s.label === worker.id || s.label === worker.title);
   const now = {
     id: worker.id,
@@ -261,8 +261,8 @@ function dueALook(w: Worker): boolean {
   return Date.now() - lastLook >= monitorEveryMs(w.deadline - w.startedAt);
 }
 
-export async function monitorSweep(night: Night) {
-  const { ctx, lookAtWorker, note, runningWorkers } = night;
+export async function monitorSweep(loopRun: LoopRun) {
+  const { ctx, lookAtWorker, note, runningWorkers } = loopRun;
   const due = runningWorkers().filter(dueALook);
   if (!due.length) return;
   const screens = await ctx.call(HostMethod.PreviewScreens, {}).catch(() => []);
@@ -278,8 +278,8 @@ export async function monitorSweep(night: Night) {
  * studio's looks into the running worktrees, and the delivery of steers the user addressed to
  * a worker — those must not wait for the director's next turn.
  */
-export function startMonitor(night: Night) {
-  const { ctx, monitorSweep, routeUserSteers, state } = night;
+export function startMonitor(loopRun: LoopRun) {
+  const { ctx, monitorSweep, routeUserSteers, state } = loopRun;
   if (state.monitor) return;
   state.monitor = (async () => {
     let routedAt = 0;
@@ -299,10 +299,10 @@ export function startMonitor(night: Night) {
 /**
  * What kind of game this is, on the run record: every judge, brief and check reads it from
  * there. A kind the director declared is written back into the user's studio.json once, so the
- * next night on this game starts knowing it.
+ * next run on this game starts knowing it.
  */
-async function declareGameKind(night: Night, game: AnyRecord): Promise<void> {
-  const { ctx, journal, note, run } = night;
+async function declareGameKind(loopRun: LoopRun, game: AnyRecord): Promise<void> {
+  const { ctx, journal, note, run } = loopRun;
   const changed = JSON.stringify(run.game ?? null) !== JSON.stringify(game);
   run.game = game;
   journal.run = { ...journal.run, game };
@@ -325,8 +325,8 @@ async function declareGameKind(night: Night, game: AnyRecord): Promise<void> {
 }
 
 /** The review window opens once, at the first plan: how long the user has, and what they had already said. */
-async function openPlanReview(night: Night): Promise<void> {
-  const { inbox, resume, run, softDeadline, state } = night;
+async function openPlanReview(loopRun: LoopRun): Promise<void> {
+  const { inbox, resume, run, softDeadline, state } = loopRun;
   const waitMs = planReviewWaitMs({
     reviewPlan: run.reviewPlan === true,
     resume,
@@ -344,18 +344,18 @@ async function openPlanReview(night: Night): Promise<void> {
  * plan: a director that re-plans after the user has spoken cannot make them wait again.
  */
 async function planAcceptance(
-  night: Night,
+  loopRun: LoopRun,
   args: AnyRecord,
   workers: Array<{ id: string; done: string[]; added?: boolean }>,
 ): Promise<string | null> {
-  const { state } = night;
+  const { state } = loopRun;
   // Parts beyond the ask are optional goals (goals.ts createGoals): a plan of nothing else would
   // leave no goal that can ever pass.
   const nothingAsked = workers.length > 0 && workers.every((part) => part.added === true);
-  if (goalCommission(night.run) && nothingAsked) return MESSAGE_GOALS.nothingAsked;
+  if (goalCommission(loopRun.run) && nothingAsked) return MESSAGE_GOALS.nothingAsked;
   // Built aside and kept only when the plan is taken: a refused plan sets no outcomes.
   let goals = state.goals;
-  if (goalCommission(night.run) && !goals) {
+  if (goalCommission(loopRun.run) && !goals) {
     if (workers.some((part: { done: string[] }) => !part.done.length))
       return "Goal mode needs measurable done scenarios for every initial required outcome.";
     goals = createGoals(workers);
@@ -365,7 +365,7 @@ async function planAcceptance(
       goals,
       workers,
       String(args.scope_instruction),
-      await night.inbox.steering(undefined, false),
+      await loopRun.inbox.steering(undefined, false),
     );
     if (!revised)
       return "Scope revision needs a new user instruction quoted exactly; ordinary replans cannot change required outcomes.";
@@ -390,10 +390,10 @@ const MESSAGE_ADDED = {
 } as const;
 
 /**
- * When an addition's card went to the user: how many of their steers its night's inbox held by
+ * When an addition's card went to the user: how many of their steers its run's inbox held by
  * then, and the time. A count holds only within one inbox: a reopened build hears the user from its
  * ask on, while the plan and its cards go on, so the time is what orders a card against a later
- * night's steers. A card kept before the time was has its count alone.
+ * run's steers. A card kept before the time was has its count alone.
  */
 interface AddedAsked {
   item: string;
@@ -416,15 +416,15 @@ interface SentSteer {
  * its additions are still asked about, once each.
  */
 async function settlePlanScope(
-  night: Night,
+  loopRun: LoopRun,
   plan: AnyRecord,
   previous: AnyRecord | null,
   args: AnyRecord,
 ): Promise<string[]> {
   const added: string[] = plan.added ?? [];
-  const scope = runScope(night.run);
-  const withCuts = scope ? scopeWith(scope, { cut: cutsOutsideAsk(night, plan, scope) }) : undefined;
-  const { sent, steers } = added.length ? await buildSteering(night) : { sent: null, steers: [] };
+  const scope = runScope(loopRun.run);
+  const withCuts = scope ? scopeWith(scope, { cut: cutsOutsideAsk(loopRun, plan, scope) }) : undefined;
+  const { sent, steers } = added.length ? await buildSteering(loopRun) : { sent: null, steers: [] };
   const askedAt: AddedAsked[] = Array.isArray(previous?.addedAskedAt) ? [...previous.addedAskedAt] : [];
   const instruction = String(args.scope_instruction ?? "");
   const next = withCuts
@@ -438,18 +438,18 @@ async function settlePlanScope(
   if (askedAt.length) plan.addedAskedAt = askedAt;
   const kept = next ? scopeWith(next, { added: fresh }) : undefined;
   if (kept && kept !== scope) {
-    night.run.scope = kept;
-    night.journal.run = { ...night.journal.run, scope: kept };
+    loopRun.run.scope = kept;
+    loopRun.journal.run = { ...loopRun.journal.run, scope: kept };
   }
   return fresh;
 }
 
 /** The plan's cuts that are not what the user asked for; the others leave the plan, and the lead hears it. */
-function cutsOutsideAsk(night: Night, plan: AnyRecord, scope: RunScope): string[] {
+function cutsOutsideAsk(loopRun: LoopRun, plan: AnyRecord, scope: RunScope): string[] {
   const cut: string[] = plan.cut ?? [];
   const asked = cut.filter((item) => scope.inScope.includes(item));
   if (!asked.length) return cut;
-  night.note(MESSAGE_ADDED.notCut(asked));
+  loopRun.note(MESSAGE_ADDED.notCut(asked));
   const kept = cut.filter((item) => !asked.includes(item));
   if (kept.length) plan.cut = kept;
   else delete plan.cut;
@@ -460,8 +460,8 @@ function cutsOutsideAsk(night: Night, plan: AnyRecord, scope: RunScope): string[
  * The user's steers to the build with when each was sent, or null from a kept run-inbox.ts from
  * before it could say (or when the log cannot be read): the cards are then ordered by count.
  */
-async function sentSteering(night: Night): Promise<SentSteer[] | null> {
-  const { inbox } = night;
+async function sentSteering(loopRun: LoopRun): Promise<SentSteer[] | null> {
+  const { inbox } = loopRun;
   if (typeof inbox.sentSteering !== "function") return null;
   return inbox.sentSteering().catch(() => null);
 }
@@ -470,10 +470,10 @@ async function sentSteering(night: Night): Promise<SentSteer[] | null> {
  * The user's steers to the build, in log order, and when each was sent (`sent`, null when the
  * inbox could not say: they are then the inbox's plain ones).
  */
-async function buildSteering(night: Night): Promise<{ sent: SentSteer[] | null; steers: string[] }> {
-  const sent = await sentSteering(night);
+async function buildSteering(loopRun: LoopRun): Promise<{ sent: SentSteer[] | null; steers: string[] }> {
+  const sent = await sentSteering(loopRun);
   if (sent) return { sent, steers: sent.map((steer) => steer.text) };
-  return { sent, steers: await night.inbox.steering(undefined, false).catch(() => []) };
+  return { sent, steers: await loopRun.inbox.steering(undefined, false).catch(() => []) };
 }
 
 /**
@@ -529,16 +529,16 @@ function widenedByUser(scope: RunScope, added: string[], instruction: string, st
  * it to keep it — set on the run too: every worker brief and every judge of the game reads
  * `run.vision` (vision-prompts.ts), and the journal's run brings it back on a Resume.
  */
-function keepVision(night: Night, plan: AnyRecord, previous: AnyRecord | null): void {
+function keepVision(loopRun: LoopRun, plan: AnyRecord, previous: AnyRecord | null): void {
   const vision = plan.vision ?? previous?.vision ?? null;
   if (!vision) return;
   plan.vision = vision;
-  night.run.vision = vision;
-  night.journal.run = { ...night.journal.run, vision };
+  loopRun.run.vision = vision;
+  loopRun.journal.run = { ...loopRun.journal.run, vision };
 }
 
-export async function setPlan(night: Night, args: AnyRecord) {
-  const { journal, saveJournal, state } = night;
+export async function setPlan(loopRun: LoopRun, args: AnyRecord) {
+  const { journal, saveJournal, state } = loopRun;
   const compiled = compilePlan(args);
   if (compiled.error !== undefined) return compiled.error;
   const plan = compiled.plan;
@@ -546,34 +546,34 @@ export async function setPlan(night: Night, args: AnyRecord) {
   const previous = state.plan;
   // Outcomes this plan sets (a reopened build's first plan for the ask) are shown like a first plan's.
   const acceptanceKept = Boolean(state.goals);
-  const scopeError = await planAcceptance(night, args, plan.workers);
+  const scopeError = await planAcceptance(loopRun, args, plan.workers);
   if (scopeError) return scopeError;
-  const additions = await settlePlanScope(night, plan, previous, args);
-  keepVision(night, plan, previous);
+  const additions = await settlePlanScope(loopRun, plan, previous, args);
+  keepVision(loopRun, plan, previous);
   state.plan = plan;
-  if (plan.game) await declareGameKind(night, plan.game);
+  if (plan.game) await declareGameKind(loopRun, plan.game);
   journal.director.plan = plan;
   journal.plan = {
     ...journal.plan,
     facets: plan.workers.map((w: AnyRecord) => ({ id: w.id, title: w.title, identity: w.done })),
   };
   await saveJournal();
-  for (const item of additions) await night.decision(MESSAGE_ADDED.text(item), MESSAGE_ADDED.plain(item));
-  if (first) await openPlanReview(night);
+  for (const item of additions) await loopRun.decision(MESSAGE_ADDED.text(item), MESSAGE_ADDED.plain(item));
+  if (first) await openPlanReview(loopRun);
   // A plan of several looping parts with a module contract: committed as docs/MODULE-CONTRACT.md,
   // with its vision beside it as docs/VISION.md.
-  const contracted = await contractOnPlan(night);
-  const answer = await planAnswer(night, plan, { first, acceptanceKept, args });
+  const contracted = await contractOnPlan(loopRun);
+  const answer = await planAnswer(loopRun, plan, { first, acceptanceKept, args });
   return contracted ? `${answer} ${contracted}` : answer;
 }
 
 /** What `plan` answers once the plan is kept: the card on the user's screen, and what to do next. */
 async function planAnswer(
-  night: Night,
+  loopRun: LoopRun,
   plan: AnyRecord,
   { first, acceptanceKept, args }: { first: boolean; acceptanceKept: boolean; args: AnyRecord },
 ): Promise<string> {
-  const { appendRun, note, state } = night;
+  const { appendRun, note, state } = loopRun;
   const acceptanceUnchanged = !first && acceptanceKept && !args.scope_instruction;
   if (acceptanceUnchanged)
     return "Worker assignments updated; required acceptance is unchanged. Read run_status only if the supplied snapshot is stale.";
@@ -582,7 +582,7 @@ async function planAnswer(
   await appendRun(RunEvent.AutopilotPlanReview, {
     waitMinutes,
     summary: plan.summary,
-    // What kind of game the night decided this is, on the one card the user reads before the
+    // What kind of game the run decided this is, on the one card the user reads before the
     // builders start: it decides the critic, the harness's own checks and the controls the
     // studio drives before every judgement, and it is written back into their studio.json —
     // so the window meant for objecting to the plan showed the one decision it never named.
@@ -602,7 +602,7 @@ async function planAnswer(
     return `Required acceptance is frozen: ${state.goals.entries.map((goal) => goal.id).join(", ")}. Use worker_start goal=<id> and playtest goal=<id> on integration. Report prerequisites through goal_update; finish once verified. Plan edits do not replace required outcomes.`;
   if (!waitMinutes)
     return `the plan is in the user's chat. Start the parts it names; call plan again if the run turns and the plan changes.`;
-  if (night.waking) return planSetWords(waitMinutes);
+  if (loopRun.waking) return planSetWords(waitMinutes);
   return `the plan is in the user's chat. They asked to read it before the run builds, so your first worker_start waits for their word — up to ${waitMinutes} min, and then it builds the plan as it stands.`;
 }
 
@@ -611,8 +611,8 @@ async function planAnswer(
  * worker_start blocks another four-minute slice and answers "nobody has answered yet" after
  * this call has just said they did.
  */
-async function planAnswered(night: Night, id: string, said: string[]): Promise<string> {
-  const { decision, state } = night;
+async function planAnswered(loopRun: LoopRun, id: string, said: string[]): Promise<string> {
+  const { decision, state } = loopRun;
   state.planSaidFrom += said.length;
   state.planGo = true;
   state.planReviewUntil = null;
@@ -624,8 +624,8 @@ async function planAnswered(night: Night, id: string, said: string[]): Promise<s
 }
 
 /** The window closed on a go, or on nobody's word: the plan is built as it stands. */
-async function planGoes(night: Night, go: boolean): Promise<void> {
-  const { decision, state } = night;
+async function planGoes(loopRun: LoopRun, go: boolean): Promise<void> {
+  const { decision, state } = loopRun;
   state.planGo = true;
   state.planReviewUntil = null;
   await decision(
@@ -640,17 +640,17 @@ async function planGoes(night: Night, go: boolean): Promise<void> {
 
 /**
  * The plan the user asked to read. The first worker waits for their word, never past the window:
- * a night nobody answers still builds, the way the classic pipeline's review always did. On a
- * night the wake loop drives (`night.waking`) the hold is a timer, not a blocked call: the inbox
+ * a run nobody answers still builds, the way the classic pipeline's review always did. On a
+ * run the wake loop drives (`run.waking`) the hold is a timer, not a blocked call: the inbox
  * is read once, and the lead ends its turn and is woken when the user answers or the window
  * closes (wake.ts). The long turn's hold — a kept older director.ts's too — blocks inside one
  * bounded slice. Answers the sentence `worker_start` returns instead of starting `id`, or null
  * when the worker may start.
  */
-export async function holdForPlanReview(night: Night, id: string): Promise<string | null> {
-  const { ctx, inbox, state } = night;
+export async function holdForPlanReview(loopRun: LoopRun, id: string): Promise<string | null> {
+  const { ctx, inbox, state } = loopRun;
   if (!state.planReviewUntil || state.planGo) return null;
-  const waking = night.waking === true;
+  const waking = loopRun.waking === true;
   const held = await waitForPlanGo({
     until: state.planReviewUntil,
     ...(waking ? { sliceMs: 0 } : {}),
@@ -660,12 +660,12 @@ export async function holdForPlanReview(night: Night, id: string): Promise<strin
       ctx.cancelled === true || state.finish !== null || (await inbox.finishing().catch(() => false)),
   });
   if (held.reason === PlanHold.Stopped) return "the run is finishing; no new workers";
-  if (held.reason === PlanHold.Answered) return planAnswered(night, id, held.said);
+  if (held.reason === PlanHold.Answered) return planAnswered(loopRun, id, held.said);
   if (held.reason === PlanHold.Slice && waking) return planHeldWords(id, state.planReviewUntil, Date.now());
   if (held.reason === PlanHold.Slice) {
     return `the user asked to read the plan first and has not answered yet; the studio waits ${minutes(state.planReviewUntil - Date.now())} more minutes and then builds it as it stands. Call wait, then start "${id}" again.`;
   }
-  await planGoes(night, held.go);
+  await planGoes(loopRun, held.go);
   return null;
 }
 
@@ -679,13 +679,13 @@ export async function holdForPlanReview(night: Night, id: string): Promise<strin
  * entry is the game's own code, with no FACET WIRING block for a second owner to meet the first
  * in. Answers the refusal, or null.
  */
-function seamRefusal(night: Night, id: string, args: AnyRecord): string | null {
-  const { ownShape, runningWorkers, shape } = night;
+function seamRefusal(loopRun: LoopRun, id: string, args: AnyRecord): string | null {
+  const { ownShape, runningWorkers, shape } = loopRun;
   if (!ownShape) return null;
   const running: Worker[] = runningWorkers();
   const seamOthers = running.length;
   // A loop worker under the module contract with no owns= takes its contract modules as its seam.
-  const seam = list(args.owns).length ? list(args.owns) : contractSeam(night, id, args, workerModeOf(args));
+  const seam = list(args.owns).length ? list(args.owns) : contractSeam(loopRun, id, args, workerModeOf(args));
   if (seamOthers > 0 && seam.length === 0) {
     return `worker "${id}" needs a seam: this game is the user's own, so a worker with no owns= may edit anything but the entry, the contract and index.html — and ${seamOthers === 1 ? "another worker is" : `${seamOthers} other workers are`} already running. Give it owns= (files, folders or a quoted glob), or wait for the others to finish.`;
   }
@@ -712,7 +712,7 @@ function seamRefusal(night: Night, id: string, args: AnyRecord): string | null {
  * whatever was free at this instant — so the director's own window, which it takes lazily on
  * its first look, was handed to a worker and every later judge, health and close pass had
  * nothing left but the user's own window. A capacity call that failed says nothing about the
- * pool; it must not refuse the night.
+ * pool; it must not refuse the run.
  */
 function capacityRefusal(running: number, cap: AnyRecord | null, pooled: boolean): string | null {
   const pool = pooled ? cap : null;
@@ -740,8 +740,8 @@ function workerModeOf(args: AnyRecord): WorkerMode {
  * memory to spare, a session with too little left — or, when it can, what the answer was read
  * from: `{ pooled, remaining, replaces, policySpec }`.
  */
-export async function startRefusal(night: Night, id: string, args: AnyRecord) {
-  const { ctx, runningWorkers, softDeadline, state } = night;
+export async function startRefusal(loopRun: LoopRun, id: string, args: AnyRecord) {
+  const { ctx, runningWorkers, softDeadline, state } = loopRun;
   if (state.finish) return "the run is finishing; no new workers";
   if (runningWorkers().length >= MAX_WORKERS) return `${MAX_WORKERS} workers are already running`;
   // A restart is the same part, not a new one: the feed folds the rows together (M3.8). Checked
@@ -749,7 +749,7 @@ export async function startRefusal(night: Night, id: string, args: AnyRecord) {
   // with "no window free" sends the director to wait for something that would not help. A
   // worker from before a pause is one of this run's too.
   const replaces = slug(args.replaces);
-  const known = [...state.workers.keys(), ...priorWorkerIds(night)];
+  const known = [...state.workers.keys(), ...priorWorkerIds(loopRun)];
   if (replaces && !known.includes(replaces))
     return `replaces: no worker "${args.replaces}" in this run (${known.join(", ") || "none started"})`;
   // The eight thresholds this worker's loop runs on (M4.10), read here for the same reason:
@@ -762,14 +762,14 @@ export async function startRefusal(night: Night, id: string, args: AnyRecord) {
   const stage = stageArg(args.stage, { move: args.move, milestones: args.milestones });
   if (stage.error !== undefined) return stage.error;
   if (stage.stage === FacetStage.Finish && workerModeOf(args) === WorkerMode.Single) return FINISH_SINGLE_REFUSAL;
-  const seam = seamRefusal(night, id, args);
+  const seam = seamRefusal(loopRun, id, args);
   if (seam) return seam;
   const screen = screenOwnerRefusal(runningWorkers(), id, args);
   if (screen) return screen;
   const cap = await ctx.call(HostMethod.PreviewCapacity, {}).catch(() => null);
   // The wake digest's room line reads the newest pool the studio gave (the user may change the
   // setting mid-run).
-  if (cap) night.capacity = cap;
+  if (cap) loopRun.capacity = cap;
   // A build without worker windows (no headless preview) lends the live view to one worker at a time.
   const pooled = cap?.headless !== false;
   const capacity = capacityRefusal(runningWorkers().length, cap, pooled);
@@ -870,8 +870,8 @@ function onlyBegin(setup: AnyRecord): boolean {
 }
 
 /** The JSON arguments of `worker_start`, parsed and held to their shapes — or the sentence that says what is wrong. */
-function parseWorkerArgs(night: Night, args: AnyRecord): WorkerArgs | string {
-  const { run } = night;
+function parseWorkerArgs(loopRun: LoopRun, args: AnyRecord): WorkerArgs | string {
+  const { run } = loopRun;
   const setupRaw = parseJson(args.setup);
   if (setupRaw?.__error) return `setup: ${setupRaw.__error}`;
   const checks = jsonArrayArg(args.checks, "checks");
@@ -890,10 +890,10 @@ function parseWorkerArgs(night: Night, args: AnyRecord): WorkerArgs | string {
 
 /** What a worker forks from: the integration branch, another worker's last commit, or a commit hash. */
 async function resolveForkCommit(
-  night: Night,
+  loopRun: LoopRun,
   rawFrom: unknown,
 ): Promise<{ from: string; commit: string | null; refusal?: undefined } | { refusal: string }> {
-  const { ctx, integrationWorktree, run, state, workerCommit } = night;
+  const { ctx, integrationWorktree, run, state, workerCommit } = loopRun;
   const from = String(rawFrom ?? BuildTarget.Integration).trim() || BuildTarget.Integration;
   if (from === BuildTarget.Integration) {
     const commit = await headOf(ctx, integrationWorktree, { label: `director:${run.runId}:fork` }).catch(
@@ -908,7 +908,7 @@ async function resolveForkCommit(
     return { from, commit };
   }
   // A worker from before a pause: its last commit, which its ref keeps.
-  const prior = priorFork(night, slug(from));
+  const prior = priorFork(loopRun, slug(from));
   if (prior)
     return prior.commit ? { from, commit: prior.commit } : { refusal: `worker "${from}" left no commit to fork from` };
   if (/^[0-9a-f]{7,40}$/i.test(from)) return { from, commit: from };
@@ -933,7 +933,7 @@ interface NewWorker {
   policySpec: AnyRecord;
 }
 
-/** A worker as the night keeps it, from the moment it is started. */
+/** A worker as the run keeps it, from the moment it is started. */
 function newWorkerRecord(fields: NewWorker): StartingWorker {
   const { id, args, mode, brief, owns, ownsMain, cameras, identity, setup, commit, replaces, baseConsole } = fields;
   /** Resolved by the record's own `resolveSettle`, assigned in the same statement below. */
@@ -1010,8 +1010,8 @@ function newWorkerRecord(fields: NewWorker): StartingWorker {
 type OpenedWorker = StartingWorker & { worktree: string };
 
 /** Give back a worker's window and remove its worktree: a start that refused after they were made. */
-async function releaseWorkspace(night: Night, worker: OpenedWorker): Promise<void> {
-  const { ctx, run } = night;
+async function releaseWorkspace(loopRun: LoopRun, worker: OpenedWorker): Promise<void> {
+  const { ctx, run } = loopRun;
   if (worker.handle) await ctx.call(HostMethod.PreviewRelease, { handle: worker.handle }).catch(() => {});
   await ctx.call(HostMethod.SnapshotRemoveWorktree, { project: run.project, path: worker.worktree }).catch(() => {});
 }
@@ -1020,8 +1020,12 @@ async function releaseWorkspace(night: Night, worker: OpenedWorker): Promise<voi
  * A worktree and a window — each undone if what comes next refuses. Answers the worker in its
  * worktree, or the refusal.
  */
-async function openWorkspace(night: Night, worker: StartingWorker, pooled: boolean): Promise<OpenedWorker | string> {
-  const { ctx, run } = night;
+async function openWorkspace(
+  loopRun: LoopRun,
+  worker: StartingWorker,
+  pooled: boolean,
+): Promise<OpenedWorker | string> {
+  const { ctx, run } = loopRun;
   try {
     const { path: worktree } = await ctx.call(HostMethod.SnapshotWorktree, {
       project: run.project,
@@ -1051,12 +1055,12 @@ async function openWorkspace(night: Night, worker: StartingWorker, pooled: boole
  * fork point once per commit — whatever it was forked from, not only the integration branch —
  * and it looks at THIS worker's worktree, which is that commit and nobody else's uncommitted
  * work. The run's own starting point is looked at as a base: an empty scaffold is allowed to be
- * blank, and refusing every worker over it is how a night from scratch used to end before it
+ * blank, and refusing every worker over it is how a run from scratch used to end before it
  * began. Answers the refusal (the worker's workspace given back), or null.
  */
-async function forkGate(night: Night, worker: OpenedWorker, from: string): Promise<string | null> {
-  const { consoleInheritedBy, errorsLogged, ledgerFacts, note, patientEvidence, recordVerdict, remember } = night;
-  const { rememberEvidence, shotsOf, state } = night;
+async function forkGate(loopRun: LoopRun, worker: OpenedWorker, from: string): Promise<string | null> {
+  const { consoleInheritedBy, errorsLogged, ledgerFacts, note, patientEvidence, recordVerdict, remember } = loopRun;
+  const { rememberEvidence, shotsOf, state } = loopRun;
   const commit = worker.from;
   if (!commit || state.healthByHead.get(commit) === true) return null;
   const gate = await patientEvidence(worker.worktree, {
@@ -1083,13 +1087,13 @@ async function forkGate(night: Night, worker: OpenedWorker, from: string): Promi
   if (gate.ok === true) return null;
   // A lead writes nothing (one session): a single session is its hands, and it starts on a build
   // that does not run — repairing it is the job.
-  if (night.lead && worker.mode === WorkerMode.Single) {
+  if (loopRun.lead && worker.mode === WorkerMode.Single) {
     note(`worker ${worker.id} starts on ${shortSha(commit)}, which does not run — ${(gate.problems ?? []).join("; ")}`);
     return null;
   }
-  await releaseWorkspace(night, worker);
+  await releaseWorkspace(loopRun, worker);
   // A builder that never started is the loss the user feels first; the ledger keeps it so
-  // the next night on this game reads "fix the fork point" before it hands out work.
+  // the next run on this game reads "fix the fork point" before it hands out work.
   await remember(
     refusalRecord({
       ...ledgerFacts(),
@@ -1103,7 +1107,7 @@ async function forkGate(night: Night, worker: OpenedWorker, from: string): Promi
   note(`worker ${worker.id} refused: ${shortSha(commit)} does not run — ${(gate.problems ?? []).join("; ")}`);
   return JSON.stringify({
     refused: worker.id,
-    reason: forkRefusal(night, commit, from),
+    reason: forkRefusal(loopRun, commit, from),
     problems: gate.problems ?? [],
     consoleErrors: gate.consoleErrors ?? [],
     shots: shotsOf(gate),
@@ -1111,8 +1115,8 @@ async function forkGate(night: Night, worker: OpenedWorker, from: string): Promi
 }
 
 /** Why a worker may not fork from a build that does not run, in the words its lead can act on. */
-function forkRefusal(night: Night, commit: string, from: string): string {
-  if (night.lead) return LEAD_FORK_REFUSED(commit, from);
+function forkRefusal(loopRun: LoopRun, commit: string, from: string): string {
+  if (loopRun.lead) return LEAD_FORK_REFUSED(commit, from);
   if (from === BuildTarget.Integration)
     return `the build at ${shortSha(commit)} does not run — fix it in your worktree and commit before starting workers on it`;
   return `the build at ${shortSha(commit)} (from=${from}) does not run — fork from something that runs, or fix it first`;
@@ -1124,22 +1128,22 @@ function threadIdOf(thread: string | { id?: string }): string {
 }
 
 /** The worker's own thread. Answers the worker, now started, or the refusal (its workspace given back). */
-async function openThread(night: Night, worker: OpenedWorker): Promise<Worker | string> {
-  const { ctx, run } = night;
+async function openThread(loopRun: LoopRun, worker: OpenedWorker): Promise<Worker | string> {
+  const { ctx, run } = loopRun;
   try {
     const thread: string | { id?: string } = await ctx.call(HostMethod.ThreadCreate, {
       title: `${run.runId} · ${worker.title}`,
     });
     return Object.assign(worker, { threadId: threadIdOf(thread) });
   } catch (err: any) {
-    await releaseWorkspace(night, worker);
+    await releaseWorkspace(loopRun, worker);
     return `could not start "${worker.id}": ${err?.message ?? err}`;
   }
 }
 
 /** The kind this part is judged as: what the director named for it, else the run's own. */
-function workerKindOf(night: Night, id: string, args: AnyRecord): string | null {
-  const { note, run } = night;
+function workerKindOf(loopRun: LoopRun, id: string, args: AnyRecord): string | null {
+  const { note, run } = loopRun;
   const namedKind = String(args.kind ?? "").trim();
   const quoted = namedKind.slice(0, KIND_QUOTED);
   const workerKind = isGameKind(namedKind) ? namedKind : (run.game?.kind ?? null);
@@ -1152,27 +1156,27 @@ function workerKindOf(night: Night, id: string, args: AnyRecord): string | null 
 }
 
 /** The critic this part is reviewed by when the director named one (`screen` for a UI or HUD part); else null, its kind's. */
-function workerCriticOf(night: Night, id: string, args: AnyRecord): string | null {
+function workerCriticOf(loopRun: LoopRun, id: string, args: AnyRecord): string | null {
   const named = String(args.critic ?? "").trim();
   if (!named) return null;
   if (Object.hasOwn(CRITIC_PRINCIPLES, named)) return named;
-  night.note(
+  loopRun.note(
     `worker ${id}: critic "${named.slice(0, KIND_QUOTED)}" is not a critic (${Object.keys(CRITIC_PRINCIPLES).join(", ")}) — reviewed by its kind's`,
   );
   return null;
 }
 
 /** The contract, compiled and read against what the fork point reports (see compileWorkerSpec). */
-function compileContract(night: Night, worker: Worker, parsed: WorkerArgs, args: AnyRecord): void {
-  const { neverMeasured, note, ownShape, state } = night;
+function compileContract(loopRun: LoopRun, worker: Worker, parsed: WorkerArgs, args: AnyRecord): void {
+  const { neverMeasured, note, ownShape, state } = loopRun;
   const { id } = worker;
-  const workerKind = workerKindOf(night, id, args);
+  const workerKind = workerKindOf(loopRun, id, args);
   if (worker.mode !== WorkerMode.Loop) return;
   const compiled = compileWorkerSpec(
     {
       id,
       title: worker.title,
-      brief: briefWithContract(night, worker.brief, [id, args.replaces, args.goal]),
+      brief: briefWithContract(loopRun, worker.brief, [id, args.replaces, args.goal]),
       owns: worker.owns,
       identity: worker.identity,
       cameras: worker.cameras,
@@ -1181,7 +1185,7 @@ function compileContract(night: Night, worker: Worker, parsed: WorkerArgs, args:
       milestones: parsed.ladder,
       traits: list(args.traits),
       kind: workerKind,
-      critic: workerCriticOf(night, id, args),
+      critic: workerCriticOf(loopRun, id, args),
       ownsMain: worker.ownsMain,
       setup: worker.setup,
       screen: !ownShape,
@@ -1224,9 +1228,9 @@ function contractOf(worker: Worker): FacetSpec {
 const identityChecks = (worker: Worker): number =>
   contractOf(worker).checks.filter((c: AnyRecord) => c.weight === CheckWeight.Identity).length;
 
-/** The worker on the night's record: its state, the journal, the card, the decision and the log. */
-async function announceWorker(night: Night, worker: Worker, { budgetMs, replaces, roundWarning }: AnyRecord) {
-  const { appendRun, decision, journal, note, saveJournal, state } = night;
+/** The worker on the run's record: its state, the journal, the card, the decision and the log. */
+async function announceWorker(loopRun: LoopRun, worker: Worker, { budgetMs, replaces, roundWarning }: AnyRecord) {
+  const { appendRun, decision, journal, note, saveJournal, state } = loopRun;
   const { id, mode, brief } = worker;
   state.workers.set(id, worker);
   journal.director.workers[id] = {
@@ -1264,8 +1268,8 @@ async function announceWorker(night: Night, worker: Worker, { budgetMs, replaces
 }
 
 /** Set the worker going in the background; the monitor looks into it from here on. */
-function launchWorker(night: Night, worker: Worker): void {
-  const { runWorker, startMonitor } = night;
+function launchWorker(loopRun: LoopRun, worker: Worker): void {
+  const { runWorker, startMonitor } = loopRun;
   startMonitor();
   worker.promise = runWorker(worker).catch((err: any) => {
     worker.error = String(err?.message ?? err);
@@ -1344,25 +1348,25 @@ function startAnswer(worker: Worker, { budgetMs, roundWarning, policySpec, dirty
  * Whether `id` may be started at all: a free id — not this session's, nor one a worker from before
  * a pause left work under, unless it builds on that work — a brief, a plan, and the plan review's word.
  */
-async function startPreconditions(night: Night, id: string, args: AnyRecord): Promise<string | null> {
-  const { holdForPlanReview, state } = night;
+async function startPreconditions(loopRun: LoopRun, id: string, args: AnyRecord): Promise<string | null> {
+  const { holdForPlanReview, state } = loopRun;
   if (RESERVED_WORKER_IDS.has(id)) return `"${id}" is reserved; pick another id`;
   if (state.workers.has(id)) return `worker "${id}" already exists (${state.workers.get(id)?.state}); pick another id`;
-  const buried = priorIdRefusal(night, id, slug(args.from));
+  const buried = priorIdRefusal(loopRun, id, slug(args.from));
   if (buried) return buried;
   if (!String(args.brief ?? "").trim()) return "a worker needs a brief";
   if (!state.plan) {
     return `call plan first: the user must be able to read what this run is for before a builder starts. plan takes a summary in plain words and the parts you mean to hand out (id, title, seam, owns, done, minutes) — then start "${id}".`;
   }
-  return goalRefusal(night, id, args) ?? holdForPlanReview(id);
+  return goalRefusal(loopRun, id, args) ?? holdForPlanReview(id);
 }
 
-/** Whether the night's required outcomes let `id` start: none verified or blocked, and its own goal open. */
-function goalRefusal(night: Night, id: string, args: AnyRecord): string | null {
-  const { state } = night;
+/** Whether the run's required outcomes let `id` start: none verified or blocked, and its own goal open. */
+function goalRefusal(loopRun: LoopRun, id: string, args: AnyRecord): string | null {
+  const { state } = loopRun;
   // A goal commission with no outcomes yet stands on a plan that set none: a finished build reopened
   // with Loop ∞, whose outcomes are what its lead plans for the ask (director/reopen.ts).
-  if (!state.goals) return goalCommission(night.run) ? MESSAGE_OUTCOMES_FIRST : null;
+  if (!state.goals) return goalCommission(loopRun.run) ? MESSAGE_OUTCOMES_FIRST : null;
   const decision = goalDecision(state.goals, state.integrationHead);
   if (decision === GoalStatus.Passed) return "Required outcomes are verified: finish instead of adding optional work.";
   if (decision === GoalStatus.Blocked)
@@ -1379,27 +1383,27 @@ function goalRefusal(night: Night, id: string, args: AnyRecord): string | null {
  * it named none — or the refusal.
  */
 async function contractedFork(
-  night: Night,
+  loopRun: LoopRun,
   id: string,
   args: AnyRecord,
   mode: WorkerMode,
 ): Promise<{ from: string; commit: string | null; owns: string[]; refusal?: undefined } | { refusal: string }> {
-  const uncontracted = await contractBeforeFork(night, args, mode);
+  const uncontracted = await contractBeforeFork(loopRun, args, mode);
   if (uncontracted) return { refusal: uncontracted };
-  const fork = await resolveForkCommit(night, args.from);
+  const fork = await resolveForkCommit(loopRun, args.from);
   if (fork.refusal !== undefined) return fork;
-  const contracted = await contractAtFork(night, { id, args, mode, commit: fork.commit });
+  const contracted = await contractAtFork(loopRun, { id, args, mode, commit: fork.commit });
   if (contracted.refusal !== undefined) return { refusal: contracted.refusal };
   return { from: fork.from, commit: fork.commit, owns: contracted.owns ?? list(args.owns) };
 }
 
-export async function startWorker(night: Night, args: AnyRecord) {
-  const { ctx, integrationWorktree, medianRoundMs, note, run, runningWorkers, startRefusal, state } = night;
-  const id = slug(args.id) || defaultWorkerId(night);
+export async function startWorker(loopRun: LoopRun, args: AnyRecord) {
+  const { ctx, integrationWorktree, medianRoundMs, note, run, runningWorkers, startRefusal, state } = loopRun;
+  const id = slug(args.id) || defaultWorkerId(loopRun);
   const goal = String(args.goal ?? id);
-  const precondition = await startPreconditions(night, id, args);
+  const precondition = await startPreconditions(loopRun, id, args);
   if (precondition) return precondition;
-  const missingPrerequisite = await requireMultiplayer(night, goal);
+  const missingPrerequisite = await requireMultiplayer(loopRun, goal);
   if (missingPrerequisite) return missingPrerequisite;
   const allowed = await startRefusal(id, args);
   if (typeof allowed === "string") return allowed;
@@ -1412,9 +1416,9 @@ export async function startWorker(night: Night, args: AnyRecord) {
   // What a round on this game has actually cost, against what this worker is being given.
   const roundWarning = shortBudgetWarning(budgetMs, medianRoundMs());
   const ownsMain = yes(args.owns_main, runningWorkers().length === 0);
-  const parsed = parseWorkerArgs(night, args);
+  const parsed = parseWorkerArgs(loopRun, args);
   if (typeof parsed === "string") return parsed;
-  const fork = await contractedFork(night, id, args, mode);
+  const fork = await contractedFork(loopRun, id, args, mode);
   if (fork.refusal !== undefined) return fork.refusal;
   const { from, commit, owns } = fork;
   const dirty = await gitAt(ctx, integrationWorktree, GIT.status, { label: `director:${run.runId}:dirty` }).catch(
@@ -1436,34 +1440,34 @@ export async function startWorker(night: Night, args: AnyRecord) {
     budgetMs,
     policySpec,
   });
-  const opened = await openWorkspace(night, starting, pooled);
+  const opened = await openWorkspace(loopRun, starting, pooled);
   if (typeof opened === "string") return opened;
-  const refused = await forkGate(night, opened, from);
+  const refused = await forkGate(loopRun, opened, from);
   if (refused) return refused;
-  const worker = await openThread(night, opened);
+  const worker = await openThread(loopRun, opened);
   if (typeof worker === "string") return worker;
   worker.goal = goal;
-  compileContract(night, worker, parsed, args);
+  compileContract(loopRun, worker, parsed, args);
   // A part the art director found defects in while nobody ran it: they are this worker's questions now.
-  night.takeShelvedShipDefects?.(worker);
+  loopRun.takeShelvedShipDefects?.(worker);
   for (const warning of policySpec.warnings) note(`worker ${id}: policy ${warning}`);
-  await announceWorker(night, worker, { budgetMs, replaces, roundWarning });
-  await chargeGoalAttempt(night, goal);
-  launchWorker(night, worker);
+  await announceWorker(loopRun, worker, { budgetMs, replaces, roundWarning });
+  await chargeGoalAttempt(loopRun, goal);
+  launchWorker(loopRun, worker);
   return startAnswer(worker, {
     budgetMs,
     roundWarning,
     policySpec,
     dirty,
-    waking: night.waking === true,
-    lead: Boolean(night.lead),
+    waking: loopRun.waking === true,
+    lead: Boolean(loopRun.lead),
   });
 }
 
-async function chargeGoalAttempt(night: Night, goal: string): Promise<void> {
-  if (!night.state.goals) return;
-  startGoalAttempt(night.state.goals, goal);
-  await night.saveJournal();
+async function chargeGoalAttempt(loopRun: LoopRun, goal: string): Promise<void> {
+  if (!loopRun.state.goals) return;
+  startGoalAttempt(loopRun.state.goals, goal);
+  await loopRun.saveJournal();
 }
 
 // ── running a worker ──
@@ -1471,10 +1475,10 @@ async function chargeGoalAttempt(night: Night, goal: string): Promise<void> {
 /**
  * A judged or stopped round, kept: the worker's own digest, the game's ledger (before anything
  * else can lose it: what was decided, why, what it measured, and what the builder was told),
- * what the round cost, the report and the night's log.
+ * what the round cost, the report and the run's log.
  */
-export function recordRound(night: Night, worker: Worker, record: AnyRecord): void {
-  const { ledgerFacts, note, remember, report } = night;
+export function recordRound(loopRun: LoopRun, worker: Worker, record: AnyRecord): void {
+  const { ledgerFacts, note, remember, report } = loopRun;
   const kept = withoutFrames(iterationDigest(record));
   worker.iterations.push(kept);
   void remember(
@@ -1503,7 +1507,7 @@ export function recordRound(night: Night, worker: Worker, record: AnyRecord): vo
   // The round a stop cut short is the lead's own doing: it opens the next digest, and wakes nobody.
   const stoppedByLead = worker.stopRequested && kept.stopped === true;
   note(roundNote(worker.id, kept), stoppedByLead ? NoteKind.WorkerStopped : NoteKind.WorkerRound);
-  void keepRound(night, worker, kept).catch(() => {});
+  void keepRound(loopRun, worker, kept).catch(() => {});
 }
 
 /**
@@ -1511,8 +1515,8 @@ export function recordRound(night: Night, worker: Worker, record: AnyRecord): vo
  * come back. The limit is gone, so `run_status` stops saying `worker_start` will meet it — most of
  * all when the engine gave no reset time for the wake loop to wait out.
  */
-function workersLimitOutlived(night: Night, worker: Worker): void {
-  const { state } = night;
+function workersLimitOutlived(loopRun: LoopRun, worker: Worker): void {
+  const { state } = loopRun;
   if (state.workerLimit && worker.startedAt > state.workerLimit.at) state.workerLimit = null;
 }
 
@@ -1526,16 +1530,16 @@ function workersLimitOutlived(night: Night, worker: Worker): void {
  * rate or usage limit cut short is published too (facet publish.ts runs before the engine's health
  * is read), and only a build that ran can win.
  */
-async function keepRound(night: Night, worker: Worker, kept: AnyRecord): Promise<void> {
-  const { ctx, saveJournal } = night;
-  if (kept.won) workersLimitOutlived(night, worker);
+async function keepRound(loopRun: LoopRun, worker: Worker, kept: AnyRecord): Promise<void> {
+  const { ctx, saveJournal } = loopRun;
+  if (kept.won) workersLimitOutlived(loopRun, worker);
   if (kept.won && worker.worktree)
     worker.lastAccepted = await headOf(ctx, worker.worktree).catch(() => worker.lastAccepted ?? null);
-  if (night.resting === true) return;
+  if (loopRun.resting === true) return;
   await saveJournal();
 }
 
-/** A round in the night's log: accepted, lost or stopped, and why. */
+/** A round in the run's log: accepted, lost or stopped, and why. */
 function roundNote(id: string, kept: AnyRecord): string {
   let outcome = "lost";
   if (kept.stopped) outcome = "stopped before it was judged";
@@ -1552,11 +1556,11 @@ function roundNote(id: string, kept: AnyRecord): string {
  * lead's newest head, which a worker may have been told to merge before its wave closes: its
  * review walks back from there (facet/merged-heads.ts).
  */
-export function loopIntegration(night: Night): {
+export function loopIntegration(loopRun: LoopRun): {
   head: () => Promise<string | null>;
   latest: () => Promise<string | null>;
 } {
-  const { state } = night;
+  const { state } = loopRun;
   return { head: async () => state.waveHead ?? state.integrationHead, latest: async () => state.integrationHead };
 }
 
@@ -1565,13 +1569,13 @@ export function loopIntegration(night: Night): {
  * of one this run already had — `replaces=`, or an id from before a pause — builds on what exists
  * and is judged side by side from its first round.
  */
-function opensWithBuildBlock(night: Night, worker: Worker): boolean {
-  return !worker.replaces && !priorWorkerIds(night).includes(worker.id);
+function opensWithBuildBlock(loopRun: LoopRun, worker: Worker): boolean {
+  return !worker.replaces && !priorWorkerIds(loopRun).includes(worker.id);
 }
 
 /** The judged loop a loop worker runs, until its `done` checks pass or its budget ends. */
-async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
-  const { ctx, medianRoundMs, note, noteWorkerLimit, ownShape, projectDir, run, shape, state, threadId } = night;
+async function runLoopWorker(loopRun: LoopRun, worker: Worker): Promise<void> {
+  const { ctx, medianRoundMs, note, noteWorkerLimit, ownShape, projectDir, run, shape, state, threadId } = loopRun;
   const result = await runFacetLoop(ctx, {
     runThreadId: threadId,
     facetThreadId: worker.threadId,
@@ -1584,9 +1588,9 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
     worktree: worker.worktree,
     handle: worker.handle,
     deadline: worker.deadline,
-    buildBlock: opensWithBuildBlock(night, worker),
+    buildBlock: opensWithBuildBlock(loopRun, worker),
     // How many rounds fit, sized from what a round on this game has actually cost. Eight
-    // minutes was the assumption; the rounds of one real night took nine to forty-six.
+    // minutes was the assumption; the rounds of one real run took nine to forty-six.
     maxIterations: Math.max(
       1,
       num(
@@ -1601,14 +1605,14 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
     // finished a round of its own and can measure itself.
     minIterationMs: medianRoundMs(),
     policy: worker.policy,
-    // The director's window into the machinery deciding its worker's night (M4.10). The
+    // The director's window into the machinery deciding its worker's run (M4.10). The
     // note only fires on a transition, so the lead is woken on what changed and on nothing else.
     onLoopState: (loop: AnyRecord) => {
       const said = loopNote(worker.id, worker.loop, loop);
       worker.loop = loop;
       if (said) note(said, NoteKind.WorkerLoop);
     },
-    // A round that waits for a lost provider wakes the lead; a lost sign-in then pauses the night (wake.ts).
+    // A round that waits for a lost provider wakes the lead; a lost sign-in then pauses the run (wake.ts).
     onProviderLost: (lost: AnyRecord) =>
       note(
         `worker ${worker.id}: its round waits for the model provider (${lost.engine}: ${lossWords(lost.kind)}) — nothing is counted against it`,
@@ -1619,7 +1623,7 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
       return own;
     },
     // Who stopped it, in words. Nothing here is ever the user's doing: the director
-    // stops its own workers, and a night that stops five to fix a shader must not tell
+    // stops its own workers, and a run that stops five to fix a shader must not tell
     // the owner they asked for it.
     finishRequested: async () => {
       if (worker.stopRequested) return { by: "director", reason: worker.stopWhy ?? "stopped by the director" };
@@ -1627,9 +1631,9 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
       return false;
     },
     // Once a wave has closed, a worker takes the integration branch once per wave (integrate.ts).
-    integration: loopIntegration(night),
+    integration: loopIntegration(loopRun),
     projectDir,
-    onIteration: (record: AnyRecord) => recordRound(night, worker, record),
+    onIteration: (record: AnyRecord) => recordRound(loopRun, worker, record),
     facets: state.facetSpecs,
     // A defect that belongs to another worker's seam goes to that worker, not onto this
     // one's board (WP2d); the classic pipeline has always done this and the director's
@@ -1658,8 +1662,8 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
  * fired and the locks never ran, so the seam the director typed was a sentence in a brief and
  * nothing else. It carries the same object a loop worker's rounds do.
  */
-function singleOwnership(night: Night, worker: Worker): DelegateOwnership {
-  const { ownShape, shape } = night;
+function singleOwnership(loopRun: LoopRun, worker: Worker): DelegateOwnership {
+  const { ownShape, shape } = loopRun;
   return {
     facetId: worker.id,
     owns: worker.owns ?? [],
@@ -1671,8 +1675,8 @@ function singleOwnership(night: Night, worker: Worker): DelegateOwnership {
 }
 
 /** A delegation that threw, as the answer the session loop reads: failed, and the engine's own limit kept by kind. */
-function failedDelegation(night: Night, err: any): AnyRecord {
-  const { run } = night;
+function failedDelegation(loopRun: LoopRun, err: any): AnyRecord {
+  const { run } = loopRun;
   return {
     ok: false,
     errorText: String(err?.message ?? err),
@@ -1694,8 +1698,8 @@ function workerLimitOf(err: any, engine: string): AnyRecord {
 }
 
 /** One turn of a single-session worker: its brief (or a steer) delegated to the builder's engine. */
-function delegateSingle(night: Night, worker: Worker, prompt: string, resume: string | null): Promise<AnyRecord> {
-  const { ctx, run } = night;
+function delegateSingle(loopRun: LoopRun, worker: Worker, prompt: string, resume: string | null): Promise<AnyRecord> {
+  const { ctx, run } = loopRun;
   return ctx
     .call(HostMethod.EngineDelegate, {
       engine: roleEngine(run, RoleKey.Builder),
@@ -1717,18 +1721,18 @@ function delegateSingle(night: Night, worker: Worker, prompt: string, resume: st
         ...(worker.setup ? { setup: worker.setup } : {}),
         label: worker.title,
       },
-      ownership: singleOwnership(night, worker),
+      ownership: singleOwnership(loopRun, worker),
     })
     .catch((err: any) => {
       // A sign-in or a limit the builders' engine lost holds it for the whole run (provider-loss.ts).
       noteProviderLoss(run.runId, roleEngine(run, RoleKey.Builder), err);
-      return failedDelegation(night, err);
+      return failedDelegation(loopRun, err);
     });
 }
 
 /** Whatever a single session made is committed — partial work is worth more than a clean tree. */
-async function commitSingleWork(night: Night, worker: Worker, delegation: AnyRecord): Promise<void> {
-  const { ctx, run } = night;
+async function commitSingleWork(loopRun: LoopRun, worker: Worker, delegation: AnyRecord): Promise<void> {
+  const { ctx, run } = loopRun;
   try {
     await commitAll(
       ctx,
@@ -1752,9 +1756,9 @@ function singleEndState(worker: Worker, delegation: AnyRecord): WorkerState {
 }
 
 /** Has a single session's turn ended in a way it resumes from: interrupted, and nobody stopping it? */
-function resumable(night: Night, worker: Worker, delegation: AnyRecord): boolean {
+function resumable(loopRun: LoopRun, worker: Worker, delegation: AnyRecord): boolean {
   const interrupted = !delegation.ok && delegation.stopReason === "stopped" && Boolean(delegation.sessionId);
-  return interrupted && !worker.stopRequested && !night.ctx.cancelled;
+  return interrupted && !worker.stopRequested && !loopRun.ctx.cancelled;
 }
 
 /**
@@ -1762,14 +1766,14 @@ function resumable(night: Night, worker: Worker, delegation: AnyRecord): boolean
  * interrupt with nothing new to hear — a second steer's, landing on the turn that already took
  * it — resumes it to carry on, a few times in a row at most. Answers the last turn.
  */
-async function runSingleSession(night: Night, worker: Worker, brief: string): Promise<AnyRecord> {
-  const { appendRun, run } = night;
+async function runSingleSession(loopRun: LoopRun, worker: Worker, brief: string): Promise<AnyRecord> {
+  const { appendRun, run } = loopRun;
   let prompt = brief;
   let resume: string | null = null;
   let emptyInterrupts = 0;
   for (;;) {
-    const delegation = await delegateSingle(night, worker, prompt, resume);
-    if (!resumable(night, worker, delegation)) return delegation;
+    const delegation = await delegateSingle(loopRun, worker, prompt, resume);
+    if (!resumable(loopRun, worker, delegation)) return delegation;
     resume = delegation.sessionId;
     const arrived = worker.steering.splice(0, worker.steering.length).filter(Boolean);
     if (!arrived.length) {
@@ -1795,33 +1799,33 @@ async function runSingleSession(night: Night, worker: Worker, brief: string): Pr
  * same session resumes with the instruction in front of it. It used to be told it could not be
  * steered at all.
  */
-async function runSingleWorker(night: Night, worker: Worker): Promise<void> {
-  const { noteWorkerLimit, ownShape, run, shape } = night;
+async function runSingleWorker(loopRun: LoopRun, worker: Worker): Promise<void> {
+  const { noteWorkerLimit, ownShape, run, shape } = loopRun;
   // A conflict worker's merge is opened first; one that went through, or failed, needs no session.
-  if (await mergeFirst(night, worker)) return;
+  if (await mergeFirst(loopRun, worker)) return;
   const brief = singleWorkerBrief({ run, worker, shape, ownShape, setup: worker.setup });
-  const delegation = await runSingleSession(night, worker, brief);
+  const delegation = await runSingleSession(loopRun, worker, brief);
   worker.summary = String(delegation.summary ?? "").slice(0, SUMMARY_CHARS);
   if (delegation.limit) noteWorkerLimit(worker, delegation.limit);
-  else if (delegation.ok) workersLimitOutlived(night, worker);
+  else if (delegation.ok) workersLimitOutlived(loopRun, worker);
   // A session the director aborted did not fail — it obeyed. Its reason is `stopWhy`.
   if (!delegation.ok && !worker.stopRequested)
     worker.error = delegation.errorText || delegation.stopReason || "the session did not finish";
   // A conflict worker that left markers commits nothing, however its session ended (conflict-worker.ts).
-  if (await markersLeft(night, worker)) {
+  if (await markersLeft(loopRun, worker)) {
     setWorkerState(worker, WorkerState.Failed);
     return;
   }
-  await commitSingleWork(night, worker, delegation);
+  await commitSingleWork(loopRun, worker, delegation);
   setWorkerState(worker, singleEndState(worker, delegation));
 }
 
 /**
  * A worker's close-out, whatever ended it: its window given back, its ref written, and its end
- * on the journal, the report, the feed and the night's log.
+ * on the journal, the report, the feed and the run's log.
  */
-async function closeOutWorker(night: Night, worker: Worker): Promise<void> {
-  const { appendRun, ctx, journal, note, protectWorker, report, saveJournal } = night;
+async function closeOutWorker(loopRun: LoopRun, worker: Worker): Promise<void> {
+  const { appendRun, ctx, journal, note, protectWorker, report, saveJournal } = loopRun;
   worker.endedAt = Date.now();
   if (worker.handle) await ctx.call(HostMethod.PreviewRelease, { handle: worker.handle }).catch(() => {});
   worker.handle = null;
@@ -1851,10 +1855,10 @@ async function closeOutWorker(night: Night, worker: Worker): Promise<void> {
   );
 }
 
-export async function runWorker(night: Night, worker: Worker) {
+export async function runWorker(loopRun: LoopRun, worker: Worker) {
   try {
-    if (worker.mode === WorkerMode.Loop) await runLoopWorker(night, worker);
-    else await runSingleWorker(night, worker);
+    if (worker.mode === WorkerMode.Loop) await runLoopWorker(loopRun, worker);
+    else await runSingleWorker(loopRun, worker);
   } catch (err: any) {
     worker.error = String(err?.message ?? err);
     setWorkerState(worker, worker.stopRequested ? WorkerState.Stopped : WorkerState.Failed);
@@ -1862,7 +1866,7 @@ export async function runWorker(night: Night, worker: Worker) {
     // First, before anything that can throw: a close is waiting on this, and a journal write
     // or a digest that fails would otherwise leave it waiting for the whole settle window.
     worker.resolveSettle();
-    await closeOutWorker(night, worker);
+    await closeOutWorker(loopRun, worker);
   }
 }
 
@@ -1871,8 +1875,8 @@ export async function runWorker(night: Night, worker: Worker) {
  * loop then keeps the half-written tree (committed, un-reset) instead of judging it. `why` is
  * the sentence the owner reads in place of "at the user's request".
  */
-export async function stopWorker(night: Night, worker: Worker, why: string | null = null, source = "director") {
-  const { appendRun, ctx } = night;
+export async function stopWorker(loopRun: LoopRun, worker: Worker, why: string | null = null, source = "director") {
+  const { appendRun, ctx } = loopRun;
   if (!isRunning(worker)) return;
   worker.stopRequested = true;
   await appendRun(RunEvent.WorkerStopRequested, {
@@ -1893,8 +1897,8 @@ export async function stopWorker(night: Night, worker: Worker, why: string | nul
  * rather than the fifteen to twenty-three minutes a steer used to wait for a boundary.
  * Answers whether a turn was actually interrupted.
  */
-export async function interruptWorker(night: Night, worker: Worker) {
-  const { ctx } = night;
+export async function interruptWorker(loopRun: LoopRun, worker: Worker) {
+  const { ctx } = loopRun;
   if (!worker.worktree || !isRunning(worker)) return false;
   const answer = await ctx.call(HostMethod.EngineInterrupt, { cwd: worker.worktree }).catch(() => null);
   return answer?.interrupted === true;
@@ -1903,14 +1907,14 @@ export async function interruptWorker(night: Night, worker: Worker) {
 // ── waiting and talking ──
 /**
  * A steer the user addressed to one worker (`to=<id>` in the chat). The director's own drain
- * only ever sees the unaddressed ones, so in a director's night these were written,
+ * only ever sees the unaddressed ones, so in a director's run these were written,
  * acknowledged in the chat and delivered to nobody at all. They go straight to the worker's
  * own queue and interrupt its build turn: the point of naming a worker is that the answer
  * arrives in a minute, not at a boundary twenty minutes away. The director hears about each
  * one either way — it is still the run's to act on when nobody by that name is building.
  */
-export async function routeUserSteers(night: Night) {
-  const { inbox, interruptWorker, note, state } = night;
+export async function routeUserSteers(loopRun: LoopRun) {
+  const { inbox, interruptWorker, note, state } = loopRun;
   for (const { facetId, text } of await inbox.addressed().catch(() => [])) {
     const worker = state.workers.get(slug(facetId));
     if (!worker || !isRunning(worker)) {

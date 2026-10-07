@@ -58,7 +58,7 @@ describe("stop reasons", () => {
 
 describe("a bounded ask's effort", () => {
   // A code review, a replan, the next move and a direct playtester's moves always ran "low",
-  // whatever effort the user set for a role: a night at high judge effort must not pay high
+  // whatever effort the user set for a role: a run at high judge effort must not pay high
   // effort for each of up to twenty playtester moves. Pinned so a refactor cannot change it.
   it("stays light even when the user set role efforts", async () => {
     const run = {
@@ -272,7 +272,7 @@ describe("the run's record", () => {
     );
   });
 
-  it("never throws a failed write at the night, and says so in the log", async () => {
+  it("never throws a failed write at the run, and says so in the log", async () => {
     resetFailureLog();
     const recorder = ctxRecorder({
       handlers: {

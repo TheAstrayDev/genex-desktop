@@ -100,7 +100,7 @@ export interface GameCandidate {
   why: string[];
 }
 
-/** What would stop a night on a candidate — read before anything is written. */
+/** What would stop a run on a candidate — read before anything is written. */
 export interface FolderPreflight {
   /** The page the preview will serve, relative to the candidate. */
   entry: string;

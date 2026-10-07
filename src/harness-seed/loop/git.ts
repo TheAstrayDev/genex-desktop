@@ -21,7 +21,7 @@ import { commitArg, REFUSED_VALUE_CHARS, shellQuote } from "./shell.ts";
 
 /**
  * This part serves a lead that is its chat's own session and writes nothing (one session): its
- * strays are set aside with `GIT.snapshotCommit`, which an older copy lacks, so a night seats a
+ * strays are set aside with `GIT.snapshotCommit`, which an older copy lacks, so a run seats a
  * lead only when this says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
@@ -452,7 +452,7 @@ export async function mergeNoFf(
 
 /**
  * Land a run's integrated build in the live game folder: one `--no-ff` merge, aborted on any
- * conflict. The live folder sat at the base all night, so a conflict here is the user's own work;
+ * conflict. The live folder sat at the base for the whole run, so a conflict here is the user's own work;
  * nothing is ever forced over it (`git reset --hard` once was) — the build stays on its ref and
  * "Make it live" lands it once the folder is theirs to merge into.
  */

@@ -29,7 +29,7 @@ export function storeRoles(storage: RoleStorage, engineId: string, roles: RoleRe
 
 /**
  * The roles the composer opens an engine with. The one migration: a record this
- * build cannot vouch for is replaced by the preset for the picked model here and now, so the night
+ * build cannot vouch for is replaced by the preset for the picked model here and now, so the run
  * after it is judged by the model the table names — not by whichever model an older build
  * happened to save into all three slots.
  */

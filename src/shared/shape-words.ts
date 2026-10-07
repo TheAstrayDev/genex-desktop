@@ -43,15 +43,15 @@ export function openedWords(title: string, shape: ProjectShape): string {
 
 /**
  * An engine export is a compiled artifact: there is no source for a builder to edit and no
- * contract for a judge to read, so a night on it would spend hours photographing a page nobody
+ * contract for a judge to read, so a run on it would spend hours photographing a page nobody
  * can change (a Godot or Unity export). Play and screenshots still work, and the
- * harness refuses the night in its own words (`loop/main.ts` `nightRefusal`).
+ * harness refuses the run in its own words (`loop/main.ts` `loopRunRefusal`).
  */
 export const ENGINE_EXPORT_REFUSAL =
   "This game was exported from a game engine. Genex can open it, play it and take screenshots — it cannot edit or judge a game that is already compiled. To have builders work on it, open the folder with the project's own scenes and scripts.";
 
-/** Whether an overnight build can be started on this shape at all. */
-export function canBuildOvernight(kind: ProjectKind): boolean {
+/** Whether an unattended build can be started on this shape at all. */
+export function canBuildUnattended(kind: ProjectKind): boolean {
   return kind !== "engine-export";
 }
 
@@ -68,7 +68,7 @@ export interface OpenChoice {
 /**
  * Keeping a folder whose game is a repository of its own is a decision with a consequence, so
  * the row that does it says the consequence and pressing it *is* the consent. Git records such a folder as a pointer, not as files: until the studio may add
- * those files to the folder's history, a night can read and run the game but nothing it changes
+ * those files to the folder's history, a run can read and run the game but nothing it changes
  * inside it can ever be made live, and the run's work is lost.
  * The game's own history is not deleted; it is renamed and kept beside it.
  */
@@ -93,11 +93,11 @@ export interface OpenOption {
   detail: string;
   /** Facts about opening it that a person would want before agreeing: packages, git, nested repos. */
   facts: string[];
-  /** What would stop a night on it, in the words `validateAt` already wrote. */
+  /** What would stop a run on it, in the words `validateAt` already wrote. */
   problems: string[];
   /** Every file the studio would add, in the order it writes them. */
   writes: string[];
-  /** Compiled: openable to play and screenshot, never buildable overnight. */
+  /** Compiled: openable to play and screenshot, never buildable unattended. */
   engineExport: boolean;
   choice: OpenChoice;
   button: string;
@@ -138,7 +138,7 @@ export function openOptions(inspection: FolderInspection): OpenOption[] {
       facts,
       problems: preflight.problems,
       writes: preflight.writes,
-      engineExport: !canBuildOvernight(shape.kind),
+      engineExport: !canBuildUnattended(shape.kind),
       choice: {
         ...(candidate.rel === "." ? {} : { subdir: candidate.rel }),
         ...(preflight.nested.length > 0 ? { versionNested: true } : {}),

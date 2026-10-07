@@ -131,7 +131,7 @@ describe("snapshot engine", () => {
     await assert.rejects(() => readFile(path.join(dir, "broken-tool.mjs"), "utf8"), /ENOENT/);
 
     // Bookmarked on a ref of the studio's own — never a tag. A tag shows in `git tag` and
-    // `git push --tags` would ship one snapshot per night to somebody's remote (M2.7).
+    // `git push --tags` would ship one snapshot per run to somebody's remote (M2.7).
     assert.equal((await git(dir, ["tag", "--list"])).trim(), "");
     assert.equal((await git(dir, ["rev-parse", snapshotRef(good.snapshot_id)])).trim(), good.git.harness);
     assert.match(
@@ -140,7 +140,7 @@ describe("snapshot engine", () => {
     );
   });
 
-  it("commits under one name, so a night leaves one committer in the user's log", async () => {
+  it("commits under one name, so a run leaves one committer in the user's log", async () => {
     const { engine, games } = await harnessWorkspace();
     await writeFile(path.join(games, "index.html"), "<h1>v2</h1>\n");
     await engine.snapshot({ scope: "game", reason: "iteration 1", gameWorkspace: "pong" });
@@ -228,12 +228,12 @@ describe("snapshot engine", () => {
 /**
  * The game inside the folder is opened as *the* game by default, and a
  * user who keeps the parent lets the studio version it instead. Everything below is the second
- * half — what "versioned" has to mean for a night's work to survive.
+ * half — what "versioned" has to mean for a run's work to survive.
  */
 describe("a game that brought its own repository", () => {
   it("keeps a worker's edit inside it: committed when accepted, undone when lost, landed when live", async () => {
     const { engine, live, wreckage } = await nestedGame();
-    const base = await engine.snapshot({ scope: "game", reason: "before the night", gameWorkspace: "stunt" });
+    const base = await engine.snapshot({ scope: "game", reason: "before the run", gameWorkspace: "stunt" });
     assert.deepEqual(
       await engine.nestedRepositories("stunt", base.git.game!),
       ["wreckage"],
@@ -294,7 +294,7 @@ describe("a game that brought its own repository", () => {
 
   it("runs the game's own build in a worker's copy, and never commits the link that lets it", async () => {
     const { engine, live } = await nestedGame();
-    const base = await engine.snapshot({ scope: "game", reason: "before the night", gameWorkspace: "stunt" });
+    const base = await engine.snapshot({ scope: "game", reason: "before the run", gameWorkspace: "stunt" });
     const fork = path.join(await tmpDir("studio-fork-"), "worker-b");
     await engine.worktreeAt("stunt", base.git.game!, fork, { versionNested: true });
 
@@ -320,7 +320,7 @@ describe("a game that brought its own repository", () => {
 
   it("refuses when the user has staged work of their own, rather than committing it as the studio", async () => {
     const { engine, live, wreckage } = await nestedGame();
-    const base = await engine.snapshot({ scope: "game", reason: "before the night", gameWorkspace: "stunt" });
+    const base = await engine.snapshot({ scope: "game", reason: "before the run", gameWorkspace: "stunt" });
     const fork = path.join(await tmpDir("studio-fork-"), "worker-e");
     await engine.worktreeAt("stunt", base.git.game!, fork, { versionNested: true });
     const carried = (await git(fork, ["rev-parse", "HEAD"])).trim();
@@ -350,7 +350,7 @@ describe("a game that brought its own repository", () => {
 
   it("leaves the folder exactly as it was when the user did not agree", async () => {
     const { engine, live, wreckage } = await nestedGame();
-    const base = await engine.snapshot({ scope: "game", reason: "before the night", gameWorkspace: "stunt" });
+    const base = await engine.snapshot({ scope: "game", reason: "before the run", gameWorkspace: "stunt" });
     const fork = path.join(await tmpDir("studio-fork-"), "worker-c");
     // No consent: the fork is a copy to read and run, versioned by nothing — as it always was.
     await engine.worktreeAt("stunt", base.git.game!, fork);
@@ -532,14 +532,14 @@ describe("snapshots of the user's own repository (characterization)", () => {
     assert.deepEqual(await repo.status(), ["A  src/level.js", " M src/main.js", "?? notes/ideas.md"]);
     const engine = new SnapshotEngine([{ name: "game", dir: repo.dir }]);
     await engine.init();
-    const before = await engine.snapshot({ scope: "game", reason: "before the night", gameWorkspace: "game" });
+    const before = await engine.snapshot({ scope: "game", reason: "before the run", gameWorkspace: "game" });
     // Today the snapshot is a commit on the user's own branch, on top of their history.
     assert.equal(await fixtureGit(repo.dir, ["branch", "--show-current"]), "main");
     assert.equal(await fixtureGit(repo.dir, ["rev-parse", "HEAD"]), before.git.game);
     assert.equal(await fixtureGit(repo.dir, ["rev-parse", "HEAD~1"]), repo.head);
     assert.deepEqual(await repo.status(), []);
 
-    // The night breaks an edit, deletes a note and leaves junk behind.
+    // The run breaks an edit, deletes a note and leaves junk behind.
     await writeFile(path.join(repo.dir, "src/main.js"), "broken\n");
     await rm(path.join(repo.dir, "notes/ideas.md"));
     await writeFile(path.join(repo.dir, "junk.js"), "junk\n");
@@ -557,7 +557,7 @@ describe("snapshots of the user's own repository (characterization)", () => {
     const dirty = await inner.status();
     const engine = new SnapshotEngine([{ name: "project", dir: parent }]);
     await engine.init();
-    await engine.snapshot({ scope: "game", reason: "before the night", gameWorkspace: "project" });
+    await engine.snapshot({ scope: "game", reason: "before the run", gameWorkspace: "project" });
     assert.deepEqual(await inner.status(), dirty, "the inner repo's own uncommitted work is not touched");
     assert.equal(await fixtureGit(inner.dir, ["rev-parse", "HEAD"]), inner.head, "nor is its history");
   });
@@ -586,7 +586,7 @@ describe("restoring a game the user may still be working in", () => {
   it("commits what the folder holds to a rescue snapshot first, so an edit made during the round survives the restore", async () => {
     const { repo, engine, before } = await snapshotted();
     // While the round is judged, the user edits a file and drops in art of their own.
-    await writeFile(path.join(repo.dir, "src/main.js"), "export const speed = 3; // edited during the night\n");
+    await writeFile(path.join(repo.dir, "src/main.js"), "export const speed = 3; // edited during the run\n");
     await mkdir(path.join(repo.dir, "assets"), { recursive: true });
     await writeFile(path.join(repo.dir, "assets/hero.txt"), "the user's own art\n");
     const rescue = await engine.restore(before, { gameWorkspace: "game" });
@@ -599,7 +599,7 @@ describe("restoring a game the user may still be working in", () => {
     assert.equal(await fixtureGit(repo.dir, ["rev-parse", snapshotRef(rescue!.snapshot_id)]), rescue!.git.game);
     assert.equal(
       await fixtureGit(repo.dir, ["show", `${rescue!.git.game}:src/main.js`]),
-      "export const speed = 3; // edited during the night",
+      "export const speed = 3; // edited during the run",
     );
     assert.equal(await fixtureGit(repo.dir, ["show", `${rescue!.git.game}:assets/hero.txt`]), "the user's own art");
   });
@@ -608,7 +608,7 @@ describe("restoring a game the user may still be working in", () => {
     skip: process.platform === "win32" && "chmod cannot make a file unreadable on Windows",
   }, async () => {
     const { repo, engine, before } = await snapshotted();
-    await writeFile(path.join(repo.dir, "src/main.js"), "export const speed = 3; // edited during the night\n");
+    await writeFile(path.join(repo.dir, "src/main.js"), "export const speed = 3; // edited during the run\n");
     // A file git cannot read: `add -A` fails on it, while `clean -fd` would delete it.
     const unreadable = path.join(repo.dir, "export-in-progress.bin");
     await writeFile(unreadable, "half-written by the user's exporter\n");
@@ -618,7 +618,7 @@ describe("restoring a game the user may still be working in", () => {
       assert.equal(await exists(unreadable), true, "the unreadable file is still there");
       assert.equal(
         await readFile(path.join(repo.dir, "src/main.js"), "utf8"),
-        "export const speed = 3; // edited during the night\n",
+        "export const speed = 3; // edited during the run\n",
       );
       assert.equal(
         await fixtureGit(repo.dir, ["rev-parse", "HEAD"]),
@@ -669,7 +669,7 @@ describe("restoring a game the user may still be working in", () => {
     );
   });
 
-  it("restores past a night whose merged-in work holds a contractor's own commit (R1)", async () => {
+  it("restores past a run whose merged-in work holds a contractor's own commit (R1)", async () => {
     const { repo, engine, before } = await snapshotted();
     // A facet worktree: one studio commit, then one the contractor made under its own identity,
     // brought into the live folder by the studio's own --no-ff merge.

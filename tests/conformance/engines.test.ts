@@ -492,9 +492,9 @@ describe("what a run of judging leaves behind", () => {
     // The mkdtemp era: one directory per verdict, all of them from last month.
     await write("-private-var-folders-T-studio-judge-03aWRw", "a1.jsonl", 30 * 24 * 60 * 60_000);
     await write("-private-var-folders-T-studio-judge-06gFTw", "b2.jsonl", 30 * 24 * 60 * 60_000);
-    // Tonight's verdicts, in the one stable directory: the old transcript goes, the new stays.
+    // This run's verdicts, in the one stable directory: the old transcript goes, the new stays.
     await write("-private-var-folders-T-studio-judge-sessions", "old.jsonl", 30 * 24 * 60 * 60_000);
-    await write("-private-var-folders-T-studio-judge-sessions", "tonight.jsonl", 60_000);
+    await write("-private-var-folders-T-studio-judge-sessions", "this-run.jsonl", 60_000);
     // A game the user actually built in, older than any of it: never ours to delete.
     await write("-Users-me-ai-games-wreckage", "session.jsonl", 90 * 24 * 60 * 60_000);
     assert.ok(old < Date.now());
@@ -507,7 +507,7 @@ describe("what a run of judging leaves behind", () => {
     const left = (await readdir(path.join(home, "projects"))).sort();
     assert.deepEqual(left, ["-Users-me-ai-games-wreckage", "-private-var-folders-T-studio-judge-sessions"]);
     assert.deepEqual(await readdir(path.join(home, "projects", "-private-var-folders-T-studio-judge-sessions")), [
-      "tonight.jsonl",
+      "this-run.jsonl",
     ]);
     assert.deepEqual(await readdir(path.join(home, "projects", "-Users-me-ai-games-wreckage")), ["session.jsonl"]);
     assert.equal(
@@ -515,7 +515,7 @@ describe("what a run of judging leaves behind", () => {
       0,
       "a game's own transcripts are not housekeeping",
     );
-    // A week is the window, so last night's verdicts are still there to read in the morning.
+    // A week is the window, so last run's verdicts are still there to read in the morning.
     assert.ok(JUDGE_TRANSCRIPT_TTL_MS >= 7 * 24 * 60 * 60_000);
     const second = await sweepJudgeTranscripts(home);
     assert.deepEqual(second, [], "nothing left to sweep, and no second pass at what stayed");
@@ -559,7 +559,7 @@ describe("what a run of judging leaves behind", () => {
     }
     assert.equal(seen.length, 2);
     assert.equal(seen[0]!.cwd, seen[1]!.cwd, "a fresh folder per verdict was a guaranteed cache miss");
-    // The folder this run owns, not the machine-global one a live night's judge is sitting in.
+    // The folder this run owns, not the machine-global one a live run's judge is sitting in.
     assert.equal(seen[0]!.cwd, judgeCwd);
     assert.match(JUDGE_CWD, /studio-judge-sessions$/);
     // Still a blind one-shot: the folder is shared, the session never is.
@@ -595,7 +595,7 @@ describe("what a run of judging leaves behind", () => {
   });
 });
 
-describe("which model judges the night", () => {
+describe("which model judges the run", () => {
   it("drops a roles record an older build wrote, and keeps its own", () => {
     // What this install actually had: three slots filled with the orchestrator's model by a
     // build whose preset table said one pick meant one model everywhere.
@@ -660,10 +660,10 @@ describe("which model judges the night", () => {
     }
     // …by the judges' own engine's name for it, and with that engine named when the judges are
     // on the other subscription (cross-provider roles).
-    // Both nights say who judged: the lead's own run_started carries it too, and on which engine.
-    // director-cross-engine.test.ts proves it on a real night (a rig, L3); this keeps an L1 gate
+    // Both runs say who judged: the lead's own run_started carries it too, and on which engine.
+    // director-cross-engine.test.ts proves it on a real run (a rig, L3); this keeps an L1 gate
     // until the payload has a pure builder, which is a seed change of its own.
-    // The night's run_started is written where the night is prepared (director/setup.ts).
+    // The run's run_started is written where the run is prepared (director/setup.ts).
     const director = await read("src/harness-seed/loop/director/setup.ts");
     assert.match(director, /event_type: RunEvent\.RunStarted[\s\S]{0,400}judgeModel/);
     assert.match(director, /event_type: RunEvent\.RunStarted[\s\S]{0,600}judgeEngine: run\.judgeEngine/);
@@ -697,7 +697,7 @@ describe("which model judges the night", () => {
     assert.match(
       started({ engine: "claude-code", roles: { judge: "opus" } }),
       new RegExp(`${roleName("claude-code", "opus")}, reviewing`),
-      "an older night's roles still name its judge",
+      "an older run's roles still name its judge",
     );
     assert.match(
       started({ engine: "claude-code", judgeEngine: "codex", judgeModel: "gpt-6-astra" }),

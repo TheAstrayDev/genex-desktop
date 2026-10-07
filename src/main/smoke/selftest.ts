@@ -665,7 +665,7 @@ async function checkLoopCommission(t: SelfTest): Promise<void> {
   const { core, uiEvents, check } = t;
   const loopThread = await core.createGameThread();
   // Phrasing matters: a continue-ask ("keep going…") resumes the dialogue instead of
-  // commissioning a night, even with Loop on.
+  // commissioning a run, even with Loop on.
   await core.sendUserMessage("I want a neon ring game over dark water", {
     thread: loopThread,
     loop: { hours: 2, frames: LOOP_FRAMES },
@@ -680,7 +680,7 @@ async function checkLoopCommission(t: SelfTest): Promise<void> {
   const runId = String(customEvents(startedLog ?? [], CustomEvent.RunStarted)[0]?.runId ?? "");
   check("a Loop commission starts a real run", runId !== "", runId || "no run_started within 60s");
 
-  // run.settled is the true end of the night — report.json and the self-improvement pass both
+  // run.settled is the true end of the run — report.json and the self-improvement pass both
   // land before it — so wait for it once, then everything below only has to look.
   const finishedLog = runId
     ? await waitForAll(

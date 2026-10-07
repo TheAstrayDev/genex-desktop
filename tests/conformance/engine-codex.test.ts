@@ -218,7 +218,7 @@ describe("codex engine", () => {
     assert.equal("cost_usd" in result.usage, false, "subscription usage has no reported dollar amount");
     assert.equal(result.model, undefined, "the requested model is not confirmation");
     assert.equal(result.requestedModel, "gpt-5.6-sol");
-    // The four facts that keep an unattended night both possible and contained.
+    // The four facts that keep an unattended run both possible and contained.
     assert.ok(call.argv.includes("--json"));
     // `--ignore-user-config` is `$CODEX_HOME/config.toml` and nothing else — not the home's
     // AGENTS.md, not its skills (see the critic test below, and the doc comment on complete()).
@@ -294,10 +294,10 @@ describe("codex engine", () => {
   });
 
   /**
-   * One session: a waking night's lead is its chat's own session and writes nothing. Codex can
+   * One session: a waking run's lead is its chat's own session and writes nothing. Codex can
    * always write where it is started, so the lead runs from a folder of its own and resumes the
    * chat's session there by id (a session is found by its id wherever it is started; the chat
-   * resumes it from the game folder again after the night). The game folder and the build it leads
+   * resumes it from the game folder again after the run). The game folder and the build it leads
    * are outside the only place its sandbox writes, and it is told where both are.
    */
   it("runs a read-only lead from a folder of its own, resumes the chat's session by id, and names what it only reads", async () => {
@@ -308,7 +308,7 @@ describe("codex engine", () => {
     await mkdir(game, { recursive: true });
     await mkdir(build, { recursive: true });
     await engine.delegate({
-      prompt: "lead the night",
+      prompt: "lead the run",
       cwd: game,
       readOnly: true,
       resume: "chat-thread",

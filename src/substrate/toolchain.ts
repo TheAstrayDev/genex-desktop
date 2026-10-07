@@ -431,7 +431,7 @@ export function packageCommands(files: string[]): PackageCommands {
 /**
  * The only command lines the studio's one network exemption may ever wrap. `studio.json` lives
  * inside the user's game folder — a downloaded game ships one, and a contractor can write one
- * mid-night — so a recorded `install` is honoured only when it is a package manager's own
+ * mid-run — so a recorded `install` is honoured only when it is a package manager's own
  * install, never `npm install && curl … | sh`.
  */
 export const INSTALL_COMMANDS: readonly string[] = [...new Set(LOCKFILES.map((row) => row.commands.install))];

@@ -424,7 +424,7 @@ describe("readiness", () => {
     assert.equal(slow.timedOut, true);
     assert.equal(slow.ready, false);
     // `phase: "failed"` is a page's own report of a boot failure and every consumer refuses to
-    // load on it — a slow first draw must cost a note, not the whole night's evidence.
+    // load on it — a slow first draw must cost a note, not the whole run's evidence.
     assert.equal(slow.settle, null, "a spent budget must not settle the page as failed");
     const early = readinessVerdict({
       elapsed: 900,

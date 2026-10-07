@@ -1,7 +1,7 @@
 import { durationCommission, goalCommission } from "./commission.ts";
 import { workersAtOnce } from "./foundation.ts";
 /**
- * The briefs the night's sessions open with, as the model reads them: the director's own, the
+ * The briefs the run's sessions open with, as the model reads them: the director's own, the
  * wrap-up prompt, a single-session worker's and the one that makes somebody's own game
  * judgeable. Only the assembly lives here; the facts come from the caller.
  */
@@ -23,12 +23,12 @@ import { DIRECTOR_SCOPE_RULE, scopeLines } from "../scope-prompts.ts";
 import { visionBriefLines } from "../vision-prompts.ts";
 import { SHIP_DEFECTS_NOT_POLISH } from "./art-direction-prompts.ts";
 import type { AnyRecord, Run } from "../../types/harness.d.ts";
-// Type-only: erased at runtime, so this module still imports no part of the night.
-import type { Worker } from "./night.ts";
+// Type-only: erased at runtime, so this module still imports no part of the run.
+import type { Worker } from "./loop-run.ts";
 
 /**
  * This part serves a lead that is its chat's own session (one session): it builds in the integration
- * worktree by its full path and keeps no memory file. A night seats one only when every part it
+ * worktree by its full path and keeps no memory file. A run seats one only when every part it
  * depends on says so (lead-session.ts `servesLead`).
  */
 export const SERVES_LEAD = true;
@@ -49,7 +49,7 @@ const joinLines = (lines: ReadonlyArray<string | null | undefined>): string =>
  * The brief for the one session that makes somebody's own game judgeable (M2.6). A game that
  * arrived without the studio contract answers nothing: no state, no cameras, no capture — every
  * judge reads "the build does not run", the fork gate refuses every builder, and there is no
- * "before" for `judge against=start` to compare with. The first real night spent its opening
+ * "before" for `judge against=start` to compare with. The first real run spent its opening
  * hour with the lead hand-wiring it in its own worktree because nobody had been given the job.
  *
  * It is the base builder's own-shape wiring task and nothing else (autopilot.ts
@@ -156,7 +156,7 @@ function requestedStateLine(setup: AnyRecord | null | undefined): string {
 }
 
 /**
- * What the night owes this game before anything else: a page that never loads the studio
+ * What the run owes this game before anything else: a page that never loads the studio
  * contract cannot be judged at all, so the studio wires it in first (M2.6) — and says so
  * here whether that worked, because the fallback is the lead doing it with its own hands.
  */
@@ -214,7 +214,7 @@ function userSaysWords(loop: DirectorLoop): string {
 /**
  * The rules that never move, with what this run already knows about its kind and its plan review.
  * A lead (`leads`) does the foundations itself in the integration worktree, hands each part to a
- * worker and keeps no memory file: the journal and its digests carry the night.
+ * worker and keeps no memory file: the journal and its digests carry the run.
  */
 function rulesThatNeverMove(run: Run, loop: DirectorLoop, leads: boolean): string[] {
   return [
@@ -297,7 +297,7 @@ export function directorBrief({
       ? LEAD_BRIEF.baseMustRun
       : `THE BASE MUST RUN: worker_start looks at the commit a worker forks from before it starts anyone, whatever it forked from (a console error there costs every worker its first iteration); a refusal names the problems — fix them in your worktree, commit, and start again. An integration head that fails its health pass cannot land: fix it, or judge it (a passing judge counts).`,
     ``,
-    // What earlier nights on this exact game already paid for (loop/ledger.ts). The studio keeps
+    // What earlier runs on this exact game already paid for (loop/ledger.ts). The studio keeps
     // its own ledger of outcomes per game; these are the patterns it found in them.
     lastTimeBlock(gameLessons),
     // Three lines, not five (M4.8b). Every tool below arrives with its own description and
@@ -336,7 +336,7 @@ function whereLine({
 }
 
 /**
- * Which world this night is in is a question the worktree answers, not the brief: with the
+ * Which world this run is in is a question the worktree answers, not the brief: with the
  * user's consent the studio versions a nested repository inside every fork of the game
  * (M2.5), and a lead told otherwise hand-ports code it already has under version control.
  */
@@ -441,7 +441,7 @@ export function singleWorkerBrief({
   ]);
 }
 
-/** What a resumed session is told about the night it picks up. */
+/** What a resumed session is told about the run it picks up. */
 export interface ResumeFacts {
   runId: string;
   forkCommit: string | null;
@@ -452,7 +452,7 @@ export interface ResumeFacts {
   priorDirector: AnyRecord;
   /** Did last session's `.studio/DIRECTOR.md` come back into this worktree? */
   memoryRestored: boolean;
-  /** A lead that is its chat's own session keeps no memory file: the journal carries the night. */
+  /** A lead that is its chat's own session keeps no memory file: the journal carries the run. */
   leads?: boolean;
 }
 

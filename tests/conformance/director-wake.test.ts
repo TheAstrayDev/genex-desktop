@@ -1,7 +1,7 @@
 /**
  * The director's wake loop, without a rig: when the lead is woken and why (wake-schedule.ts),
  * what the message that wakes it says (wake-prompts.ts), what the journal keeps (wake.ts), and
- * the typed lines the night's producers write so the waker never reads English.
+ * the typed lines the run's producers write so the waker never reads English.
  *
  * The lead used to stay inside one long turn — `wait` in a loop and a "continue" prompt whenever
  * the turn ended with time left, which stretched a single session over the whole run. Now it ends its turn after every decision and the studio wakes the same
@@ -236,7 +236,7 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     });
   });
 
-  it("W7b (provider lost). a turn a lost provider failed closes the night paused — never the wrap-up that lands a build", () => {
+  it("W7b (provider lost). a turn a lost provider failed closes the run paused — never the wrap-up that lands a build", () => {
     // A wrap-up after a lost provider would land a build nobody could check.
     const lost = {
       ok: false,
@@ -292,7 +292,7 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     assert.equal(
       passDeadline({ ...clocks, now: T0 + HOUR_MS + MINUTE_MS }),
       T0 + 2 * HOUR_MS - WRAP_UP_MARGIN_MS,
-      "wrapping up: the night's end, less the wrap-up's margin",
+      "wrapping up: the run's end, less the wrap-up's margin",
     );
     // A finish request moved the working deadline to the moment it started the wrap-up.
     assert.equal(
@@ -315,7 +315,7 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     // Wrapping up, the mark is gone; once said, the loop hands the schedule none.
     assert.equal(nextWake(view({ finishMarkAt: mark, wrapping: true, running: 0 })), null);
     assert.deepEqual(nextWake(view({ finishMarkAt: null })), { at: T0 + HEARTBEAT_MS, reasons: [WakeCause.Heartbeat] });
-    // A timer ahead, like the wrap-up: a night gone idle before its mark is still asked what next.
+    // A timer ahead, like the wrap-up: a run gone idle before its mark is still asked what next.
     assert.deepEqual(nextWake(view({ running: 0, finishMarkAt: mark })), { at: T0, reasons: [WakeCause.IdleAsk] });
   });
 
@@ -335,7 +335,7 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
   });
 
   it("W10b. a finish mark still unsaid when the wrap-up is due gives way to the wrap-up: the two never share a wake", () => {
-    // A Mac that slept through both times, or a Resume of a night paused in its wrap-up (soft deadline now).
+    // A Mac that slept through both times, or a Resume of a run paused in its wrap-up (soft deadline now).
     const mark = T0 - 40 * MINUTE_MS;
     const due = nextWake(view({ softDeadline: T0 - 1_000, finishMarkAt: mark, running: 2 }));
     assert.deepEqual(due?.reasons, [WakeCause.WrapUp]);
@@ -427,14 +427,14 @@ const facts = (over: Partial<DigestFacts> = {}): DigestFacts => ({
     project: "skate",
     goal: "a dusk plaza",
     direction: true,
-    plan: { summary: "Tonight: a dusk sky over the plaza.", parts: ["sky"] },
+    plan: { summary: "This run: a dusk sky over the plaza.", parts: ["sky"] },
   },
   closing: "Decide, act, and end your turn — the studio wakes you when something happens.",
   ...over,
 });
 
 describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
-  it("P1. the digest: the user's words first and verbatim, then what happened, then where the night stands, then a build card of at most fifteen lines — no worktree path", () => {
+  it("P1. the digest: the user's words first and verbatim, then what happened, then where the run stands, then a build card of at most fifteen lines — no worktree path", () => {
     const digest = wakeDigest(facts());
     assert.match(digest, /^WOKEN AT 14:00 UTC — /);
     const order = ["THE USER SAYS", "make the sky red", "WHAT HAPPENED", "worker sky done", "WHERE THE RUN STANDS"];
@@ -449,7 +449,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     assert.match(digest, /- worker sky \(Dusk sky\): running · 12 min left · round 2 · 1 accepted · passing 3\/5/);
     const card = digest.slice(digest.indexOf("BUILD CARD")).split("\n\n")[0]!.split("\n");
     assert.ok(card.length <= CARD_MAX_LINES, `the card is ${card.length} lines:\n${card.join("\n")}`);
-    assert.match(card.join("\n"), /Plan: Tonight: a dusk sky over the plaza\. — parts: sky/);
+    assert.match(card.join("\n"), /Plan: This run: a dusk sky over the plaza\. — parts: sky/);
     assert.match(card.join("\n"), /end your turn after each decision/i);
     assert.doesNotMatch(digest, /autopilot\/run_w|\/integration\b/, "no worktree path");
     assert.doesNotMatch(digest, /THE USER ASKED TO FINISH/);
@@ -495,7 +495,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       digest: "WOKEN AT 14:00 UTC — a worker ended",
     };
     const fresh = freshStart({ ...lost, lead: true });
-    // One session: a lead has no memory file to read first — the notes and the night so far follow.
+    // One session: a lead has no memory file to read first — the notes and the run so far follow.
     const order = [
       "YOUR EARLIER SESSION WAS LOST (the session was not found)",
       "Your notes and the run so far are below",
@@ -725,7 +725,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
 
 describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () => {
   /**
-   * The night's own record — its clock, its workers, the defects nobody owns, the plan window, the
+   * The run's own record — its clock, its workers, the defects nobody owns, the plan window, the
    * log — is written on every save now (director-journal.test.ts K2); the wake loop's record keeps
    * only the loop's own state, and a Resume takes back the idle question and the wakes (K5).
    */
@@ -753,7 +753,7 @@ describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () =
   });
 });
 
-describe("the lines the night writes, typed for the waker", () => {
+describe("the lines the run writes, typed for the waker", () => {
   it("M1. a fresh violation is a waking line; its clearing and a silent round are not", () => {
     const look = (over: Record<string, unknown>) => ({
       id: "plaza",
@@ -855,7 +855,7 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
     assert.equal(
       seat(other, { director: { sessionId: "pre-one-session" } }).sessionId,
       null,
-      "an older night's director session sat elsewhere",
+      "an older run's director session sat elsewhere",
     );
     // The chat's latest session wins, whatever engine an older one was on.
     const latest = chatBookmark([
@@ -990,7 +990,7 @@ describe("a wake digest over its budget", () => {
 });
 
 describe("the lost-session allowance across a Resume", () => {
-  it("is kept on the journal, so a Resume does not hand a night fresh sessions it already spent", async () => {
+  it("is kept on the journal, so a Resume does not hand a run fresh sessions it already spent", async () => {
     const { wakeRecord, restoredWake } = await import("../../src/harness-seed/loop/director/journal.ts");
     const now = Date.now();
     const saved = wakeRecord({

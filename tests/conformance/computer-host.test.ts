@@ -95,7 +95,7 @@ function booting(extra: Record<string, unknown> = {}): Record<string, unknown> {
 
 /**
  * A port with scripted answers and an injected clock: `awaitReady` is pure over a PreviewPort,
- * so a night's worth of waiting costs a test nothing.
+ * so a run's worth of waiting costs a test nothing.
  */
 function scriptedPort(answers: Array<unknown>, options: { loadError?: string | null; crashed?: boolean } = {}) {
   let clock = 0;
@@ -612,7 +612,7 @@ describe("the computer tool's host", () => {
   });
 
   // Flipped: with every pooled window leased, the director's session used to fall
-  // back to the live view — the person's own window, for the whole night — and say so on the
+  // back to the live view — the person's own window, for the whole run — and say so on the
   // run's thread. Live is the person's alone now: the session gets a window past the pool's
   // ceiling for its own length, and there is no borrow to announce.
   it("never lends the director's session the window the user is watching, even with the pool full", async () => {

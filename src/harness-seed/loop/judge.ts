@@ -359,11 +359,11 @@ interface JudgeError {
 /**
  * Ask the judge engine for a strict-JSON verdict; tolerate models that wrap it in prose.
  *
- * A judge outage is the one failure that can end a whole night, so a verdict gets three chances
+ * A judge outage is the one failure that can end a whole run, so a verdict gets three chances
  * on its own engine, and a throttled or unreachable engine gets one shot on its fallback — the
  * same policy the build path applies (turn-loop). What never happens here is an invented answer:
  * when every attempt fails the error surfaces, and the gauntlet decides what an outage costs:
- * one is a capped auto-tie on the record, two in a row end the night honestly.
+ * one is a capped auto-tie on the record, two in a row end the run honestly.
  */
 async function askJudge(ctx: HarnessCtx, ask: JudgeAsk): Promise<AnyRecord> {
   return (await askJudgeFor(ctx, ask)).raw;

@@ -1,5 +1,5 @@
 /**
- * What a waking night's lead reads because it IS its chat's own session (one session,
+ * What a waking run's lead reads because it IS its chat's own session (one session,
  * lead-session.ts): where it sits and where it builds — with its own hands, in the integration
  * worktree it leads, beside the workers it hands parallel parts to — the chat so far when its
  * session is a fresh one, and what a merge conflict or a build that does not run asks of it. The
@@ -67,7 +67,7 @@ export const LEAD_BRIEF = {
 export const LEAD_CARD_RULE =
   "- You build in the integration worktree and commit there; workers take the parts that run side by side.";
 
-/** The first line of a lead's fresh session (wake-prompts.ts `freshStart`): no memory file, the night follows. */
+/** The first line of a lead's fresh session (wake-prompts.ts `freshStart`): no memory file, the run follows. */
 export const LEAD_FRESH_START = (why: string) =>
   `YOUR EARLIER SESSION WAS LOST (${why}) — this is a fresh one. Your notes and the run so far are below: carry on from where the run stands.`;
 
@@ -77,7 +77,7 @@ export const LEAD_INTEGRATE_SWAP = [
   "A conflict elsewhere goes to a worker: the merge is aborted, the files listed, and the studio starts a single worker from the integration branch that resolves it — integrate that worker when it ends.",
 ] as const;
 
-/** What a resumed lead is told about its memory: the journal and the digests carry the night. */
+/** What a resumed lead is told about its memory: the journal and the digests carry the run. */
 export const LEAD_RESUMED_MEMORY =
   "The journal kept the run: the digest below says where it stands, and run_status has the rest.";
 

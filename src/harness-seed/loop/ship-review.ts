@@ -1,7 +1,7 @@
 /**
  * The art director's one absolute question about one build: would you ship this as the user's
  * demo today? Every other judge compares — a round against the build before it, the integration
- * against the start — so a night could win round after round and never be asked whether it was
+ * against the start — so a run could win round after round and never be asked whether it was
  * good. This one sees the whole game: every frame the evidence pass took of a camera the game
  * registered, the player's eyes and each demo's end, then the motion strip and the reference, and
  * answers ship or not with each defect typed to the plan part that owns it (`part`, kept only when

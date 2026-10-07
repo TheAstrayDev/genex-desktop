@@ -28,7 +28,7 @@ export interface BriefMessage {
   content?: string;
 }
 
-/** "Keep going" / "continue" — resume the same dialogue, don't start a new overnight Loop. */
+/** "Keep going" / "continue" — resume the same dialogue, don't start a new unattended Loop. */
 export function isContinueAsk(text: unknown): boolean {
   const ask = String(text ?? "")
     .trim()
@@ -260,7 +260,7 @@ const TEMPLATE_RULE =
  * …and the same rule for a game that came with its own shape: what it already is stays, the
  * contract is installed into its own entry, and its build is run before the turn ends. The
  * wording mirrors the run's own briefs (facet-loop.ts `facetPrompt`) so a chat build and a
- * night's builder are told the same thing about the same folder.
+ * run's builder are told the same thing about the same folder.
  */
 function ownShapeRules(shape: BriefShape | null | undefined, contractMissing = false): string[] {
   const main = shape?.main ?? "src/main.js";
@@ -268,7 +268,7 @@ function ownShapeRules(shape: BriefShape | null | undefined, contractMissing = f
   const build = shape?.build ?? null;
   return [
     // The game cannot be judged, checked or compared until its page loads the contract, and a
-    // chat build is the fastest way somebody gets that done (M2.6): the night's own first step
+    // chat build is the fastest way somebody gets that done (M2.6): the run's own first step
     // is the same job in the same words (director.ts `contractBrief`). Said first, because a
     // turn that spends itself on the ask and never wires it leaves the folder unjudgeable.
     ...(contractMissing
@@ -322,11 +322,11 @@ function stillsBlock(extraReads: unknown): string {
 }
 
 /**
- * This brief tells the chat's own session after a lead's night that the build is over
- * (`afterNight`): chat-dispatch.ts asks before it sends the chat there (after-night.ts
- * `servesAfterNight`), since a kept copy from before would tell it to pick up where it left off.
+ * This brief tells the chat's own session after a lead's run that the build is over
+ * (`afterLoopRun`): chat-dispatch.ts asks before it sends the chat there (after-loop-run.ts
+ * `servesAfterLoopRun`), since a kept copy from before would tell it to pick up where it left off.
  */
-export const SERVES_AFTER_NIGHT = true;
+export const SERVES_AFTER_LOOP_RUN = true;
 
 /** How a resumed build is told to go on; a Loop chat reads the message instead (`RESUME_LOOP_CHAT`). */
 const RESUME_BUILD =
@@ -336,8 +336,8 @@ const RESUME_BUILD =
  * What the contractor is actually told. Resume = short pickup (its own context is restored).
  * No session = the chat's original ask plus the latest instruction, so "keep going" cannot
  * become a blank new job. `launch` = Loop is on: the chat may also start a build
- * (launch-prompts.ts), and still answers, researches and edits itself. `afterNight` = the build
- * this chat's session led is over (after-night-prompts.ts): its note replaces the pickup of a
+ * (launch-prompts.ts), and still answers, researches and edits itself. `afterLoopRun` = the build
+ * this chat's session led is over (after-loop-run-prompts.ts): its note replaces the pickup of a
  * resumed session, and follows the rules of a fresh one.
  *
  * @param {{
@@ -352,7 +352,7 @@ const RESUME_BUILD =
  *   contractMissing?: boolean,
  *   engine?: string,
  *   launch?: LaunchGrant | null,
- *   afterNight?: string | null,
+ *   afterLoopRun?: string | null,
  *   compacted?: string | null,
  *   fresh?: boolean,
  * }} [opts]
@@ -371,8 +371,8 @@ export function buildContractorBrief({
   engine = undefined,
   /** Loop is on: this chat may also launch a build. */
   launch = null,
-  /** The build this chat's session led is over: what it is told of it (after-night-prompts.ts). */
-  afterNight = null,
+  /** The build this chat's session led is over: what it is told of it (after-loop-run-prompts.ts). */
+  afterLoopRun = null,
   /** The handover the session before this one wrote when the chat was compacted (session-compact.ts). */
   compacted = null,
   /** Nothing has been made in this game yet: the studio's template, as it was made. */
@@ -389,7 +389,7 @@ export function buildContractorBrief({
   contractMissing?: boolean;
   engine?: string;
   launch?: LaunchGrant | null;
-  afterNight?: string | null;
+  afterLoopRun?: string | null;
   compacted?: string | null;
   fresh?: boolean;
 } = {}): string {
@@ -401,7 +401,7 @@ export function buildContractorBrief({
   const launchBlock = launch?.toolName ? launchRules(engine, launch) : [];
 
   if (resume)
-    return [ask, "", resumePickup(afterNight, launch), ...launchBlock, workHere, stills].filter(Boolean).join("\n");
+    return [ask, "", resumePickup(afterLoopRun, launch), ...launchBlock, workHere, stills].filter(Boolean).join("\n");
 
   // The rules a build follows depend on whose game this is — every run brief already carries
   // the shape (autopilot.ts, director.ts, facet-loop.ts); a chat build used to carry none.
@@ -423,7 +423,7 @@ export function buildContractorBrief({
     CONVERSATION_RULE,
     ...rules,
     ...launchBlock,
-    ...(afterNight ? [afterNight] : []),
+    ...(afterLoopRun ? [afterLoopRun] : []),
     workHere,
     stills,
   ]
@@ -462,9 +462,9 @@ function briefHead(
   };
 }
 
-/** How a resumed session goes on: after a night it led, that night's note; else a build's or a Loop chat's pickup. */
-function resumePickup(afterNight: string | null, launch: LaunchGrant | null): string {
-  if (afterNight) return afterNight;
+/** How a resumed session goes on: after a run it led, that run's note; else a build's or a Loop chat's pickup. */
+function resumePickup(afterLoopRun: string | null, launch: LaunchGrant | null): string {
+  if (afterLoopRun) return afterLoopRun;
   return launch ? RESUME_LOOP_CHAT : RESUME_BUILD;
 }
 

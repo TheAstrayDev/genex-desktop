@@ -254,7 +254,7 @@ export function autoWantsPage(ui: PageUi | null): boolean {
  * The other half of `auto`: the case where the CANVAS eye is the broken one. No frame at all, or
  * a frame that is effectively black on a page that does have a canvas, means the canvas read
  * gave the studio nothing — a WebGPU or multi-canvas game that would otherwise be judged black
- * all night. The compositor sees those frames, so `auto` asks it.
+ * for the whole run. The compositor sees those frames, so `auto` asks it.
  */
 export function blankCanvasWantsPage(stats: PixelStats | null, ui: PageUi | null): boolean {
   if (!stats) return true;

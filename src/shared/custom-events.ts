@@ -188,7 +188,7 @@ export function isCustomEventType(value: unknown): value is CustomEventType | De
 
 // ── payloads ─────────────────────────────────────────────────────────────────────────────────
 
-/** Where in a night a record belongs. Most run records carry some of these. */
+/** Where in a run a record belongs. Most run records carry some of these. */
 export interface RunScope {
   runId?: string;
   project?: string;
@@ -264,7 +264,7 @@ export const StopCode = {
 export type StopCode = (typeof StopCode)[keyof typeof StopCode];
 
 /**
- * The provider failure a director's night paused on (its report's `limit`): `kind` is an engine
+ * The provider failure a director's run paused on (its report's `limit`): `kind` is an engine
  * failure kind (`EngineFailureKind` in shared/engine-requests.ts) — an engine limit, a lost sign-in
  * (`auth`, an expired login or an account whose access was taken away) or an outage the lead could
  * not wait out (`unavailable`) — and `retryAfterMs` how long after `at` (ms since the epoch; a close
@@ -288,7 +288,7 @@ export interface RunFinishedPayload extends RunScope {
   landed?: boolean;
   /** Why the run failed, when it did (the director's report). */
   failure?: { message?: string } | null;
-  /** The provider failure that paused it, when one did (a director's night). */
+  /** The provider failure that paused it, when one did (a director's run). */
   limit?: RunLimit | null;
   /** Older closes marked a pause with this flag instead of `executionStatus`. */
   paused?: boolean;
@@ -296,7 +296,7 @@ export interface RunFinishedPayload extends RunScope {
   baseCommit?: string;
   landingResult?: { line?: string };
   learned?: string;
-  /** The night's own report to the user; anything but a string is ignored by its readers. */
+  /** The run's own report to the user; anything but a string is ignored by its readers. */
   summary?: unknown;
   mode?: string;
   durationMs?: number;
@@ -558,7 +558,7 @@ export interface CustomEventMap {
     facets?: PlannedFacet[];
     maxParallel?: number;
     director?: boolean;
-    /** The night's lead takes the chat while it builds (live chat): a message goes to it, not behind the build. */
+    /** The run's lead takes the chat while it builds (live chat): a message goes to it, not behind the build. */
     liveChat?: boolean;
   };
   blender_asset: RunScope & {

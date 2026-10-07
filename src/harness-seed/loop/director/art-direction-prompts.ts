@@ -36,7 +36,7 @@ export interface ShipSteerFacts {
   severity: DefectSeverity;
   /** The review's verdict: ship, not ship, or none read. */
   ship: boolean | null;
-  /** The worker finishes its part (`stage=finish`), or the night is past its finish mark: the defects are its round's work, not beside a move. */
+  /** The worker finishes its part (`stage=finish`), or the run is past its finish mark: the defects are its round's work, not beside a move. */
   finishing: boolean;
 }
 
@@ -83,7 +83,7 @@ export const ART_SKIPPED = {
 export const SHIP_ALONE =
   "judge ship=yes looks at one build on its own at 1600x900, so it is never compared with a build seen at another size: leave out against (or say against=none), and compare builds in a judge call of their own.";
 
-/** The night's note when a goal build's finish closes before the art director could look. */
+/** The run's note when a goal build's finish closes before the art director could look. */
 export function shipGateSkipped(head: string | null): string {
   return `the art director did not look at ${shortSha(head)} before this finish: the close's own blind judge against the start needs the finish call's time — judge ship=yes before finishing to have its word`;
 }

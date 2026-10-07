@@ -99,7 +99,7 @@ describe("a patient look", () => {
     assert.equal(racing.count(), 3);
   });
 
-  it("reads a look that threw as a failed pass, and a stopped night as the end", async () => {
+  it("reads a look that threw as a failed pass, and a stopped run as the end", async () => {
     const thrown = looks(new Error(BLIND), { ok: true });
     const evidence = await patientEvidence({ cancelled: false }, thrown.look as never, { delayMs: 1 });
     assert.equal(evidence!.ok, true, "the throw was a race, looked at again");

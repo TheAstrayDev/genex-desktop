@@ -243,8 +243,8 @@ async function settleVisionAnswers(scoring: Scoring, asks: AnyRecord[]): Promise
 function playWorthIt(scoring: Scoring, playChecks: Check[]): boolean {
   // "All measured mechanical checks pass" — an unmeasured check neither opens nor closes the gate.
   // "Mechanical" means the scene/pixel/metric/probe/demo checks the planner wrote: a
-  // judge-grown vision check that never settles must not keep the playtester waiting all
-  // night (talk-hud-legible went unmeasured through ten villagers iterations).
+  // judge-grown vision check that never settles must not keep the playtester waiting for the whole
+  // run (talk-hud-legible went unmeasured through ten villagers iterations).
   const measured = scoring.results.filter((r) => isMeasured(r) && MECHANICAL_KINDS.includes(r.kind));
   const mechanicalAllPass = measured.length > 0 && measured.every((r) => r.pass === true);
   const identityPlay = playChecks.some((c) => c.weight === CheckWeight.Identity);

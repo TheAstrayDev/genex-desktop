@@ -4,7 +4,7 @@ import { runRef } from "../repo.ts";
 import { GoalStatus } from "./goals.ts";
 import { MINUTE_MS } from "../time.ts";
 import type { GoalLedger } from "./goals.ts";
-import type { Night } from "./night.ts";
+import type { LoopRun } from "./loop-run.ts";
 
 const SOFT_REVIEW_MS = 30 * MINUTE_MS;
 /**
@@ -63,32 +63,32 @@ export interface PlayableCheckpoint {
 }
 
 /** Preserve the first verified milestone and the newest recoverable one without rewriting a game. */
-export async function keepCheckpoint(night: Night, head: string): Promise<void> {
-  const goals = night.state.goals;
+export async function keepCheckpoint(loopRun: LoopRun, head: string): Promise<void> {
+  const goals = loopRun.state.goals;
   if (!goals) return;
   const verifiedGoals = goals.entries
     .filter((goal) => goal.head === head && goal.status === GoalStatus.Passed)
     .map((goal) => goal.id);
   if (!verifiedGoals.length) return;
-  await updateRef(night.ctx, { project: night.run.project }, runRef(night.run.runId, "checkpoints", head), head);
+  await updateRef(loopRun.ctx, { project: loopRun.run.project }, runRef(loopRun.run.runId, "checkpoints", head), head);
   const checkpoint: PlayableCheckpoint = {
     head,
     at: Date.now(),
     verifiedGoals,
     requiredGoals: goals.entries.filter((goal) => goal.required).length,
   };
-  const director = night.journal.director;
+  const director = loopRun.journal.director;
   const first = !director.firstVerifiedCheckpoint;
   director.firstVerifiedCheckpoint ??= checkpoint;
   director.latestVerifiedCheckpoint = checkpoint;
-  night.report.firstVerifiedCheckpoint = director.firstVerifiedCheckpoint;
-  night.report.latestVerifiedCheckpoint = checkpoint;
+  loopRun.report.firstVerifiedCheckpoint = director.firstVerifiedCheckpoint;
+  loopRun.report.latestVerifiedCheckpoint = checkpoint;
   if (first)
-    await night.decision(
+    await loopRun.decision(
       `Verified checkpoint ${head}: ${verifiedGoals.join(", ")}. Remaining requirements are not yet verified.`,
       "A verified checkpoint is saved. You can ask to show this build now; Stop keeps it recoverable without overwriting your game.",
     );
-  await night.saveJournal();
+  await loopRun.saveJournal();
 }
 
 /** A soft review informs the user once; it never cancels healthy required work. */
@@ -106,18 +106,18 @@ export function progressReview(
 }
 
 /** Durable review state survives Resume, so a paused run does not repeat its milestone. */
-export async function reviewProgress(night: Night, now: number): Promise<void> {
-  const ledger = night.state.goals;
+export async function reviewProgress(loopRun: LoopRun, now: number): Promise<void> {
+  const ledger = loopRun.state.goals;
   if (!ledger) return;
-  const director = night.journal.director;
+  const director = loopRun.journal.director;
   const text = progressReview(
     ledger,
-    night.state.integrationHead,
-    now - night.started,
+    loopRun.state.integrationHead,
+    now - loopRun.started,
     director.softReviewAt !== undefined,
   );
   if (!text) return;
   director.softReviewAt = now;
-  await night.decision(text, text);
-  await night.saveJournal();
+  await loopRun.decision(text, text);
+  await loopRun.saveJournal();
 }

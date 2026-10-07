@@ -10,7 +10,7 @@ are counted at the graphics API, and readiness is a fact the page reports rather
 holds for any Three.js game of any shape — inline, ES modules with an import map, a Vite bundle
 (which adds the two-line `installStudio({ renderer, player })` and nothing else), WebGL or WebGPU.
 It does not hold for Phaser, plain canvas 2D or an engine export: those are out of scope, and a
-folder whose kind is `engine-export` can be played and photographed but can never start a night.
+folder whose kind is `engine-export` can be played and photographed but can never start a run.
 
 The kind of game (`loop/kinds.ts`). Eight kinds — first-person, third-person, top-down, side-2d,
 racing, flight, static-board, free-camera. Each names the traits it implies, the state axes its
@@ -50,7 +50,7 @@ Where learning goes. Four places, and they are not interchangeable: a check earn
 `library/checks.json` (five technical checks ship; a planner's check earns its place by being
 used), a craft recipe in `library/recipes` (opinions about how a thing should look — retrieved
 when a check fails or a judge names the defect, never imposed), a skill file (how an agent works),
-and a prompt (what a role is). `library/games/<game>.jsonl` and `.md` hold what a night learned
+and a prompt (what a role is). `library/games/<game>.jsonl` and `.md` hold what a run learned
 about one game and belong to the harness workspace, never the user's repository.
 
 What the loop's code is. The seed is TypeScript that Node runs by stripping its types — under
@@ -128,16 +128,16 @@ The architect's fork (`SelfImprovementService.runArchitectJob`) uses the same fo
 boot, plus the loop self-test.
 
 How the loop's code is laid out. The modes keep their own control flow — `director.ts` (the
-night, with its parts under `loop/director/`: `setup.ts` builds the night as one explicit object,
-`workers.ts`, `tools.ts`, `integrate.ts`, `night.ts` for the night's shared functions, `rules.ts`
-for what needs no night, the wake loop that drives the lead's session — `wake.ts` (its turns),
+run, with its parts under `loop/director/`: `setup.ts` builds the run as one explicit object,
+`workers.ts`, `tools.ts`, `integrate.ts`, `loop-run.ts` for the run's shared functions, `rules.ts`
+for what needs no run, the wake loop that drives the lead's session — `wake.ts` (its turns),
 `wake-schedule.ts` (when it is woken, a pure leaf) and `wake-prompts.ts` (what it is told) — and
-the full journal — `journal.ts` (the night's record every save writes to the run journal, the
-clock a Resume keeps, and what a resumed night reads back) and `journal-prompts.ts` (the resumed
+the full journal — `journal.ts` (the run's record every save writes to the run journal, the
+clock a Resume keeps, and what a resumed run reads back) and `journal-prompts.ts` (the resumed
 lead's first digest) — and one session — `lead-session.ts` (whose session the lead is, and the
 chat's bookmark), `lead-session-prompts.ts` (the chat's own session as lead, building in the integration worktree) and `conflict-worker.ts`
 (the worker a merge conflict goes to) — and a finished build reopened — `reopen.ts` (the journal
-the chat rewrites, where the night forks) and `reopen-prompts.ts` (its words) — the parts never import `director.ts`, which re-exports it), `autopilot.ts` (a run is a list of named phases, `PIPELINE_PHASES`, over one `pipeline`
+the chat rewrites, where the run forks) and `reopen-prompts.ts` (its words) — the parts never import `director.ts`, which re-exports it), `autopilot.ts` (a run is a list of named phases, `PIPELINE_PHASES`, over one `pipeline`
 object), `facet-loop.ts` (a round is a list of named phases, `ROUND_PHASES`, over the facet's
 state and the round's; the phases are `loop/facet/phases/*.ts`, beside the facet's `state.ts`,
 `policy.ts`, `scoring.ts`, `round.ts` and `round-judgement.ts`, what a judged round may claim: a
@@ -157,25 +157,25 @@ agent edited, so a module that code moved out of still exports every name it had
 (`tests/fixtures/seed-exports-2e-pre.json`), a kept older file keeps loading against the new
 siblings, and a name an existing module newly needs comes from a new module, never from another
 existing one that the agent may have kept at an older vintage (the wake loop's, the journal's,
-live chat's, one session's, the after-night chat's, the reopen's and goal-directed generation's
+live chat's, one session's, the after-run chat's, the reopen's and goal-directed generation's
 vintages are `seed-exports-pre-wake.json`, `seed-exports-pre-journal.json`,
 `seed-exports-pre-live.json`, `seed-exports-pre-one-session.json`,
-`seed-exports-pre-after-night.json`, `seed-exports-pre-reopen.json` and
+`seed-exports-pre-after-loop-run.json`, `seed-exports-pre-reopen.json` and
 `seed-exports-pre-goals.json`, the last kept one module at a time). Where a kept older
-part would contradict a newer one, the loop asks before it relies on it: a waking night seats its
+part would contradict a newer one, the loop asks before it relies on it: a waking run seats its
 chat's session as its lead only when every part that lead depends on exports
 `SERVES_LEAD` (`director.ts` `seatsLead`), and otherwise a director with its own hands leads, as
-before; the chat after that lead's night goes to the same session only when its runner, turn and
-brief (`turn-loop.ts`, `delegated-turn.ts`, `chat-session.ts`) export `SERVES_AFTER_NIGHT`
-(`chat-dispatch.ts` `ownSessionAfterNight`), and otherwise to the coordinator; and a Loop message
+before; the chat after that lead's run goes to the same session only when its runner, turn and
+brief (`turn-loop.ts`, `delegated-turn.ts`, `chat-session.ts`) export `SERVES_AFTER_LOOP_RUN`
+(`chat-dispatch.ts` `ownSessionAfterLoopRun`), and otherwise to the coordinator; and a Loop message
 after a finished build reopens the same run only when the parts that answer it export
 `SERVES_REOPEN` — the session's runner, turn, note and start (`turn-loop.ts`, `delegated-turn.ts`,
-`after-night-prompts.ts`, `run-dispatch.ts`; `chat-dispatch.ts` `ownSessionReopens`), or the
+`after-loop-run-prompts.ts`, `run-dispatch.ts`; `chat-dispatch.ts` `ownSessionReopens`), or the
 coordinator, its prompt and the start (`coordinator.ts`, `coordinator-prompts.ts`,
-`run-dispatch.ts`; `coordinatorReopens`) — and is otherwise answered as with Loop off. The night's
+`run-dispatch.ts`; `coordinatorReopens`) — and is otherwise answered as with Loop off. The run's
 own parts need no such mark for a reopen: the chat rewrites the journal
 (`director/reopen.ts` `reopenedJournal`) without the clock and wake state, which every vintage of
-`setup.ts`, `wake.ts` and `journal.ts` reads as a new night's. An edit the agent made to a moved
+`setup.ts`, `wake.ts` and `journal.ts` reads as a new run's. An edit the agent made to a moved
 function in a kept file still serves that file's own callers; the rest of the loop uses the new
 home. The upgrade does not hold the callers back (that would freeze every shipped fix to them for
 as long as the file stays edited); it says so instead. `SEED_MOVES` in `substrate/seed-upgrade.ts`
@@ -183,29 +183,32 @@ lists what moved where, and `applySeed` reports a kept file that still defines m
 other files now import from the new home (`moved`: names, new home, callers). The
 `seed_upgraded` chat card and Studio activity name it, and every boot keeps one note per such
 file in the agent's memory (`RecoveryService.noteSeedMoves`), taken back once the kept file no
-longer defines the moved code.
+longer defines the moved code. A renamed name or module (`substrate/seed-renames.ts`) is carried
+into the agent's files instead: before the pass, a kept or agent-written module has its old names
+rewritten, the original backed up, and an edited copy of a renamed module moves to its new path;
+`applySeed` lists them (`renamed`).
 
 Scheduled for removal: the long turn (`directorLoop: "turn"`, `STUDIO_DIRECTOR_LOOP=turn`, its
 `wait` tool, continuation prompts and `.studio/DIRECTOR.md` memory), the way back from the wake
 loop. Its gate is the first release that ships the lead as the chat's own session and the chat
-after its night. A later PR deletes it once that release's own build has passed, live
-(L5, with the owner's permission), on Claude Code and on Codex each: a waking night led by the
+after its run. A later PR deletes it once that release's own build has passed, live
+(L5, with the owner's permission), on Claude Code and on Codex each: a waking run led by the
 chat's own session is stopped with Stop, resumed from the chat, and after its close answers a
-question and makes a change in the same session — no night on the long turn, no coordinator
+question and makes a change in the same session — no run on the long turn, no coordinator
 session. The removal PR's validation summary records, per engine, the build, profile and provider
 identity and each step's outcome; the raw thread log and journal stay in
-`.studio-dev/evidence/after-night-gate/<engine>/`.
+`.studio-dev/evidence/after-run-gate/<engine>/`.
 
 Not removed at that gate: the run's coordinator (`loop/coordinator.ts`, `coordinator-prompts.ts`,
 the host's `coordinator` delegation and `continue_build`) and the `SERVES_LEAD` and
-`SERVES_AFTER_NIGHT` checks. The coordinator answers after every classic-pipeline run — on a model
+`SERVES_AFTER_LOOP_RUN` checks. The coordinator answers after every classic-pipeline run — on a model
 without sessions it is the only answerer there is (its tool rounds, `answerWithTools`) — after a
-night of a kept older seed whose parts lack those marks or of a lead that was a session of its own,
+run of a kept older seed whose parts lack those marks or of a lead that was a session of its own,
 and a message on another engine than the lead's
 ([the coordinator, a fallback](conversation-coordinator.md#the-coordinator-a-fallback)). With Loop
 on after a finished build whose journal seated a lead, a coordinator that answers in a session is
 told so (`coordinatorReopenRules`), and its `continue_build` reopens that same run for the Loop's
-time on the build's own models once the reply ends (`reopen-run.ts` `finishedNight`), instead of
+time on the build's own models once the reply ends (`reopen-run.ts` `finishedLoopRun`), instead of
 one builder turn. A finished build no Loop can go on from — no lead seated (the long turn, a kept
 pre-lead director, the classic pipeline, a gauntlet), a coordinator without sessions, a kept older
 part — is answered as with Loop off, and the chat says so once per build while the loop lives
@@ -216,7 +219,7 @@ answers yet; it goes only once something does, in work of its own.
 
 `src/harness-seed/prompts/` is the LOCAL-ENGINE game chat path only (`loop/prompt.ts`): the delegated
 engines get their instructions from the briefs the loop renders, not from those files. Trimming
-them changes the local game chat and the readiness fixture, and nothing a night does.
+them changes the local game chat and the readiness fixture, and nothing a run does.
 Studio's tool-free instructions live in `loop/studio-chat.ts` for every provider.
 
 Session permissions, web research and thinking summaries (`substrate/engines/claude-code.ts`,
@@ -225,7 +228,7 @@ game's own chat is interactive: the host, never the loop, hands it `DelegateRequ
 so it runs in the mode the person picked, without the studio's sandbox or a blanket Bash allow,
 and asks them (`canUseTool`) whatever Claude Code would ask. The host decides from its own records:
 the brief's shape, the message id it dispatched on that thread (`chatTurn`) and the thread's
-metadata. A waking night's lead answering its chat, and the coordinator of a run started in that
+metadata. A waking run's lead answering its chat, and the coordinator of a run started in that
 chat, get `leadAsks` instead: Claude Code's tools in the chat's Auto, Accept edits or Bypass, else
 in Manual, switched by the permission picker while they run, no sandbox, limited only by the chat's
 mode and saved rules as the chat's own session (the studio's fence spares a lead the integration
@@ -244,7 +247,7 @@ rule's `/x` relative to the settings root. A worktree's session still reads its 
 folder's neighbours are denied only inside the games root or scratch
 ([tool permissions](tool-permissions.md)). A Claude Code chat,
 long-turn director and builder may use WebSearch and WebFetch; judges (`complete()`), read-only
-sessions (the coordinator, playtester, scout and a waking night's lead; the lead and coordinator
+sessions (the coordinator, playtester, scout and a waking run's lead; the lead and coordinator
 only by asking) and performance-optimization candidates may not, and an unattended
 shell keeps its sandboxed network. Every delegated Claude session asks for thinking summaries
 (`showThinkingSummaries`); the chat shows a chat or lead session's non-empty summary under the
@@ -642,7 +645,7 @@ Windows/Linux.
 Until-satisfied director runs treat the clock as a safety ceiling; explicit duration runs retain
 their working window and user Finish override. The lead's `finish` is refused while working time
 remains unless the user asked: Finish, or `user_asked` quoting the user's own words from a message
-delivered into the run (`integrate.ts` `userQuoted`, checked against the run inbox's steers). However a night ends — the lead's `finish`, the
+delivered into the run (`integrate.ts` `userQuoted`, checked against the run inbox's steers). However a run ends — the lead's `finish`, the
 clock, the user's Finish — the close judges the head it is about to make live
 (`director/tools.ts` `judgeTheLanding`, from `integrate.ts`): blind against the build the user had,
 or, for a new game or one whose start nobody could photograph, a yes-or-no on the goal
@@ -724,10 +727,10 @@ OUTCOMES, asking for `playtest goal=<id>` on each one still unverified (journale
 
 The initial plan freezes required acceptance scenarios in the versioned director journal. A
 reopened build is a goal commission, the Loop's hours or ∞ its ceiling (`reopen-run.ts`
-`reopenBudgets`), and takes none of the finished night's outcomes: its journal records
+`reopenBudgets`), and takes none of the finished run's outcomes: its journal records
 `goals: null` (`director/reopen.ts` `reopenedJournal`); its lead's first plan taken for the ask posts the plan card and freezes new ones (a refused plan sets
 none), and until then `worker_start` asks for that plan (`workers.ts` `goalRefusal`). A Resume
-before it plans keeps waiting: `restoreNight` takes outcomes from the plan only for a journal from
+before it plans keeps waiting: `restoreLoopRun` takes outcomes from the plan only for a journal from
 before they were kept, and `reopen.ts` `outcomesAwaitPlan` sets aside any a kept older
 `journal.ts` rebuilt. Renaming workers does not reset an
 unresolved goal's attempt allowance. Independent integration playtests record acceptance on
@@ -767,12 +770,12 @@ failure (`auth`): Claude Code from the CLI's own error code on the reply (`authe
 `oauth_org_not_allowed`, `account_on_hold`, `billing_error`) or the access words both engines share
 (`engines/common.ts` `isAccessLost`), also when the result's subtype says success. A lead turn a lost provider ended — a sign-in, a limit it will not wait out,
 an outage the patience ladder could not outlast, a 529 the session returned included — pauses the
-night (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
+run (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
 or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and no learning pass
 until the run ends. A sign-in, cap or reset-naming limit opens that engine's circuit for the run
 (`loop/provider-loss.ts`): judge, critic and ship-review calls to it fail at once with its kind
 until the run starts again or the limit resets (ten minutes at most for a loss that names no end),
-and a sign-in any engine of the run lost pauses the night at the lead's next turn or wake. A worker
+and a sign-in any engine of the run lost pauses the run at the lead's next turn or wake. A worker
 round the provider failed (`facet/provider.ts`) is recorded as `facet_provider_outage` with
 `lost`, never judged, struck or rolled back: its build or
 verification waits for the provider and runs again, a run's stop keeps it on its `…-stopped` ref,
@@ -782,7 +785,7 @@ and a usage cap still stops the worker with its limit for the lead.
 
 A paused build is the user's to resume, with three exceptions the host takes itself
 (`main/core/auto-resume.ts`) while Settings → Harness **Resume builds automatically** is on (the
-default). A director night closed on an engine limit (`run_finished.limit`: `rate_limit` or
+default). A director run closed on an engine limit (`run_finished.limit`: `rate_limit` or
 `usage_limit` with `retryAfterMs`, counted from `limit.at` when the close has it) resumes two
 minutes after the limit resets. Both engines read that wait from the limit's own text
 (`engines/limit-reset.ts`: Claude Code's "resets 9:50pm", Codex's "try again in 1 hour 30

@@ -36,7 +36,7 @@ import {
   openedWords,
   suggestedOption,
 } from "../../src/shared/shape-words.ts";
-import { nightRefusal } from "../../src/harness-seed/loop/main.ts";
+import { loopRunRefusal } from "../../src/harness-seed/loop/main.ts";
 import { servedAfterBuild } from "../../src/main/game-build.ts";
 import { allowedFile as hookAllowedFile } from "../../src/substrate/ownership.ts";
 import { allowedFile as reviewAllowedFile } from "../../src/harness-seed/loop/review.ts";
@@ -354,12 +354,12 @@ describe("a project's own shape", () => {
     assert.equal(checked.shape.kind, "engine-export");
     assert.ok(checked.problems.includes(NO_CONTRACT_PROBLEM), checked.problems.join("; "));
     // The sheet prints this sentence to the person who opened the folder, so it says what the
-    // night does about it and never asks them to hand-write JavaScript into their own entry —
-    // installing the contract is the base builder's first job, and the night is not refused.
+    // run does about it and never asks them to hand-write JavaScript into their own entry —
+    // installing the contract is the base builder's first job, and the run is not refused.
     assert.match(checked.problems.join("; "), /nothing on your page connects the studio to your game yet/);
     assert.ok(!/installStudio|import \{|`/.test(NO_CONTRACT_PROBLEM), NO_CONTRACT_PROBLEM);
     assert.equal(checked.ok, false);
-    // The same fact as a word, so the harness never has to match the sentence: the night's
+    // The same fact as a word, so the harness never has to match the sentence: the run's
     // first step (loop/director.ts) and a chat build's brief both read this one field.
     assert.equal(checked.contract, "missing");
   });
@@ -489,7 +489,7 @@ describe("a project's own shape", () => {
     assert.match(flagged[0]!, /static\.example\.org/);
     for (const host of ["fonts.googleapis.com", "cdn.jsdelivr.net", "unpkg.com", "example.com/credits"])
       assert.doesNotMatch(flagged[0]!, new RegExp(host.replace(/\./g, "\\.")));
-    assert.equal(nightRefusal({ name: "cdn-game" }, checked.problems), null, "a night can still vendor them");
+    assert.equal(loopRunRefusal({ name: "cdn-game" }, checked.problems), null, "a run can still vendor them");
     // The Open Game sheet says it too.
     const rows = openOptions(await games.inspect(dir));
     assert.ok(
@@ -1226,7 +1226,7 @@ describe("a project's own shape", () => {
     rig.core.snapshots.register({ name: project.name, dir: parent });
     const base = await rig.core.snapshots.snapshot({
       scope: "game",
-      reason: "before the night",
+      reason: "before the run",
       gameWorkspace: project.name,
     });
     const fork = path.join(await tmpDir("studio-fork-"), "worker");
@@ -1551,7 +1551,7 @@ describe("the Open Game sheet", () => {
     assert.match(ENGINE_EXPORT_REFUSAL, /play it and take screenshots/);
   });
 
-  it("never starts a night on a compiled export, whoever asked for it", async () => {
+  it("never starts a run on a compiled export, whoever asked for it", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const dir = path.join(await tmpDir("studio-export-"), "arcade");
@@ -1566,7 +1566,7 @@ describe("the Open Game sheet", () => {
       type: "run_start",
       threadId: thread,
       run: {
-        runId: "export-night",
+        runId: "export-run",
         project: project.name,
         engine: "codex",
         goal: "make it prettier",
@@ -1633,20 +1633,20 @@ describe("the Open Game sheet", () => {
     assert.match(
       sheet,
       /chosen\.engineExport \?\s*\(\s*<div[^>]*data-testid="engine-export-card"[^>]*>\s*\{ENGINE_EXPORT_REFUSAL\}\s*<\/div>/,
-      "the refusal a night would give is shown before the night",
+      "the refusal a run would give is shown before the run",
     );
   });
 
-  it("refuses a night on a compiled export, and only on what the folder itself cannot do", async () => {
+  it("refuses a run on a compiled export, and only on what the folder itself cannot do", async () => {
     const { games, base } = await workspaces();
-    const godot = path.join(base, "godot-night");
+    const godot = path.join(base, "godot-run");
     await mkdir(godot, { recursive: true });
     await writeFile(path.join(godot, "index.html"), `<canvas id="canvas"></canvas><script src="index.js"></script>`);
     await writeFile(path.join(godot, "index.js"), `const engine = new Engine(); engine.startGame();\n`);
     await writeFile(path.join(godot, "game.pck"), "binary");
     const project = await games.adopt(godot);
     assert.equal(project.shape.kind, "engine-export");
-    const refusal = nightRefusal(project, (await games.validate(project.name)).problems);
+    const refusal = loopRunRefusal(project, (await games.validate(project.name)).problems);
     assert.match(refusal!, /exported from a game engine/);
     assert.match(refusal!, /play it and take screenshots/);
     assert.match(refusal!, /scenes and scripts/);
@@ -1655,10 +1655,10 @@ describe("the Open Game sheet", () => {
     // A page that cannot load still refuses, naming what is missing; a missing contract does not
     // — installing it is the base builder's first job.
     const own = await games.adopt(
-      await viteFolder(path.join(base, "night-vite")).then(() => path.join(base, "night-vite")),
+      await viteFolder(path.join(base, "run-vite")).then(() => path.join(base, "run-vite")),
     );
-    assert.equal(nightRefusal(own, [NO_CONTRACT_PROBLEM]), null);
-    assert.match(nightRefusal(own, ["src/main.ts is missing"])!, /is not ready for a run: src\/main\.ts is missing/);
+    assert.equal(loopRunRefusal(own, [NO_CONTRACT_PROBLEM]), null);
+    assert.match(loopRunRefusal(own, ["src/main.ts is missing"])!, /is not ready for a run: src\/main\.ts is missing/);
     assert.match(openedWords(own.title, own.shape), /keeps it as it is/);
   });
 });
@@ -1667,7 +1667,7 @@ describe("the Open Game sheet", () => {
  * The contract a run pushes into a game it did not scaffold. The gate used to sniff for two
  * literals every vintage since the one-screen contract already carries, so an already-scaffolded
  * game answered "current" and kept a studio.js that predates M4 — no borrowed eye camera, no
- * hook-fed facade — while the director and autopilot called this at the top of every night
+ * hook-fed facade — while the director and autopilot called this at the top of every run
  * believing it had brought the game up to date.
  */
 describe("the contract upgrade", () => {

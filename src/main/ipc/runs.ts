@@ -1,5 +1,5 @@
-/** Runs: starting, stopping and wrapping up a night, and what the Builds tab reads about one. */
-import { lastNightForProject } from "../../shared/run-review.ts";
+/** Runs: starting, stopping and wrapping up a run, and what the Builds tab reads about one. */
+import { lastLoopRunForProject } from "../../shared/run-review.ts";
 import { graphEventsSince } from "../../shared/run-summary-feed.ts";
 import { RunSummaryCache } from "../run-summary-cache.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
@@ -69,7 +69,7 @@ export function registerRunsIpc(
   handle("studio:activity", async () => core.activityItems());
   handle("studio:run.review", async (payload) => {
     const events = await runSummaryReader.forProject(payload.project, core.mainThread);
-    return lastNightForProject(
+    return lastLoopRunForProject(
       payload.runId
         ? events.filter(
             (event) =>
@@ -103,7 +103,7 @@ export function registerRunsIpc(
   });
 
   handle("studio:run.stop", async (payload) => {
-    // Asking a night to stop is not the night ending: the harness still settles its workers,
+    // Asking a run to stop is not the run ending: the harness still settles its workers,
     // runs a close health pass, lands what it can and writes the report — minutes of work that
     // used to happen on a Mac already free to sleep. `run.settled` releases the blocker; this
     // timer is only for the harness child that died and will never send it — which is exactly

@@ -823,7 +823,7 @@ export async function gatherEvidence(
 }
 
 /**
- * However this pass ends, the game is handed back running. A night that crashed here used to
+ * However this pass ends, the game is handed back running. A run that crashed here used to
  * leave the user's own stage frozen on a paused frame until they reloaded it. The live view (a
  * pass with no window of its own) is the user's stage: a pass that took the game past its title
  * puts it back on its first screen before it lets it run, rather than mid-race.
@@ -923,7 +923,7 @@ async function loadPage(look: Look): Promise<LookEnd> {
   // otherwise judgeable challenger over.
   look.warnings = [];
   // The base pass of a shared scaffold is the one place a dead clock or a dead contract must
-  // stop the night; a later iteration warns, so one regression never voids a whole run.
+  // stop the run; a later iteration warns, so one regression never voids a whole run.
   look.baseStage = scaffold === true && iterationId === "base";
 
   await sizeWindow(look);
@@ -1046,7 +1046,7 @@ async function reachRequestedState(look: Look): Promise<LookEnd> {
  *
  * An empty shared base draws nothing because there is nothing in it. That is the one stage where
  * blankness is allowed, and the exemption is settled by inspection a few steps below
- * (emptyScene) — so the no-draw verdict waits for it rather than failing the scaffold every night.
+ * (emptyScene) — so the no-draw verdict waits for it rather than failing the scaffold every run.
  */
 function weighClockFailure(look: Look, proof: StepProof): void {
   const { baseStage, problems, warnings } = look;
@@ -2212,7 +2212,7 @@ async function reportLook(look: Look): Promise<LookEnd> {
       // ...and every distinct message, for the next build's baseline. An error inherited from the
       // build this one forked from must be recognisable when the next pass looks: a baseline of
       // five forgives the wrong ones, and one unforgiven shader line once voided four iterations,
-      // every judge of a night and its landing.
+      // every judge of a run and its landing.
       consoleBaseline: [...new Set(consoleErrors.map((entry: AnyRecord) => String(entry.message)))].slice(
         0,
         MAX_CONSOLE_BASELINE,
@@ -2312,7 +2312,7 @@ async function noWindowFree(ctx: HarnessCtx): Promise<{ noWindow: string }> {
 /**
  * A look that is allowed to look again when the load raced the window (`loadRaced`), or when the
  * OS killed the window under memory pressure (`machineKilled`). `look` makes one pass; a pass that
- * throws is a failed pass, never a thrown night. `onRace` hears each race before the next look.
+ * throws is a failed pass, never a thrown run. `onRace` hears each race before the next look.
  * The answer carries how many looks it was allowed (`attempts`). A `viewport` sizes the leased
  * window (`handle`) once, before the first look; the live view is never sized.
  */

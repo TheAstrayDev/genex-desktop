@@ -1198,7 +1198,7 @@ describe("skillopt: applying and undoing a learned change", () => {
     const second = staged(await readFile(file, "utf8"), "- Attach held props to a hand.", "2026-09-03T17:41:54.000Z");
     await rig.core.store.writeArtifact(rig.core.mainThread, "skillopt_staged", [second]);
     await rig.core.acceptStagedProposal(0, "human", { at: second.at });
-    // A night's lesson written after both: history, not part of either change.
+    // A run's lesson written after both: history, not part of either change.
     const lessons = path.join(rig.core.layout.harnessWs, "library", "games", "pong.md");
     await mkdir(path.dirname(lessons), { recursive: true });
     await writeFile(lessons, "- The bridge rounds were kept.\n");

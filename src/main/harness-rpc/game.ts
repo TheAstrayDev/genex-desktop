@@ -133,7 +133,7 @@ export function gameRpc(core: StudioCore, x: CoreInternals) {
         ? core.games.validateAt((await core.candidates.get(p.candidateId, p.project)).root)
         : core.games.validate(p.project),
     // The live half of the same question. `game.validate` reads the folder; this serves the
-    // page, waits for it to boot and asks what the hook got hold of — so a night stops asking
+    // page, waits for it to boot and asks what the hook got hold of — so a run stops asking
     // for the two lines from a game the studio already attached to on its own. A HOST call,
     // made by the run for the director: no MCP tool and no bridge entry, so both engines see
     // exactly the tools they saw before.

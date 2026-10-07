@@ -1,6 +1,6 @@
 /**
  * Briefs more than one mode builds from: the base builder's (the classic pipeline's shared base,
- * and the starting point a director's night from scratch builds first) and the one sentence that
+ * and the starting point a director's run from scratch builds first) and the one sentence that
  * makes somebody's own game judgeable (the base builder's own-shape bullet, and the director's
  * `installContract`). They lived in autopilot.ts, so the director imported the whole classic
  * pipeline to reach them; autopilot.ts still exports both, for harness files that import them
@@ -13,7 +13,7 @@ import type { AnyRecord, Run } from "../types/harness.d.ts";
 /**
  * The one job that makes somebody's own game judgeable: its entry loads the studio contract, so
  * every window, judge and check can see the game at all. The base builder's own-shape bullet is
- * this sentence, and so is the step a director's night runs first when the game arrived without
+ * this sentence, and so is the step a director's run takes first when the game arrived without
  * it (director.ts `contractBrief`) — one wording, because the two are the same task.
  */
 export function contractWiringAsk(shape: { main?: string } | null | undefined): string {
@@ -23,7 +23,7 @@ export function contractWiringAsk(shape: { main?: string } | null | undefined): 
 
 /**
  * The base builder's brief. The classic pipeline knows its facets by name here; a director's
- * night does not — it plans as it goes — so a plan with no facets asks for the same starting
+ * run does not — it plans as it goes — so a plan with no facets asks for the same starting
  * point in the same words, minus the roll call.
  */
 /** What the base builder is told about the plan: its facets and the shared base they fork from. */
@@ -136,7 +136,7 @@ function ownShapeRules(shape: BriefShape): string[] {
     `- ${contractWiringAsk(shape)} Register the cameras the facets name through config.cameras, in the same call.`,
     // Said as a prohibition, because the template's answer to "where do parallel builders
     // meet" is a marker block and a group per facet, and imposing either on a game that
-    // already has its own structure is how a night rewrites somebody's architecture.
+    // already has its own structure is how a run rewrites somebody's architecture.
     `- Do NOT impose the studio template's structure on this game: no marker block in the entry for builders to add import lines to, no empty per-builder container added to the scene, no shared module invented to hold them. Builders here are given a seam in the code this game already has — a file, a folder or a glob — and they wire their work in the way this game already wires things.`,
     ...(shape?.build
       ? [

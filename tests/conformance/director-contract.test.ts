@@ -16,9 +16,9 @@ import { mkdir, readdir, readFile, symlink, unlink, writeFile } from "node:fs/pr
 import path from "node:path";
 import { describe, it } from "node:test";
 import { compilePlan, compileWorkerSpec } from "../../src/harness-seed/loop/director/rules.ts";
-import { rememberEvidence as rememberHeadEvidence } from "../../src/harness-seed/loop/director/night.ts";
+import { rememberEvidence as rememberHeadEvidence } from "../../src/harness-seed/loop/director/loop-run.ts";
 import { loopIntegration, startRefusal } from "../../src/harness-seed/loop/director/workers.ts";
-import { priorFork, recordNight, restoreNight } from "../../src/harness-seed/loop/director/journal.ts";
+import { priorFork, recordLoopRun, restoreLoopRun } from "../../src/harness-seed/loop/director/journal.ts";
 import {
   ARCHITECTURE_FILE,
   contractPointer,
@@ -40,7 +40,7 @@ import {
   missingAt,
   writeArchitecture,
 } from "../../src/harness-seed/loop/director/contract-gate.ts";
-import { closeTheNight, integrate } from "../../src/harness-seed/loop/director/integrate.ts";
+import { closeTheLoopRun, integrate } from "../../src/harness-seed/loop/director/integrate.ts";
 import { firstWaveIn, shipOwed } from "../../src/harness-seed/loop/director/art-direction.ts";
 import { CompletionPolicy } from "../../src/harness-seed/loop/completion-policy.ts";
 import { CONFLICT_MERGE } from "../../src/harness-seed/loop/director/conflict-worker.ts";
@@ -78,7 +78,7 @@ const CONTRACT = {
   shared: [{ path: "src/state.js", owner: "car" }],
 };
 const planArgs = (contract: unknown = CONTRACT, parts: unknown[] = PARTS) => ({
-  summary: "Tonight: a city to drive through.",
+  summary: "This run: a city to drive through.",
   workers: JSON.stringify(parts),
   ...(contract === null ? {} : { contract: JSON.stringify(contract) }),
 });
@@ -366,8 +366,8 @@ async function commitFiles(repo: string, files: Record<string, string>, message 
 
 type Look = Record<string, any>;
 
-/** A night with only what the contract gate and `integrate` read, over a real repository. */
-function stubNight(repo: string, head: string, plan: Record<string, any> | null) {
+/** A run with only what the contract gate and `integrate` read, over a real repository. */
+function stubLoopRun(repo: string, head: string, plan: Record<string, any> | null) {
   const events: Array<{ type: string; payload: Record<string, any> }> = [];
   const notes: string[] = [];
   const looks: Array<Record<string, any>> = [];
@@ -377,7 +377,7 @@ function stubNight(repo: string, head: string, plan: Record<string, any> | null)
       "assets.checkpoint": () => ({ committed: false }),
     },
   });
-  const night: Record<string, any> = {
+  const loopRun: Record<string, any> = {
     ctx: recorder.ctx,
     run: { runId: "run_contract", project: "apex", setup: null },
     integrationWorktree: repo,
@@ -416,13 +416,13 @@ function stubNight(repo: string, head: string, plan: Record<string, any> | null)
     withLease: (_lease: string, fn: (handle: string | null) => unknown) => fn(null),
     patientEvidence: async (_root: string, options: Record<string, any>) => {
       looks.push(options);
-      return night.look(night.state.integrationHead);
+      return loopRun.look(loopRun.state.integrationHead);
     },
-    // What the night keeps of a look, exactly as night.ts keeps it.
+    // What the run keeps of a look, exactly as loop-run.ts keeps it.
     rememberEvidence: (commit: string, evidence: Look, options?: Record<string, unknown>) =>
-      rememberHeadEvidence(night as never, commit, evidence as never, options as never),
+      rememberHeadEvidence(loopRun as never, commit, evidence as never, options as never),
   };
-  return { night, events, notes, looks, recorder };
+  return { loopRun, events, notes, looks, recorder };
 }
 
 /** A worker branch off `from` that writes its own file: answers its commit. */
@@ -438,12 +438,12 @@ describe("the contract on the integration branch, and the gate a loop worker pas
 
   it("commits the contract file on the plan and names the stubs still to write", async () => {
     const { repo, head } = await integrationRepo();
-    const { night, events } = stubNight(repo, head, plan());
-    const said = await contractOnPlan(night as never);
+    const { loopRun, events } = stubLoopRun(repo, head, plan());
+    const said = await contractOnPlan(loopRun as never);
     const committed = await fixtureGit(repo, ["rev-parse", "HEAD"]);
     assert.notEqual(committed, head, "one commit on the integration branch");
-    assert.equal(night.state.contract.commit, committed);
-    assert.equal(night.state.integrationHead, committed);
+    assert.equal(loopRun.state.contract.commit, committed);
+    assert.equal(loopRun.state.integrationHead, committed);
     assert.deepEqual(
       (await fixtureGit(repo, ["show", "--name-only", "--format=", "HEAD"])).split("\n"),
       [ARCHITECTURE_FILE],
@@ -458,14 +458,14 @@ describe("the contract on the integration branch, and the gate a loop worker pas
       events.map((e) => e.type),
       ["director_progress"],
     );
-    assert.equal(await contractOnPlan(night as never), null, "the same contract again commits nothing");
+    assert.equal(await contractOnPlan(loopRun as never), null, "the same contract again commits nothing");
   });
 
   it("tells a lead, which builds with its own hands in the integration worktree, to write the stubs there itself and commit — a single worker is the other way", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, plan());
-    night.lead = { folder: "/games/apex", chatSession: true };
-    const said = String(await contractOnPlan(night as never));
+    const { loopRun } = stubLoopRun(repo, head, plan());
+    loopRun.lead = { folder: "/games/apex", chatSession: true };
+    const said = String(await contractOnPlan(loopRun as never));
     assert.match(said, /Stubs still to write before their loop workers start: src\/car\.js/);
     const stubs = said.slice(said.indexOf("Stubs still to write"));
     assert.match(stubs, /yourself in the integration worktree/);
@@ -476,20 +476,20 @@ describe("the contract on the integration branch, and the gate a loop worker pas
   it("refuses a loop worker without a contract twice, then writes one from the plan's seams", async () => {
     const { repo, head } = await integrationRepo();
     await commitFiles(repo, { "src/car.js": "export {};\n" });
-    const { night, notes } = stubNight(
+    const { loopRun, notes } = stubLoopRun(
       repo,
       await fixtureGit(repo, ["rev-parse", "HEAD"]),
       compilePlan(planArgs(null)).plan!,
     );
     for (let i = 0; i < CONTRACT_REFUSALS_BEFORE_DERIVED; i++) {
-      const refused = await contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop);
+      const refused = await contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop);
       assert.match(String(refused), /2 parts that loop, and no module contract yet: call plan again with contract=/);
     }
-    assert.equal(night.state.contract, undefined, "nothing written while the lead can still write one");
-    assert.equal(await contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop), null);
-    assert.equal(night.state.contract.spec.derived, true);
+    assert.equal(loopRun.state.contract, undefined, "nothing written while the lead can still write one");
+    assert.equal(await contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop), null);
+    assert.equal(loopRun.state.contract.spec.derived, true);
     assert.deepEqual(
-      night.state.contract.spec.modules.map((m: { path: string }) => m.path),
+      loopRun.state.contract.spec.modules.map((m: { path: string }) => m.path),
       ["src/car.js"],
       "only the seams that exist",
     );
@@ -497,7 +497,7 @@ describe("the contract on the integration branch, and the gate a loop worker pas
       notes.some((n) => /the harness wrote one from the plan's owns/.test(n)),
       notes.join("\n"),
     );
-    assert.notEqual(head, night.state.integrationHead);
+    assert.notEqual(head, loopRun.state.integrationHead);
   });
 
   it("keeps the game's own docs/ARCHITECTURE.md byte for byte, and still commits the contract", async () => {
@@ -508,18 +508,18 @@ describe("the contract on the integration branch, and the gate a loop worker pas
       {
         name: "the contract the harness derives after two refusals",
         plan: () => compilePlan(planArgs(null)).plan!,
-        gate: async (night: never) => {
+        gate: async (loopRun: never) => {
           for (let i = 0; i <= CONTRACT_REFUSALS_BEFORE_DERIVED; i++)
-            await contractBeforeFork(night, { id: "car" }, WorkerMode.Loop);
+            await contractBeforeFork(loopRun, { id: "car" }, WorkerMode.Loop);
         },
       },
     ];
     for (const { name, plan: planOf, gate } of paths) {
       const { repo } = await integrationRepo();
       const base = await commitFiles(repo, { [own]: handWritten, "src/car.js": "export {};\n" }, "the user's docs");
-      const { night } = stubNight(repo, base, planOf());
-      await gate(night as never);
-      assert.ok(night.state.contract?.commit, `${name}: the contract is committed, so workers are not stalled`);
+      const { loopRun } = stubLoopRun(repo, base, planOf());
+      await gate(loopRun as never);
+      assert.ok(loopRun.state.contract?.commit, `${name}: the contract is committed, so workers are not stalled`);
       assert.equal(await readFile(path.join(repo, own), "utf8"), handWritten, `${name}: the working file`);
       assert.equal(await fixtureGit(repo, ["show", `HEAD:${own}`]), handWritten.trimEnd(), `${name}: the head`);
       assert.match(await readFile(path.join(repo, ARCHITECTURE_FILE), "utf8"), /### src\/car\.js — owned by `car`/);
@@ -539,21 +539,23 @@ describe("the contract on the integration branch, and the gate a loop worker pas
       },
     ];
     for (const { plan: exemptPlan, args, mode } of exempt) {
-      const { night } = stubNight(repo, head, exemptPlan);
-      assert.equal(await contractBeforeFork(night as never, args, mode), null, JSON.stringify(args));
-      assert.deepEqual(await contractAtFork(night as never, { id: args.id, args, mode, commit: head }), { owns: null });
+      const { loopRun } = stubLoopRun(repo, head, exemptPlan);
+      assert.equal(await contractBeforeFork(loopRun as never, args, mode), null, JSON.stringify(args));
+      assert.deepEqual(await contractAtFork(loopRun as never, { id: args.id, args, mode, commit: head }), {
+        owns: null,
+      });
     }
   });
 
   it("refuses a fork without the contract, a worker whose modules are not stubbed, and a seam over another's module", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, plan());
-    await contractOnPlan(night as never);
+    const { loopRun } = stubLoopRun(repo, head, plan());
+    await contractOnPlan(loopRun as never);
     const gate = (args: Record<string, unknown>, commit: string) =>
-      contractAtFork(night as never, { id: String(args.id), args, mode: WorkerMode.Loop, commit });
+      contractAtFork(loopRun as never, { id: String(args.id), args, mode: WorkerMode.Loop, commit });
     const before = await gate({ id: "car" }, head);
     assert.match(String(before.refusal), /does not contain the module contract/);
-    const contract = night.state.contract.commit;
+    const contract = loopRun.state.contract.commit;
     const unstubbed = await gate({ id: "car" }, contract);
     assert.match(
       String(unstubbed.refusal),
@@ -573,7 +575,7 @@ describe("the contract on the integration branch, and the gate a loop worker pas
 
   it("never runs a path or a commit a contract names: every git question is quoted", async () => {
     const { root, repo, head } = await integrationRepo();
-    const { recorder } = stubNight(repo, head, null);
+    const { recorder } = stubLoopRun(repo, head, null);
     const hostile = [
       "src/$(touch dollar).js",
       "src/`touch backtick`.js",
@@ -624,20 +626,20 @@ describe("the contract on the integration branch, and the gate a loop worker pas
 describe("integration in waves", () => {
   it("merges a wave in order with one integration_merge each and ONE health pass, and closes the wave", async () => {
     const { repo, head } = await integrationRepo();
-    const { night, events, looks } = stubNight(repo, head, null);
+    const { loopRun, events, looks } = stubLoopRun(repo, head, null);
     const car = await workerBranch(repo, head, "car", { "src/car.js": "export const car = 1;\n" });
     const city = await workerBranch(repo, head, "city", { "src/city.js": "export const city = 1;\n" });
     for (const [id, commit] of [
       ["car", car],
       ["city", city],
     ])
-      night.state.workers.set(id, { id, title: id, from: head, lastCommit: commit, merging: null });
-    night.state.facetSpecs.push({
+      loopRun.state.workers.set(id, { id, title: id, from: head, lastCommit: commit, merging: null });
+    loopRun.state.facetSpecs.push({
       id: "hud",
       cameras: [],
       checks: [{ id: "lap", kind: "probe", demo: "lap", expr: "state.lap >= 1" }],
     });
-    const answer = JSON.parse(await integrate(night as never, { worker: "car,city" }));
+    const answer = JSON.parse(await integrate(loopRun as never, { worker: "car,city" }));
     assert.equal(answer.merged, true, JSON.stringify(answer));
     assert.deepEqual(answer.wave, { merged: ["car", "city"] });
     assert.deepEqual(
@@ -649,19 +651,19 @@ describe("integration in waves", () => {
     assert.deepEqual(looks[0]!.requiredDemos, ["lap"], "the demos workers' checks name");
     assert.equal(looks[0]!.maxDemos, 0);
     const merged = await fixtureGit(repo, ["rev-parse", "HEAD"]);
-    assert.equal(night.state.waveHead, merged, "a healthy integrate closes the wave");
+    assert.equal(loopRun.state.waveHead, merged, "a healthy integrate closes the wave");
     // The lead's own commit moves the integration head, not the wave: workers take it with the next.
     const fix = await commitFiles(repo, { "src/main.js": "// FACET WIRING\n// fixed\n" }, "lead fix");
-    night.state.integrationHead = fix;
-    assert.equal(night.state.waveHead, merged);
-    const closed = JSON.parse(await integrate(night as never, { wave: "close" }));
+    loopRun.state.integrationHead = fix;
+    assert.equal(loopRun.state.waveHead, merged);
+    const closed = JSON.parse(await integrate(loopRun as never, { wave: "close" }));
     assert.equal(closed.wave, "closed");
-    assert.equal(night.state.waveHead, fix);
+    assert.equal(loopRun.state.waveHead, fix);
   });
 
   it("a clean merge brings each merged loop worker into the first wave the art director waits for", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, null);
+    const { loopRun } = stubLoopRun(repo, head, null);
     const car = await workerBranch(repo, head, "car", { "src/car.js": "export const car = 1;\n" });
     const city = await workerBranch(repo, head, "city", { "src/city.js": "export const city = 1;\n" });
     const building = (id: string, commit: string) => ({
@@ -674,36 +676,36 @@ describe("integration in waves", () => {
       state: "running",
       spec: { id, checks: [] },
     });
-    night.state.workers.set("car", building("car", car));
-    night.state.workers.set("city", building("city", city));
-    const waveIn = () => firstWaveIn(night as never);
+    loopRun.state.workers.set("car", building("car", car));
+    loopRun.state.workers.set("city", building("city", city));
+    const waveIn = () => firstWaveIn(loopRun as never);
     assert.equal(waveIn(), false, "nothing merged yet");
-    JSON.parse(await integrate(night as never, { worker: "car" }));
+    JSON.parse(await integrate(loopRun as never, { worker: "car" }));
     assert.equal(waveIn(), false, "city's kept work is not in yet");
-    JSON.parse(await integrate(night as never, { worker: "city" }));
+    JSON.parse(await integrate(loopRun as never, { worker: "city" }));
     assert.equal(waveIn(), true, "every running loop worker has kept work on the integration branch");
   });
 
   it("answers a single worker's merge with exactly the keys it always had", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, null);
+    const { loopRun } = stubLoopRun(repo, head, null);
     const car = await workerBranch(repo, head, "car", { "src/car.js": "export const car = 1;\n" });
-    night.state.workers.set("car", { id: "car", title: "car", from: head, lastCommit: car, merging: null });
-    const answer = JSON.parse(await integrate(night as never, { worker: "car" }));
+    loopRun.state.workers.set("car", { id: "car", title: "car", from: head, lastCommit: car, merging: null });
+    const answer = JSON.parse(await integrate(loopRun as never, { worker: "car" }));
     assert.deepEqual(Object.keys(answer), ["merged", "union", "head", "health", "next"]);
     assert.equal(answer.next, "judge or look at integration before you build on it");
   });
 
   it("fails the health pass of a merge that lost a demo another worker's check runs, and names it", async () => {
     const { repo, head } = await integrationRepo();
-    const { night, notes } = stubNight(repo, head, null);
-    night.state.evidenceByHead.set(head, { state: {}, demoStates: null, demos: ["pileup"], cameras: ["default"] });
-    night.state.facetSpecs.push({
+    const { loopRun, notes } = stubLoopRun(repo, head, null);
+    loopRun.state.evidenceByHead.set(head, { state: {}, demoStates: null, demos: ["pileup"], cameras: ["default"] });
+    loopRun.state.facetSpecs.push({
       id: "city",
       cameras: [],
       checks: [{ id: "crash", kind: "probe", demo: "pileup", expr: "state.cars >= 3" }],
     });
-    night.look = () => ({
+    loopRun.look = () => ({
       ok: true,
       problems: [],
       warnings: [],
@@ -713,14 +715,14 @@ describe("integration in waves", () => {
       state: {},
     });
     const race = await workerBranch(repo, head, "race", { "src/race.js": "export const race = 1;\n" });
-    night.state.workers.set("race", { id: "race", title: "race", from: head, lastCommit: race, merging: null });
-    const answer = JSON.parse(await integrate(night as never, { worker: "race" }));
+    loopRun.state.workers.set("race", { id: "race", title: "race", from: head, lastCommit: race, merging: null });
+    const answer = JSON.parse(await integrate(loopRun as never, { worker: "race" }));
     assert.equal(answer.health.ok, false);
     assert.match(answer.health.problems.join("\n"), /lost demo "pileup", which city depends on/);
     assert.deepEqual(answer.lost, [{ kind: "demo", name: "pileup", usedBy: ["city"] }]);
     assert.match(answer.next, /lost what another worker depends on/);
-    assert.equal(night.state.integrationHealthy, false);
-    assert.equal(night.state.waveHead, undefined, "an unhealthy merge closes no wave");
+    assert.equal(loopRun.state.integrationHealthy, false);
+    assert.equal(loopRun.state.waveHead, undefined, "an unhealthy merge closes no wave");
     assert.ok(
       notes.some((n) => /integrated race → .*health problems/.test(n)),
       notes.join("\n"),
@@ -729,7 +731,7 @@ describe("integration in waves", () => {
 
   it("stops a wave at its first conflict and says what merged and what was not tried", async () => {
     const { repo, head } = await integrationRepo();
-    const { night, events } = stubNight(repo, head, null);
+    const { loopRun, events } = stubLoopRun(repo, head, null);
     const car = await workerBranch(repo, head, "car", { "src/shared.js": "car\n" });
     const city = await workerBranch(repo, head, "city", { "src/shared.js": "city\n" });
     const hud = await workerBranch(repo, head, "hud", { "src/hud2.js": "hud\n" });
@@ -738,13 +740,13 @@ describe("integration in waves", () => {
       ["city", city],
       ["hud", hud],
     ])
-      night.state.workers.set(id, { id, title: id, from: head, lastCommit: commit, merging: null });
-    const answer = JSON.parse(await integrate(night as never, { worker: "car,city,hud" }));
+      loopRun.state.workers.set(id, { id, title: id, from: head, lastCommit: commit, merging: null });
+    const answer = JSON.parse(await integrate(loopRun as never, { worker: "car,city,hud" }));
     assert.equal(answer.merged, false);
     assert.deepEqual(answer.conflict, ["src/shared.js"]);
     assert.deepEqual(answer.wave, { merged: ["car"], notTried: ["hud"], skipped: {} });
     assert.equal(events.filter((e) => e.type === "integration_health").length, 0, "no health pass on half a wave");
-    assert.equal(night.state.integrationHealthy, null);
+    assert.equal(loopRun.state.integrationHealthy, null);
   });
 });
 
@@ -769,10 +771,10 @@ const healthLook = (over: Record<string, unknown>): Look => ({
 const shotsOf = (names: string[]) => names.map((camera) => ({ camera }));
 
 /** A worker on its own branch off the integration head, ready to be merged. */
-async function readyWorker(repo: string, night: Record<string, any>, id: string): Promise<void> {
-  const from = night.state.integrationHead;
+async function readyWorker(repo: string, loopRun: Record<string, any>, id: string): Promise<void> {
+  const from = loopRun.state.integrationHead;
   const commit = await workerBranch(repo, from, id, { [`src/${id}.js`]: `export const ${id} = 1;\n` });
-  night.state.workers.set(id, { id, title: id, from, lastCommit: commit, merging: null });
+  loopRun.state.workers.set(id, { id, title: id, from, lastCommit: commit, merging: null });
 }
 
 describe("the harness's own view is never a registration (review)", () => {
@@ -807,29 +809,29 @@ describe("the harness's own view is never a registration (review)", () => {
 
   it("a merge compares the cameras the page registered, not the shots: default photographed before is no loss", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, null);
-    night.state.facetSpecs.push(
+    const { loopRun } = stubLoopRun(repo, head, null);
+    loopRun.state.facetSpecs.push(
       workerSpec("city", [{ id: "sky", kind: "pixel", camera: "top", expr: "meanLuma > 0.1" }]),
     );
     // The head before, as a judge kept it: default is always photographed, and the page registers named ones only.
-    night.rememberEvidence(head, {
+    loopRun.rememberEvidence(head, {
       ok: true,
       state: { a: 1 },
       shots: shotsOf(["default", "chase", "top"]),
       registeredCameras: ["chase", "top"],
       registeredDemos: [],
     });
-    night.look = () =>
+    loopRun.look = () =>
       healthLook({ state: { a: 1 }, shots: shotsOf(["default", "chase", "top"]), registeredCameras: ["chase", "top"] });
-    await readyWorker(repo, night, "race");
-    const kept = JSON.parse(await integrate(night as never, { worker: "race" }));
+    await readyWorker(repo, loopRun, "race");
+    const kept = JSON.parse(await integrate(loopRun as never, { worker: "race" }));
     assert.equal(kept.health.ok, true, JSON.stringify(kept));
     assert.equal(kept.lost, undefined);
     // The next merge drops "top", which city's check looks through: that one is a loss.
-    night.look = () =>
+    loopRun.look = () =>
       healthLook({ state: { a: 1 }, shots: shotsOf(["default", "chase"]), registeredCameras: ["chase"] });
-    await readyWorker(repo, night, "hud");
-    const lost = JSON.parse(await integrate(night as never, { worker: "hud" }));
+    await readyWorker(repo, loopRun, "hud");
+    const lost = JSON.parse(await integrate(loopRun as never, { worker: "hud" }));
     assert.deepEqual(lost.lost, [{ kind: "camera", name: "top", usedBy: ["city"] }]);
   });
 });
@@ -837,12 +839,12 @@ describe("the harness's own view is never a registration (review)", () => {
 describe("a wave that breaks one of its own workers (review)", () => {
   it("fails the wave's health pass when one merged worker drops a camera another merged worker's checks use", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, null);
-    night.state.facetSpecs.push(
+    const { loopRun } = stubLoopRun(repo, head, null);
+    loopRun.state.facetSpecs.push(
       workerSpec("car", [{ id: "drift", kind: "pixel", camera: "chase", expr: "meanLuma > 0.1" }]),
       workerSpec("city"),
     );
-    night.rememberEvidence(head, {
+    loopRun.rememberEvidence(head, {
       ok: true,
       state: { a: 1 },
       shots: shotsOf(["default", "chase"]),
@@ -850,14 +852,14 @@ describe("a wave that breaks one of its own workers (review)", () => {
       registeredDemos: [],
     });
     // city's merge deleted config.cameras.chase: the merged page registers the default view only.
-    night.look = () => healthLook({ state: { a: 1 }, shots: shotsOf(["default"]), registeredCameras: ["default"] });
-    await readyWorker(repo, night, "car");
+    loopRun.look = () => healthLook({ state: { a: 1 }, shots: shotsOf(["default"]), registeredCameras: ["default"] });
+    await readyWorker(repo, loopRun, "car");
     const city = await workerBranch(repo, head, "city", { "src/city.js": "export const city = 1;\n" });
-    night.state.workers.set("city", { id: "city", title: "city", from: head, lastCommit: city, merging: null });
-    const answer = JSON.parse(await integrate(night as never, { worker: "car,city" }));
+    loopRun.state.workers.set("city", { id: "city", title: "city", from: head, lastCommit: city, merging: null });
+    const answer = JSON.parse(await integrate(loopRun as never, { worker: "car,city" }));
     assert.equal(answer.health.ok, false, JSON.stringify(answer));
     assert.deepEqual(answer.lost, [{ kind: "camera", name: "chase", usedBy: ["car"] }]);
-    assert.equal(night.state.waveHead, undefined, "an unhealthy wave closes nothing");
+    assert.equal(loopRun.state.waveHead, undefined, "an unhealthy wave closes nothing");
   });
 });
 
@@ -886,21 +888,21 @@ describe("probe losses only between looks taken alike (review)", () => {
 
   it("a merge compares probes only with a head its own health pass looked at, under the same setup", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, null);
-    night.state.facetSpecs.push(workerSpec("city", [{ id: "cars", kind: "probe", expr: "state.traffic.cars >= 3" }]));
+    const { loopRun } = stubLoopRun(repo, head, null);
+    loopRun.state.facetSpecs.push(workerSpec("city", [{ id: "cars", kind: "probe", expr: "state.traffic.cars >= 3" }]));
     // A judge kept this head under the setup it asked for: paths only that setup reaches.
-    night.rememberEvidence(head, { ok: true, state: { traffic: { cars: 4 } }, shots: [], registeredDemos: [] });
-    night.look = () => healthLook({ state: { traffic: {} } });
-    await readyWorker(repo, night, "race");
-    const kept = JSON.parse(await integrate(night as never, { worker: "race" }));
+    loopRun.rememberEvidence(head, { ok: true, state: { traffic: { cars: 4 } }, shots: [], registeredDemos: [] });
+    loopRun.look = () => healthLook({ state: { traffic: {} } });
+    await readyWorker(repo, loopRun, "race");
+    const kept = JSON.parse(await integrate(loopRun as never, { worker: "race" }));
     assert.equal(kept.health.ok, true, JSON.stringify(kept));
     // Health pass after health pass, both under the run's setup: a path gone is a loss.
-    night.look = () => healthLook({ state: { traffic: { cars: 4 } } });
-    await readyWorker(repo, night, "hud");
-    assert.equal(JSON.parse(await integrate(night as never, { worker: "hud" })).health.ok, true);
-    night.look = () => healthLook({ state: { traffic: {} } });
-    await readyWorker(repo, night, "sky");
-    const lost = JSON.parse(await integrate(night as never, { worker: "sky" }));
+    loopRun.look = () => healthLook({ state: { traffic: { cars: 4 } } });
+    await readyWorker(repo, loopRun, "hud");
+    assert.equal(JSON.parse(await integrate(loopRun as never, { worker: "hud" })).health.ok, true);
+    loopRun.look = () => healthLook({ state: { traffic: {} } });
+    await readyWorker(repo, loopRun, "sky");
+    const lost = JSON.parse(await integrate(loopRun as never, { worker: "sky" }));
     assert.deepEqual(lost.lost, [{ kind: "probe", name: "state.traffic.cars", usedBy: ["city"] }]);
   });
 });
@@ -909,8 +911,8 @@ describe("a contract that could not be committed (review)", () => {
   it("retries the contract it derives once the cause is gone, rather than refusing every loop worker", async () => {
     const { root, repo } = await integrationRepo();
     const stub = await commitFiles(repo, { "src/car.js": "export {};\n", "src/city.js": "export {};\n" });
-    const { night } = stubNight(repo, stub, compilePlan(planArgs(null)).plan!);
-    const start = () => contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop);
+    const { loopRun } = stubLoopRun(repo, stub, compilePlan(planArgs(null)).plan!);
+    const start = () => contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop);
     for (let i = 0; i < CONTRACT_REFUSALS_BEFORE_DERIVED; i++) assert.ok(await start());
     // docs/ is a link out of the worktree: the derived contract is not written.
     const outside = path.join(root, "outside");
@@ -918,14 +920,14 @@ describe("a contract that could not be committed (review)", () => {
     await symlink(outside, path.join(repo, "docs"));
     const failed = await start();
     assert.ok(failed, "refused while the contract cannot be written");
-    assert.ok(night.state.contractError);
+    assert.ok(loopRun.state.contractError);
     await unlink(path.join(repo, "docs"));
     assert.equal(await start(), null, "the derived contract is written on the next start");
-    assert.ok(night.state.contract, "and held");
-    assert.equal(night.state.contractError, null);
+    assert.ok(loopRun.state.contract, "and held");
+    assert.equal(loopRun.state.contractError, null);
     assert.deepEqual(await readdir(outside), [], "nothing was written through the link");
     // A contract the lead gave that could not be committed still asks the lead to give it again.
-    const given = stubNight(repo, stub, compilePlan(planArgs()).plan!).night;
+    const given = stubLoopRun(repo, stub, compilePlan(planArgs()).plan!).loopRun;
     given.state.contractError = "git commit failed";
     const again = await contractBeforeFork(given as never, { id: "car" }, WorkerMode.Loop);
     assert.match(String(again), /git commit failed/);
@@ -935,19 +937,19 @@ describe("a contract that could not be committed (review)", () => {
 describe("a game the user brought, under a contract (review)", () => {
   it("lets a second contracted loop worker start with no owns=: its contract modules are its seam", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, compilePlan(planArgs()).plan!);
-    await contractOnPlan(night as never);
+    const { loopRun } = stubLoopRun(repo, head, compilePlan(planArgs()).plan!);
+    await contractOnPlan(loopRun as never);
     const car = { id: "car", owns: ["src/car.js", "src/state.js"], ownsMain: false };
-    Object.assign(night, {
+    Object.assign(loopRun, {
       ownShape: true,
       softDeadline: Date.now() + 60 * 60_000,
       priorWorkers: [],
       runningWorkers: () => [car],
     });
-    night.state.finish = null;
-    const asked = await startRefusal(night as never, "city", {});
+    loopRun.state.finish = null;
+    const asked = await startRefusal(loopRun as never, "city", {});
     assert.notEqual(typeof asked, "string", String(asked));
-    const single = await startRefusal(night as never, "stubs", { mode: "single" });
+    const single = await startRefusal(loopRun as never, "stubs", { mode: "single" });
     assert.match(String(single), /needs a seam/, "a single session has no contract seam");
   });
 });
@@ -957,19 +959,19 @@ describe("a game the user brought, under a contract (review)", () => {
  * stage may accept an empty world, and the contract's commit on top of it became the fork point
  * every loop worker had to take. The fork gate looked at that commit as a game, not a start, and
  * refused every worker over the blank world the base stage had accepted; and a branch whose only
- * change was the contract file (now docs/MODULE-CONTRACT.md) counted as the night's work at the close.
+ * change was the contract file (now docs/MODULE-CONTRACT.md) counted as the run's work at the close.
  */
 describe("a contract written on the run's starting point (review)", () => {
   const SEEN = { ok: true, state: { world: { groups: [] } }, shots: [{ camera: "default" }], problems: [] };
-  /** A night standing on an empty starting point the base stage accepted: a base head, healthy, its look kept. */
+  /** A run standing on an empty starting point the base stage accepted: a base head, healthy, its look kept. */
   async function onEmptyStart(plan: Record<string, any>) {
     const { repo, head } = await integrationRepo();
-    const stub = stubNight(repo, head, plan);
-    const { state } = stub.night;
+    const stub = stubLoopRun(repo, head, plan);
+    const { state } = stub.loopRun;
     state.baseHeads.add(head);
     state.healthByHead.set(head, true);
     state.consoleByHead.set(head, ["a warning the start already logs"]);
-    stub.night.rememberEvidence(head, SEEN);
+    stub.loopRun.rememberEvidence(head, SEEN);
     return { ...stub, repo, head };
   }
   /** What the fork gate and the close read of a commit: where it stands. */
@@ -981,39 +983,39 @@ describe("a contract written on the run's starting point (review)", () => {
   });
 
   it("the lead's contract on an empty start stands where the start stood: a starting point, healthy, its look kept", async () => {
-    const { night, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
-    await contractOnPlan(night as never);
-    const commit = night.state.contract.commit;
+    const { loopRun, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
+    await contractOnPlan(loopRun as never);
+    const commit = loopRun.state.contract.commit;
     assert.notEqual(commit, head, "the contract is its own commit");
-    assert.equal(night.state.integrationHead, commit, "and the fork point of every loop worker");
-    assert.deepEqual(standing(night.state, commit), standing(night.state, head));
+    assert.equal(loopRun.state.integrationHead, commit, "and the fork point of every loop worker");
+    assert.deepEqual(standing(loopRun.state, commit), standing(loopRun.state, head));
   });
 
   it("so does the contract the harness derives, and one the lead gives again on top of it", async () => {
-    const { night, head } = await onEmptyStart(compilePlan(planArgs(null)).plan!);
-    const start = () => contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop);
+    const { loopRun, head } = await onEmptyStart(compilePlan(planArgs(null)).plan!);
+    const start = () => contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop);
     for (let i = 0; i < CONTRACT_REFUSALS_BEFORE_DERIVED; i++) assert.ok(await start());
     assert.equal(await start(), null);
-    const derived = night.state.contract.commit;
+    const derived = loopRun.state.contract.commit;
     assert.notEqual(derived, head);
-    assert.deepEqual(standing(night.state, derived), standing(night.state, head));
-    night.state.plan = compilePlan(planArgs()).plan!;
-    await contractOnPlan(night as never);
-    const given = night.state.contract.commit;
+    assert.deepEqual(standing(loopRun.state, derived), standing(loopRun.state, head));
+    loopRun.state.plan = compilePlan(planArgs()).plan!;
+    await contractOnPlan(loopRun as never);
+    const given = loopRun.state.contract.commit;
     assert.notEqual(given, derived);
-    assert.deepEqual(standing(night.state, given), standing(night.state, head));
+    assert.deepEqual(standing(loopRun.state, given), standing(loopRun.state, head));
   });
 
-  it("a contract on a head the night built is no starting point: only what is known of its parent carries over", async () => {
-    const { night, repo } = await onEmptyStart(compilePlan(planArgs()).plan!);
+  it("a contract on a head the run built is no starting point: only what is known of its parent carries over", async () => {
+    const { loopRun, repo } = await onEmptyStart(compilePlan(planArgs()).plan!);
     const built = await commitFiles(repo, { "src/car.js": "export {};\n" }, "a worker's merge");
-    night.state.integrationHead = built;
-    night.state.healthByHead.set(built, false);
-    await contractOnPlan(night as never);
-    const commit = night.state.contract.commit;
-    assert.equal(night.state.baseHeads.has(commit), false);
-    assert.equal(night.state.healthByHead.get(commit), false, "a docs file does not make a broken build load");
-    assert.equal(night.state.evidenceByHead.has(commit), false, "nobody looked at its parent");
+    loopRun.state.integrationHead = built;
+    loopRun.state.healthByHead.set(built, false);
+    await contractOnPlan(loopRun as never);
+    const commit = loopRun.state.contract.commit;
+    assert.equal(loopRun.state.baseHeads.has(commit), false);
+    assert.equal(loopRun.state.healthByHead.get(commit), false, "a docs file does not make a broken build load");
+    assert.equal(loopRun.state.evidenceByHead.has(commit), false, "nobody looked at its parent");
   });
 
   it("the close lands nothing and the art director owes no look when the branch holds only the contract", async () => {
@@ -1022,36 +1024,36 @@ describe("a contract written on the run's starting point (review)", () => {
       { name: "on the game the user brought", scratch: false },
     ];
     for (const { name, scratch } of cases) {
-      const { night, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
+      const { loopRun, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
       if (!scratch) {
-        night.state.baseHeads.delete(head);
-        night.baseCommit = head;
+        loopRun.state.baseHeads.delete(head);
+        loopRun.baseCommit = head;
       }
-      await contractOnPlan(night as never);
-      const looked = night.state.healthByHead.size;
-      Object.assign(night, {
-        run: { ...night.run, budgets: { completionPolicy: CompletionPolicy.Goal } },
+      await contractOnPlan(loopRun as never);
+      const looked = loopRun.state.healthByHead.size;
+      Object.assign(loopRun, {
+        run: { ...loopRun.run, budgets: { completionPolicy: CompletionPolicy.Goal } },
         report: {},
-        syncHead: async () => night.state.integrationHead,
+        syncHead: async () => loopRun.state.integrationHead,
         runningWorkers: () => [],
         settleWorkers: async () => {},
         stopWorker: async () => {},
         closeRun: async () => {},
       });
-      assert.equal(shipOwed(night as never), false, name);
-      const landed = await closeTheNight(night as never, { land: true, settleMs: 0 });
+      assert.equal(shipOwed(loopRun as never), false, name);
+      const landed = await closeTheLoopRun(loopRun as never, { land: true, settleMs: 0 });
       assert.equal(landed.why, NotLandedReason.NothingNew, `${name}: ${JSON.stringify(landed)}`);
-      assert.equal(night.state.healthByHead.size, looked, `${name}: the close did not look`);
+      assert.equal(loopRun.state.healthByHead.size, looked, `${name}: the close did not look`);
     }
   });
 
   it("a Resume keeps a contract written on the start a starting point", async () => {
-    const { night, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
-    await contractOnPlan(night as never);
+    const { loopRun, head } = await onEmptyStart(compilePlan(planArgs()).plan!);
+    await contractOnPlan(loopRun as never);
     const now = Date.UTC(2026, 9, 6, 2, 0, 0);
     const run = { runId: "run_j", project: "apex", goal: "a city", reference: { name: "City" } };
-    /** A night with only what the journal's record and restore read, standing on the start. */
-    const nightWith = (state: Record<string, unknown>, over: Record<string, unknown> = {}) => ({
+    /** A run with only what the journal's record and restore read, standing on the start. */
+    const loopRunWith = (state: Record<string, unknown>, over: Record<string, unknown> = {}) => ({
       run,
       started: now,
       softDeadline: now,
@@ -1060,31 +1062,31 @@ describe("a contract written on the run's starting point (review)", () => {
       journal: { director: {} as Record<string, any> },
       ...over,
     });
-    const first = nightWith({ baseHeads: new Set([head]), contract: night.state.contract });
-    recordNight(first as never, now);
+    const first = loopRunWith({ baseHeads: new Set([head]), contract: loopRun.state.contract });
+    recordLoopRun(first as never, now);
     const saved = structuredClone(first.journal.director);
-    // `startingHeads` gives a resumed night its scaffold and base commit, never the contract's.
-    const back = nightWith(
+    // `startingHeads` gives a resumed run its scaffold and base commit, never the contract's.
+    const back = loopRunWith(
       { baseHeads: new Set([head]) },
       { resume: true, priorJournal: { director: saved } },
     ) as Record<string, any>;
-    restoreNight(back as never, now);
-    assert.equal(back.state.contract.commit, night.state.contract.commit);
-    assert.ok(back.state.baseHeads.has(night.state.contract.commit), "the fork gate looks at it as the start it is");
+    restoreLoopRun(back as never, now);
+    assert.equal(back.state.contract.commit, loopRun.state.contract.commit);
+    assert.ok(back.state.baseHeads.has(loopRun.state.contract.commit), "the fork gate looks at it as the start it is");
   });
 });
 
 describe("running loop workers follow the wave, not every commit (review)", () => {
   it("a loop worker's integration head stays on the wave's head after a lead commit until the wave closes", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = stubNight(repo, head, null);
-    const hook = loopIntegration(night as never);
+    const { loopRun } = stubLoopRun(repo, head, null);
+    const hook = loopIntegration(loopRun as never);
     assert.equal(await hook.head(), head, "before any wave: the integration head");
-    night.state.waveHead = head;
+    loopRun.state.waveHead = head;
     const fix = await commitFiles(repo, { "src/main.js": "// FACET WIRING\n// lead\n" }, "lead fix");
-    night.state.integrationHead = fix;
+    loopRun.state.integrationHead = fix;
     assert.equal(await hook.head(), head, "the lead's commit waits for the wave");
-    await integrate(night as never, { wave: "close" });
+    await integrate(loopRun as never, { wave: "close" });
     assert.equal(await hook.head(), fix);
   });
 });
@@ -1092,13 +1094,13 @@ describe("running loop workers follow the wave, not every commit (review)", () =
 describe("integrate's arguments (review)", () => {
   it("names worker= or wave=close when neither is given, and merges a repeated id once", async () => {
     const { repo, head } = await integrationRepo();
-    const { night, events } = stubNight(repo, head, null);
-    const empty = String(await integrate(night as never, {}));
+    const { loopRun, events } = stubLoopRun(repo, head, null);
+    const empty = String(await integrate(loopRun as never, {}));
     assert.ok(!empty.includes("undefined"), empty);
     assert.match(empty, /worker=/);
-    await readyWorker(repo, night, "car");
-    await readyWorker(repo, night, "city");
-    const answer = JSON.parse(await integrate(night as never, { worker: "car,car,city" }));
+    await readyWorker(repo, loopRun, "car");
+    await readyWorker(repo, loopRun, "city");
+    const answer = JSON.parse(await integrate(loopRun as never, { worker: "car,car,city" }));
     assert.deepEqual(answer.wave, { merged: ["car", "city"] });
     assert.equal(events.filter((e) => e.type === "integration_merge").length, 2);
   });
@@ -1109,8 +1111,8 @@ describe("the contract and the wave on the journal (review)", () => {
   const WAVE = "abcdef0".padEnd(40, "2");
   const run = { runId: "run_j", project: "apex", goal: "a city", reference: { name: "City" } };
   const now = Date.UTC(2026, 9, 6, 1, 0, 0);
-  /** A night with only what the journal's record and restore read. */
-  const journalNight = (state: Record<string, unknown> = {}, over: Record<string, unknown> = {}) => ({
+  /** A run with only what the journal's record and restore read. */
+  const journalLoopRun = (state: Record<string, unknown> = {}, over: Record<string, unknown> = {}) => ({
     run,
     started: now,
     softDeadline: now,
@@ -1119,25 +1121,25 @@ describe("the contract and the wave on the journal (review)", () => {
     journal: { director: {} as Record<string, any> },
     ...over,
   });
-  /** The night a Resume of `saved` starts. */
+  /** The run a Resume of `saved` starts. */
   const resumed = (saved: Record<string, unknown>) => {
-    const night = journalNight({}, { resume: true, priorJournal: { director: saved } }) as Record<string, any>;
-    restoreNight(night as never, now);
-    return night;
+    const loopRun = journalLoopRun({}, { resume: true, priorJournal: { director: saved } }) as Record<string, any>;
+    restoreLoopRun(loopRun as never, now);
+    return loopRun;
   };
   const spec = () => parseModuleContract(CONTRACT, ["car", "city"]).contract!;
 
   it("round-trips the contract and the wave's head through a Resume", () => {
-    const night = journalNight({ contract: { commit: CONTRACT_COMMIT, spec: spec() }, waveHead: WAVE });
-    recordNight(night as never, now);
-    const back = resumed(structuredClone(night.journal.director));
+    const loopRun = journalLoopRun({ contract: { commit: CONTRACT_COMMIT, spec: spec() }, waveHead: WAVE });
+    recordLoopRun(loopRun as never, now);
+    const back = resumed(structuredClone(loopRun.journal.director));
     assert.deepEqual(back.state.contract, { commit: CONTRACT_COMMIT, spec: spec() });
     assert.equal(back.state.waveHead, WAVE);
   });
 
-  it("writes neither key for a night with neither, and keeps a saved commit that is no hash out", () => {
-    const plain = journalNight();
-    recordNight(plain as never, now);
+  it("writes neither key for a run with neither, and keeps a saved commit that is no hash out", () => {
+    const plain = journalLoopRun();
+    recordLoopRun(plain as never, now);
     assert.ok(!("contract" in plain.journal.director) && !("waveHead" in plain.journal.director));
     for (const commit of ["HEAD", "HEAD; touch x", "", 42, null]) {
       const back = resumed({ contract: { commit, spec: spec() }, waveHead: commit });
@@ -1155,7 +1157,7 @@ describe("the contract and the wave on the journal (review)", () => {
     ]);
   });
 
-  it("a finished build reopened forks from the folder as it is now: the finished night's wave head is not followed", () => {
+  it("a finished build reopened forks from the folder as it is now: the finished run's wave head is not followed", () => {
     const back = resumed({
       contract: { commit: CONTRACT_COMMIT, spec: spec() },
       waveHead: WAVE,
@@ -1170,19 +1172,19 @@ describe("a build paused before the contract gate shipped, resumed (review)", ()
   const now = Date.UTC(2026, 9, 6, 2, 0, 0);
   /** The plan as a pre-upgrade director kept it: two parts, no contract, no part marked single. */
   const oldPlan = () => compilePlan(planArgs(null)).plan!;
-  /** A night over `repo` resumed from `saved` (its journal's director record), as setup.ts starts one. */
+  /** A run over `repo` resumed from `saved` (its journal's director record), as setup.ts starts one. */
   const resumedOver = (repo: string, head: string, saved: Record<string, any>) => {
-    const { night } = stubNight(repo, head, saved.plan ?? null);
-    Object.assign(night, {
+    const { loopRun } = stubLoopRun(repo, head, saved.plan ?? null);
+    Object.assign(loopRun, {
       resume: true,
       priorJournal: { director: saved },
       started: now,
       softDeadline: now,
       finalDeadline: now,
     });
-    Object.assign(night.state, { log: [], planReviewUntil: 0, judges: 0, plays: 0 });
-    restoreNight(night as never, now);
-    return night;
+    Object.assign(loopRun.state, { log: [], planReviewUntil: 0, judges: 0, plays: 0 });
+    restoreLoopRun(loopRun as never, now);
+    return loopRun;
   };
   /** A pre-upgrade journal: a two-part plan and a worker that left a commit, and nothing of the contract. */
   async function preUpgrade() {
@@ -1198,23 +1200,23 @@ describe("a build paused before the contract gate shipped, resumed (review)", ()
 
   it("starts a loop worker from a worker before the pause as it always did: no refusal, no contract commit", async () => {
     const { repo, head, carWork, saved } = await preUpgrade();
-    const night = resumedOver(repo, head, saved);
-    assert.equal(priorFork(night as never, "car")?.commit, carWork);
+    const loopRun = resumedOver(repo, head, saved);
+    assert.equal(priorFork(loopRun as never, "car")?.commit, carWork);
     const args = { id: "car", from: "car" };
     for (let i = 0; i <= CONTRACT_REFUSALS_BEFORE_DERIVED; i++) {
-      assert.equal(await contractBeforeFork(night as never, args, WorkerMode.Loop), null, `call ${i + 1}`);
+      assert.equal(await contractBeforeFork(loopRun as never, args, WorkerMode.Loop), null, `call ${i + 1}`);
     }
-    const gate = await contractAtFork(night as never, { id: "car", args, mode: WorkerMode.Loop, commit: carWork });
+    const gate = await contractAtFork(loopRun as never, { id: "car", args, mode: WorkerMode.Loop, commit: carWork });
     assert.deepEqual(gate, { owns: null });
     assert.equal(await fixtureGit(repo, ["rev-parse", "HEAD"]), head, "no docs/MODULE-CONTRACT.md committed");
-    assert.equal(night.state.contract, undefined);
+    assert.equal(loopRun.state.contract, undefined);
   });
 
   it("stays a build from before the gate through a second pause", async () => {
     const { repo, head, saved } = await preUpgrade();
-    const night = resumedOver(repo, head, saved);
-    recordNight(night as never, now);
-    const again = resumedOver(repo, head, structuredClone(night.journal.director));
+    const loopRun = resumedOver(repo, head, saved);
+    recordLoopRun(loopRun as never, now);
+    const again = resumedOver(repo, head, structuredClone(loopRun.journal.director));
     for (let i = 0; i <= CONTRACT_REFUSALS_BEFORE_DERIVED; i++) {
       assert.equal(await contractBeforeFork(again as never, { id: "car" }, WorkerMode.Loop), null, `call ${i + 1}`);
     }
@@ -1223,14 +1225,14 @@ describe("a build paused before the contract gate shipped, resumed (review)", ()
 
   it("holds its loop workers once its lead gives a contract", async () => {
     const { repo, head, saved } = await preUpgrade();
-    const night = resumedOver(repo, head, saved);
-    night.state.plan = compilePlan(planArgs()).plan!;
-    assert.match(String(await contractOnPlan(night as never)), /docs\/MODULE-CONTRACT\.md/);
+    const loopRun = resumedOver(repo, head, saved);
+    loopRun.state.plan = compilePlan(planArgs()).plan!;
+    assert.match(String(await contractOnPlan(loopRun as never)), /docs\/MODULE-CONTRACT\.md/);
     const args = { id: "city" };
-    const gate = await contractAtFork(night as never, { id: "city", args, mode: WorkerMode.Loop, commit: head });
+    const gate = await contractAtFork(loopRun as never, { id: "city", args, mode: WorkerMode.Loop, commit: head });
     assert.match(String(gate.refusal), /does not contain the module contract/);
-    recordNight(night as never, now);
-    const again = resumedOver(repo, head, structuredClone(night.journal.director));
+    recordLoopRun(loopRun as never, now);
+    const again = resumedOver(repo, head, structuredClone(loopRun.journal.director));
     const stillHeld = await contractAtFork(again as never, { id: "city", args, mode: WorkerMode.Loop, commit: head });
     assert.match(String(stillHeld.refusal), /does not contain the module contract/, "and goes on holding them");
   });
@@ -1240,9 +1242,9 @@ describe("a build paused before the contract gate shipped, resumed (review)", ()
     const before = resumedOver(repo, head, {});
     before.resume = false;
     before.state.plan = oldPlan();
-    recordNight(before as never, now);
-    const night = resumedOver(repo, head, structuredClone(before.journal.director));
-    const refused = await contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop);
+    recordLoopRun(before as never, now);
+    const loopRun = resumedOver(repo, head, structuredClone(before.journal.director));
+    const refused = await contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop);
     assert.match(String(refused), /2 parts that loop, and no module contract yet/);
   });
 });

@@ -285,7 +285,7 @@ export class GameBuilds {
    *
    * "This command" is the package manager's own install, read off the folder's lockfile, never
    * the string `studio.json` happens to record: that file ships with a downloaded game and a
-   * contractor can rewrite it mid-night, and the one exemption the studio ever grants must not
+   * contractor can rewrite it mid-run, and the one exemption the studio ever grants must not
    * be lent to `npm install && curl … | sh`. `readProjectShape` refuses the same string, so the
    * sheet and the button still name the command that runs.
    */

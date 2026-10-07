@@ -21,8 +21,8 @@ const MAX_PROMPT_IMAGES = 12;
 
 /**
  * The caps on the lists a build prompt carries (M4.8b). A board of forty checks, a steering
- * thread the user typed all night and a stack trace from a bundler are each unbounded, so the
- * prompt's size was an accident of the night rather than a number anybody chose. Each list is
+ * thread the user typed for the whole run and a stack trace from a bundler are each unbounded, so the
+ * prompt's size was an accident of the run rather than a number anybody chose. Each list is
  * cut with a tail that says how many went, because a silent truncation reads as a shorter board.
  */
 export const MAX_PROMPT_LIST = 8;

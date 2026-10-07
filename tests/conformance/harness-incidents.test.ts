@@ -23,7 +23,7 @@ import {
   type Rig,
 } from "../helpers/studio-rig.ts";
 import { EngineError, type CompleteRequest, type DelegateRequest } from "../../src/substrate/engines/types.ts";
-import { rememberEvidence } from "../../src/harness-seed/loop/director/night.ts";
+import { rememberEvidence } from "../../src/harness-seed/loop/director/loop-run.ts";
 import {
   compareScoreboards,
   dryRunChecks,
@@ -153,7 +153,7 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
 });
 
 import { timedWorkRemaining, wrapReserveMs } from "../../src/harness-seed/loop/director/budgets.ts";
-import { restoreNight } from "../../src/harness-seed/loop/director/journal.ts";
+import { restoreLoopRun } from "../../src/harness-seed/loop/director/journal.ts";
 import { reopenedJournal } from "../../src/harness-seed/loop/director/reopen.ts";
 import { applySeed } from "../../src/substrate/seed-upgrade.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -175,7 +175,7 @@ it("AUDIT-SEED. preserved pre-wake budgets cannot break newly shipped completion
   assert.ok(report.kept.includes("loop/director/budgets.ts"));
   assert.equal(await readFile(path.join(workspace, "loop/director/budgets.ts"), "utf8"), older);
   const journal = await import(pathToFileURL(path.join(workspace, "loop/director/journal.ts")).href);
-  assert.equal(typeof journal.restoreNight, "function");
+  assert.equal(typeof journal.restoreLoopRun, "function");
 });
 import { reopenBudgets, reopenedRun } from "../../src/harness-seed/loop/reopen-run.ts";
 import { CompletionPolicy } from "../../src/harness-seed/loop/completion-policy.ts";
@@ -331,11 +331,11 @@ describe("readiness judge incidents", () => {
     );
     assert.deepEqual(dry.unsatisfiable, [{ id: "fuel", missing: ["player.fuel"] }]);
     // The next worker's dry run never inherits a head the host could not read.
-    const night = { state: { evidenceByHead: new Map() } } as unknown as Parameters<typeof rememberEvidence>[0];
-    rememberEvidence(night, "c0ffee", { ok: true, state: head } as never);
-    assert.equal(night.state.evidenceByHead.has("c0ffee"), false);
-    rememberEvidence(night, "beef", { ok: true, state: bounded(0) } as never);
-    assert.equal(night.state.evidenceByHead.has("beef"), true);
+    const loopRun = { state: { evidenceByHead: new Map() } } as unknown as Parameters<typeof rememberEvidence>[0];
+    rememberEvidence(loopRun, "c0ffee", { ok: true, state: head } as never);
+    assert.equal(loopRun.state.evidenceByHead.has("c0ffee"), false);
+    rememberEvidence(loopRun, "beef", { ok: true, state: bounded(0) } as never);
+    assert.equal(loopRun.state.evidenceByHead.has("beef"), true);
   });
 
   it("AUDIT-WEBGPU-NULL: an unavailable triangle counter stays unmeasured", () => {
@@ -2212,7 +2212,7 @@ describe("harness incidents", () => {
     );
   });
 
-  it("V2b. the derby night: a round the judge preferred is not undone for a move the harness invented, and the miss is on the record", async () => {
+  it("V2b. the derby run: a round the judge preferred is not undone for a move the harness invented, and the miss is on the record", async () => {
     // dirt2 it2: the director's brief said mud; the harness planner made "a wet-mud puddle zone
     // system" mandatory, the taste judge preferred the build anyway, and the round was reset for
     // missing what nobody had asked for. Now the move is guidance until two accepted builds in a
@@ -2295,7 +2295,7 @@ describe("harness incidents", () => {
       `it is asked again: ${JSON.stringify(moves.map((m) => [m.iteration, m.what, m.mandatory]))}`,
     );
     // And when two accepted builds in a row have only polished, the escalation bites: the move
-    // is mandatory and the build without it is undone, which is what stops a polish-only night.
+    // is mandatory and the build without it is undone, which is what stops a polish-only run.
     const escalated = asked.find((i) => (i.move as Move).mandatory === true);
     assert.ok(escalated, `after two polish-only accepted builds the move is mandatory again: ${debug}`);
     assert.equal(escalated!.verdictSource, "no-move", `and the build without it is undone: ${debug}`);
@@ -3312,7 +3312,7 @@ describe("the modeller in the loop (AG-930)", () => {
   });
 });
 
-describe("the loop dies in the middle of the night (M3.9)", () => {
+describe("the loop dies in the middle of the run (M3.9)", () => {
   /** Poll until it holds, or say what was still true when the clock ran out. */
   async function until(condition: () => boolean | Promise<boolean>, label: string, timeoutMs = 60_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
@@ -3326,11 +3326,11 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
   /**
    * The 1 am incident: the harness child dies, the app restarts it in seconds, and five
    * contractors keep editing worktrees for another forty minutes with no loop left to judge,
-   * commit or land a single round — while the chat still says the night is running, the Mac
+   * commit or land a single round — while the chat still says the run is running, the Mac
    * stays awake and Cmd-Q still asks about a run nobody is running. Every clause below is one
    * of those forty minutes.
    */
-  it("aborts every contractor, settles the run, and closes the night in its own thread as paused with a Resume", async () => {
+  it("aborts every contractor, settles the run, and closes the run in its own thread as paused with a Resume", async () => {
     const rig = await startRig(
       { replies: [] },
       { previewPoolMax: 2, createHeadlessPreview: async () => makeFakePreview() },
@@ -3338,7 +3338,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
     rigs.push(rig);
     // The pause itself is what this row reads: the host's automatic resume has a row of its own.
     await rig.core.updateSettings({ autoResume: false });
-    const project = await rig.core.games.scaffold("crash-night", { title: "Crash night" });
+    const project = await rig.core.games.scaffold("crash-run", { title: "Crash run" });
     const aborts = { lead: 0, builder: 0 };
     const letBuilderGo: Array<() => void> = [];
     registerFakeEngine(rig, {
@@ -3354,7 +3354,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
           );
           const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args).catch(() => "");
           await call("plan", {
-            summary: "Tonight: paint the plaza.",
+            summary: "This run: paint the plaza.",
             workers: JSON.stringify([
               {
                 id: "plaza",
@@ -3381,7 +3381,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
           return { sessionId: "director-1", summary: "the lead was aborted" };
         }
         // A builder — eyes on its own worktree — that shrugs off the first signal, which is the
-        // one Stop must still reach. Anything else the night briefs answers at once, so the
+        // one Stop must still reach. Anything else the run briefs answers at once, so the
         // scripted lead is what the run is waiting on when the loop dies.
         if (!request.selfCapture) return null;
         return new Promise<Record<string, unknown>>((resolve) => {
@@ -3394,7 +3394,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
     });
 
     const runId = rig.core.newRunId();
-    // Never awaited: the night is meant to be in flight when the loop under it dies.
+    // Never awaited: the run is meant to be in flight when the loop under it dies.
     void rig.core
       .dispatchRun({
         runId,
@@ -3434,7 +3434,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
       "the run settled the moment its loop died",
     );
 
-    // The reborn loop owes the night an ending where the user is looking.
+    // The reborn loop owes the run an ending where the user is looking.
     const threadId = await rig.core.threadForGame(project.name);
     await until(
       async () =>
@@ -3444,7 +3444,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
     );
     const inThread = await rig.core.store.listEvents(threadId);
     const finished = customEvents(inThread, "run_finished").find((e) => e.runId === runId);
-    assert.ok(finished, "the night was closed");
+    assert.ok(finished, "the run was closed");
     assert.equal(finished!.stoppedBecause, "the studio's loop crashed and restarted");
     assert.equal(finished!.victory, false);
     assert.equal(finished!.project, project.name);
@@ -3456,7 +3456,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
     );
     // Paused, not dead: what makes the card's Resume real is the journal it can pick up from.
     const journal = (await rig.core.store.readArtifact(threadId, `autopilot_${runId}`)) as { phase?: string } | null;
-    assert.equal(journal?.phase, "paused", "the journal says the night can be picked up again");
+    assert.equal(journal?.phase, "paused", "the journal says the run can be picked up again");
 
     // A contractor that did not die on the signal is still the app's to reach: its entry stays
     // registered, which is what the next test's Stop depends on.
@@ -3469,7 +3469,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
   });
 
   /**
-   * The other half of the same night: the loop that started the run is gone, so `activeRuns`
+   * The other half of the same run: the loop that started the run is gone, so `activeRuns`
    * knows nothing about it — but the contractors are the *app's*, not the loop's, and the run's
    * own start event still says which project they were hired for. Without the fallback, Stop
    * after a restart is a notification and nothing else.
@@ -3480,7 +3480,7 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
     const project = await rig.core.games.scaffold("stop-after-restart", { title: "Stop after restart" });
     const threadId = await rig.core.threadForGame(project.name);
     const runId = "run_orphaned";
-    // The night as the previous incarnation left it, and as the reborn loop's own repair closed it.
+    // The run as the previous incarnation left it, and as the reborn loop's own repair closed it.
     await rig.core.store.appendEvents(threadId, [
       {
         type: "custom",
@@ -3539,14 +3539,14 @@ describe("the loop dies in the middle of the night (M3.9)", () => {
 });
 
 /**
- * The night after the 1 am incident: paused with a Resume, and Resume pressed. The resumed night
+ * The run after the 1 am incident: paused with a Resume, and Resume pressed. The resumed run
  * used to know only what its brief said — the names of the workers from before, "gone" — and
  * nothing of what they had built, what the judges had shelved or what had happened since the
- * lead last looked; and it got a whole fresh budget, as every Resume did. Everything a night
+ * lead last looked; and it got a whole fresh budget, as every Resume did. Everything a run
  * needs to go on is in its journal now — the time it has worked among it, so a Resume goes on with
  * what the budget has left — and the resumed lead's first message is read from it.
  */
-describe("a night the loop died in, resumed (the full journal)", () => {
+describe("a run the loop died in, resumed (the full journal)", () => {
   async function until(condition: () => boolean | Promise<boolean>, label: string, timeoutMs = 60_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -3559,7 +3559,7 @@ describe("a night the loop died in, resumed (the full journal)", () => {
   const BUDGET_MS = 30 * 60_000;
   const iso = (ms: number) => new Date(ms).toISOString();
 
-  it("crash mid-build, then Resume: the first digest names the workers and the defects nobody owns from before, and the night goes on with the working time it had left", async () => {
+  it("crash mid-build, then Resume: the first digest names the workers and the defects nobody owns from before, and the run goes on with the working time it had left", async () => {
     const rig = await startRig(
       { replies: [] },
       { previewPoolMax: 3, createHeadlessPreview: async () => makeFakePreview() },
@@ -3567,7 +3567,7 @@ describe("a night the loop died in, resumed (the full journal)", () => {
     rigs.push(rig);
     // The user's own Resume is what this row reads: the host's automatic resume has a row of its own.
     await rig.core.updateSettings({ autoResume: false });
-    const project = await rig.core.games.scaffold("resume-night", { title: "Resume night" });
+    const project = await rig.core.games.scaffold("resume-run", { title: "Resume run" });
     const lead: DelegateRequest[] = [];
     let resumed = false;
     let resumedTurnAt = 0;
@@ -3579,12 +3579,12 @@ describe("a night the loop died in, resumed (the full journal)", () => {
           if (resumed && !resumedTurnAt) resumedTurnAt = Date.now();
           const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args).catch(() => "");
           if (resumed) {
-            // The resumed night: its first turn is all this row reads, so it closes the night.
+            // The resumed run: its first turn is all this row reads, so it closes the run.
             await call("finish", { land: "no", summary: "picked up where it stood" });
             return { sessionId: "lead-1", summary: "finished" };
           }
           await call("plan", {
-            summary: "Tonight: a dusk plaza.",
+            summary: "This run: a dusk plaza.",
             workers: JSON.stringify([
               { id: "sky", title: "Dusk sky", seam: "the sky", owns: "src/sky.js", done: ["dusk"], minutes: 20 },
               { id: "props", title: "Props", seam: "the props", owns: "src/props.js", done: ["crates"], minutes: 20 },
@@ -3629,7 +3629,7 @@ describe("a night the loop died in, resumed (the full journal)", () => {
         string,
         any
       > | null;
-    // The lead rests: its turn is over, the builder builds, and the journal holds where the night stands.
+    // The lead rests: its turn is over, the builder builds, and the journal holds where the run stands.
     await until(
       async () => lead.length === 1 && Boolean((await journal())?.director?.wake),
       "the lead to rest with the sky building",
@@ -3637,7 +3637,7 @@ describe("a night the loop died in, resumed (the full journal)", () => {
     );
     const before = (await journal())!.director;
 
-    // 1 am: the loop dies mid-build. The app's repair pauses the night.
+    // 1 am: the loop dies mid-build. The app's repair pauses the run.
     resumed = true;
     const pid = rig.core.host.pid;
     assert.ok(pid, "the harness child has a pid to kill");
@@ -3649,7 +3649,7 @@ describe("a night the loop died in, resumed (the full journal)", () => {
       120_000,
     );
     // A judge had shelved one defect nobody owns before the loop died. A judged round is out of
-    // this rig's reach, so it goes on the journal as the night's save writes its ledger
+    // this rig's reach, so it goes on the journal as the run's save writes its ledger
     // (director-journal.test.ts K2 holds that write).
     const paused = (await journal())!;
     paused.director.ledger = [
@@ -3660,29 +3660,29 @@ describe("a night the loop died in, resumed (the full journal)", () => {
     assert.equal(
       typeof worked,
       "number",
-      `the journal counts the time the night worked: ${JSON.stringify(paused.director.clock)}`,
+      `the journal counts the time the run worked: ${JSON.stringify(paused.director.clock)}`,
     );
 
     const resumeAsked = Date.now();
     void rig.core.resumeAutopilot(runId).catch(() => {});
-    await until(() => lead.length >= 2, "the resumed night's first turn", 180_000);
+    await until(() => lead.length >= 2, "the resumed run's first turn", 180_000);
     const first = String(lead[1]!.prompt);
     const standsAt = first.indexOf("WHERE THE RUN STANDS:");
-    assert.ok(standsAt >= 0, `the resumed night's first message has no digest:\n${first.slice(-2_000)}`);
+    assert.ok(standsAt >= 0, `the resumed run's first message has no digest:\n${first.slice(-2_000)}`);
     const stands = first.slice(standsAt).split("\n\n")[0]!;
     assert.match(stands, /^- worker sky \(Dusk sky\): /m, stands);
     assert.match(stands, /defects nobody owns: the crates float above the plaza/, stands);
-    assert.ok(before.clock?.softDeadline, `the first night's journal keeps its clock: ${JSON.stringify(before.clock)}`);
+    assert.ok(before.clock?.softDeadline, `the first run's journal keeps its clock: ${JSON.stringify(before.clock)}`);
 
     await until(
       async () =>
         customEvents(await rig.core.store.listEvents(threadId), "run_finished").filter((e) => e.runId === runId)
           .length >= 2,
-      "the resumed night to close",
+      "the resumed run to close",
       180_000,
     );
     const after = (await journal())!.director;
-    // The resumed night's clock was set between the Resume and its lead's first turn, to the
+    // The resumed run's clock was set between the Resume and its lead's first turn, to the
     // working time the budget had left: never a fresh budget, and the pause did not count.
     const soft = Date.parse(after.clock.softDeadline);
     const workingLeft = BUDGET_MS - wrapReserveMs(BUDGET_MS) - worked;
@@ -3692,14 +3692,14 @@ describe("a night the loop died in, resumed (the full journal)", () => {
     assert.ok(after.clock.workedMs >= worked, "the time it worked is never given back");
   });
 
-  it("crash mid-build with Resume builds automatically on: the host resumes the paused night once, as soon as its loop is back", async () => {
+  it("crash mid-build with Resume builds automatically on: the host resumes the paused run once, as soon as its loop is back", async () => {
     const rig = await startRig(
       { replies: [] },
       { previewPoolMax: 3, createHeadlessPreview: async () => makeFakePreview() },
     );
     rigs.push(rig);
     assert.equal(rig.core.settings.autoResume, true, "on by default");
-    const project = await rig.core.games.scaffold("auto-resume-night", { title: "Auto resume night" });
+    const project = await rig.core.games.scaffold("auto-resume-run", { title: "Auto resume run" });
     const lead: DelegateRequest[] = [];
     let crashed = false;
     registerFakeEngine(rig, {
@@ -3713,7 +3713,7 @@ describe("a night the loop died in, resumed (the full journal)", () => {
             return { sessionId: "lead-1", summary: "finished" };
           }
           await call("plan", {
-            summary: "Tonight: a dusk plaza.",
+            summary: "This run: a dusk plaza.",
             workers: JSON.stringify([
               { id: "sky", title: "Dusk sky", seam: "the sky", owns: "src/sky.js", done: ["dusk"], minutes: 20 },
             ]),
@@ -3765,13 +3765,13 @@ describe("a night the loop died in, resumed (the full journal)", () => {
     const pid = rig.core.host.pid;
     assert.ok(pid, "the harness child has a pid to kill");
     killTree(pid);
-    // Nobody presses Resume: the reborn loop pauses the night and the host picks it back up.
-    await until(() => lead.length >= 2, "the night resumed without a click", 180_000);
+    // Nobody presses Resume: the reborn loop pauses the run and the host picks it back up.
+    await until(() => lead.length >= 2, "the run resumed without a click", 180_000);
     await until(
       async () =>
         customEvents(await rig.core.store.listEvents(threadId), "run_finished").filter((e) => e.runId === runId)
           .length >= 2,
-      "the resumed night to close",
+      "the resumed run to close",
       180_000,
     );
     const events = await rig.core.store.listEvents(threadId);
@@ -3883,21 +3883,21 @@ describe("a Loop chat asked for research (corner-guy)", () => {
 });
 
 /**
- * A resumed night read its inbox from the whole log as if it were new: a wrap-up the user asked
+ * A resumed run read its inbox from the whole log as if it were new: a wrap-up the user asked
  * of the session before the Resume told it to skip every builder and integrate having built
  * nothing (the host only narrowed this by refusing a finish on a run that was not running), and
  * every steer an earlier session had handed over went out again. Reading hand-overs from the log
  * then overshot: a director that restarted in a fresh session after the Resume never heard an
- * instruction the earlier night's director had been told, since its `wait` asked only for steers
+ * instruction the earlier run's director had been told, since its `wait` asked only for steers
  * no session had handed over.
  */
-describe("a resumed night inherited the session before it (resume-inbox)", () => {
+describe("a resumed run inherited the session before it (resume-inbox)", () => {
   const custom = (event_type: string, payload: Record<string, unknown>) => ({
     type: "custom",
     event_type,
     payload: { runId: "r", ...payload },
   });
-  /** A run's thread with one steer, read by a first night and then resumed. */
+  /** A run's thread with one steer, read by a first run and then resumed. */
   function resumedLog() {
     const log: Array<{ id: string; data: Record<string, unknown> }> = [];
     const append = (...batch: Array<Record<string, unknown>>) => {
@@ -3915,8 +3915,8 @@ describe("a resumed night inherited the session before it (resume-inbox)", () =>
 
   it("resume-inbox. a Resume forgets the earlier wrap-up and hands nothing over twice", async () => {
     const { log, append, ctx } = resumedLog();
-    const night = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
-    await night.steering(undefined);
+    const loopRun = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
+    await loopRun.steering(undefined);
     append(
       custom("run_control", { action: "finish" }),
       custom("autopilot_paused", {}),
@@ -3924,33 +3924,33 @@ describe("a resumed night inherited the session before it (resume-inbox)", () =>
     );
     const resumedAt = log.length;
     const resumed = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
-    assert.equal(await resumed.finishing(), false, "the resumed night was never asked to wrap up");
+    assert.equal(await resumed.finishing(), false, "the resumed run was never asked to wrap up");
     await resumed.steering(undefined);
     assert.deepEqual(log.slice(resumedAt), [], "nothing the first session handed over goes out again");
   });
 
   it("resume-inbox-fresh. a fresh director after a Resume hears the earlier instruction once, handed over no second time", async () => {
     const { log, append, ctx } = resumedLog();
-    const night = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
-    assert.deepEqual(await night.steering(undefined, true, { onlyNew: true }), ["brighter sky"]);
+    const loopRun = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
+    assert.deepEqual(await loopRun.steering(undefined, true, { onlyNew: true }), ["brighter sky"]);
     append(custom("autopilot_paused", {}), custom("run_registered", { resumed: true }));
     const resumedAt = log.length;
     const resumed = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
     assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), ["brighter sky"]);
-    assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), [], "once per night");
-    assert.deepEqual(log.slice(resumedAt), [], "the first night already handed it over");
+    assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), [], "once per run");
+    assert.deepEqual(log.slice(resumedAt), [], "the first run already handed it over");
   });
 });
 
 /**
  * The lead's later turns (the wake loop, loop/director/wake.ts). The limit wait and the fallback
  * to a fresh session used to cover only the first session: a limit on the wrap-up paused the
- * night, and a session the engine had forgotten by the wrap-up closed it unfinished. The lead now
- * takes many turns a night, so both hold on every one of them.
+ * run, and a session the engine had forgotten by the wrap-up closed it unfinished. The lead now
+ * takes many turns a run, so both hold on every one of them.
  */
 describe("the lead's later turns (wake loop)", () => {
   const plan = {
-    summary: "Tonight: paint the sky.",
+    summary: "This run: paint the sky.",
     workers: JSON.stringify([
       { id: "sky", title: "Sky", seam: "the sky", owns: "src/sky.js", done: ["the sky is blue"], minutes: 20 },
     ]),
@@ -3966,8 +3966,8 @@ describe("the lead's later turns (wake loop)", () => {
     owns: "src/sky.js",
   };
 
-  /** A night whose lead is scripted turn by turn, and whose one builder paints the sky and stops. */
-  async function lateTurnNight(
+  /** A run whose lead is scripted turn by turn, and whose one builder paints the sky and stops. */
+  async function lateTurnLoopRun(
     name: string,
     lead: (request: DelegateRequest, turn: number) => Promise<Record<string, unknown>>,
     budgets: Record<string, unknown> = {},
@@ -4013,7 +4013,7 @@ describe("the lead's later turns (wake loop)", () => {
   }
 
   it("I1. the lead's session limit on a later turn is waited out and the same session carries on", async () => {
-    const { turns, finished } = await lateTurnNight("late-limit", async (request, turn) => {
+    const { turns, finished } = await lateTurnLoopRun("late-limit", async (request, turn) => {
       const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
       if (turn === 1) {
         await call("plan", plan);
@@ -4035,7 +4035,7 @@ describe("the lead's later turns (wake loop)", () => {
   });
 
   it("I3. a provider outage on a later lead turn is waited out, and the same session carries on", async () => {
-    const { turns, finished } = await lateTurnNight(
+    const { turns, finished } = await lateTurnLoopRun(
       "late-outage",
       async (request, turn) => {
         const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
@@ -4054,11 +4054,11 @@ describe("the lead's later turns (wake loop)", () => {
     assert.equal(turns.length, 3, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
     assert.equal(turns[2]!.resume, "lead-1", "the same session carries on");
     assert.equal(turns[2]!.prompt, turns[1]!.prompt, "the turn's own message is asked again");
-    assert.equal(finished.stoppedBecause, "the director finished the run", "the night was not wrapped up for it");
+    assert.equal(finished.stoppedBecause, "the director finished the run", "the run was not wrapped up for it");
   });
 
   it("I2. a session lost on a later turn is replaced by a fresh one with the brief, the lead's notes and the news", async () => {
-    const { turns, finished } = await lateTurnNight("late-lost", async (request, turn) => {
+    const { turns, finished } = await lateTurnLoopRun("late-lost", async (request, turn) => {
       const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
       if (turn === 1) {
         await call("plan", plan);
@@ -4084,7 +4084,7 @@ describe("the lead's later turns (wake loop)", () => {
   it("D11. the lead's account disabled on a wake pauses the run: workers stopped, nothing landed, no wrap-up, the user told what to fix", async () => {
     const disabled =
       "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
-    const { turns, finished } = await lateTurnNight("late-access-lost", async (request, turn) => {
+    const { turns, finished } = await lateTurnLoopRun("late-access-lost", async (request, turn) => {
       const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
       if (turn === 1) {
         await call("plan", plan);
@@ -4107,7 +4107,7 @@ describe("the lead's later turns (wake loop)", () => {
     const disabled =
       "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
     const judgeCalls: string[] = [];
-    const { turns, events, finished } = await lateTurnNight(
+    const { turns, events, finished } = await lateTurnLoopRun(
       "judge-access-lost",
       async (request, turn) => {
         const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
@@ -4125,7 +4125,7 @@ describe("the lead's later turns (wake loop)", () => {
         throw new EngineError("auth", "fake-delegate", disabled);
       },
     );
-    assert.equal(turns.length, 1, "the lead is not woken into a dead account: the night pauses first");
+    assert.equal(turns.length, 1, "the lead is not woken into a dead account: the run pauses first");
     assert.equal(finished.executionStatus, "paused", String(finished.stoppedBecause));
     assert.equal((finished.limit as { kind?: string }).kind, "auth");
     assert.equal(judgeCalls.length, 1, `one call reached the dead account: ${judgeCalls.join(" | ")}`);
@@ -4144,8 +4144,8 @@ describe("the lead's later turns (wake loop)", () => {
 
 /**
  * The wake loop on a clock the row moves (loop/director/wake.ts `runWakeLoop`), with no rig: one
- * running worker, and the night's log, inbox and journal as plain objects. `ticks` run on every
- * sleep, so a row can make the night move while the lead rests.
+ * running worker, and the run's log, inbox and journal as plain objects. `ticks` run on every
+ * sleep, so a row can make the run move while the lead rests.
  */
 function clockNight(inbox: Record<string, unknown> = {}) {
   const T0 = Date.UTC(2026, 8, 25, 14, 0, 0);
@@ -4178,7 +4178,7 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     fromScratch: false,
     log,
   };
-  const night = {
+  const loopRun = {
     state,
     ctx: { cancelled: false },
     report: {},
@@ -4201,8 +4201,8 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     ledgerLines: () => [],
   };
   const note = (text: string, kind?: string) => {
-    night.logSeq += 1;
-    log.push({ at: at.now, seq: night.logSeq, text, ...(kind ? { kind } : {}) });
+    loopRun.logSeq += 1;
+    log.push({ at: at.now, seq: loopRun.logSeq, text, ...(kind ? { kind } : {}) });
   };
   const clock = {
     now: () => at.now,
@@ -4227,9 +4227,9 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     return { talk, calls };
   }
   const run = (talk: DirectorTalk) =>
-    runWakeLoop(night as never, talk, () => "You are the DIRECTOR of run run_w", clock);
+    runWakeLoop(loopRun as never, talk, () => "You are the DIRECTOR of run run_w", clock);
   const wakes = () => events.filter((e) => e.type === "director_continued").map((e) => e.payload.reasons as string[]);
-  return { T0, at, ticks, night, state, worker, note, lead, run, wakes };
+  return { T0, at, ticks, loopRun, state, worker, note, lead, run, wakes };
 }
 
 /**
@@ -4249,7 +4249,7 @@ describe("the wake loop, reviewed", () => {
     });
     const { talk, calls } = w.lead((turn, now) => {
       if (turn === 1) {
-        // worker_stop, then end the turn: the worker is still settling, so the night is busy.
+        // worker_stop, then end the turn: the worker is still settling, so the run is busy.
         w.worker.stopRequested = true;
         settleAt = now + 30_000;
       } else w.state.finished = true;
@@ -4410,15 +4410,15 @@ function userSaysIn(prompt: string): string[] {
 
 /**
  * Live chat during a build (loop/live-chat.ts, loop/director/lead-line.ts), with no rig: the chat's
- * real queue hands messages to a night's real line, the run's real inbox reads them from the same
+ * real queue hands messages to a run's real line, the run's real inbox reads them from the same
  * log, and the lead's wake loop runs on a clock the row moves, as director.ts drives it — the line
- * released when the night ends. `night({ resume })` opens a night of the same run on the same log,
+ * released when the run ends. `run({ resume })` opens a run of the same run on the same log,
  * as a Resume does; `closeBuild` is the run's close, after which the chat answers what waits.
  */
 let liveChats = 0;
 function liveChat() {
   const T0 = Date.UTC(2026, 8, 26, 9, 0, 0);
-  // Lines are kept by run: each row's night is a run of its own.
+  // Lines are kept by run: each row's run is a run of its own.
   const RUN = `run_live_${++liveChats}`;
   const THREAD = `t_${RUN}`;
   const at = { now: T0 };
@@ -4506,7 +4506,7 @@ function liveChat() {
       void say(text);
     });
   };
-  function night({ resume = false } = {}) {
+  function loopRun({ resume = false } = {}) {
     const notes: Array<{ at: number; seq: number; text: string; kind?: string }> = [];
     const worker = { id: "sky", title: "Sky", state: "running", iterations: [], brief: "paint the sky" };
     const state = {
@@ -4556,10 +4556,10 @@ function liveChat() {
       saveJournal: async () => {},
       ledgerLines: () => [],
     };
-    // As director.ts opens it: live while the night goes on, recording on the run's own log.
+    // As director.ts opens it: live while the run goes on, recording on the run's own log.
     const line = openLeadLine(RUN, THREAD, () => !state.finished && !ctx.cancelled && !n.report.failure, ctx as never);
     const calls: Array<{ prompt: string; at: number }> = [];
-    /** The night, each of the lead's turns answered by `script`; its line released when it ends, as director.ts does. */
+    /** The run, each of the lead's turns answered by `script`; its line released when it ends, as director.ts does. */
     const run = async (script: (turn: number) => unknown) => {
       const talk: DirectorTalk = {
         sessionId: "lead-1",
@@ -4594,7 +4594,7 @@ function liveChat() {
     sayAt,
     idOf,
     requeued,
-    night,
+    loopRun,
     closeBuild,
     append,
   };
@@ -4605,13 +4605,13 @@ const worked = { ok: true, sessionId: "lead-1", turns: 1 };
 
 /**
  * Live chat during a build, reviewed before it shipped: every chat message is now a steer of the
- * run, so a resumed night told the lead the whole night's chat again; a failed turn, a line
+ * run, so a resumed run told the lead the whole run's chat again; a failed turn, a line
  * released under a message, and a message handed while the lead's inbox was read lost or doubled
  * what the user said; a lead that cannot read input mid-turn was cut short inside a tool call; and
  * the chat's own wakes used up the lead's hourly cap.
  */
 /**
- * A provider that disables the account mid-run is no verdict on anybody's work: the night pauses
+ * A provider that disables the account mid-run is no verdict on anybody's work: the run pauses
  * (nothing landed, no wrap-up, Resume carries on), no round is counted broken or auto-tied, and
  * nobody asks the provider again.
  */
@@ -4672,7 +4672,7 @@ describe("a provider lost mid-run", () => {
     }
   });
 
-  it("D7. a lead whose account is disabled on a wake pauses the night: no wrap-up turn, the loss kept for the close", async () => {
+  it("D7. a lead whose account is disabled on a wake pauses the run: no wrap-up turn, the loss kept for the close", async () => {
     const w = clockNight();
     try {
       const { talk, calls } = w.lead((turn) => {
@@ -4689,7 +4689,7 @@ describe("a provider lost mid-run", () => {
     }
   });
 
-  it("D8. a lead's first turn that meets a disabled account pauses the night instead of crashing it", async () => {
+  it("D8. a lead's first turn that meets a disabled account pauses the run instead of crashing it", async () => {
     const w = clockNight();
     try {
       const { talk, calls } = w.lead(() => {
@@ -4703,7 +4703,7 @@ describe("a provider lost mid-run", () => {
     }
   });
 
-  it("D9. a lead turn the provider's outage ended is not a failed turn: the night pauses, it does not wrap up", async () => {
+  it("D9. a lead turn the provider's outage ended is not a failed turn: the run pauses, it does not wrap up", async () => {
     const w = clockNight();
     const { talk, calls } = w.lead((turn) =>
       turn === 1
@@ -4720,7 +4720,7 @@ describe("a provider lost mid-run", () => {
     assert.equal(w.state.limit?.retryAfterMs, null);
   });
 
-  it("D10. a sign-in a judge lost while the lead slept pauses the night before the lead is woken", async () => {
+  it("D10. a sign-in a judge lost while the lead slept pauses the run before the lead is woken", async () => {
     const w = clockNight();
     try {
       w.ticks.push((now) => {
@@ -4852,17 +4852,17 @@ describe("a provider lost mid-run", () => {
 
 describe("live chat during a build, reviewed", () => {
   /**
-   * Night one: the lead hears "is the sky dusk yet?" (woken by it) and "then light the lamps"
-   * (woken by it), then, in the turn the lamps woke, the user adds "and add some fog". The night
+   * Run one: the lead hears "is the sky dusk yet?" (woken by it) and "then light the lamps"
+   * (woken by it), then, in the turn the lamps woke, the user adds "and add some fog". The run
    * then ends as `ending` says: Stop, the app quitting mid-turn, or the engine's usage limit.
    */
-  async function nightOne(ending: "stop" | "restart" | "limit") {
+  async function loopRunOne(ending: "stop" | "restart" | "limit") {
     const chat = liveChat();
     // The host refuses the words mid-turn: they wait for the lead's next message.
     chat.hooks.cuts = false;
     chat.sayAt(chat.T0 + MINUTE_MS, "is the sky dusk yet?");
     chat.sayAt(chat.T0 + 2 * MINUTE_MS, "then light the lamps");
-    const one = chat.night();
+    const one = chat.loopRun();
     const quit = one.run(async (turn) => {
       if (turn < 3) return worked;
       void chat.say("and add some fog");
@@ -4876,7 +4876,7 @@ describe("live chat during a build, reviewed", () => {
       return worked;
     });
     if (ending === "restart") {
-      // The app quits in the middle of the turn: nothing more of this night runs, nothing is given back.
+      // The app quits in the middle of the turn: nothing more of this run happens, nothing is given back.
       await settleOn(() => chat.steers.length === 1);
       chat.queue.stop();
     } else {
@@ -4887,9 +4887,9 @@ describe("live chat during a build, reviewed", () => {
     return chat;
   }
 
-  /** Night two of the same run, resumed: the first message it opens with. */
+  /** Run two of the same run, resumed: the first message it opens with. */
   async function resumedFirstPrompt(chat: ReturnType<typeof liveChat>): Promise<string> {
-    const two = chat.night({ resume: true });
+    const two = chat.loopRun({ resume: true });
     await two.run(() => {
       two.state.finished = true;
       return worked;
@@ -4897,8 +4897,8 @@ describe("live chat during a build, reviewed", () => {
     return two.calls[0]!.prompt;
   }
 
-  it("LC1a. Stop, then Resume: the resumed lead is told only what the chat said since, never the night's chat again", async () => {
-    const chat = await nightOne("stop");
+  it("LC1a. Stop, then Resume: the resumed lead is told only what the chat said since, never the run's chat again", async () => {
+    const chat = await loopRunOne("stop");
     assert.deepEqual(chat.requeued(), ["and add some fog"], "Stop gave back only what the lead never heard");
     await settleOn(() => chat.answered.length === 1);
     assert.deepEqual(chat.answered, ["and add some fog"]);
@@ -4914,13 +4914,13 @@ describe("live chat during a build, reviewed", () => {
   });
 
   it("LC1b. the app quits mid-turn, then Resume: the lead is told what it never heard — and nothing it had", async () => {
-    const chat = await nightOne("restart");
+    const chat = await loopRunOne("restart");
     assert.deepEqual(chat.requeued(), [], "a quit gives nothing back: the words stay with the run");
     assert.deepEqual(userSaysIn(await resumedFirstPrompt(chat)), ["then light the lamps", "and add some fog"]);
   });
 
-  it("LC1c. the engine's limit pauses the night, then Resume: what went back to the chat is not told again, nor what the lead heard", async () => {
-    const chat = await nightOne("limit");
+  it("LC1c. the engine's limit pauses the run, then Resume: what went back to the chat is not told again, nor what the lead heard", async () => {
+    const chat = await loopRunOne("limit");
     assert.deepEqual(chat.requeued(), ["then light the lamps", "and add some fog"]);
     assert.deepEqual(userSaysIn(await resumedFirstPrompt(chat)), []);
   });
@@ -4928,7 +4928,7 @@ describe("live chat during a build, reviewed", () => {
   it("LC2. a lead in the middle of a tool call is never cut short for the chat; a cut turn is told so and asked to finish what it was doing", async () => {
     const chat = liveChat();
     chat.sayAt(chat.T0 + MINUTE_MS, "is the sky dusk yet?");
-    const one = chat.night();
+    const one = chat.loopRun();
     const words = (steer: Record<string, any>): string => String(steer.messages[0]?.text ?? "");
     const oak = () => chat.steers.find((steer) => words(steer).includes("and the benches oak"));
     await one.run(async (turn) => {
@@ -4965,7 +4965,7 @@ describe("live chat during a build, reviewed", () => {
   it("LC3. a turn that failed before it worked on its message owes the user's words to the next one, and they are never given back twice", async () => {
     const chat = liveChat();
     chat.sayAt(chat.T0 + MINUTE_MS, "is the sky dusk yet?");
-    const one = chat.night();
+    const one = chat.loopRun();
     await one.run((turn) => {
       if (turn === 1) return worked;
       if (turn === 2) throw new Error("the provider broke");
@@ -5010,9 +5010,9 @@ describe("live chat during a build, reviewed", () => {
     assert.ok(wokenAt < 33, `woken for the round ${wokenAt} minutes in, not held for the hour`);
   });
 
-  it("LC5. a message handed to a lead whose night ended under it comes back at once, and the chat answers it", async () => {
+  it("LC5. a message handed to a lead whose run ended under it comes back at once, and the chat answers it", async () => {
     const chat = liveChat();
-    const one = chat.night();
+    const one = chat.loopRun();
     let write = () => {};
     chat.hooks.gate = new Promise<void>((resolve) => {
       write = resolve;
@@ -5020,13 +5020,13 @@ describe("live chat during a build, reviewed", () => {
     // The lead takes it, and its receipt is being written…
     const sending = chat.say("is it done?");
     assert.ok(await settleOn(() => chat.hooks.gated === 1), "the receipt is being written");
-    // …when the night ends and its line is released.
+    // …when the run ends and its line is released.
     one.state.finished = true;
     await one.line.release();
     chat.hooks.gate = undefined;
     write();
     await sending;
-    assert.deepEqual(chat.requeued(), ["is it done?"], "given back at once, not left with a night that is over");
+    assert.deepEqual(chat.requeued(), ["is it done?"], "given back at once, not left with a run that is over");
     chat.closeBuild();
     assert.ok(await settleOn(() => chat.answered.length === 1), "the chat answers it");
   });
@@ -5043,7 +5043,7 @@ describe("live chat during a build, reviewed", () => {
       fired = true;
       await chat.say("and the benches oak");
     };
-    const one = chat.night();
+    const one = chat.loopRun();
     // The lead's poll has seen the question and the wake is decided (the schedule reads the log's
     // lines last): the next read of the inbox is the one that tells the lead.
     const lines = one.n.notesSince;
@@ -5072,7 +5072,7 @@ describe("live chat during a build, reviewed", () => {
 
   it("LC7. a picture waits for the chat, and plain words sent after it still reach the lead, in order", async () => {
     const chat = liveChat();
-    chat.night();
+    chat.loopRun();
     await chat.say("does it look like this?", picture);
     await chat.say("make the sky red");
     await chat.say("and the benches oak");
@@ -5087,14 +5087,14 @@ describe("live chat during a build, reviewed", () => {
     assert.deepEqual(chat.answered, ["does it look like this?"], "the chat answers the picture once the build closes");
   });
 
-  it("LC8. what waited while the night prepared reaches the lead once its line opens — past a picture among it", async () => {
+  it("LC8. what waited while the run prepared reaches the lead once its line opens — past a picture among it", async () => {
     const chat = liveChat();
     // The build is under way, but its lead has no line yet: everything waits.
     await chat.say("is it started?");
     await chat.say("does it look like this?", picture);
     await chat.say("and make the sky red");
     assert.ok(await settleOn(() => Object.values(standing(chat)).every((state) => state === "queued")));
-    chat.night();
+    chat.loopRun();
     const lead = `delivered ${chat.RUN}`;
     assert.ok(await settleOn(() => standing(chat)["and make the sky red"] === lead), JSON.stringify(standing(chat)));
     assert.deepEqual(standing(chat), {
@@ -5107,7 +5107,7 @@ describe("live chat during a build, reviewed", () => {
     assert.deepEqual(chat.answered, ["does it look like this?"]);
   });
 
-  it("LC9. a night that crashed before its lead's loop began gives every message it was handed back to the chat", async () => {
+  it("LC9. a run that crashed before its lead's loop began gives every message it was handed back to the chat", async () => {
     const back: string[][] = [];
     const line = openLeadLine("run_crash", "t_crash", () => true);
     const giveBack = async (items: Array<{ text?: string }>) => {
@@ -5115,7 +5115,7 @@ describe("live chat during a build, reviewed", () => {
     };
     line.hear({ threadId: "t_crash", messageId: "m1", text: "is it started?" }, giveBack);
     line.hear({ threadId: "t_crash", messageId: "m2", text: "and the sky?" }, giveBack);
-    // What director.ts does when the night crashes before `runWakeLoop` ever took the line.
+    // What director.ts does when the run crashes before `runWakeLoop` ever took the line.
     await line.release({ heardNone: true });
     assert.deepEqual(back, [["is it started?", "and the sky?"]]);
   });
@@ -5168,7 +5168,7 @@ describe("live chat during a build, reviewed", () => {
 /**
  * One session, reviewed: holes a lead would have fallen into — a conflict worker committing the
  * markers it left, changes no worker made stopping every merge for good, a first turn crashing the
- * night because the lead's lock was still held — and, once the lead was limited only by the chat's
+ * run because the lead's lock was still held — and, once the lead was limited only by the chat's
  * permission mode, what its own commands leave in the game folder at the landing.
  */
 describe("one session, reviewed", () => {
@@ -5225,7 +5225,7 @@ describe("one session, reviewed", () => {
     ];
     for (const { label, session } of rows) {
       const { dir, git, right, left } = await twoSigns();
-      const night = { ctx: localCtx(), run: { runId: "run_os" } };
+      const loopRun = { ctx: localCtx(), run: { runId: "run_os" } };
       const worker: Record<string, any> = {
         id: "merge-right",
         worktree: dir,
@@ -5235,12 +5235,12 @@ describe("one session, reviewed", () => {
         merging: { of: "right", commit: right },
       };
       assert.equal(
-        await mergeFirst(night as never, worker as never),
+        await mergeFirst(loopRun as never, worker as never),
         false,
         `${label}: the merge is open for a session`,
       );
       await session(dir, git);
-      assert.equal(await markersLeft(night as never, worker as never), true, label);
+      assert.equal(await markersLeft(loopRun as never, worker as never), true, label);
       assert.equal(await git("rev-parse", "HEAD"), left, `${label}: nothing was committed`);
       assert.equal(
         await git("rev-parse", "-q", "--verify", "MERGE_HEAD").catch(() => ""),
@@ -5256,28 +5256,28 @@ describe("one session, reviewed", () => {
     }
     // A session that resolved the file leaves nothing to refuse.
     const { dir, right } = await twoSigns();
-    const night = { ctx: localCtx(), run: { runId: "run_os" } };
+    const loopRun = { ctx: localCtx(), run: { runId: "run_os" } };
     const worker: Record<string, any> = { id: "merge-right", worktree: dir, merging: { of: "right", commit: right } };
-    await mergeFirst(night as never, worker as never);
+    await mergeFirst(loopRun as never, worker as never);
     await writeFile(path.join(dir, "src", "sign.js"), "export const sign = ['left', 'right'];\n");
-    assert.equal(await markersLeft(night as never, worker as never), false, "a resolved file is the worker's work");
+    assert.equal(await markersLeft(loopRun as never, worker as never), false, "a resolved file is the worker's work");
     assert.equal(unresolvedOf(worker as never), null);
   });
 
   it("OS2. changes no worker made in a lead's integration worktree are kept on a ref and the worktree reset — never a merge refused for good", async () => {
     const { dir, git, left } = await twoSigns();
     const notes: string[] = [];
-    const night = {
+    const loopRun = {
       ctx: localCtx(),
       run: { runId: "run_os" },
       integrationWorktree: dir,
       note: (text: string) => notes.push(text),
     };
-    assert.equal(await setAsideStrays(night as never, "label"), null, "a clean worktree has nothing to set aside");
+    assert.equal(await setAsideStrays(loopRun as never, "label"), null, "a clean worktree has nothing to set aside");
     // A game that builds in place: a file it generated, and one it rewrote.
     await writeFile(path.join(dir, "built.txt"), "made by a build\n");
     await writeFile(path.join(dir, "src", "sign.js"), "export const sign = 'rebuilt';\n");
-    const setAside = await setAsideStrays(night as never, "label");
+    const setAside = await setAsideStrays(loopRun as never, "label");
     assert.ok(setAside, "set aside");
     assert.match(setAside.ref, /^refs\/studio\/runs\/run_os\/set-aside\/\d+$/);
     assert.deepEqual([...setAside.files].sort(), ["built.txt", "src/sign.js"]);
@@ -5287,11 +5287,11 @@ describe("one session, reviewed", () => {
     assert.equal(await git("rev-parse", "HEAD"), left, "the branch never moved");
     assert.equal(await git("status", "--porcelain"), "", "the worktree is back at the head");
     assert.doesNotMatch(await git("branch", "--list"), /set-aside/, "a ref, never a branch of the user's");
-    assert.equal(notes.length, 1, "the night's log says what was set aside");
+    assert.equal(notes.length, 1, "the run's log says what was set aside");
     assert.match(notes[0]!, /built\.txt/);
   });
 
-  it("OS3. a first turn the host refused because the lead's lock was held is asked again after a wait, and the night goes on", async () => {
+  it("OS3. a first turn the host refused because the lead's lock was held is asked again after a wait, and the run goes on", async () => {
     const w = clockNight();
     const busy = () => Object.assign(new Error('a contractor is already building in "sky"'), { code: "folder_busy" });
     const { talk, calls } = w.lead((turn) => {
@@ -5305,7 +5305,7 @@ describe("one session, reviewed", () => {
     assert.ok(calls[1]!.at > calls[0]!.at, "after a wait on the loop's own clock");
   });
 
-  it("OS4. a first turn the lead's lock stays busy for ends as a failed turn — the night closes on its own terms, not in a crash", async () => {
+  it("OS4. a first turn the lead's lock stays busy for ends as a failed turn — the run closes on its own terms, not in a crash", async () => {
     const w = clockNight();
     const { talk } = w.lead(() => {
       throw Object.assign(new Error("busy"), { code: "folder_busy" });
@@ -5315,7 +5315,7 @@ describe("one session, reviewed", () => {
   });
 
   /**
-   * A lead night on the real rig: the lead plans and starts one builder that paints the sky, and on
+   * A lead run on the real rig: the lead plans and starts one builder that paints the sky, and on
    * its next turn integrates it, runs `beforeFinish` (its own commands, in either folder) and
    * finishes.
    */
@@ -5338,7 +5338,7 @@ describe("one session, reviewed", () => {
           const call = (tool: string, args: Record<string, unknown>) => request.onLiveTool!(tool, args);
           if (++turns === 1) {
             await call("plan", {
-              summary: "Tonight: paint the sky.",
+              summary: "This run: paint the sky.",
               workers: JSON.stringify([
                 {
                   id: "sky",
@@ -5410,7 +5410,7 @@ describe("one session, reviewed", () => {
     assert.match(results.finished, /leave it as it is/, "never an invitation to clear the folder");
     const close = (finished.verdicts as Array<{ pass: string; because: string }>).find((v) => v.pass === "close")!;
     assert.doesNotMatch(close.because, /of (?:your|its) own/, close.because);
-    // The sentence is kept in the game's lessons and read by the next night's lead: no order in it.
+    // The sentence is kept in the game's lessons and read by the next run's lead: no order in it.
     assert.match(close.because, /left beside it, waiting for Make it live\.$/);
     // Nothing forced: the file as the lead left it, and the build on its ref for Make it live.
     assert.equal(await gitIn(project.dir, ["status", "--porcelain"]), "?? src/sky.js");
@@ -5438,7 +5438,7 @@ describe("one session, reviewed", () => {
 
   /**
    * A game folder at `base` and a build that adds src/sky.js, and the landing (`landIntegration`)
-   * over a night of real git in them: the close's own look and head are not the question here.
+   * over a run of real git in them: the close's own look and head are not the question here.
    */
   async function landingOver(prepare: (git: (...a: string[]) => Promise<string>, dir: string) => Promise<void>) {
     const { tmpDir } = await import("../helpers/tmp.ts");
@@ -5453,10 +5453,10 @@ describe("one session, reviewed", () => {
     await git("add", "-A");
     await git("commit", "-qm", "base");
     const base = await git("rev-parse", "HEAD");
-    await git("checkout", "-qb", "night");
+    await git("checkout", "-qb", "run");
     await writeFile(path.join(dir, "src", "sky.js"), "export const sky = 'blue';\n");
     await git("add", "-A");
-    await git("commit", "-qm", "the night's build");
+    await git("commit", "-qm", "the run's build");
     const head = await git("rev-parse", "HEAD");
     await git("checkout", "-q", "main");
     const worktree = await tmpDir("one-session-landing-wt-");
@@ -5465,7 +5465,7 @@ describe("one session, reviewed", () => {
     const notes: string[] = [];
     const report: Record<string, unknown> = {};
     const exec = localCtx();
-    const night = {
+    const loopRun = {
       ctx: {
         ...exec,
         call: (method: string, p: Record<string, any>) => exec.call(method, { ...p, cwd: p.cwd ?? dir } as never),
@@ -5483,7 +5483,7 @@ describe("one session, reviewed", () => {
       nestedGit: async () => "",
       landingClaim: () => ({ verified: false, how: "fresh-health-pass", line: "made live, not judged better" }),
     };
-    const landed = await landIntegration(night as never, true);
+    const landed = await landIntegration(loopRun as never, true);
     return { landed, git, dir, head, notes, report };
   }
 
@@ -5676,8 +5676,8 @@ describe("a run started again after a close of its own", () => {
 
   /**
    * Start the run again, as a resume, on a host that keeps `log` and lists it from a cursor as the
-   * host does. The engine is session-capable, so the night is a director's; no game has its name,
-   * so the night cannot ready its folder and throws. Answers the run's ctx and what the app was told.
+   * host does. The engine is session-capable, so the run is a director's; no game has its name,
+   * so the run cannot ready its folder and throws. Answers the run's ctx and what the app was told.
    */
   async function startAgain(
     log: Array<{ id: string; data: Logged }>,
@@ -5727,12 +5727,12 @@ describe("a run started again after a close of its own", () => {
   }
 
   /**
-   * A night registered again after an earlier session of it closed — a Resume of a paused night, or
+   * A run registered again after an earlier session of it closed — a Resume of a paused run, or
    * a finished build its chat's own session reopens — that threw before it wrote its own close:
    * `closeFailedRun` took the earlier session's `run_finished` for this session's and wrote none,
    * so the log kept the new `run_registered` unmatched and the run read as running for good.
    */
-  it("a resumed night whose journal cannot be read fails, instead of starting over with a full budget", async () => {
+  it("a resumed run whose journal cannot be read fails, instead of starting over with a full budget", async () => {
     const log = closedLog();
     await startAgain(
       log,
@@ -5747,11 +5747,11 @@ describe("a run started again after a close of its own", () => {
     const errors = log.filter((entry) => entry.data.type === "error").map((entry) => String(entry.data.message));
     assert.ok(
       errors.some((message) => /journal read failed/.test(message)),
-      `the night stops on the unreadable journal, not somewhere after it: ${JSON.stringify(errors)}`,
+      `the run stops on the unreadable journal, not somewhere after it: ${JSON.stringify(errors)}`,
     );
   });
 
-  it("a resumed or reopened night that throws before its own close still closes: an earlier session's close is not this one's", async () => {
+  it("a resumed or reopened run that throws before its own close still closes: an earlier session's close is not this one's", async () => {
     const log = closedLog();
     const { failed } = await startAgain(log);
 
@@ -5759,9 +5759,9 @@ describe("a run started again after a close of its own", () => {
     const registered = records.findLastIndex(
       (data) => data.event_type === "run_registered" && data.payload?.runId === runId,
     );
-    assert.ok(registered > 1, "the night was registered again after its earlier close");
+    assert.ok(registered > 1, "the run was registered again after its earlier close");
     const errorAt = records.findIndex((data, i) => i > registered && data.type === "error");
-    assert.ok(errorAt > registered, `the night threw: ${JSON.stringify(records.slice(registered))}`);
+    assert.ok(errorAt > registered, `the run threw: ${JSON.stringify(records.slice(registered))}`);
     const ownClose = records
       .slice(registered + 1)
       .filter((data) => data.event_type === "run_finished" && data.payload?.runId === runId);
@@ -5774,9 +5774,9 @@ describe("a run started again after a close of its own", () => {
   /**
    * A finished build reopened hears the user from the ask the chat recorded for it
    * (loop/reopen-run.ts gives the cursor): a steer left on the run after its close and before that
-   * ask — a Stop that came before a start — is not the reopened night's to hear.
+   * ask — a Stop that came before a start — is not the reopened run's to hear.
    */
-  it("a reopened night's inbox reads from the cursor its start carries: a steer left before the ask is not told", async () => {
+  it("a reopened run's inbox reads from the cursor its start carries: a steer left before the ask is not told", async () => {
     const log = closedLog();
     const steer = (text: string): Logged => ({ type: "custom", event_type: "run_steering", payload: { runId, text } });
     log.push({ id: "e3", data: steer("old note") }, { id: "e4", data: steer("add enemies") });
@@ -5787,11 +5787,11 @@ describe("a run started again after a close of its own", () => {
 
   /**
    * A finished build reopened from a message on other models went on building and judging on the
-   * finished night's: the reopen (loop/reopen-run.ts `reopenedRun`) replaced only the planner, and the
-   * night's start never resolves an applied run's roles again (model-roles.ts `withRoles`), so the
+   * finished run's: the reopen (loop/reopen-run.ts `reopenedRun`) replaced only the planner, and the
+   * run's start never resolves an applied run's roles again (model-roles.ts `withRoles`), so the
    * Loop's roles, the effort and the preferences the message was sent with were ignored.
    */
-  it("RO4. a reopened night builds and judges on the reopening message's picks: only its planner is the session's model", async () => {
+  it("RO4. a reopened run builds and judges on the reopening message's picks: only its planner is the session's model", async () => {
     const { reopenAfterReply } = await import("../../src/harness-seed/loop/reopen-run.ts");
     const finished = {
       ...run,
@@ -5816,7 +5816,7 @@ describe("a run started again after a close of its own", () => {
       },
     };
     const studio = { host, cancels: new Set<string>(), moodBoards: new Map(), activeRuns: new Map() };
-    const night = {
+    const loopRun = {
       runId,
       state: "finished",
       engine: "codex",
@@ -5841,7 +5841,7 @@ describe("a run started again after a close of its own", () => {
     await reopenAfterReply(
       studio as never,
       { threadId, cancelled: false },
-      night as never,
+      loopRun as never,
       ask as never,
       start as never,
     );
@@ -5870,13 +5870,13 @@ describe("a run started again after a close of its own", () => {
   });
 
   /**
-   * The loop died under a night started again after a close of its own — a Resume of a paused night,
+   * The loop died under a run started again after a close of its own — a Resume of a paused run,
    * or a finished build reopened — while the app lived on: the host restarted the loop and named the
-   * night among the runs in flight (`BootNotice.openRuns`), but the reborn loop (boot-notice.ts
+   * run among the runs in flight (`BootNotice.openRuns`), but the reborn loop (boot-notice.ts
    * `runsIn`) took the earlier session's `run_finished` for this one's and closed nothing, so the chat
    * read the run as running until the next launch of the app.
    */
-  it("RO3. a night started again after a close of its own, left open by a loop crash, is closed by the reborn loop: an earlier session's close is not this one's", async () => {
+  it("RO3. a run started again after a close of its own, left open by a loop crash, is closed by the reborn loop: an earlier session's close is not this one's", async () => {
     const { handleBootNotice } = await import("../../src/harness-seed/loop/boot-notice.ts");
     const log = [
       ...closedLog(),
@@ -5899,14 +5899,14 @@ describe("a run started again after a close of its own", () => {
     await handleBootNotice(studio as never, messages as never, { reason: "crash_restart", openRuns: [runId] } as never);
 
     const closes = log.slice(3).filter((entry) => entry.data.event_type === "run_finished");
-    assert.equal(closes.length, 1, `the night is closed once: ${JSON.stringify(log.slice(3))}`);
+    assert.equal(closes.length, 1, `the run is closed once: ${JSON.stringify(log.slice(3))}`);
     assert.equal(closes[0]?.data.payload?.runId, runId);
   });
 
   /**
    * The host names a run in flight at every later crash of the same app session, so a reborn loop can
    * be told of a run it has already started again itself — a Resume or a reopen taken the moment it
-   * woke. Read as open again (RO3), it would be closed and paused under the night running it.
+   * woke. Read as open again (RO3), it would be closed and paused under the run running it.
    */
   it("RO3b. a run the reborn loop is itself running again is never closed as one the crash left open", async () => {
     const { handleBootNotice } = await import("../../src/harness-seed/loop/boot-notice.ts");
@@ -5943,7 +5943,7 @@ describe("a run started again after a close of its own", () => {
     assert.deepEqual(
       log.slice(3).filter((entry) => entry.data.event_type === "run_finished"),
       [],
-      "the night this loop runs is not closed under it",
+      "the run this loop runs is not closed under it",
     );
   });
 
@@ -5951,12 +5951,12 @@ describe("a run started again after a close of its own", () => {
    * A finished build its chat's own session reopened, the app gone before the chat's queue marked the
    * message answered: the queue answers it again after the restart (message-queue.ts `restore`), and
    * the reopen found the ask the first answer had recorded (loop/reopen-run.ts `askTheBuild`) and did
-   * not record it twice — but started the night from the log's last record, past that ask, so the
-   * reopened night never heard what it was reopened for. So did a message the finished night's lead
+   * not record it twice — but started the run from the log's last record, past that ask, so the
+   * reopened run never heard what it was reopened for. So did a message the finished run's lead
    * took and never heard: back with the chat, its own turn took the lead's record of its words for the
    * ask and recorded none.
    */
-  it("RO2. a reopened night hears its ask: one recorded before a restart replayed the message, and one a lead's record of the same words gave back", async () => {
+  it("RO2. a reopened run hears its ask: one recorded before a restart replayed the message, and one a lead's record of the same words gave back", async () => {
     const { reopenAfterReply } = await import("../../src/harness-seed/loop/reopen-run.ts");
     const record = (event_type: string, payload: Record<string, unknown>): Logged => ({
       type: "custom",
@@ -5980,14 +5980,14 @@ describe("a run started again after a close of its own", () => {
         },
       };
       const studio = { host, cancels: new Set<string>(), moodBoards: new Map(), activeRuns: new Map() };
-      const night = { runId, state: "finished", engine: "codex", model: null, messageId: "m9", reopenable: true };
+      const loopRun = { runId, state: "finished", engine: "codex", model: null, messageId: "m9", reopenable: true };
       let cursor: unknown = null;
-      // Not started: the app dies before the night is registered again.
+      // Not started: the app dies before the run is registered again.
       const start = async (_run: unknown, reopen: unknown) => {
         if (started) cursor = reopen;
       };
       const ask = { hours: 2, words: "add enemies", models: null };
-      await reopenAfterReply(studio as never, { threadId, cancelled: false }, night as never, ask, start);
+      await reopenAfterReply(studio as never, { threadId, cancelled: false }, loopRun as never, ask, start);
       return cursor;
     }
     /** The chat's own asks for the message (a lead's records of its words are not). */
@@ -6050,7 +6050,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
    * A chat whose build finished under a lead of its own, on a host that keeps the log and the journal.
    * The coordinator, when asked, continues the build as the host's continue_build records it; any
    * other session is a builder. Once the chat's turn has ended no game has the build's name, so a
-   * night started again throws before it builds and closes.
+   * run started again throws before it builds and closes.
    */
   function coordinatedChat(
     continues: boolean,
@@ -6184,7 +6184,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
     );
     const again = chat.log.findLastIndex((entry) => entry.data.event_type === "run_registered");
     assert.ok(ask > 1 && ask < again, "the ask is recorded before the start");
-    assert.ok(chat.store.journal.director.reopened, "the night started from the reopened journal");
+    assert.ok(chat.store.journal.director.reopened, "the run started from the reopened journal");
   });
 
   it("RO5b. with Loop off the coordinator's continue_build still hands the work to one builder turn, and nothing reopens", async () => {
@@ -6218,7 +6218,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
     );
   });
 
-  it("RO5d. a Loop message after a finished build no night of the run can go on from — no lead was seated — is answered as with Loop off, and the chat says so once", async () => {
+  it("RO5d. a Loop message after a finished build no run of the run can go on from — no lead was seated — is answered as with Loop off, and the chat says so once", async () => {
     const chat = coordinatedChat(true);
     chat.store.journal = { phase: "done", run, director: { plan: {} } };
     const first = { ...message, autopilot: { hours: 2 } };
@@ -6322,7 +6322,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
 
 /**
  * A finished build reopened meets the outcomes a build must verify (director/goals.ts). The reopen
- * kept the finished night's ledger: a Loop ∞ build reopened with two hours found its one outcome
+ * kept the finished run's ledger: a Loop ∞ build reopened with two hours found its one outcome
  * verified, so every worker for the ask was refused ("Required outcomes are verified: finish
  * instead"), finish was refused for the time left, and two idle turns wrapped the build up with
  * nothing done; a timed build reopened with ∞ made its old plan's parts its outcomes, so a worker
@@ -6330,7 +6330,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
  */
 describe("a finished build reopened, and the outcomes it must verify", () => {
   const FINISHED_HEAD = "c".repeat(40);
-  /** The finished night's journal: its plan, and — for a Loop ∞ build — its one outcome verified on its head. */
+  /** The finished run's journal: its plan, and — for a Loop ∞ build — its one outcome verified on its head. */
   const finishedJournal = (budgets: Record<string, unknown>, verified: boolean) => ({
     runId: "run_ro",
     phase: "done",
@@ -6360,30 +6360,33 @@ describe("a finished build reopened, and the outcomes it must verify", () => {
         : {}),
     },
   });
-  /** The night the reopened journal starts, as far as it reads its outcomes back (journal.ts `restoreNight`). */
-  const reopenedNight = (finished: ReturnType<typeof finishedJournal>, hours: number | null) => {
+  /** The run the reopened journal starts, as far as it reads its outcomes back (journal.ts `restoreLoopRun`). */
+  const reopenedLoopRun = (finished: ReturnType<typeof finishedJournal>, hours: number | null) => {
     const run = reopenedRun(finished.run as never, reopenBudgets(finished.run.budgets as never, hours), {
       model: null,
     });
     const priorJournal = reopenedJournal(finished, run, { at: new Date(0).toISOString(), finishedHead: FINISHED_HEAD });
     const state = { plan: priorJournal.director.plan, ledger: [], workers: new Map(), log: [] } as Record<string, any>;
-    const night = { resume: true, priorJournal, run, state, journal: { director: {} as Record<string, unknown> } };
-    restoreNight(night as never, Date.now());
-    return night;
+    const loopRun = { resume: true, priorJournal, run, state, journal: { director: {} as Record<string, unknown> } };
+    restoreLoopRun(loopRun as never, Date.now());
+    return loopRun;
   };
 
-  it("RO1. a finished build reopened stood on the finished night's outcomes — verified, or its old plan's parts — and refused every worker for the ask: its outcomes wait for its plan for the ask", () => {
+  it("RO1. a finished build reopened stood on the finished run's outcomes — verified, or its old plan's parts — and refused every worker for the ask: its outcomes wait for its plan for the ask", () => {
     const loopInfinity = { wallClockMs: 24 * HOUR_MS, completionPolicy: CompletionPolicy.Goal, untilSatisfied: true };
     const timed = { wallClockMs: HOUR_MS, completionPolicy: CompletionPolicy.Duration };
     const rows = [
-      { label: "a Loop ∞ build reopened with two hours", night: reopenedNight(finishedJournal(loopInfinity, true), 2) },
-      { label: "a Loop ∞ build reopened with ∞", night: reopenedNight(finishedJournal(loopInfinity, true), null) },
-      { label: "a timed build reopened with ∞", night: reopenedNight(finishedJournal(timed, false), null) },
+      {
+        label: "a Loop ∞ build reopened with two hours",
+        loopRun: reopenedLoopRun(finishedJournal(loopInfinity, true), 2),
+      },
+      { label: "a Loop ∞ build reopened with ∞", loopRun: reopenedLoopRun(finishedJournal(loopInfinity, true), null) },
+      { label: "a timed build reopened with ∞", loopRun: reopenedLoopRun(finishedJournal(timed, false), null) },
     ];
-    for (const { label, night } of rows) {
-      assert.equal(night.state.goals, undefined, `${label}: no outcomes until its lead plans for the ask`);
+    for (const { label, loopRun } of rows) {
+      assert.equal(loopRun.state.goals, undefined, `${label}: no outcomes until its lead plans for the ask`);
       const carried = ["firstVerifiedCheckpoint", "latestVerifiedCheckpoint", "softReviewAt"].filter(
-        (key) => key in night.journal.director,
+        (key) => key in loopRun.journal.director,
       );
       assert.deepEqual(carried, [], `${label}: its checkpoints and review are its own`);
     }
@@ -6402,9 +6405,9 @@ describe("a quick fix after a finished Loop build (golden-boot-glory)", () => {
   const finished = { runId: "run_gb", state: "finished", goal: "a soccer game", landed: true, reopenable: true };
 
   it("GB1. Loop permits a build but never orders one: a contained change after a finished build is the session's own edit, and only more work reopens it", async () => {
-    const { afterNightNote } = await import("../../src/harness-seed/loop/after-night-prompts.ts");
+    const { afterLoopRunNote } = await import("../../src/harness-seed/loop/after-loop-run-prompts.ts");
     const { coordinatorPrompt } = await import("../../src/harness-seed/loop/coordinator-prompts.ts");
-    const note = afterNightNote(finished as never, "claude-code", grant);
+    const note = afterLoopRunNote(finished as never, "claude-code", grant);
     const coordinator = coordinatorPrompt({
       events: [],
       run: { runId: "run_gb" },
@@ -6453,39 +6456,39 @@ describe("a quick fix after a finished Loop build (golden-boot-glory)", () => {
     const { finish } = await import("../../src/harness-seed/loop/director/integrate.ts");
     const now = Date.now();
     const userSaid = "Why build? You don't need to make a little snake, don't run the build.";
-    const nightAsked = () => {
+    const loopRunAsked = () => {
       const closes: unknown[] = [];
-      const night = {
+      const loopRun = {
         ctx: { cancelled: false, setStatus: () => {} },
         run: { runId: "run_gb", budgets: { wallClockMs: 3 * HOUR_MS, completionPolicy: CompletionPolicy.Duration } },
         softDeadline: now + 2 * HOUR_MS,
         state: { integrationHead: "f".repeat(40) },
         inbox: { finishing: async () => false, steering: async () => [userSaid] },
-        closeTheNight: async (how: unknown) => {
+        closeTheLoopRun: async (how: unknown) => {
           closes.push(how);
           return { ok: true, line: "made live, not judged better" };
         },
       };
-      return { night, closes };
+      return { loopRun, closes };
     };
 
-    const quoted = nightAsked();
+    const quoted = loopRunAsked();
     const answer = String(
-      await finish(quoted.night as never, { summary: "the fix", user_asked: "don't run the build" }),
+      await finish(quoted.loopRun as never, { summary: "the fix", user_asked: "don't run the build" }),
     );
     assert.equal(quoted.closes.length, 1, answer);
     assert.match(answer, /the run is closed/);
 
-    const unquoted = nightAsked();
-    const refused = String(await finish(unquoted.night as never, { summary: "the fix" }));
+    const unquoted = loopRunAsked();
+    const refused = String(await finish(unquoted.loopRun as never, { summary: "the fix" }));
     assert.equal(unquoted.closes.length, 0);
     assert.match(refused, /finish refused/);
     assert.match(refused, /user_asked/, "the refusal says how the user's words end it");
     assert.doesNotMatch(refused, /Finish button|press Finish/i);
 
     for (const invented of ["stop now please", "don't", ""]) {
-      const made = nightAsked();
-      await finish(made.night as never, { summary: "the fix", user_asked: invented });
+      const made = loopRunAsked();
+      await finish(made.loopRun as never, { summary: "the fix", user_asked: invented });
       assert.equal(made.closes.length, 0, `"${invented}" is not the user's words`);
     }
   });
@@ -6509,18 +6512,18 @@ describe("a quick fix after a finished Loop build (golden-boot-glory)", () => {
     assert.deepEqual(withAsk({ asks: again }, "Add a second stadium"), again, "a replayed ask is kept once");
   });
 
-  it("GB5. the reopened night wrote over the record of the night it continued — its thirteen workers, 31 rounds and its judge_1 folder — and learned from a fix it made by hand: it adds to that record, numbers its passes on, and learns only from new rounds", async () => {
-    const { nightReport } = await import("../../src/harness-seed/loop/director/setup.ts");
-    const { recordNight } = await import("../../src/harness-seed/loop/director/journal.ts");
+  it("GB5. the reopened run wrote over the record of the run it continued — its thirteen workers, 31 rounds and its judge_1 folder — and learned from a fix it made by hand: it adds to that record, numbers its passes on, and learns only from new rounds", async () => {
+    const { loopRunReport } = await import("../../src/harness-seed/loop/director/setup.ts");
+    const { recordLoopRun } = await import("../../src/harness-seed/loop/director/journal.ts");
     const { keptNewRounds } = await import("../../src/harness-seed/loop/run-dispatch.ts");
     const run = { runId: "run_gb", project: "golden-boot-glory", goal: "a soccer game", reference: { name: "FC" } };
     const earlier = {
       workers: { audio: { id: "audio" }, hud: { id: "hud" } },
       iterations: [{ facetId: "audio" }, { facetId: "hud" }],
       verdicts: [{ pass: "judge" }],
-      notes: [{ text: "the night's note" }],
+      notes: [{ text: "the run's note" }],
     };
-    const report = nightReport(run as never, earlier);
+    const report = loopRunReport(run as never, earlier);
     assert.deepEqual(
       { workers: Object.keys(report.workers), rounds: report.iterations.length, verdicts: report.verdicts.length },
       { workers: ["audio", "hud"], rounds: 2, verdicts: 1 },
@@ -6529,10 +6532,10 @@ describe("a quick fix after a finished Loop build (golden-boot-glory)", () => {
     assert.equal(keptNewRounds(report), false, "the lead's own fix kept no round: nothing new to learn");
     report.iterations.push({ facetId: "plates" });
     assert.equal(keptNewRounds(report), true);
-    assert.equal(keptNewRounds(nightReport(run as never)), true, "a night of its own learns as before");
+    assert.equal(keptNewRounds(loopRunReport(run as never)), true, "a run of its own learns as before");
 
     const now = Date.now();
-    const finishedNight = {
+    const finishedLoopRun = {
       run,
       started: now,
       softDeadline: now,
@@ -6540,15 +6543,15 @@ describe("a quick fix after a finished Loop build (golden-boot-glory)", () => {
       state: { judges: 3, plays: 2, ledger: [], workers: new Map(), log: [], planReviewUntil: 0 },
       journal: { director: {} as Record<string, any> },
     };
-    recordNight(finishedNight as never, now);
+    recordLoopRun(finishedLoopRun as never, now);
     const reopened = {
       resume: true,
-      priorJournal: { director: finishedNight.journal.director },
+      priorJournal: { director: finishedLoopRun.journal.director },
       run,
       state: { judges: 0, plays: 0, ledger: [], workers: new Map(), log: [] } as Record<string, any>,
       journal: { director: {} as Record<string, unknown> },
     };
-    restoreNight(reopened as never, now);
+    restoreLoopRun(reopened as never, now);
     assert.deepEqual(
       { judges: reopened.state.judges, plays: reopened.state.plays },
       { judges: 3, plays: 2 },
@@ -6578,13 +6581,13 @@ describe("the reviewers and the playtester of a broadcast match (golden-boot-glo
     const board = {
       corner: vision("corner", 0.2),
       fouls: vision("fouls", 0.3),
-      night: vision("night", 0.8),
+      lighting: vision("lighting", 0.8),
       score: { id: "score", kind: "probe", weight: "identity", pass: true, reason: "" },
     };
     const summary = summarizeScoreboard(board as never, { checks: [] });
     assert.deepEqual(
       summary.failing.map((entry: { id: string }) => entry.id),
-      ["night"],
+      ["lighting"],
     );
     assert.deepEqual(
       summary.unmeasuredChecks.map((entry: { id: string }) => entry.id),
@@ -6657,14 +6660,14 @@ describe("a pitch that says neither what the game is nor how it looks (ask-first
 });
 
 /**
- * hurry: a build whose user asked for it fast — "just make it", or Finish pressed before the night
+ * hurry: a build whose user asked for it fast — "just make it", or Finish pressed before the run
  * was done — landed on its lead's word that it loads. Judging was the lead's choice, and every
- * prompt of a hurried night (the wrap-up, the user's finish, the goal card) told it to call finish,
+ * prompt of a hurried run (the wrap-up, the user's finish, the goal card) told it to call finish,
  * so the build went live with no judge having looked at it: "made live, not judged better".
  */
 describe("the final judge when the user is in a hurry", () => {
   const plan = {
-    summary: "Tonight: paint the sky, fast.",
+    summary: "This run: paint the sky, fast.",
     workers: JSON.stringify([
       { id: "sky", title: "Sky", seam: "the sky", owns: "src/sky.js", done: ["the sky is blue"], minutes: 20 },
     ]),
@@ -6686,10 +6689,10 @@ describe("the final judge when the user is in a hurry", () => {
 
   /**
    * One lead turn in a hurry: the user asks to finish at once, and the lead has its one builder
-   * paint the sky, integrates it and finishes with land=yes — never calling `judge` itself. A night
+   * paint the sky, integrates it and finishes with land=yes — never calling `judge` itself. A run
    * `fromScratch` starts on the empty scaffold (nothing drawn) until the builder paints.
    */
-  async function hurriedNight(
+  async function hurriedLoopRun(
     name: string,
     {
       fromScratch = false,
@@ -6791,7 +6794,7 @@ describe("the final judge when the user is in a hurry", () => {
   }
 
   it("hurry-1. a game the user had, finished in a hurry without the lead judging it: the close judges what it makes live against that game", async () => {
-    const { asked, finished, judgedLanding, results } = await hurriedNight("hurry-existing");
+    const { asked, finished, judgedLanding, results } = await hurriedLoopRun("hurry-existing");
 
     assert.equal(finished.landed, true, `${finished.stoppedBecause} | ${results.finished}`);
     assert.equal(judgedLanding.length, 1, "the build made live was judged once, by the close");
@@ -6805,7 +6808,7 @@ describe("the final judge when the user is in a hurry", () => {
   });
 
   it("hurry-2. a new game finished in a hurry: the close asks a judge whether the build does what was asked, and the card says what it answered", async () => {
-    const { finished, judgedLanding, results } = await hurriedNight("hurry-scratch", { fromScratch: true });
+    const { finished, judgedLanding, results } = await hurriedLoopRun("hurry-scratch", { fromScratch: true });
 
     assert.equal(finished.landed, true, `${finished.stoppedBecause} | ${results.finished}`);
     assert.equal(judgedLanding.length, 1, "the build made live was judged once, by the close");
@@ -6818,7 +6821,7 @@ describe("the final judge when the user is in a hurry", () => {
   });
 
   it("hurry-3. a new game whose judge gave no usable answer: the card does not say the judge found it wanting", async () => {
-    const { finished, judgedLanding, results } = await hurriedNight("hurry-unsure", {
+    const { finished, judgedLanding, results } = await hurriedLoopRun("hurry-unsure", {
       fromScratch: true,
       judge: (text) => (text.includes("QUESTION:") ? "sorry, I cannot tell from one picture" : null),
     });
@@ -6831,7 +6834,7 @@ describe("the final judge when the user is in a hurry", () => {
   });
 
   it("hurry-4. Stop pressed while the close's judge is out: the build is not made live", async () => {
-    const { finished, project, results } = await hurriedNight("hurry-stopped", {
+    const { finished, project, results } = await hurriedLoopRun("hurry-stopped", {
       judge: async (text, runId, rig) => {
         if (!(text.includes("BUILD A") && text.includes("BUILD B"))) return null;
         await rig.core.host.dispatch({ type: "run_stop", runId }, 30_000);
@@ -6999,7 +7002,7 @@ describe("a failed tool call on the local engine", () => {
   });
 });
 
-describe("two starts of a night on one chat at once", () => {
+describe("two starts of a run on one chat at once", () => {
   it("reserves the chat for the first; the second is refused, not started beside it", async () => {
     const { handleRunStart } = await import("../../src/harness-seed/loop/run-dispatch.ts");
     const appended: Array<Record<string, any>> = [];
@@ -7011,7 +7014,7 @@ describe("two starts of a night on one chat at once", () => {
         if (method === HostMethod.EventsAppend) appended.push(...(params?.batch ?? []));
         if (method !== HostMethod.GameList) return null;
         gameLists++;
-        // A folder no night can build on: each start that gets this far ends here, cleanly.
+        // A folder no run can build on: each start that gets this far ends here, cleanly.
         return [{ name: "plaza", shape: { kind: "engine-export" } }];
       },
     };
@@ -7033,7 +7036,7 @@ describe("two starts of a night on one chat at once", () => {
 
     await Promise.all([start("run-a"), start("run-b")]);
 
-    assert.equal(gameLists, 1, "only one night got past the reservation");
+    assert.equal(gameLists, 1, "only one run got past the reservation");
     const blocked = appended.filter((data) => data.event_type === "run_start_blocked").map((data) => data.payload);
     assert.ok(
       blocked.some((payload) => payload.requestedRunId === "run-b" && payload.runId === "run-a"),
@@ -7404,8 +7407,8 @@ describe("a spike the user stopped", () => {
   });
 });
 
-describe("an Autopilot night whose landing conflicts", () => {
-  it("ends at the failed landing: the user's folder is neither judged as the night's build nor rolled back", async () => {
+describe("an Autopilot run whose landing conflicts", () => {
+  it("ends at the failed landing: the user's folder is neither judged as the run's build nor rolled back", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const project = await rig.core.games.scaffold("landclash");
@@ -7419,7 +7422,7 @@ describe("an Autopilot night whose landing conflicts", () => {
         const cwd = request.cwd;
         await mkdir(path.join(cwd, "src"), { recursive: true });
         if (/YOUR FACET: Water|facet "Water"/.test(request.prompt)) {
-          await writeFile(path.join(cwd, "src", "water.js"), "export const water = 'the night\\'s marsh';\n");
+          await writeFile(path.join(cwd, "src", "water.js"), "export const water = 'the run\\'s marsh';\n");
           if (!userCommitted) {
             // Meanwhile the user commits their own evening of work on the same file in the game folder.
             userCommitted = true;
@@ -7442,18 +7445,14 @@ describe("an Autopilot night whose landing conflicts", () => {
     const finished = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
     assert.match(String(finished.landing ?? ""), /not landed/, JSON.stringify(finished.landing ?? null));
     assert.match(String(finished.stoppedBecause), /not landed/, String(finished.stoppedBecause));
-    assert.equal(
-      finished.globalVerdict ?? null,
-      null,
-      "the folder the night did not build was not judged as its build",
-    );
+    assert.equal(finished.globalVerdict ?? null, null, "the folder the run did not build was not judged as its build");
     assert.equal(finished.rolledBack ?? false, false);
     assert.equal(await readFile(path.join(live, "src", "water.js"), "utf8"), USER_WATER, "the user's work stands");
   });
 });
 
-describe("Stop on a one-facet Autopilot night", () => {
-  it("pauses the night where it was: no finalization is journaled for Resume to skip ahead to", async () => {
+describe("Stop on a one-facet Autopilot run", () => {
+  it("pauses the run where it was: no finalization is journaled for Resume to skip ahead to", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const project = await rig.core.games.scaffold("onefacetstop");
@@ -7478,14 +7477,14 @@ describe("Stop on a one-facet Autopilot night", () => {
       string,
       unknown
     > | null;
-    assert.ok(journal, "the night kept its journal");
-    assert.equal(journal!.phase, "paused", "a Stop pauses the night");
+    assert.ok(journal, "the run kept its journal");
+    assert.equal(journal!.phase, "paused", "a Stop pauses the run");
     assert.equal(journal!.finalization ?? null, null, "Resume goes on with the building, not the finalization");
   });
 });
 
 describe("Stop during the integration facet", () => {
-  it("pauses the night, instead of judging it and closing it as done", async () => {
+  it("pauses the run, instead of judging it and closing it as done", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const project = await rig.core.games.scaffold("integrationstop");
@@ -7522,13 +7521,13 @@ describe("Stop during the integration facet", () => {
       string,
       unknown
     > | null;
-    assert.equal(journal?.phase, "paused", "the night can be resumed");
+    assert.equal(journal?.phase, "paused", "the run can be resumed");
     assert.ok(
       customEvents(events, "autopilot_paused").some((e) => e.runId === runId),
       "the paused card is posted",
     );
     const finished = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
-    assert.equal(finished.globalVerdict ?? null, null, "nothing judged the stopped night");
+    assert.equal(finished.globalVerdict ?? null, null, "nothing judged the stopped run");
   });
 });
 
@@ -7542,7 +7541,7 @@ describe("the check catalogue on disk", () => {
     await writeFile(file, damaged);
 
     const loaded = await loadCatalogue(workspace);
-    await saveCatalogue(workspace, { ...loaded, checks: { tonight: { uses: 1 } as never } }).catch(() => {});
+    await saveCatalogue(workspace, { ...loaded, checks: { runLedger: { uses: 1 } as never } }).catch(() => {});
 
     assert.equal(await readFile(file, "utf8"), damaged, "every earlier run's counts are still there to recover");
   });
@@ -7556,7 +7555,7 @@ describe("the check catalogue on disk", () => {
   });
 });
 
-describe("a night's close the log refuses once", () => {
+describe("a run's close the log refuses once", () => {
   it("is written on a second try instead of being dropped", async () => {
     const { appendClose } = await import("../../src/harness-seed/loop/director/integrate.ts");
     let refusals = 1;
@@ -7572,7 +7571,7 @@ describe("a night's close the log refuses once", () => {
     });
     const close = { type: "custom", event_type: "run_finished", payload: { runId: "r1" } };
     await appendClose(ctx as never, "t1", [close] as never);
-    assert.deepEqual(appended, [close], "the night is closed, not left running");
+    assert.deepEqual(appended, [close], "the run is closed, not left running");
   });
 });
 
@@ -7694,7 +7693,7 @@ describe("a lead's plan and worker starts called together", () => {
       inside--;
       return `${name} done`;
     };
-    const night = {
+    const loopRun = {
       ctx: { cancelled: false },
       toolCalls: 0,
       toolsInFlight: 0,
@@ -7708,20 +7707,20 @@ describe("a lead's plan and worker starts called together", () => {
       startWorker: step("worker_start"),
     };
     const answers = await Promise.all([
-      handler(night as never, "plan", {}),
-      handler(night as never, "worker_start", { id: "sky" }),
-      handler(night as never, "worker_start", { id: "water" }),
+      handler(loopRun as never, "plan", {}),
+      handler(loopRun as never, "worker_start", { id: "sky" }),
+      handler(loopRun as never, "worker_start", { id: "water" }),
     ]);
     assert.deepEqual(answers, ["plan done", "worker_start done", "worker_start done"]);
-    assert.equal(most, 1, `one change to the night at a time: ${order.join(" ")}`);
+    assert.equal(most, 1, `one change to the run at a time: ${order.join(" ")}`);
   });
 });
 
 describe("what integrate takes from a worker", () => {
   it("never the worktree head of a worker still building: only a commit it accepted", async () => {
-    const { workerCommit } = await import("../../src/harness-seed/loop/director/night.ts");
+    const { workerCommit } = await import("../../src/harness-seed/loop/director/loop-run.ts");
     const ATTEMPT = "a".repeat(40);
-    const night = {
+    const loopRun = {
       ctx: {
         call: async (method: string) =>
           method === HostMethod.RunExec ? { code: 0, stdout: `${ATTEMPT}\n`, stderr: "" } : null,
@@ -7729,14 +7728,18 @@ describe("what integrate takes from a worker", () => {
     };
     const building = { id: "sky", state: "running", worktree: "/runs/r1/sky", lastCommit: null };
     assert.equal(
-      await workerCommit(night as never, building as never),
+      await workerCommit(loopRun as never, building as never),
       null,
       "a mid-round attempt is not the worker's work",
     );
     const accepted = "b".repeat(40);
-    assert.equal(await workerCommit(night as never, { ...building, lastCommit: accepted } as never), accepted);
+    assert.equal(await workerCommit(loopRun as never, { ...building, lastCommit: accepted } as never), accepted);
     const ended = { ...building, state: "done" };
-    assert.equal(await workerCommit(night as never, ended as never), ATTEMPT, "a worker that ended stands on its head");
+    assert.equal(
+      await workerCommit(loopRun as never, ended as never),
+      ATTEMPT,
+      "a worker that ended stands on its head",
+    );
   });
 });
 
@@ -7763,7 +7766,7 @@ describe("one facet's failure in the schedule", () => {
 });
 
 describe("a final look that throws", () => {
-  it("keeps the night's build unverdicted instead of rolling it back as broken", async () => {
+  it("keeps the run's build unverdicted instead of rolling it back as broken", async () => {
     const { lookThatThrew, unjudgedByObservation } = await import("../../src/harness-seed/loop/autopilot.ts");
     for (const err of [
       new Error("Target page, context or browser has been closed"),
@@ -8167,7 +8170,7 @@ describe("stuck ladders and small reviewers", () => {
     const { handler } = await import("../../src/harness-seed/loop/director/tools.ts");
     const { chooseMove } = await import(rulesUrl);
     const worker = { id: "match", title: "Match", state: "running", mode: "loop", steering: [], spec: matchSpec() };
-    const night = {
+    const loopRun = {
       ctx: { cancelled: false },
       toolCalls: 0,
       toolsInFlight: 0,
@@ -8181,7 +8184,7 @@ describe("stuck ladders and small reviewers", () => {
       interruptWorker: async () => false,
     };
     const teamPlay = "The AI plays as a team: roles, passing lanes and a back line that steps up";
-    const answer = String(await handler(night as never, "worker_steer", { id: "match", move: teamPlay }));
+    const answer = String(await handler(loopRun as never, "worker_steer", { id: "match", move: teamPlay }));
     assert.match(answer, /next round builds it/);
     const next = chooseMove({ spec: worker.spec as never });
     assert.equal(next.milestone.what, teamPlay, "the steered rung goes ahead of the one the worker was stuck on");
@@ -8193,12 +8196,12 @@ describe("stuck ladders and small reviewers", () => {
   });
 
   it("GGR-5. integrate answered 'no commit yet' for workers with accepted rounds: a running worker's work is its last accepted round", async () => {
-    const { workerCommit } = await import("../../src/harness-seed/loop/director/night.ts");
-    const night = { ctx: { call: async () => ({ code: 0, stdout: `${"a".repeat(40)}\n`, stderr: "" }) } };
+    const { workerCommit } = await import("../../src/harness-seed/loop/director/loop-run.ts");
+    const loopRun = { ctx: { call: async () => ({ code: 0, stdout: `${"a".repeat(40)}\n`, stderr: "" }) } };
     const accepted = "c".repeat(40);
     const building = { id: "match", state: "running", worktree: "/runs/ggr/match", lastCommit: null };
-    assert.equal(await workerCommit(night as never, { ...building, lastAccepted: accepted } as never), accepted);
-    assert.equal(await workerCommit(night as never, { ...building, lastAccepted: null } as never), null);
+    assert.equal(await workerCommit(loopRun as never, { ...building, lastAccepted: accepted } as never), accepted);
+    assert.equal(await workerCommit(loopRun as never, { ...building, lastAccepted: null } as never), null);
   });
 
   it("GGR-6. the taste judge listed 189 defects, 61% minutiae, and nobody was asked for the big step: it names one big move for its area and keeps polish apart", async () => {
@@ -8995,7 +8998,7 @@ describe("the finish stage and the false ESCALATE", () => {
       rig.core,
       (log) => customEvents(log, "run_finished").some((e) => e.runId === runId),
       180_000,
-      "the finish night to end",
+      "the finish run to end",
     );
     assert.match(results.started, /"started":"paint"/, results.started);
     const rounds = customEvents(events, "facet_iteration").filter((i) => i.runId === runId && i.facetId === "paint");
@@ -10483,7 +10486,7 @@ describe("facet rounds: the build block, kept fixes and the lead's merged fixes"
       lastIterationAt: null,
       stopRequested: false,
     };
-    const night = {
+    const loopRun = {
       ledgerFacts: () => ({}),
       note: () => {},
       remember: async () => {},
@@ -10492,7 +10495,7 @@ describe("facet rounds: the build block, kept fixes and the lead's merged fixes"
       ctx: {},
       state: {},
     };
-    recordRound(night as never, worker as never, published[0]!);
+    recordRound(loopRun as never, worker as never, published[0]!);
     assert.deepEqual(worker.roundMs, [], "the run's median round is not an hour and a half");
   });
 });
@@ -10593,7 +10596,7 @@ describe("MAP-5. scope inflated without the user", () => {
       defaultModel: async () => "vendor-model",
       delegate: async (request: DelegateRequest) => {
         calls++;
-        // Only the chat's launch matters here; the night's lead thinks until it is stopped.
+        // Only the chat's launch matters here; the run's lead thinks until it is stopped.
         if (calls > 1)
           return new Promise((resolve) =>
             request.signal?.addEventListener("abort", () =>
@@ -10628,7 +10631,7 @@ describe("MAP-5. scope inflated without the user", () => {
       customEvents(log, "autopilot_paused").length + customEvents(log, "run_finished").length >= n;
 
     await rig.core.sendUserMessage(ASK, { thread, engine: "vendor", autopilot: { hours: 1 } });
-    const first = await waitForLog(rig.core, leading(1), 60_000, "the night's lead at work");
+    const first = await waitForLog(rig.core, leading(1), 60_000, "the run's lead at work");
     const [launched] = customEvents(first, "run_registered") as Array<Record<string, any>>;
     assert.ok(launched);
     assert.deepEqual(launched.scope?.asked, [ASK], "the user's words, from the log, not the contractor's goal");
@@ -10641,15 +10644,15 @@ describe("MAP-5. scope inflated without the user", () => {
     assert.deepEqual(journal?.run?.scope, launched.scope, "the journal keeps the scope a Resume reads");
 
     await rig.core.stopThread(thread).catch(() => {});
-    await waitForLog(rig.core, paused(1), 60_000, "the night to pause");
-    // The resumed night runs until it is stopped; the Resume is the user's click, not awaited.
+    await waitForLog(rig.core, paused(1), 60_000, "the run to pause");
+    // The resumed run goes on until it is stopped; the Resume is the user's click, not awaited.
     void rig.core.resumeAutopilot(runId).catch(() => {});
-    const second = await waitForLog(rig.core, leading(2), 60_000, "the resumed night's lead at work");
+    const second = await waitForLog(rig.core, leading(2), 60_000, "the resumed run's lead at work");
     const resumed = (customEvents(second, "run_registered") as Array<Record<string, any>>)[1];
     assert.equal(resumed?.resumed, true);
     assert.deepEqual(resumed?.scope, launched.scope, "a Resume restores the same scope");
     await rig.core.stopThread(thread).catch(() => {});
-    await waitForLog(rig.core, paused(2), 60_000, "the resumed night to pause").catch(() => {});
+    await waitForLog(rig.core, paused(2), 60_000, "the resumed run to pause").catch(() => {});
   });
 
   it("MAP-5b. lists sent as text (Claude Code declares intake fields as strings) still launch, and the chat's own command report is not in the user's words", async () => {
@@ -10725,7 +10728,7 @@ describe("MAP-5. scope inflated without the user", () => {
         rig.core,
         (events) => customEvents(events, "autopilot_paused").length + customEvents(events, "run_finished").length >= 1,
         60_000,
-        "the night to pause",
+        "the run to pause",
       ).catch(() => {});
     }
   });

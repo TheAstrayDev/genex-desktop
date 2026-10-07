@@ -614,7 +614,7 @@ async function incumbentAnchor(
 /** The workers' engine and what it can do: a worker builds on it, and the whole loop speaks to it and no other. */
 async function builderEngine(ctx: HarnessCtx, run: AnyRecord, budgets: AnyRecord) {
   const described = await ctx.call(HostMethod.EngineDescribe, {});
-  // A worker builds on the workers' engine, which a cross-provider night puts on the other
+  // A worker builds on the workers' engine, which a cross-provider run puts on the other
   // subscription; the whole loop below speaks to that engine and no other.
   const engineId = roleEngine(run, RoleKey.Builder);
   const delegated = supportsSessions(described.find((e) => e.id === engineId));
@@ -630,7 +630,7 @@ async function builderEngine(ctx: HarnessCtx, run: AnyRecord, budgets: AnyRecord
 
 /** The facet's clock: how long it had, whether a step still fits, and what a build turn holds back. */
 function clock(ctx: HarnessCtx, deadline: number) {
-  // "Enough time left" scales with the facet's own clock: ten minutes on a night, a slice of a
+  // "Enough time left" scales with the facet's own clock: ten minutes on a run, a slice of a
   // short run — a fixed floor silently disabled spikes and follow-ups on anything under an hour.
   const budgetMs = Math.max(1, deadline - Date.now());
   return {

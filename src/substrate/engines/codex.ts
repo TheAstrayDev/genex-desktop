@@ -715,7 +715,7 @@ export class CodexEngine implements Engine {
     // A read-only session is started somewhere of its own, so the only folder its sandbox lets
     // it write is the studio's bridge — the build it is judging stays untouchable. A lead that is
     // its chat's own session is resumed from there by id (a Codex session is found by its id,
-    // wherever it is started), and the chat resumes it from the game folder after the night.
+    // wherever it is started), and the chat resumes it from the game folder after the run.
     const { scratch, bridge } = await this.#openRunDir(request, cwd, locks);
     const runDir = scratch ?? cwd;
     // Interview tools are read off the bridge's own record — the authoritative list of what the
@@ -1578,7 +1578,7 @@ type CodexItemRecord = Record<string, unknown>;
 /**
  * Codex's JSONL → the studio's log vocabulary. Every consumer downstream (the chat rows, the
  * run graph, SkillOpt's miner, the morning review) already speaks the Claude Code shape, so
- * translating here is what makes a Codex night indistinguishable from a Claude one everywhere
+ * translating here is what makes a Codex run indistinguishable from a Claude one everywhere
  * that matters.
  */
 export function translateEvent(event: Record<string, unknown>, cwd?: string): Translated | null {

@@ -69,7 +69,7 @@ describe("loop capability handshake", () => {
     assert.deepEqual(rig.core.host.capabilities, [], "a harness that claims nothing has nothing");
 
     const threadId = await rig.core.createGameThread();
-    const brief = "an overnight rainy city with neon puddles";
+    const brief = "a rainy city with neon puddles";
     await rig.core.sendUserMessage(brief, { thread: threadId, loop: { hours: 2 } });
 
     const events = await waitForLog(
@@ -89,7 +89,7 @@ describe("loop capability handshake", () => {
       "the user's text is in the log",
     );
 
-    // Never downgraded: the stale self never saw the commission as a chat turn, no night was
+    // Never downgraded: the stale self never saw the commission as a chat turn, no run was
     // started, and no model was ever consulted.
     assert.ok(
       !messages.some((m) => String(m.content).startsWith("plain chat:")),

@@ -82,7 +82,7 @@ function blockerAndTimers() {
   return { blocker, timers, log };
 }
 
-describe("the Mac stays awake until the night actually settles", () => {
+describe("the Mac stays awake until the run actually settles", () => {
   it("a run holds the blocker once, and run.settled or run.failed is what releases it", () => {
     const { blocker, timers, log } = blockerAndTimers();
     const keep = new KeepAwake(blocker, timers);

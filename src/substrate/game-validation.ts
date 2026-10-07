@@ -32,7 +32,7 @@ const MODULE_EXTENSIONS = [".js", ".mjs", ".ts", ".tsx", ".jsx"];
 
 /**
  * The one problem that decides whether a build can be judged at all. It is read by a person —
- * the Open Game sheet prints it under "Before a night can judge it" — so it says what the night
+ * the Open Game sheet prints it under "Before a run can judge it" — so it says what the run
  * will do about it rather than handing the user two lines of JavaScript to type: installing the
  * contract is the base builder's first job (loop/director.ts `installContract`), and the brief
  * the engine reads is where the two lines belong.
@@ -177,7 +177,7 @@ function shippedDigest(source: string): string {
 /**
  * A browser runs JavaScript. Inserting an import map does not make TypeScript run in Chromium,
  * so a folder whose reachable sources are `.ts` is not attachable however its three resolves —
- * telling a night the page attaches and then judging a blank screen is the failure this whole
+ * telling a run the page attaches and then judging a blank screen is the failure this whole
  * milestone exists to remove.
  */
 function nonExecutableSource(sources: string[]): string | null {
@@ -187,7 +187,7 @@ function nonExecutableSource(sources: string[]): string | null {
 /**
  * A dev-only game (Vite with no build script) is served exactly as written, and the browser
  * has no bundler: `import … from "three"` simply fails and the stage goes black. Say so here
- * rather than let a night be judged on a page that never ran. The exception is what the
+ * rather than let a run be judged on a page that never ran. The exception is what the
  * studio's own inserted map answers: a page with no map of its own gets the five vendored
  * keys from the serve layer, so `three` there is resolved, not missing.
  */
@@ -302,7 +302,7 @@ export async function validateGameDir(dir: string): Promise<GameValidation> {
   warnings.push(...use.randomUsers.map((rel) => MESSAGE.MathRandom(rel)));
   const nonExecutable = reach === "none" ? null : nonExecutableSource(sources);
   if (nonExecutable) problems.push(MESSAGE.TypescriptUnbuilt(toPosixRelative(path.relative(dir, nonExecutable))));
-  // The one problem the night can do something about on its own: a page that never loads the
+  // The one problem the run can do something about on its own: a page that never loads the
   // contract is unjudgeable, and installing it is the first thing a run does (loop/director.ts
   // `installContract`). Answered as a word rather than left for every caller to match the
   // sentence in `problems` — the folder sheet already read it that way.

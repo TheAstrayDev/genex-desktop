@@ -19,7 +19,7 @@ import {
   contractBeforeFork,
   contractOnPlan,
 } from "../../src/harness-seed/loop/director/contract-gate.ts";
-import { recordNight, restoreNight } from "../../src/harness-seed/loop/director/journal.ts";
+import { recordLoopRun, restoreLoopRun } from "../../src/harness-seed/loop/director/journal.ts";
 import { directorBrief, singleWorkerBrief } from "../../src/harness-seed/loop/director/briefs.ts";
 import { foundationFirst } from "../../src/harness-seed/loop/director/foundation.ts";
 import { buildStartingPoint } from "../../src/harness-seed/loop/director/setup.ts";
@@ -92,11 +92,11 @@ async function integrationRepo() {
   return { repo, head: await fixtureGit(repo, ["rev-parse", "HEAD"]) };
 }
 
-/** A night with only what the contract gate reads, over a real repository. */
-function gateNight(repo: string, head: string, plan: Record<string, unknown>) {
+/** A run with only what the contract gate reads, over a real repository. */
+function gateLoopRun(repo: string, head: string, plan: Record<string, unknown>) {
   const notes: string[] = [];
   const recorder = ctxRecorder({ handlers: { "run.exec": (p) => sh(String(p.command), String(p.cwd)) } });
-  const night: Record<string, any> = {
+  const loopRun: Record<string, any> = {
     ctx: recorder.ctx,
     run: { runId: "run_vision", project: "apex" },
     integrationWorktree: repo,
@@ -116,7 +116,7 @@ function gateNight(repo: string, head: string, plan: Record<string, unknown>) {
     saveJournal: async () => {},
     protectHead: async () => {},
   };
-  return { night, notes };
+  return { loopRun, notes };
 }
 
 describe("the vision, written by the harness beside the contract (P0)", () => {
@@ -140,15 +140,15 @@ describe("the vision, written by the harness beside the contract (P0)", () => {
       assert.ok(cutAtAWord(kept, whole), `cut at a word: …${kept.slice(-30)}`);
 
     const { repo, head } = await integrationRepo();
-    const { night } = gateNight(repo, head, compiled.plan!);
-    await contractOnPlan(night as never);
+    const { loopRun } = gateLoopRun(repo, head, compiled.plan!);
+    await contractOnPlan(loopRun as never);
     const files = (await fixtureGit(repo, ["show", "--name-only", "--format=", "HEAD"])).split("\n").sort();
     assert.deepEqual(files, [ARCHITECTURE_FILE, VISION_FILE].sort(), "one commit holds both documents");
     const text = await readFile(path.join(repo, VISION_FILE), "utf8");
     assert.ok(text.length <= VISION_CHARS, `docs/VISION.md is ${text.length} characters`);
     for (const heading of ["World scale", "Past the nearest building", "Set-pieces", "Headroom"])
       assert.match(text, new RegExp(`## ${heading}`));
-    assert.deepEqual(night.state.contract.vision, vision, "the night holds the vision it committed");
+    assert.deepEqual(loopRun.state.contract.vision, vision, "the run holds the vision it committed");
     const contractText = await readFile(path.join(repo, ARCHITECTURE_FILE), "utf8");
     assert.match(contractText, /Frozen: these interfaces and conventions\. Not frozen: content, layout, scale\./);
     assert.match(contractText, /Change it by re-planning, never by editing another part's module\./);
@@ -170,23 +170,23 @@ describe("the vision, written by the harness beside the contract (P0)", () => {
 describe("the gate: no second loop worker before the vision (P0)", () => {
   it("V3. a loop worker under a contract with no vision is refused by name; the vision given, it forks only from the commit that holds it", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = gateNight(repo, head, compilePlan(planArgs({ vision: null })).plan!);
-    await contractOnPlan(night as never);
-    const contractOnly = night.state.contract.commit;
-    const refused = String(await contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop));
+    const { loopRun } = gateLoopRun(repo, head, compilePlan(planArgs({ vision: null })).plan!);
+    await contractOnPlan(loopRun as never);
+    const contractOnly = loopRun.state.contract.commit;
+    const refused = String(await contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop));
     assert.match(refused, /no vision yet/, refused);
     assert.match(refused, /vision=/);
     assert.doesNotMatch(refused, /no module contract yet/, "the contract it has is not asked for again");
 
-    night.state.plan = compilePlan(planArgs()).plan!;
-    assert.match(String(await contractOnPlan(night as never)), /docs\/VISION\.md/);
+    loopRun.state.plan = compilePlan(planArgs()).plan!;
+    assert.match(String(await contractOnPlan(loopRun as never)), /docs\/VISION\.md/);
     assert.deepEqual(
       (await fixtureGit(repo, ["show", "--name-only", "--format=", "HEAD"])).split("\n"),
       [VISION_FILE],
       "the vision is committed; the contract it repeats is unchanged",
     );
-    assert.equal(await contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop), null);
-    const stale = await contractAtFork(night as never, {
+    assert.equal(await contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop), null);
+    const stale = await contractAtFork(loopRun as never, {
       id: "car",
       args: { id: "car" },
       mode: WorkerMode.Loop,
@@ -197,8 +197,8 @@ describe("the gate: no second loop worker before the vision (P0)", () => {
 
   it("V4. with neither, the refusal names both; a lead that never writes a vision is refused twice, then the build goes on with a note", async () => {
     const { repo, head } = await integrationRepo();
-    const { night, notes } = gateNight(repo, head, compilePlan(planArgs({ contract: null, vision: null })).plan!);
-    const start = () => contractBeforeFork(night as never, { id: "car" }, WorkerMode.Loop);
+    const { loopRun, notes } = gateLoopRun(repo, head, compilePlan(planArgs({ contract: null, vision: null })).plan!);
+    const start = () => contractBeforeFork(loopRun as never, { id: "car" }, WorkerMode.Loop);
     for (let i = 0; i < CONTRACT_REFUSALS_BEFORE_DERIVED; i++) {
       const refused = String(await start());
       assert.match(refused, /no module contract yet: call plan again with contract=/);
@@ -213,11 +213,11 @@ describe("the gate: no second loop worker before the vision (P0)", () => {
 
   it("V5. a Resume keeps the vision committed with the contract", async () => {
     const { repo, head } = await integrationRepo();
-    const { night } = gateNight(repo, head, compilePlan(planArgs()).plan!);
-    await contractOnPlan(night as never);
+    const { loopRun } = gateLoopRun(repo, head, compilePlan(planArgs()).plan!);
+    await contractOnPlan(loopRun as never);
     const now = Date.UTC(2026, 9, 6, 2, 0, 0);
     const run = { runId: "run_v", project: "apex", goal: "a city", reference: { name: "City" } };
-    const nightWith = (state: Record<string, unknown>, over: Record<string, unknown> = {}) => ({
+    const loopRunWith = (state: Record<string, unknown>, over: Record<string, unknown> = {}) => ({
       run,
       started: now,
       softDeadline: now,
@@ -226,14 +226,14 @@ describe("the gate: no second loop worker before the vision (P0)", () => {
       journal: { director: {} as Record<string, any> },
       ...over,
     });
-    const first = nightWith({ baseHeads: new Set(), contract: night.state.contract });
-    recordNight(first as never, now);
-    const back = nightWith(
+    const first = loopRunWith({ baseHeads: new Set(), contract: loopRun.state.contract });
+    recordLoopRun(first as never, now);
+    const back = loopRunWith(
       { baseHeads: new Set() },
       { resume: true, priorJournal: { director: structuredClone(first.journal.director) } },
     ) as Record<string, any>;
-    restoreNight(back as never, now);
-    assert.deepEqual(back.state.contract.vision, night.state.contract.vision);
+    restoreLoopRun(back as never, now);
+    assert.deepEqual(back.state.contract.vision, loopRun.state.contract.vision);
   });
 });
 
@@ -346,7 +346,7 @@ describe("a run with room for a team: the lead lays the foundation", () => {
     const recorder = ctxRecorder({ unknown: { value: null } });
     const cards: string[] = [];
     const journal: Record<string, any> = { director: {} };
-    const night: Record<string, any> = {
+    const loopRun: Record<string, any> = {
       ctx: recorder.ctx,
       run: { runId: "run_apex", project: "apex", goal: "an NFS race" },
       state: { fromScratch: true },
@@ -358,7 +358,7 @@ describe("a run with room for a team: the lead lays the foundation", () => {
       appendRun: async () => {},
       note: () => {},
     };
-    const start = await buildStartingPoint(night as never);
+    const start = await buildStartingPoint(loopRun as never);
     assert.equal(start?.skipped, true, JSON.stringify(start));
     assert.equal(journal.base?.skipped, true, "a Resume does not build one either");
     assert.deepEqual(recorder.calls, [], "no builder session, no window, no commit");
@@ -368,7 +368,7 @@ describe("a run with room for a team: the lead lays the foundation", () => {
     );
     for (const lead of [null, { gameFolder: "/games/apex" }]) {
       const brief = directorBrief({
-        run: night.run,
+        run: loopRun.run,
         softDeadline: Date.now() + 60 * MINUTE,
         finalDeadline: Date.now() + 75 * MINUTE,
         integrationWorktree: "/runs/apex/integration",

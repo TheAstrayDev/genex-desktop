@@ -15,7 +15,7 @@ import type { ConversationRecord, EventEnvelope, SnapshotRecord } from "./event-
 import type { EngineDescriptor } from "./engine-descriptor.ts";
 import type { FolderInspection, GameLocation, GameName, GameNameRequest, GameProject } from "./game-project.ts";
 import type { BuildProblem, InstallResult } from "./build-problem.ts";
-import type { NightReview } from "./run-review.ts";
+import type { LoopRunReview } from "./run-review.ts";
 import type { StagedTarget } from "./self-change-files.ts";
 import type { CodexLoginState } from "./codex-login.ts";
 import type { ClaudeLoginState } from "./claude-login.ts";
@@ -296,7 +296,7 @@ export interface StudioApi {
     runId: string,
     listener: (summary: import("./run-summary.ts").RunSummary) => void,
   ): () => void;
-  runReview(project: string, runId?: string): Promise<NightReview>;
+  runReview(project: string, runId?: string): Promise<LoopRunReview>;
   staged(): Promise<StagedProposal[]>;
   settings(): Promise<StudioSettingsView>;
   setSettings(patch: {
@@ -507,7 +507,7 @@ export interface StudioApi {
    * as `pathLabel`, never as the path it holds here.
    */
   pickProject(): Promise<string | null>;
-  /** What a folder holds — games in it and one level down, how each runs, what would stop a night. Writes nothing. */
+  /** What a folder holds — games in it and one level down, how each runs, what would stop a run. Writes nothing. */
   inspectFolder(dir: string): Promise<FolderInspection>;
   /**
    * Open a folder as a game: the Open Game sheet's button, and the first thing that writes.

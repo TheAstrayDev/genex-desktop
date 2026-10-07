@@ -178,7 +178,7 @@ describe("model roles", () => {
  * Two subscriptions in one run: the composer may send the
  * workers and/or the judges to the other signed-in engine. The record says so in `engines`,
  * the stamped run in `builderEngine`/`judgeEngine`, and every site that starts a job asks
- * `roleEngine`/`modelOn` so a model id never reaches an engine that does not know it. A night
+ * `roleEngine`/`modelOn` so a model id never reaches an engine that does not know it. A run
  * with nothing crossed must read exactly as it did before this existed.
  */
 import { engineLabel, modelOn, plannerModel, roleEngine } from "../../src/harness-seed/loop/model-roles.ts";
@@ -323,7 +323,7 @@ describe("roles across two subscriptions", () => {
     assert.equal(stamped.judgeModel, "gpt-6-astra");
   });
 
-  it("a night on one subscription carries nothing new", () => {
+  it("a run on one subscription carries nothing new", () => {
     const before = {
       runId: "x5",
       engine: "claude-code",

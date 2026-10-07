@@ -127,7 +127,7 @@ async function collectArchitectFiles(workspace: string, dir: string, depth: numb
       if (architectMayEdit(entry.name)) out.push(toPosixRelative(path.relative(workspace, full)));
       continue;
     }
-    // library/games/*.md is the night ledger's derived output (loop/ledger.ts): the studio
+    // library/games/*.md is the run ledger's derived output (loop/ledger.ts): the studio
     // rewrites it at every close, so an architect edit there is gone by morning.
     if (path.relative(workspace, full) === path.join("library", "games")) continue;
     await collectArchitectFiles(workspace, full, depth + 1, out);

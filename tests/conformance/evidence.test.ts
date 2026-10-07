@@ -205,7 +205,7 @@ function cameraList(evidence: { shots: Array<{ camera: string }> }): string[] {
   return evidence.shots.map((shot) => shot.camera);
 }
 
-describe("gatherEvidence after the stale-frame night", () => {
+describe("gatherEvidence after the stale-frame run", () => {
   it("retakes a duplicate frame once and accepts the fresh one — the race costs a retake, not the iteration", async () => {
     // Capture order: default=A, close=A (stale!), retake close=B, wide=C.
     const { ctx } = stubCtx({ frames: ["AAAA", "AAAA", "BBBB", "CCCC"] });
@@ -338,7 +338,7 @@ describe("gatherEvidence after the stale-frame night", () => {
   });
 
   /**
-   * The night of run_fixture123456: the base logged one shader error under three r185, and every
+   * The run of run_fixture123456: the base logged one shader error under three r185, and every
    * pass that did not know it was inherited — four first-round iterations, every director judge,
    * the health passes, the close — answered "the build does not run: 1 console error(s)".
    */
@@ -867,7 +867,7 @@ describe("where a kind is read from and written back to", () => {
     assert.equal(saved.game.declaredBy, "the plan");
     assert.equal(saved.kind, "three-modules", "the project's own shape is untouched");
     assert.equal(saved.title, "Board", "and so is everything else the user's file holds");
-    // Once a night: the same declaration written twice writes nothing the second time.
+    // Once a run: the same declaration written twice writes nothing the second time.
     assert.equal(
       (await writeDeclaredGame(ctx as never, "board", { kind: "top-down" }, { from: "the plan" })).written,
       false,
@@ -1058,7 +1058,7 @@ describe("proveStep: the studio owns the clock, or nothing it measures means any
     assert.match(base.problems.join(" | "), /the shim did not load/);
   });
 
-  it("is a verdict on a scaffold base and a warning on an iteration — one regression never voids a night", async () => {
+  it("is a verdict on a scaffold base and a warning on an iteration — one regression never voids a run", async () => {
     const stuck = (tick: number) => ({ steppedFrames: 8, drawCalls: tick * 40, now: tick * 320, canvas: true });
     const sentence = /the game does not ride the studio's clock/;
     const base = await gather(stubCtx({ frames: ["a", "b", "c"], witness: stuck }).ctx, {
@@ -1410,7 +1410,7 @@ describe("cameras: a floor under the classic trio, and an honest 'registered' ha
 
   it("says whose picture the judged frame was, and by which rungs", async () => {
     // `capture()` is a member the facade delegates to the game, so a build can answer with a
-    // picture and a draw count of its own. The block must say so, or a night reads the build's
+    // picture and a draw count of its own. The block must say so, or a run reads the build's
     // claim about itself as the canvas's own answer.
     const claimed = {
       canvas: true,
@@ -1727,7 +1727,7 @@ describe("a game with a front-end: the drive starts in play", () => {
     const game = frontEnd({ countdownSteps: Number.POSITIVE_INFINITY });
     const { ctx, calls } = stubCtx({ frames: ["a", "b", "c"], ...game });
     const evidence = await gather(ctx);
-    assert.equal(evidence.ok, true, "one regression never voids a night");
+    assert.equal(evidence.ok, true, "one regression never voids a run");
     assert.equal(evidence.play?.reached, false);
     assert.equal(evidence.play?.phase, "countdown");
     assert.ok(

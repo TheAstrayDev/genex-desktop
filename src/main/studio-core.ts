@@ -684,7 +684,7 @@ export class StudioCore {
   /**
    * An applied seed moves the workspace past every existing healthy snapshot, and the
    * watchdog rewinds to the newest healthy one — without a fresh baseline here, the first
-   * wedge of the night lands the harness back on a weeks-old promotion instead of the seed
+   * wedge of the run lands the harness back on a weeks-old promotion instead of the seed
    * that just shipped. Failure is logged, never fatal: a boot matters more than a baseline.
    * Healthy by the usual rules, not by being taken: at once when its code is an already-healthy
    * snapshot's (a skill or prompt fix), else once start() has booted exactly it. The workspace it
@@ -951,7 +951,7 @@ export class StudioCore {
     const engines = this.options.engines ?? this.#defaultEngines();
     for (const engine of engines) this.engines.register(engine);
     // Local first: it is the one engine that cannot be rate limited, which is what makes it
-    // the fallback when a subscription throttles mid-night.
+    // the fallback when a subscription throttles mid-run.
     this.engines.setPreferredOrder([EngineId.Bonsai, EngineId.Ollama, ...SUBSCRIPTION_ENGINES]);
   }
 
@@ -1175,7 +1175,7 @@ export class StudioCore {
   /**
    * Ask every subscription engine whether its session is actually alive. Credential *files*
    * outlive dead logins, so the cheap `status()` can say ready for an account that will refuse
-   * the first brief of the night.
+   * the first brief of the run.
    */
   async #probeSubscriptions(): Promise<void> {
     for (const id of SUBSCRIPTION_ENGINES) {
@@ -1541,7 +1541,7 @@ export class StudioCore {
 
   /**
    * What a picked folder holds — every game in it and one level down, how each runs, and what
-   * would stop a night. Read-only on purpose: the Open Game sheet shows this *before* the user
+   * would stop a run. Read-only on purpose: the Open Game sheet shows this *before* the user
    * consents to anything being written (a folder used to be scaffolded the moment it was picked).
    */
   async inspectFolder(dir: string): Promise<FolderInspection> {

@@ -1043,7 +1043,7 @@ function registerIpc(studio: StudioCore): void {
     performance: performanceRecorder,
   });
   registerPerformanceIpc(handle, performanceRecorder);
-  // The renderer's bootstrap carries only a 600-event tail across all threads; one real night is
+  // The renderer's bootstrap carries only a 600-event tail across all threads; one real run is
   // over a thousand events, so the morning review must be computed from the project's full log.
   const runSummaryReader = new RunSummaryReader(studio.store);
   registerTerminalIpc(handle, {
@@ -1281,7 +1281,7 @@ async function runSelfTestAndExit(): Promise<void> {
 /**
  * One studio per Mac. Two instances share one userData: the second corrupts the first's
  * event store and doubles the harness — a stale twin caused both the "No handler registered"
- * night and the two-contractors-in-one-folder collision. (Smoke runs use their own userData
+ * run and the two-contractors-in-one-folder collision. (Smoke runs use their own userData
  * and may run alongside a real instance.) False when another instance already has it.
  */
 function claimTheMac(): boolean {
@@ -1615,7 +1615,7 @@ app.on("before-quit", async (event) => {
     await devRuntime.stop();
     return;
   }
-  // A quit mid-run ends the night silently — it must be an explicit choice. preventDefault
+  // A quit mid-run ends the run silently — it must be an explicit choice. preventDefault
   // lands before the first await, or the quit proceeds regardless. The dialog is async: a sync
   // dialog blocks the main-process event loop, and the harness's calls into main stall for as
   // long as the prompt sits unanswered — pausing the very run the prompt is protecting.

@@ -5,7 +5,7 @@
  * files the facet owns, its ranked identity features, the cameras the judge must look
  * through, and a list of checks the harness (or a one-question judge) can evaluate. The
  * harness validates a spec before a facet starts — unknown kinds, expressions that do not
- * parse, a vision check without a camera — so the planner is asked again instead of a night
+ * parse, a vision check without a camera — so the planner is asked again instead of a run
  * being spent on a contract nobody can verify.
  *
  * The check catalogue (`library/checks.json`) is the reusable half: checks that earned their
@@ -233,7 +233,7 @@ export const CheckOrigin = {
   Craft: "craft",
   Milestone: "milestone",
   Seed: "seed",
-  /** A director night's lead, whose workers' checks its close keeps in the catalogue. */
+  /** A director run's lead, whose workers' checks its close keeps in the catalogue. */
   Director: "director",
 } as const;
 export type CheckOrigin = (typeof CheckOrigin)[keyof typeof CheckOrigin];
@@ -503,8 +503,8 @@ export function normalizeCheck(raw: AnyRecord | null | undefined, index = 0): Ch
  * `done`: what the work IS when it is finished, in 2–4 lines the harness can score. Each entry
  * is `{ what, check }` — a sentence a player could check, and the check that measures it — and
  * every check comes back `weight:"identity"`, the field that makes "satisfied" reachable at
- * all. The first director night wrote none: every board read identityTotal 0, no worker could
- * ever finish, no spike ever fired, and the move gate stood open all night.
+ * all. The first director run wrote none: every board read identityTotal 0, no worker could
+ * ever finish, no spike ever fired, and the move gate stood open for the whole run.
  */
 export function normalizeDone(list: unknown): Array<DoneEntry & { check: Check }> {
   if (!Array.isArray(list)) return [];
@@ -1129,7 +1129,7 @@ export function withHarnessChecks<S extends { checks?: Check[] }>(
 
 /**
  * A kind's family: its critic and whether it has eyes. The catalogue is gated on this and not
- * on the kind's name, because a first-person night and a third-person night learn the same
+ * on the kind's name, because a first-person run and a third-person run learn the same
  * lessons and hiding one from the other would throw away most of what the runs know.
  */
 function kindFamily(kind: unknown): string | null {
@@ -1371,7 +1371,7 @@ export function renderCatalogueForPlanner(
 }
 
 /**
- * What a night on another sort of game learned is not automatically knowledge about this one,
+ * What a run on another sort of game learned is not automatically knowledge about this one,
  * but the kind's name is too fine a gate: an entry recorded under exactly one FAMILY is offered
  * only to that family; one recorded under two families, or under none, is general.
  */
@@ -1480,7 +1480,7 @@ export function recordCatalogueOutcomes<C extends Pick<Catalogue, "checks">>(
 ): C {
   catalogue.checks ??= {};
   const { checks } = catalogue;
-  // The kind rides beside the genres so a later night knows what sort of game taught this.
+  // The kind rides beside the genres so a later run knows what sort of game taught this.
   const provenance = { runId, genres, kind: declaredKindOf(kind) };
   for (const check of spec?.checks ?? []) {
     if (!theCatalogues(check)) continue;

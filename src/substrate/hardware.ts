@@ -3,7 +3,7 @@
  *
  * "Weak local model produces garbage games" is a listed corner case; the honest answer is to
  * know the machine and say what it can actually run, rather than letting the user discover it
- * after a 20 GB download and a night of bad output.
+ * after a 20 GB download and a run of bad output.
  *
  * Fit rule (from the plan): model file (≈ params × 0.55–0.65 GB/B at Q4/MXFP4) + KV cache
  * (0.5–3 GB) + 1–2 GB overhead must fit in the model budget — the whole machine's RAM is never

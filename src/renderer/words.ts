@@ -123,7 +123,7 @@ const PHRASES: Array<[RegExp, (match: RegExpMatchArray) => StatusWords]> = [
     /^building the (?:shared base|starting point)$/i,
     () => ({ line: "Building the starting point", short: "Starting point" }),
   ],
-  // The night's other first step: a game the user brought that the studio cannot see into yet.
+  // The run's other first step: a game the user brought that the studio cannot see into yet.
   [/^making the game judgeable$/i, () => ({ line: "Connecting your game to the studio", short: "Connecting" })],
   [
     /^plan ready — waiting for steering$/i,
@@ -193,7 +193,7 @@ const PHASE_SUFFIX =
 /**
  * Turn a harness status line into what the user reads. The harness prefixes almost every status
  * with `run <runId> ·`; that prefix is dropped, not shortened, because the old rail chip kept
- * exactly that segment and read "run run_mtrfu5…" all night.
+ * exactly that segment and read "run run_mtrfu5…" for the whole run.
  */
 export function statusWords(status: string): StatusWords {
   const raw = (status ?? "").trim();
@@ -261,7 +261,7 @@ export function runIdIn(status: string): string | null {
   return /^run (\S+)\b/.exec((status ?? "").trim())?.[1] ?? null;
 }
 
-/** Has the night been asked for but not yet drawn anything — no parts, no rounds, no build? */
+/** Has the run been asked for but not yet drawn anything — no parts, no rounds, no build? */
 export function isPlanning(status: string): boolean {
   return /^run \S+ · planning facets\b/i.test((status ?? "").trim());
 }
@@ -278,7 +278,7 @@ export interface Verdict {
    * The round's own verdict record (`loop/verdict.ts`). Its `because` is written by the pass
    * that judged the build and already names what it measured — "2 checks that were failing now
    * pass" rather than "the checks it was given now pass". When one is there it wins; the mapping
-   * below stays for every night recorded before the record existed.
+   * below stays for every run recorded before the record existed.
    */
   record?: { because?: string | null } | null;
 }
@@ -346,7 +346,7 @@ const NOT_JUDGED_BETTER = /\bnot judged better\b/gi;
  * the models' vocabulary, and renaming it would change what they read. The app calls the same role
  * Reviewers (ModelMenu.tsx, and "reviewer" in every sentence it writes itself). So the harness's
  * sentences are reworded here, when they are shown, never at their source — which also keeps
- * nights logged before the rename reading the same. Do not "fix" the seed to say reviewer.
+ * runs logged before the rename reading the same. Do not "fix" the seed to say reviewer.
  */
 export function reviewerWords(text: string): string {
   return text
@@ -402,7 +402,7 @@ function verdictWord(verdict: Verdict, outcome: RoundOutcome): string {
   return outcome === RoundOutcome.Rejected ? "undone" : "not reviewed";
 }
 
-/** Why, for a night from before the verdict record wrote its own sentence. */
+/** Why, for a run from before the verdict record wrote its own sentence. */
 function unwrittenBecause(verdict: Verdict, outcome: RoundOutcome): string {
   if (verdict.satisfied) return "the checks it was given pass and the reviewer agrees";
   if (outcome === RoundOutcome.Accepted)
@@ -457,7 +457,7 @@ export function sideBySideWords(node: { status: IterationStatus; satisfied: bool
 }
 
 /**
- * Why the night ended. The harness writes this for itself — "land=no", "autopilot finished" —
+ * Why the run ended. The harness writes this for itself — "land=no", "autopilot finished" —
  * so the few phrases that carry a decision are named here and everything else is at least
  * stripped of ids before it reaches a screen.
  */
@@ -486,13 +486,13 @@ const LANDING_CLAUSE = /;\s*(?:nothing was landed|the integration branch was lan
 /** `… — its work so far is kept on refs/studio/…/attempts/cars2/3-stopped` — not the user's business. */
 const KEPT_ON_BRANCH = /\s*—\s*its work so far is kept on \S+\s*$/i;
 
-/** The half of a close that says why the night (or a builder) ended, in the user's words. */
+/** The half of a close that says why the run (or a builder) ended, in the user's words. */
 function whyItEnded(why: string): string | null {
   if (!why) return null;
   if (/^stopped by the user$/i.test(why)) return "you stopped it";
   if (/at the user.s request/i.test(why)) return "you asked it to wrap up";
   if (/^the director finished the run$/i.test(why)) return "the lead finished the build";
-  // "stopped by the director: fixing the starting point" — the night's own words, minus the
+  // "stopped by the director: fixing the starting point" — the run's own words, minus the
   // job title. The lead stopping a builder is not the owner asking for anything.
   if (/^stopped by the director\b/i.test(why)) {
     const said = why.replace(/^stopped by the director\b[:\s—-]*/i, "").trim();
@@ -525,7 +525,7 @@ export function ranToItsEnd(reason: string | null | undefined): boolean {
   return /budget exhausted|settled|yielded/i.test(reason ?? "");
 }
 
-/** Was the night ended by the owner rather than by the lead, the clock or the engine? */
+/** Was the run ended by the owner rather than by the lead, the clock or the engine? */
 export function wasCancelled(reason: string | null | undefined): boolean {
   return /^stopped by the user\b/i.test((reason ?? "").trim());
 }
@@ -575,8 +575,8 @@ function finishedTitle({ delivered, verification }: OutcomeView, variant: Outcom
   return variant === "card" ? "Changes are live · Checks incomplete" : "Changes are live";
 }
 
-/** The morning's two sentences: what the night amounts to, and what became of the build. */
-export interface NightWords {
+/** The morning's two sentences: what the run amounts to, and what became of the build. */
+export interface LoopRunWords {
   /** "Finished after 21 rounds · live in your game" */
   headline: string;
   /** why it ended, or what happened to the build */
@@ -584,21 +584,21 @@ export interface NightWords {
 }
 
 /**
- * How a finished night reads. The old screen decided this on `victory` — a flag the lead sets
- * only when it explicitly claims one — so a night that built, merged and landed a game read
+ * How a finished run reads. The old screen decided this on `victory` — a flag the lead sets
+ * only when it explicitly claims one — so a run that built, merged and landed a game read
  * "Stopped after 21 rounds". What the user actually cares about is whether the build reached
  * their game, which is `landed`, so that is what the headline says.
  */
-export function nightWords(night: {
+export function loopRunWords(loopRun: {
   rounds: number;
   landed: boolean | null;
   stoppedBecause?: string | null;
-  /** the night stopped where it can be picked up again — a plan limit, a quit, a crash */
+  /** the run stopped where it can be picked up again — a plan limit, a quit, a crash */
   paused?: boolean;
   /** the provider failure that paused it (the close's `limit.kind`), when one did */
   pausedOn?: string | null;
   /**
-   * Is there a merged build to play? The card offers Play only when the night left a head of its
+   * Is there a merged build to play? The card offers Play only when the run left a head of its
    * own, so the sentence may only promise one under the same condition. Unknown counts as yes,
    * which is what an older log with no head recorded means.
    */
@@ -609,15 +609,16 @@ export function nightWords(night: {
    * checked the build that is now their game — so it replaces the flat promise when it is there.
    */
   landing?: string | null;
-}): NightWords {
-  const rounds = Math.max(0, Math.trunc(night.rounds || 0));
+}): LoopRunWords {
+  const rounds = Math.max(0, Math.trunc(loopRun.rounds || 0));
   const after = rounds ? ` after ${plural(rounds, "round")}` : "";
-  const hasBuild = night.hasBuild ?? true;
-  const landing = reviewerWords(withoutIds((night.landing ?? "").trim()));
-  const why = stoppedWords(night.stoppedBecause);
-  if (night.paused) return pausedNightWords(after, wasCancelled(night.stoppedBecause), pausedWhy(night.pausedOn, why));
-  if (wasCancelled(night.stoppedBecause)) return stoppedNightWords(after, night.landed === true, hasBuild);
-  if (night.landed === true) {
+  const hasBuild = loopRun.hasBuild ?? true;
+  const landing = reviewerWords(withoutIds((loopRun.landing ?? "").trim()));
+  const why = stoppedWords(loopRun.stoppedBecause);
+  if (loopRun.paused)
+    return pausedLoopRunWords(after, wasCancelled(loopRun.stoppedBecause), pausedWhy(loopRun.pausedOn, why));
+  if (wasCancelled(loopRun.stoppedBecause)) return stoppedLoopRunWords(after, loopRun.landed === true, hasBuild);
+  if (loopRun.landed === true) {
     return {
       headline: `Finished${after} · live in your game`,
       because: landing
@@ -625,7 +626,7 @@ export function nightWords(night: {
         : "This build is your game now — open Live to play it.",
     };
   }
-  if (night.landed === false) {
+  if (loopRun.landed === false) {
     // Nothing merged: the old copy promised "kept and playable" over a card with no button at all.
     return hasBuild
       ? { headline: `Finished${after} · not made live yet`, because: `The build is kept and playable — ${why}.` }
@@ -635,7 +636,7 @@ export function nightWords(night: {
 }
 
 /**
- * Why a night its model provider paused stopped, and what brings it back, from the close's typed
+ * Why a run its model provider paused stopped, and what brings it back, from the close's typed
  * kind (`run_finished.limit.kind`). A limit keeps the close's own words (`stoppedWords`).
  */
 const PAUSED_ON_WORDS = {
@@ -644,7 +645,7 @@ const PAUSED_ON_WORDS = {
   [EngineFailureKind.Unavailable]: "the model provider stayed down — Resume picks the build up where it stopped",
 } as const satisfies Partial<Record<EngineFailureKind, string>>;
 
-/** The paused night's reason: the typed provider failure's words when there are some, else the close's. */
+/** The paused run's reason: the typed provider failure's words when there are some, else the close's. */
 function pausedWhy(kind: string | null | undefined, why: string): string {
   return failureWords(PAUSED_ON_WORDS, kind) ?? why;
 }
@@ -656,7 +657,7 @@ function failureWords(table: Partial<Record<EngineFailureKind, string>>, kind: u
 }
 
 /** Stop and pause are one thing to the owner: the work is kept and Resume sits beside this line. */
-function pausedNightWords(after: string, stopped: boolean, why: string): NightWords {
+function pausedLoopRunWords(after: string, stopped: boolean, why: string): LoopRunWords {
   return {
     headline: `${stopped ? "Stopped" : "Paused"}${after}`,
     because: stopped
@@ -665,8 +666,8 @@ function pausedNightWords(after: string, stopped: boolean, why: string): NightWo
   };
 }
 
-/** A night the owner stopped: what reached the game, what is kept, or that nothing changed. */
-function stoppedNightWords(after: string, landed: boolean, hasBuild: boolean): NightWords {
+/** A run the owner stopped: what reached the game, what is kept, or that nothing changed. */
+function stoppedLoopRunWords(after: string, landed: boolean, hasBuild: boolean): LoopRunWords {
   if (landed)
     return { headline: `Stopped${after} · live in your game`, because: "Stopped. What it built is in your game now." };
   if (hasBuild)
@@ -724,12 +725,12 @@ function errorText(err: unknown): string {
 // ── the checks ────────────────────────────────────────────────────────────────────────────
 
 /**
- * What a round's checks came to. "1 of 10 checks" reads as nine failures; on the first real night
+ * What a round's checks came to. "1 of 10 checks" reads as nine failures; on the first real run
  * nine of them were checks nothing could measure, which is the difference between "the game is
  * wrong" and "the studio couldn't look". All three surfaces say it the same way.
  *
  * The counted checks are the ones the plan asked for. A judge that keeps naming what it still
- * dislikes grows its own questions beside them, and on that night they outnumbered the plan's —
+ * dislikes grows its own questions beside them, and on that run they outnumbered the plan's —
  * a part whose work was passing read "1 of 10". They are counted separately, as notes, because
  * that is what they are: a judge's opinion of the build, not the job it was given.
  */
@@ -758,7 +759,7 @@ export function checkCounts(board: CheckBoard | null | undefined): string {
 
 const whole = (value: number | null | undefined): number => Math.max(0, Math.trunc(value ?? 0));
 
-/** The plan's checks, counted; a night from before the split has no planned counts: everything it measured was a check. */
+/** The plan's checks, counted; a run from before the split has no planned counts: everything it measured was a check. */
 function countedChecks(board: CheckBoard): { total: number; passed: number; unmeasured: number; notes: number } {
   if (typeof board.plannedTotal !== "number")
     return { total: whole(board.total), passed: whole(board.passing), unmeasured: whole(board.unmeasured), notes: 0 };
@@ -770,7 +771,7 @@ function countedChecks(board: CheckBoard): { total: number; passed: number; unme
   };
 }
 
-// ── the night, as it narrates itself ──────────────────────────────────────────────────────
+// ── the run, as it narrates itself ──────────────────────────────────────────────────────
 
 /** Every per-round line names the part the lead named, and never the id underneath it. */
 export interface PartRound {
@@ -790,10 +791,10 @@ export function partRoundWords(part: PartRound): string {
 }
 
 /**
- * What the night is: the reference it was given, if it was given one, and which model judges it.
+ * What the run is: the reference it was given, if it was given one, and which model judges it.
  *
  * The judge is named because it is the one role a saved preference can quietly get wrong — a
- * night was judged by the orchestrator's model and nothing said so. `judge` is the model's own
+ * run was judged by the orchestrator's model and nothing said so. `judge` is the model's own
  * short name (model-roles' `roleName`); "default" is not a name a person can act on, so a run
  * whose critic is whatever the engine happens to use says nothing about it.
  */
@@ -813,7 +814,7 @@ export function runStartWords(
   return named ? `the bar for this build is "${named}" — ${rule}` : rule;
 }
 
-/** How the night is organised — the first thing the user reads after pressing send. */
+/** How the run is organised — the first thing the user reads after pressing send. */
 export function autopilotStartWords(start: {
   facets?: Array<{ id?: string | null; title?: string | null; budgetShare?: number | null }> | null;
   maxParallel?: number | null;
@@ -836,7 +837,7 @@ export function autopilotStartWords(start: {
 
 /**
  * The lead's own decisions, which it writes for itself: job titles, ten-character shas, git refs
- * and the provider's raw exception text. This is the busiest line of the night, so it is the one
+ * and the provider's raw exception text. This is the busiest line of the run, so it is the one
  * that most needs saying in the user's words. The raw text stays on the event for Details.
  */
 export function decisionWords(decision: string): string {
@@ -1079,23 +1080,23 @@ function replanWhat(action: string): string {
   return "changed one of its checks";
 }
 
-/** A builder that stopped to tell the studio something is wrong with the night itself. */
+/** A builder that stopped to tell the studio something is wrong with the run itself. */
 export function flagWords(part: PartRound & { what?: string | null }): string {
   return `${partName(part)} raised a problem with the build: ${withoutIds((part.what ?? "").trim())}`;
 }
 
 /**
- * The night's plan: what it is for, the parts it will hand out, and — only when the night is
+ * The run's plan: what it is for, the parts it will hand out, and — only when the run is
  * actually holding for an answer — the one word that starts it. A lead writes its own summary
  * (`plan`); the programmed pipeline sends the parts alone. A plan nobody asked to review is a
  * card to read, not a question: the builders are already starting, and asking for a "go" that
- * changes nothing would be a promise the night does not keep.
+ * changes nothing would be a promise the run does not keep.
  */
 export function planReviewWords(plan: {
   facets?: Array<{ id?: string | null; title?: string | null }> | null;
   waitMinutes?: number | null;
   summary?: string | null;
-  /** What kind of game the night decided this is (M4.5b) — the plan card's one other decision. */
+  /** What kind of game the run decided this is (M4.5b) — the plan card's one other decision. */
   game?: { kind?: string | null } | null;
 }): string {
   const parts = (plan.facets ?? []).map((facet) => withoutIds((facet?.title ?? "").trim())).filter(Boolean);
@@ -1620,13 +1621,13 @@ export function partsBuildingWords(parts: number): string {
   return `${plural(parts, "part")} building`;
 }
 
-/** What a lead's night has kept while its builders work, and how many parts are done. */
+/** What a lead's run has kept while its builders work, and how many parts are done. */
 export function keptSoFarWords(kept: number, finished: number): string {
   const sofar = kept ? `${plural(kept, "round")} kept so far` : PROGRESS_WORDS.nothingKept;
   return `${sofar}${finished ? ` · ${finished} finished` : ""}.`;
 }
 
-/** A lead's night between builders. */
+/** A lead's run between builders. */
 export function partsFinishedWords(parts: number): string {
   return `${plural(parts, "part")} finished · the lead is deciding what comes next.`;
 }

@@ -185,7 +185,7 @@ function defectOpening(text: unknown, words: number): string[] {
 
 /**
  * The second dedupe net (M3.2). `similarDefect` scores whole texts, so one terse wording and one
- * long one of the same complaint can fall under 0.5 and grow twins — a real night grew
+ * long one of the same complaint can fall under 0.5 and grow twins — a real run grew
  * `defect-coupe-trunk-deck-reads-as-a-smoot` and `…-smoot-2`, then kept a round because one twin
  * answered "yes" while the other still failed at 0.80. Two questions opening the same way on the
  * same camera are the same question, whatever their tails say.

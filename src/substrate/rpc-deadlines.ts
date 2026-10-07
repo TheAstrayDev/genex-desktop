@@ -3,7 +3,7 @@
  *
  * A call nobody answers keeps the harness awaiting it, and a harness awaiting the host is not
  * wedged, so the watchdog stays quiet while any call is in flight. A generated game whose
- * `state()` never returns, or a page that stops answering, therefore used to freeze a whole night
+ * `state()` never returns, or a page that stops answering, therefore used to freeze a whole run
  * with nothing to notice it. Every call now has a class, and a class with a deadline is answered
  * with `RpcDeadline` once it passes; the watchdog sees the harness's own silence again after that.
  *

@@ -329,7 +329,7 @@ export const tools: HarnessTool[] = [
       const kind = referenceKind(frames);
       // This slug only ever names a chat that has no folder yet: the launch stamps the chat's
       // own folder over it (turn-loop) and a bound thread wins outright (main.ts). It used to
-      // outrank the binding, and the night then built in a second, empty folder while the user
+      // outrank the binding, and the run then built in a second, empty folder while the user
       // typed into the chat attached to the first.
       const project = slugProject(args.project || args.direction || args.goal);
       const hours = clampRunHours(loop.hours);
@@ -388,11 +388,11 @@ export const tools: HarnessTool[] = [
       const kind = referenceKind(frames);
       // This slug only ever names a chat that has no folder yet: the launch stamps the chat's
       // own folder over it (turn-loop) and a bound thread wins outright (main.ts). It used to
-      // outrank the binding, and the night then built in a second, empty folder while the user
+      // outrank the binding, and the run then built in a second, empty folder while the user
       // typed into the chat attached to the first.
       const project = slugProject(args.project || args.direction || args.goal);
       // No cap set means run until the critics are satisfied — with a 24h safety ceiling so a
-      // wedged night can never hold the machine forever.
+      // wedged run can never hold the machine forever.
       const capped = typeof autopilot.hours === "number" && autopilot.hours > 0;
       const hours = capped ? clampRunHours(autopilot.hours) : MAX_RUN_HOURS;
       const notes = criticNotes(args);

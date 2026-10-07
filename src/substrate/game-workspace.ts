@@ -164,7 +164,7 @@ export interface AdoptOptions {
   template?: boolean;
   /**
    * The user keeps a folder that holds a game of its own as a repository, and agrees that the
-   * studio may make that game part of this folder's history when a build goes live. Without it a night can read and run the nested game but can never deliver a
+   * studio may make that game part of this folder's history when a build goes live. Without it a run can read and run the nested game but can never deliver a
    * change inside it. Recorded in studio.json; nothing else may set it.
    */
   versionNested?: boolean;
@@ -850,7 +850,7 @@ export class GameWorkspaces {
 
   /**
    * What a folder holds, without writing a byte into it: every game in it and one level down,
-   * how each runs, and what would stop a night on it. The Open Game sheet asks this before the
+   * how each runs, and what would stop a run on it. The Open Game sheet asks this before the
    * user consents to anything — the studio used to scaffold first and explain never.
    */
   async inspect(dir: string): Promise<FolderInspection> {
@@ -983,7 +983,7 @@ export class GameWorkspaces {
     if (await this.#writesStudioJson(dir, shape, options)) writes.push("studio.json");
     const ignored = await readFile(path.join(dir, ".gitignore"), "utf8").catch(() => null);
     if (missingIgnoreRules(ignored).length > 0) writes.push(".gitignore");
-    // Version history is what makes a night undoable; an existing repository is left alone.
+    // Version history is what makes a run undoable; an existing repository is left alone.
     if (!(await pathExists(path.join(dir, ".git")))) writes.push(".git");
     return writes;
   }

@@ -2,10 +2,10 @@
  * How the studio touches a game's repository — one committer, refs nobody has to look at, and
  * one place for a builder's notes.
  *
- * The morning after the first real night, the user's own repo held eleven `attempt/*` branches,
+ * The morning after the first real run, the user's own repo held eleven `attempt/*` branches,
  * a `snap/*` tag that `git push --tags` would have shipped, seven `NOTES.<facet>.md` beside the
  * one they wrote, and four committer names in `git log`. None of that is theirs to keep. What
- * the night must be able to find again lives under `refs/studio/…`: a real ref, reachable by
+ * the run must be able to find again lives under `refs/studio/…`: a real ref, reachable by
  * hash and by name, that `git branch`, `git tag` and `git log --oneline` never show. What the
  * builders write down lives under `docs/notes/`, one folder, out of the root.
  *
@@ -13,7 +13,7 @@
  * the optimizer baseline and `landBuild`'s ancestor test, and it moves on its own day.
  */
 
-/** The one name every studio commit carries, wherever in the night it is made. */
+/** The one name every studio commit carries, wherever in the run it is made. */
 export const STUDIO_COMMITTER = { name: "AI Game Studio", email: "studio@ai-game-studio.local" };
 
 /**

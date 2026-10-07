@@ -87,7 +87,7 @@ function initOf(events: readonly EventEnvelope[], sessionId: string): Record<str
 }
 
 /**
- * A worktree of `project` under the run's own folder in scratch, as a night's integration worktree
+ * A worktree of `project` under the run's own folder in scratch, as a run's integration worktree
  * is — and, unless `recorded: false`, the run's start on the record of the game's own chat, as the
  * harness writes it when a run begins (`run_registered`).
  */
@@ -318,7 +318,7 @@ describe("a director's turn says it ended", () => {
 });
 
 /**
- * One session: a waking night's lead is its chat's own session. It sits in the game folder (no
+ * One session: a waking run's lead is its chat's own session. It sits in the game folder (no
  * `cwd`), reads the run's integration worktree it leads (the grant's `root`) and writes nothing;
  * when it says it is the chat's (`chatSession`), the session it answers with is the chat's bookmark.
  */
@@ -483,10 +483,10 @@ describe("a lead that is its chat's own session", () => {
 const git = async (cwd: string, args: string[]): Promise<string> => (await gitFile(args, { cwd })).stdout.trim();
 
 /**
- * A night of this game's chat that is over: its run's worktree holds one commit the game folder
+ * A run of this game's chat that is over: its run's worktree holds one commit the game folder
  * does not have (what the run built), and the close on the chat's record names it, unlanded.
  */
-async function closedNight(core: CoreLite["core"], project: { name: string; dir: string }, runId: string) {
+async function closedLoopRun(core: CoreLite["core"], project: { name: string; dir: string }, runId: string) {
   const worktree = await runWorktree(core, project, runId);
   await mkdir(path.join(worktree, "src"), { recursive: true });
   await writeFile(path.join(worktree, "src", "sky.js"), "export const sky = 'dusk';\n");
@@ -508,11 +508,11 @@ async function closedNight(core: CoreLite["core"], project: { name: string; dir:
 }
 
 /**
- * The same agent after the build: once a lead's night is over, the chat's own session — in the game
+ * The same agent after the build: once a lead's run is over, the chat's own session — in the game
  * folder, its hands back — keeps the run's controls (`runControls`), answered by the host as the
  * coordinator's tools are. Nothing else is given them, and a control never reaches another run.
  */
-describe("the chat's own session after a lead's night", () => {
+describe("the chat's own session after a lead's run", () => {
   /** A delegated engine whose session calls `calls` while it holds its folder, and keeps each answer. */
   function controlsEngine(calls: Array<[string, Record<string, unknown>]>, seen: DelegateRequest[]) {
     const answers: Record<string, string> = {};
@@ -536,7 +536,7 @@ describe("the chat's own session after a lead's night", () => {
 
   it("answers run_status, show_build and land_build for the session asking, whose own hold on the game folder is no contractor building there", async () => {
     const { core, api, project, threadId } = await gameChat({ withPreview: true });
-    const built = await closedNight(core, project, "run_after");
+    const built = await closedLoopRun(core, project, "run_after");
     const seen: DelegateRequest[] = [];
     const { engine, answers } = controlsEngine(
       [
@@ -579,7 +579,7 @@ describe("the chat's own session after a lead's night", () => {
   it("gives them to nothing but the chat's own session, and a control never reaches another run", async () => {
     const { core, api, project, threadId } = await gameChat();
     const worktree = await runWorktree(core, project, "run_other");
-    await closedNight(core, project, "run_after");
+    await closedLoopRun(core, project, "run_after");
     const head = await git(project.dir, ["rev-parse", "HEAD"]);
     const seen: DelegateRequest[] = [];
     const { engine, answers } = controlsEngine([["land_build", {}]], seen);
@@ -595,7 +595,7 @@ describe("the chat's own session after a lead's night", () => {
           selfCapture: { project: project.name, root: project.dir, runId: "run_after", facetId: "sky", label: "sky" },
         },
       },
-      { label: "a night's lead", extra: { ...controls, ...leadGrant(threadId, project.name, "run_other", worktree) } },
+      { label: "a run's lead", extra: { ...controls, ...leadGrant(threadId, project.name, "run_other", worktree) } },
     ];
     const offered: Array<{ label: string; controls: string[] }> = [];
     for (const { label, extra } of hostile) {
@@ -631,7 +631,7 @@ const CLOSED =
   "This chat was closed, so nobody can approve this and it was not allowed. Do not retry it; say in your reply what you needed.";
 
 /**
- * A game chat whose engine asks (`permissionPrompts`), with a night of its run under way: its lead
+ * A game chat whose engine asks (`permissionPrompts`), with a run of its run under way: its lead
  * leads the integration worktree from the game folder. The fake session asks the host once, when a
  * test gives it a question, and keeps the answer.
  */
@@ -673,7 +673,7 @@ async function leadChat({ leadAskTimeoutMs }: { leadAskTimeoutMs?: number } = {}
   const worktree = await runWorktree(core, project, runId);
   const delegate = (extra: Record<string, unknown>, thread = threadId) =>
     api["engine.delegate"]!({ engine: ENGINE, prompt: "go", project: game, threadId: thread, ...extra });
-  /** The night's lead answering its chat, as a waking lead is briefed. */
+  /** The run's lead answering its chat, as a waking lead is briefed. */
   const leadBrief = (thread = threadId, run = runId) => ({
     chatTurn: { messageId: run },
     ...leadGrant(thread, game, run, worktree),
@@ -722,7 +722,7 @@ async function leadChat({ leadAskTimeoutMs }: { leadAskTimeoutMs?: number } = {}
       threadId: thread,
       batch: [{ type: "custom", event_type, payload: { messageId, ...extra } }],
     });
-  /** The person's message, handed to the night's lead (live chat): the queue's receipt. */
+  /** The person's message, handed to the run's lead (live chat): the queue's receipt. */
   const handToLead = async (messageId: string, into = runId) => {
     await queue(messageId, "coordinator_message_queued");
     await queue(messageId, "coordinator_message_delivered", { into, how: "lead" });
@@ -860,7 +860,7 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
   });
 
   // Flipped: a lead nobody talked to was denied at once, with no card, so a
-  // night's lead could not even run `ls`. The chat's mode alone decides now, as for the chat's own
+  // run's lead could not even run `ls`. The chat's mode alone decides now, as for the chat's own
   // session: Manual cards (withdrawn after five minutes), Bypass allows.
   it("asks in the person's mode whether or not they are talking to it", async () => {
     const { asking, personSays, handToLead, heard, core, threadId } = await leadChat();
@@ -872,7 +872,7 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
       assert.equal(core.answerPermission(card.requestId, { decision: "allow" }), true);
       assert.deepEqual((await done()).answer, { decision: "allow" }, label);
     };
-    await carded("a night nobody talks to");
+    await carded("a run nobody talks to");
     const said = await personSays();
     await handToLead(said);
     await heard(said);
@@ -1478,7 +1478,7 @@ const offered = (request: DelegateRequest) =>
  * read-only, so the lead, the chat's own session resumed to lead its build, lost the plugins,
  * connectors and cover the chat's own session has, with their guidance still in its transcript.
  * The host's own finding of the seat decides now, and the lead's plugins act on the build it leads,
- * where a director's do: what they deliver reaches the game when the night lands.
+ * where a director's do: what they deliver reaches the game when the run lands.
  */
 describe("a lead has the chat's own session's plugins and connectors, on the build it leads", () => {
   it("offers them with their guidance, its plugins bound to the worktree it leads, whether or not it asks", async () => {
@@ -1763,7 +1763,7 @@ type ToolHook = (
 ) => Promise<unknown>;
 
 /**
- * A night's lead is the chat's main agent: only the chat's permission mode and the rules the person
+ * A run's lead is the chat's main agent: only the chat's permission mode and the rules the person
  * saved limit it, as for the chat's own session. Flipped: the
  * host screened each of its calls in a hook and refused everything but a read while nobody talked
  * to it, whatever rules stood. The hook stays, to ask first once the chat leaves the mode the
@@ -1844,7 +1844,7 @@ describe("a lead's calls follow the chat's mode and the rules that stand, whoeve
 
 /**
  * The lead sits in the game folder the person plays, while its builders change the game in their
- * own worktrees and the night lands their work there. Flipped:
+ * own worktrees and the run lands their work there. Flipped:
  * its own edit tools were refused that folder in every mode. The chat's mode decides them now, as
  * every other call, and the lead's prompt still leaves the game's changes to its builders.
  */

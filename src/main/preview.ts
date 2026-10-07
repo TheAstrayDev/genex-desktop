@@ -910,7 +910,7 @@ export class GamePreview {
    * It NEVER restores a hidden window. The evidence pass takes a user-view frame every pass now,
    * and un-hiding the user's window once a pass (or once a camera) to get a nicety is not a
    * trade the studio makes. An offscreen port does attempt it — offscreen rendering paints its
-   * own frames — and falls back like any other. A page frame is a nicety; an unattended night
+   * own frames — and falls back like any other. A page frame is a nicety; an unattended run
    * must never depend on one, so a failure ends at the page's own canvas read, not at an error.
    */
   async #capturePageSurface(): Promise<{

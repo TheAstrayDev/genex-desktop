@@ -150,7 +150,7 @@ export interface HarnessCompleteParams {
 export interface HarnessDelegateParams {
   coordinator?: { runId: string; messageId?: string };
   /**
-   * The chat's own session after a night it led: the run's controls it keeps (`run_status`,
+   * The chat's own session after a run it led: the run's controls it keeps (`run_status`,
    * `show_build`, `land_build`, shared/coordinator.ts `RunControl`), answered by the host for this
    * run and message as the coordinator's tools are. Honoured only for the chat's own session.
    */
@@ -158,7 +158,7 @@ export interface HarnessDelegateParams {
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
-   * night's lead (a `director` session), whose turn is named by its run id instead.
+   * run's lead (a `director` session), whose turn is named by its run id instead.
    */
   chatTurn?: { messageId?: string };
   engine?: string;

@@ -170,7 +170,7 @@ test("agent reference pages stay current references: no dated headings and a wor
   for (const heading of [
     "## Autopilot corrections (17 September)",
     "### Seed upgrade (2026-09-22)",
-    "## Night runs (16 September continuation)",
+    "## Loop runs (16 September continuation)",
   ]) {
     fs.writeFileSync(page, `# Behavior\n${heading}\nText.\n`);
     assert.match(checkReferences(x.root).join("\n"), /docs\/agent\/doc\.md: dated heading/, heading);

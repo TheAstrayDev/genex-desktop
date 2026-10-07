@@ -287,7 +287,7 @@ const MESSAGE = {
 } as const;
 
 /**
- * What a limit message means for the run: a weekly/monthly cap ends the night (`usage_limit`),
+ * What a limit message means for the run: a weekly/monthly cap ends the run (`usage_limit`),
  * a session/5-hour window is waitable (`rate_limit`), anything else is not a limit at all. The
  * CLI reports both only in result TEXT ("You've hit your session limit · resets 9:50pm"), never
  * in a subtype, so the text is read before the SDK's throw is classified, or a limit reads as a
@@ -321,7 +321,7 @@ export { limitResetMs } from "./limit-reset.ts";
  */
 export const JUDGE_CWD = path.join(os.tmpdir(), "studio-judge-sessions");
 
-/** How long a judge transcript is worth keeping: long enough to debug last night, not last month. */
+/** How long a judge transcript is worth keeping: long enough to debug last run, not last month. */
 export const JUDGE_TRANSCRIPT_TTL_MS = 7 * 24 * HOUR_MS;
 
 /**
@@ -1961,7 +1961,7 @@ function compactSummaryText(raw: string | null): string {
  * main.js` died even with the sandbox's auto-allow on. Safe only together with the sandbox shape — allowUnsandboxedCommands:
  * false makes the CLI ignore dangerouslyDisableSandbox entirely, so the blanket allow can never
  * step outside the sandbox. One authority: no parallel permissions.allow rules. A read-only
- * session (the playtester, a waking night's lead) is never allowed its shell by a blanket rule, and
+ * session (the playtester, a waking run's lead) is never allowed its shell by a blanket rule, and
  * has none at all unless it asks in the chat's mode (`leadAsks`, `disallowedToolsFor`).
  */
 function allowedToolsFor(request: DelegateRequest, interviewTools: StudioToolSpec[]): string[] {

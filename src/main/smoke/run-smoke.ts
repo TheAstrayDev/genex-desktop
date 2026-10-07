@@ -1409,7 +1409,7 @@ async function checkPluginJobInGraph(buildSmoke: BuildSmoke, assetJobId: string)
   const { core, pushUiEvent } = buildSmoke.ctx;
   // The two records the host writes for every plugin tool call, built by the very functions
   // that write them in production and carrying this run's attribution: the graph has to draw
-  // the job under the part that asked for it rather than floating it loose in the night.
+  // the job under the part that asked for it rather than floating it loose in the run.
   const assetCall = startedPayload({
     callId: randomUUID(),
     pluginId: "genex",
@@ -1515,7 +1515,7 @@ async function checkInterruptControls(buildSmoke: BuildSmoke): Promise<Interrupt
     await wc.executeJavaScript(`document.querySelector('[aria-label="Model settings"]')?.click()`);
     return waitFor(`!!document.querySelector('[data-slot="popover-content"][aria-label="Model options"]')`);
   });
-  await checkAsync("Escape closes the menu and leaves the night running", async () => {
+  await checkAsync("Escape closes the menu and leaves the run running", async () => {
     await wc.executeJavaScript(
       `document.querySelector('[data-slot="popover-content"][aria-label="Model options"] button')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`,
     );
@@ -1683,10 +1683,10 @@ async function checkFinishedRun(buildSmoke: BuildSmoke): Promise<void> {
 async function checkMorningCardAndHistory(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, project, runId, append, waitFor } = buildSmoke;
   const { pushUiEvent } = buildSmoke.ctx;
-  // The morning card is the night's whole report to the user; its copy is unit-tested in
+  // The morning card is the run's whole report to the user; its copy is unit-tested in
   // morning-words.ts, but only a real window proves the card mounts at all.
   check(
-    "the night's morning card is in the chat",
+    "the run's morning card is in the chat",
     await waitFor(`!!document.querySelector('[data-testid="morning-card"]')`),
   );
   await append(CustomEvent.RunStarted, {
@@ -1853,7 +1853,7 @@ async function checkRunTimeAndLead(buildSmoke: BuildSmoke, { followRun, followEv
 }
 
 /**
- * The empty scaffold takes the night's first healthy build by itself; after that Live never
+ * The empty scaffold takes the run's first healthy build by itself; after that Live never
  * changes while it is watched: a later build, a checkpoint and a changed folder light Reload, and
  * Reload (or leaving Live) brings them in.
  */
@@ -2000,7 +2000,7 @@ async function checkLiveStaysStill(
       Boolean(await wc.executeJavaScript(`${LIVE_LOADS}===0`)),
   );
   // Out of sight, what waits goes in, so Live is current when the person comes back. Live then
-  // shows the game folder, so Reload may offer the night's newest build again, never the change.
+  // shows the game folder, so Reload may offer the run's newest build again, never the change.
   await wc.executeJavaScript(`document.querySelector('[data-stage-action="builds"]').click()`);
   const changedGone = `!document.querySelector('[data-behind-reason="changed"]')`;
   check(
@@ -3051,7 +3051,7 @@ async function checkScriptedDirector(computerSmoke: ComputerSmoke): Promise<void
   core.engines.register(
     scriptedCodex(
       async (request) => {
-        if (request.director) return directNight(computerSmoke, request, dir);
+        if (request.director) return directLoopRun(computerSmoke, request, dir);
         await fs.writeFile(path.join(request.cwd, "src", "sign.js"), "export const sign = 1;\n");
         dir.workerShot = await required(request.onLiveTool, "a live tool bridge")("computer", { action: "screenshot" });
         return { ok: true, engine: EngineId.Codex, turns: 2, usage: {}, sessionId: "sign", summary: "sign added" };
@@ -3073,12 +3073,12 @@ async function checkScriptedDirector(computerSmoke: ComputerSmoke): Promise<void
     .filter((e) => e.data.type === EventKind.Custom && e.data.event_type === CustomEvent.RunFinished)
     .map((e) => (e.data as { payload: Record<string, unknown> }).payload)
     .find((p) => p.runId === dirRunId);
-  checkDirectorNight(computerSmoke, dir);
+  checkDirectorLoopRun(computerSmoke, dir);
   checkDirectorLanding(computerSmoke, dir, dirFinished, dirProject.dir);
 }
 
-/** The scripted director's night: look, plan, one worker, integrate, show, finish. */
-async function directNight(
+/** The scripted director's run: look, plan, one worker, integrate, show, finish. */
+async function directLoopRun(
   { wc, waitFor }: ComputerSmoke,
   request: DelegateRequest,
   dir: DirectorSeen,
@@ -3091,9 +3091,9 @@ async function directNight(
   // No part works yet, so the lead has the run: its node in Builds is its own screen.
   await wc.executeJavaScript(`document.querySelector('[data-stage-action="builds"]')?.click()`);
   dir.uiCard = await waitFor(`!!document.querySelector('[data-graph-node="lead"][data-agent-screen] img')`);
-  // The night says what it is for before a builder starts (M3.8): worker_start refuses until plan has been called.
+  // The run says what it is for before a builder starts (M3.8): worker_start refuses until plan has been called.
   await call("plan", {
-    summary: "Tonight: a sign on the street.",
+    summary: "This run: a sign on the street.",
     workers: JSON.stringify([
       {
         id: "sign",
@@ -3124,11 +3124,11 @@ async function directNight(
   dir.integrated = JSON.parse(asText(await call("integrate", { worker: "sign" })));
   dir.shown = asText(await call("show", { target: "integration" }));
   dir.finished = asText(await call("finish", { summary: "a sign on the street", land: "yes" }));
-  return { ok: true, engine: EngineId.Codex, turns: 9, usage: {}, sessionId: "director", summary: "night done" };
+  return { ok: true, engine: EngineId.Codex, turns: 9, usage: {}, sessionId: "director", summary: "run done" };
 }
 
-/** What the director saw and did during the night. */
-function checkDirectorNight({ check }: ComputerSmoke, dir: DirectorSeen): void {
+/** What the director saw and did during the run. */
+function checkDirectorLoopRun({ check }: ComputerSmoke, dir: DirectorSeen): void {
   check(
     "the director's window shows the integration worktree with the game running in it",
     /the window now shows integration/.test(asText(dir.look)) &&
@@ -3161,7 +3161,7 @@ function checkDirectorNight({ check }: ComputerSmoke, dir: DirectorSeen): void {
   );
 }
 
-/** How the night ended: landed in the live folder, closed as the director's, every window gone. */
+/** How the run ended: landed in the live folder, closed as the director's, every window gone. */
 function checkDirectorLanding(
   { check, ctx }: ComputerSmoke,
   dir: DirectorSeen,

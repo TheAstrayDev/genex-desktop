@@ -101,10 +101,10 @@ export interface WorkspaceSpec {
 }
 
 /**
- * One committer, everywhere the studio writes history — here, in the night's worktrees
+ * One committer, everywhere the studio writes history — here, in the run's worktrees
  * (`harness-seed/loop/repo.ts`) and in `landBuild`. A user's `git log` used to name five
  * (studio-substrate, studio-facet, studio-integrator, studio-director, studio-base) as if a
- * committee had been through their game overnight.
+ * committee had been through their game unattended.
  */
 export const STUDIO_COMMITTER = { name: "AI Game Studio", email: "studio@ai-game-studio.local" };
 
@@ -257,7 +257,7 @@ export class SnapshotEngine {
       await git(dir, [...NO_HOOKS, "commit", "-q", "--allow-empty", "-m", `snapshot ${snapshotId}: ${options.reason}`]);
       const commit = (await git(dir, ["rev-parse", "HEAD"])).trim();
       // `refs/studio/snap/…`, not `refs/tags/snap/…`: a tag in the user's repository is theirs,
-      // it shows in `git tag`, and `git push --tags` would ship every night's bookkeeping to
+      // it shows in `git tag`, and `git push --tags` would ship every run's bookkeeping to
       // their remote. The ref is just as reachable and nothing but the studio ever lists it.
       await git(dir, ["update-ref", snapshotRef(snapshotId), commit]);
       if (name === HARNESS_WORKSPACE) refs.harness = commit;

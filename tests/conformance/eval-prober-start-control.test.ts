@@ -330,7 +330,7 @@ function pressAnyKey(specs: readonly Spec[]): string | null {
 }
 
 test('PRESS ANY KEY: the title line is found; a HUD legend "Press E to interact" is NOT an entrance; a covered line is not live', () => {
-  const title: Spec = { id: "title", tag: "h1", text: "NIGHTSTEEL", rect: { x: 440, y: 200, w: 400, h: 80 }, z: 5 };
+  const title: Spec = { id: "title", tag: "h1", text: "IRONSTEEL", rect: { x: 440, y: 200, w: 400, h: 80 }, z: 5 };
   const line: Spec = {
     id: "line",
     tag: "p",
