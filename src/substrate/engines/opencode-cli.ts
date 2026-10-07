@@ -65,6 +65,7 @@ interface ListedModel {
     reasoning?: unknown;
     toolcall?: unknown;
     input?: { image?: unknown };
+    output?: Record<string, unknown>;
   };
   variants?: unknown;
 }
@@ -101,6 +102,16 @@ function apiHost(value: unknown): string | null {
   }
 }
 
+/**
+ * Can the studio's builds run on it: it calls tools, is not retired, and answers with text alone
+ * (an image or audio generator is no coding model, though it may call tools).
+ */
+function runsBuilds(listed: ListedModel): boolean {
+  if (listed.capabilities?.toolcall !== true || listed.status === DEPRECATED) return false;
+  const output = Object.entries(listed.capabilities.output ?? {});
+  return output.every(([modality, on]) => modality === "text" || on !== true);
+}
+
 /** The hosts a provider answers on: the address its listing names, and its built-in hosts. */
 function providerHosts(provider: string, url: unknown): string[] {
   const listed = apiHost(url);
@@ -121,7 +132,7 @@ export function openCodeModel(listed: ListedModel): OpenCodeModel | null {
   const provider = typeof listed.providerID === "string" ? listed.providerID : "";
   const model = typeof listed.id === "string" ? listed.id : "";
   if (!provider || !model) return null;
-  if (listed.capabilities?.toolcall !== true || listed.status === DEPRECATED) return null;
+  if (!runsBuilds(listed)) return null;
   const contextWindow = positive(listed.limit?.context) ?? DEFAULT_CONTEXT_TOKENS;
   const efforts = variants(listed.variants);
   const thinking = listed.capabilities?.reasoning === true;

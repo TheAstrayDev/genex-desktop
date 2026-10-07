@@ -59,6 +59,28 @@ describe("OpenRouter's catalog", () => {
     assert.equal(qwen?.note, "Free");
   });
 
+  it("leaves out models that answer with images or audio, though they call tools", () => {
+    const entry = (id: string, output?: string[]) => ({
+      id,
+      supported_parameters: ["tools"],
+      architecture: { input_modalities: ["text"], ...(output ? { output_modalities: output } : {}) },
+    });
+    const rows = openRouterModels({
+      data: [
+        entry("google/gemini-nano-banana-2.1", ["image", "text"]),
+        entry("openai/gpt-audio", ["text", "audio"]),
+        entry("openrouter/auto", ["text", "image"]),
+        entry("openai/gpt-6-luna", ["text"]),
+        entry("vendor/older-listing"),
+      ],
+    });
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      ["openai/gpt-6-luna", "vendor/older-listing"],
+      "only text comes back into a build; a listing that names no output is taken as text",
+    );
+  });
+
   it("refuses a catalog that is not one, and skips entries it cannot read", () => {
     for (const body of [null, {}, { data: "x" }, "[]"])
       assert.throws(() => openRouterModels(body), /could not be read/, JSON.stringify(body));

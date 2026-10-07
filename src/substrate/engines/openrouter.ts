@@ -107,7 +107,7 @@ interface CatalogEntry {
   name?: unknown;
   context_length?: unknown;
   supported_parameters?: unknown;
-  architecture?: { input_modalities?: unknown };
+  architecture?: { input_modalities?: unknown; output_modalities?: unknown };
   top_provider?: { max_completion_tokens?: unknown };
   pricing?: { prompt?: unknown; completion?: unknown };
 }
@@ -133,11 +133,23 @@ const positive = (value: unknown): number | undefined =>
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-/** One catalog entry as a model row, or null for a model that cannot call tools (the studio's loop needs them). */
+/** The one output a build reads back: a model that answers with images or audio is no coding model. */
+const TEXT_OUTPUT = "text";
+
+/** Does the model answer with text alone? A listing that names no output is taken as text. */
+function answersInText(entry: CatalogEntry): boolean {
+  const output = strings(entry.architecture?.output_modalities);
+  return output.length === 0 || output.every((modality) => modality === TEXT_OUTPUT);
+}
+
+/**
+ * One catalog entry as a model row, or null for a model that cannot call tools (the studio's loop
+ * needs them) or that answers with images or audio (an image generator such as Nano Banana).
+ */
 export function openRouterModel(entry: CatalogEntry): EngineModel | null {
   if (typeof entry.id !== "string" || !entry.id) return null;
   const parameters = strings(entry.supported_parameters);
-  if (!parameters.includes("tools")) return null;
+  if (!parameters.includes("tools") || !answersInText(entry)) return null;
   const contextWindow = positive(entry.context_length) ?? DEFAULT_CONTEXT_TOKENS;
   const replyCap = Math.min(MAX_REPLY_TOKENS, Math.floor(contextWindow / 4));
   const maxTokens = Math.min(positive(entry.top_provider?.max_completion_tokens) ?? replyCap, replyCap);

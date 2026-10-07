@@ -103,6 +103,15 @@ describe("OpenCode's model list", () => {
       `p/m\n${JSON.stringify({ id: "m", providerID: "p", capabilities: { toolcall: true }, ...fields }, null, 2)}`;
     assert.deepEqual(parseOpenCodeModels(entry({ capabilities: { toolcall: false } })), []);
     assert.deepEqual(parseOpenCodeModels(entry({ status: "deprecated" })), []);
+    assert.deepEqual(
+      parseOpenCodeModels(entry({ capabilities: { toolcall: true, output: { text: true, image: true } } })),
+      [],
+      "an image generator is no coding model, though it calls tools",
+    );
+    assert.equal(
+      parseOpenCodeModels(entry({ capabilities: { toolcall: true, output: { text: true, image: false } } })).length,
+      1,
+    );
     assert.deepEqual(parseOpenCodeModels(entry({ api: { url: "http://insecure.example/v1" } }))[0]?.hosts, []);
     assert.deepEqual(parseOpenCodeModels(entry({ api: { url: "not a url" } }))[0]?.hosts, []);
     assert.deepEqual(parseOpenCodeModels(""), [], "an empty listing is nothing signed in, not an error");
