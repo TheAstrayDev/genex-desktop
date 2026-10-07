@@ -69,6 +69,8 @@ const STDERR_TAIL_CHARS = 4_000;
  * model gone): no wait or retry helps, another model might.
  */
 const MODEL_REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 404]);
+/** The status the sandbox's proxy answers a host off its allow-list with. */
+const PROXY_REFUSED_STATUS = 403;
 /** Where OpenCode refreshes its model catalogs; opened beside the provider's own hosts. */
 const CATALOG_HOSTS = ["models.dev", "models.opencode.ai"] as const;
 
@@ -84,6 +86,10 @@ const MESSAGE = {
   Stopped: (code: number | null) => `OpenCode exited with ${code}`,
   ModelRefused: (model: string, words: string) =>
     `The provider refused ${model} (${words}). Pick another model, then send again.`,
+  HostUnknown: (provider: string) =>
+    `Genex doesn't know where ${provider} answers, so its sandbox kept OpenCode from reaching it. Pick a model from another provider.`,
+  FreeModelFailed: (model: string | null, words: string) =>
+    `OpenCode's free model${model ? ` ${model}` : ""} failed (${words}). OpenCode runs its free models itself and they are sometimes down: try again later, or pick another model.`,
   NoAnswer: "OpenCode gave no answer",
   JudgeTimedOut: (minutes: number) => `the judge did not answer within ${minutes} min`,
 } as const;
@@ -149,6 +155,8 @@ export class OpenCodeEngine implements Engine {
   #hosts = new Map<string, string[]>();
   /** Whether the last listing named a model some provider's sign-in runs, not only OpenCode's free ones. */
   #signedIn = false;
+  /** OpenCode's own free models in the last listing, which run with no sign-in. */
+  #anonymous = new Set<string>();
 
   constructor(options: OpenCodeEngineOptions) {
     this.#scratchRoot = options.scratchRoot ?? path.join(os.tmpdir(), `studio-${EngineId.OpenCode}`);
@@ -213,6 +221,7 @@ export class OpenCodeEngine implements Engine {
     const listed = [...parsed.filter((model) => !model.anonymous), ...parsed.filter((model) => model.anonymous)];
     this.#hosts = new Map(listed.map((model) => [model.row.id, model.hosts]));
     this.#signedIn = listed.some((model) => !model.anonymous);
+    this.#anonymous = new Set(listed.filter((model) => model.anonymous).map((model) => model.row.id));
     return { models: listed.map((model: OpenCodeModel) => model.row), source: ModelCatalogSource.Provider };
   }
 
@@ -489,17 +498,48 @@ export class OpenCodeEngine implements Engine {
     partial: () => PartialDelegateState,
     model: string | undefined,
   ): DelegateResult {
+    const blocked = this.#blockedHostText(failure, model);
     const error = failureError(this.id, failure);
-    if (error.kind !== EngineFailureKind.Other) throw error;
-    const errorText = this.#refusedModelText(failure, model) ?? failure.message;
+    if (!blocked && error.kind !== EngineFailureKind.Other) throw this.#namedFreeModel(error, failure, model);
+    const free = this.#ranFreeModel(model) ? MESSAGE.FreeModelFailed(this.#label(model), failure.message) : null;
+    const errorText = blocked ?? this.#refusedModelText(failure, model) ?? free ?? failure.message;
     return metered(partialDelegateResult(this.id, { stopReason: StopReason.Error, errorText }, partial()));
+  }
+
+  /** A model's name as the picker shows it, or null with no pick. */
+  #label(model: string | undefined): string | null {
+    if (!model) return null;
+    return this.#catalog.models().find((row) => row.id === model)?.label ?? model;
+  }
+
+  /** Did the run use one of OpenCode's free models: the one picked, or OpenCode's own default with no sign-in? */
+  #ranFreeModel(model: string | undefined): boolean {
+    if (model) return this.#anonymous.has(model);
+    return !this.#signedIn && this.#anonymous.size > 0;
+  }
+
+  /** A failure on a free model, said as one, of the same kind so the run waits or stops as before. */
+  #namedFreeModel(error: EngineError, failure: { message: string }, model: string | undefined): EngineError {
+    if (!this.#ranFreeModel(model)) return error;
+    const message = MESSAGE.FreeModelFailed(this.#label(model), failure.message);
+    return new EngineError(error.kind, this.id, message, error.retryAfterMs);
+  }
+
+  /**
+   * A 403 for a picked model whose provider has no host Genex knows: the sandbox's proxy refused
+   * it, since no other host was open to the session. Null for anything else.
+   */
+  #blockedHostText(failure: { status: number | null }, model: string | undefined): string | null {
+    if (!model || failure.status !== PROXY_REFUSED_STATUS) return null;
+    const hosts = this.#hosts.get(model);
+    if (!hosts || hosts.length > 0) return null;
+    return MESSAGE.HostUnknown(model.slice(0, model.indexOf("/")));
   }
 
   /** A picked model the provider refused, by its name and with the provider's words; null for anything else. */
   #refusedModelText(failure: { message: string; status: number | null }, model: string | undefined): string | null {
     if (!model || failure.status === null || !MODEL_REFUSED_STATUSES.has(failure.status)) return null;
-    const label = this.#catalog.models().find((row) => row.id === model)?.label ?? model;
-    return MESSAGE.ModelRefused(label, failure.message);
+    return MESSAGE.ModelRefused(this.#label(model) ?? model, failure.message);
   }
 }
 

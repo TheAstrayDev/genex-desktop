@@ -164,3 +164,18 @@ test("OpenCode on a ChatGPT plan starts with the GPT models the plan runs, as Co
     "with no word from Codex, the newest",
   );
 });
+
+test("at the same version, a long catalog prefers a vendor's larger models to its small ones", () => {
+  const listed = [
+    row("anthropic/claude-haiku-5-5", "Claude Haiku 5.5"),
+    row("anthropic/claude-sonnet-5-5", "Claude Sonnet 5.5"),
+    row("anthropic/claude-opus-5-5", "Claude Opus 5.5"),
+    row("openai/gpt-6-mini", "GPT-6 Mini"),
+    row("openai/gpt-6-luna", "GPT-6 Luna"),
+  ];
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenRouter, listed)],
+    ["anthropic/claude-sonnet-5-5", "openai/gpt-6-luna", "anthropic/claude-opus-5-5"],
+    "Haiku and Mini wait behind their vendor's larger models of the same version",
+  );
+});

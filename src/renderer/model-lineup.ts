@@ -38,6 +38,9 @@ const FIRST_FEW: Partial<Record<string, number>> = { [EngineId.OpenRouter]: 3, [
 const CLAUDE_ID = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/;
 /** `gpt-6.1-sol`, `gpt-6-astra`, `gpt-5.5`. */
 const CODEX_ID = /^gpt-(\d+)(?:\.(\d+))?(?:-([a-z]+))?$/;
+/** The small families a vendor makes beside its larger models; at one version they come after. */
+const SMALL_FAMILIES: ReadonlySet<string> = new Set(["haiku", "mini", "nano"]);
+const isSmall = (lineage: Lineage): boolean => SMALL_FAMILIES.has(lineage.family);
 /** A Claude id in a metered catalog: `claude-opus-5-5`, or OpenRouter's `claude-sonnet-4.5`. */
 const VENDOR_CLAUDE_ID = /^claude-([a-z]+)-(\d+)(?:[-.](\d{1,2}))?(?:-\d{8})?$/;
 /** A context variant such as `[1m]` names the same model. */
@@ -92,7 +95,11 @@ function newestFirst(listed: readonly LineupModel[], runnable: ReadonlySet<strin
     if (read && !refused) byVendor.set(read.vendor, [...(byVendor.get(read.vendor) ?? []), read]);
   }
   const queues = [...byVendor.values()].map((reads) =>
-    reads.toSorted((a, b) => Number(isNewer(b.lineage, a.lineage)) - Number(isNewer(a.lineage, b.lineage))),
+    reads.toSorted(
+      (a, b) =>
+        Number(isNewer(b.lineage, a.lineage)) - Number(isNewer(a.lineage, b.lineage)) ||
+        Number(isSmall(a.lineage)) - Number(isSmall(b.lineage)),
+    ),
   );
   const ranked: LineupModel[] = [];
   for (let round = 0; queues.some((queue) => round < queue.length); round++) {

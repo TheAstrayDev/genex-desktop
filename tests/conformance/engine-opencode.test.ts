@@ -360,6 +360,72 @@ describe("OpenCode sessions", () => {
     assert.equal(unpicked.errorText, "Bad Request: not supported", "with no pick there is no model to blame");
   });
 
+  it("says the sandbox kept OpenCode from a provider whose address it does not know, never to sign in again", async () => {
+    const root = await tmpDir("opencode-hosts-");
+    const listing = `unheard-of/m\n${JSON.stringify(
+      {
+        id: "m",
+        name: "Mystery",
+        providerID: "unheard-of",
+        capabilities: { toolcall: true },
+        cost: { input: 1, output: 1 },
+      },
+      null,
+      2,
+    )}`;
+    const engine = new OpenCodeEngine({
+      scratchRoot: path.join(root, "scratch"),
+      protectedPaths: [path.join(root, "secrets")],
+      resolveCli: ready,
+      listModels: async () => listing,
+      execFn: () =>
+        replay([
+          {
+            type: "error",
+            sessionID: "ses_z",
+            error: { name: "APIError", data: { message: "Forbidden", statusCode: 403 } },
+          },
+        ]),
+    });
+    await engine.refreshModels(true);
+    const result = await engine.delegate({ cwd: await game(), prompt: "x", model: "unheard-of/m" });
+    assert.equal(result.stopReason, "error", "a blocked host is the build's outcome, not a lost sign-in");
+    assert.match(result.errorText ?? "", /unheard-of/);
+    assert.match(result.errorText ?? "", /sandbox/);
+  });
+
+  it("names OpenCode's free model when it fails, keeping the failure's kind", async () => {
+    const failing = (status: number, message: string) =>
+      replay([
+        { type: "error", sessionID: "ses_f", error: { name: "APIError", data: { message, statusCode: status } } },
+      ]);
+    const cwd = await game();
+    for (const [status, kind] of [
+      [429, "rate_limit"],
+      [500, "unavailable"],
+    ] as const) {
+      const { engine } = await engineWith(() => failing(status, "Upstream request failed: Endpoint is unavailable."));
+      await engine.refreshModels(true);
+      await assert.rejects(
+        engine.delegate({ cwd, prompt: "x", model: "opencode/big-pickle" }),
+        (err) =>
+          err instanceof EngineError &&
+          err.kind === kind &&
+          /OpenCode's free model Big Pickle/.test(err.message) &&
+          /Endpoint is unavailable/.test(err.message) &&
+          !/^rate limited/.test(err.message),
+        `${status}`,
+      );
+    }
+    const { engine } = await engineWith(() => failing(500, "Unexpected server error"));
+    await engine.refreshModels(true);
+    await assert.rejects(
+      engine.delegate({ cwd, prompt: "x" }),
+      (err) => err instanceof EngineError && /OpenCode's free model/.test(err.message),
+      "with no pick and no sign-in, OpenCode's own default is one of its free models",
+    );
+  });
+
   it("hands back what a stopped or timed-out session did, with the id Continue resumes", async () => {
     const hang: OpenCodeExec = async function* (invocation) {
       yield { type: "text", sessionID: "ses_long", part: { type: "text", text: "Working on it" } };
