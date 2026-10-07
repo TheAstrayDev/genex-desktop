@@ -38,6 +38,8 @@ export const EngineId = {
   Codex: "codex",
   Bonsai: "bonsai",
   Ollama: "ollama",
+  OpenCode: "opencode",
+  OpenRouter: "openrouter",
 } as const;
 export type EngineId = (typeof EngineId)[keyof typeof EngineId];
 
@@ -53,8 +55,12 @@ export function supportsSessions(
 ): boolean {
   return descriptor?.supportsSessions ?? descriptor?.kind === "delegated";
 }
+/** Session engines that are not delegated presets: they hold a session and can cross roles too. */
+const SESSION_ENGINES: readonly string[] = [EngineId.Bonsai, EngineId.OpenCode, EngineId.OpenRouter];
+
+/** Session engines: the delegated ones, and the others that hold a session (`SESSION_ENGINES`). */
 export function hasSessionRoles(engine: string | null | undefined): boolean {
-  return isDelegated(engine) || engine === EngineId.Bonsai;
+  return isDelegated(engine) || SESSION_ENGINES.includes(engine as string);
 }
 
 export const FABLE = "claude-fable-5-1";
@@ -296,9 +302,9 @@ export function plannerModel(run: RoleRun | null | undefined): string | undefine
 }
 
 /**
- * How a Codex session spells a studio tool. Claude Code receives the studio's tools as MCP
- * tools and calls them by name; Codex has no tool channel of its own, so the studio ships a
- * bridge and the session runs it as a shell command. The two spellings are the ONLY thing in
+ * How a Codex or OpenCode session spells a studio tool. Claude Code receives the studio's tools as
+ * MCP tools and calls them by name; Codex and OpenCode have no tool channel of the studio's, so the
+ * studio ships a bridge and the session runs it as a shell command. The two spellings are the ONLY thing in
  * the whole harness that branches on the engine, and every prompt that mentions a tool renders
  * it through `toolCall` — a Claude session that reads a bridge command tries to run it, and a
  * Codex session that reads an `mcp__` name asks for a tool it does not have.
@@ -309,11 +315,14 @@ export function plannerModel(run: RoleRun | null | undefined): string | undefine
  */
 export const BRIDGE_TOOL_CMD = "node .studio/bridge/tool.mjs";
 
+/** The engines whose sessions reach the studio's tools through the bridge command. */
+const BRIDGE_ENGINES: readonly string[] = [EngineId.Codex, EngineId.OpenCode];
+
 /** One studio tool, spelled the way this engine's session must write it. */
 export function toolCall(engine: string | null | undefined, name: unknown): string {
   const tool = String(name ?? "");
   if (engine === EngineId.ClaudeCode) return `mcp__studio__${tool}`;
-  if (engine === EngineId.Codex) return `${BRIDGE_TOOL_CMD} ${tool}`;
+  if (BRIDGE_ENGINES.includes(engine as string)) return `${BRIDGE_TOOL_CMD} ${tool}`;
   // A local engine drives its tools through the studio's own tool loop, where a tool is its
   // bare name and neither spelling exists.
   return tool;
@@ -322,7 +331,7 @@ export function toolCall(engine: string | null | undefined, name: unknown): stri
 /** The clause at the head of a TOOLS block: how this engine calls the tools listed under it. */
 export function toolSyntax(engine: string | null | undefined): string {
   if (engine === EngineId.ClaudeCode) return "call each one by its name, mcp__studio__<name>";
-  if (engine === EngineId.Codex) return `run each one as \`${BRIDGE_TOOL_CMD} <name> --field=value\``;
+  if (BRIDGE_ENGINES.includes(engine as string)) return `run each one as \`${BRIDGE_TOOL_CMD} <name> --field=value\``;
   return "call each one by its name";
 }
 

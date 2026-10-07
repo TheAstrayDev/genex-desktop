@@ -127,13 +127,14 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
   Studio does not wrap the CLI in `ProcessSandbox`. The studio's secrets, both CLIs' sign-in homes
   and sibling games are named off limits in the brief only; the Claude path enforces the same list
   as `Read()` deny rules, and `ProcessSandbox` enforces it for the harness and Bonsai. A
-  prompt-injected Codex build could copy what it reads into game files or its summary. Studio's
+  prompt-injected Codex build could copy what it reads into its game or summary. Studio's
   own secrets are safeStorage ciphertext; the exposed material is other games, `~/.genex`, the
-  borrowed Codex sign-in and the ordinary home folder. Running the CLI under `ProcessSandbox` with
-  deny-read is planned, not done.
+  borrowed Codex sign-in and the ordinary home folder. Running it under `ProcessSandbox` with
+  deny-read is planned.
+- **OpenCode reads its sign-ins** ([details](../connections-and-context.md#openrouter-and-opencode)).
 - **An install briefly opens the npm registry to every sandboxed process.** sandbox-runtime's
-  proxy filters against one process-wide allow-list, so `ProcessSandbox.run` widens it for the
-  length of a package install and restores it afterwards (counted, in `finally`). Two installs
+  proxy filters against one process-wide allow-list, so `ProcessSandbox.run` widens it for a
+  package install's length and restores it afterwards (counted, in `finally`). Two installs
   open it: the user's Install packages button and `genex__package`, a consented add of one of the
   two exact-pinned Genex SDK packages (`GENEX_GAME_PACKAGES`) that the agent cannot re-version.
 - **A Genex CLI run opens `api.genex.games` to every sandboxed process** for its length, by the

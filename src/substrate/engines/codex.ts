@@ -60,13 +60,17 @@ import { credentialHomes } from "../credential-homes.ts";
 import { normalizeCodexUsage, type ProviderUsage } from "../../shared/provider-usage.ts";
 import {
   type LockRecord,
+  LOCK_RECOVERY_DIR,
   lockUnowned,
   ownershipBriefing,
   reapplyLocks,
   releaseLocks,
   releaseStaleLocks,
 } from "./ownership-locks.ts";
-import { StudioBridge, type BridgeTool } from "./studio-bridge.ts";
+import { StudioBridge, answerBridgeCall, bridgeTools } from "./studio-bridge.ts";
+
+/** The bridge's tool list moved to `studio-bridge.ts`, shared with OpenCode; kept here for importers. */
+export { bridgeTools };
 import {
   type CompleteRequest,
   type CompleteResponse,
@@ -79,12 +83,10 @@ import {
   type EngineAccount,
   type EngineModel,
   type EngineStatus,
-  type LiveToolResult,
   ModelContextSource,
 } from "./types.ts";
 import {
   abortControllerFor,
-  CHECKPOINT_NOTE_CHARS,
   clip,
   COMPLETE_TIMEOUT_MS,
   hasCredentials,
@@ -95,14 +97,7 @@ import {
   STOPPED_BY_USER,
   CompletionStop,
 } from "./common.ts";
-import {
-  CHECKPOINT_TOOL,
-  CODEX_CAPTURE_TOOL,
-  intakeToolReply,
-  StudioTool,
-  studioToolName,
-} from "./studio-tool-prompts.ts";
-import { captureArgs } from "./capture-args.ts";
+import { StudioTool, studioToolName } from "./studio-tool-prompts.ts";
 import { limitResetMs } from "./limit-reset.ts";
 import { JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
@@ -215,12 +210,6 @@ const DEFAULT_MODEL = "default";
 const CREDENTIAL_FILE = "auth.json";
 /** The marker a studio-connected profile leaves in the engine home, signed in or not. */
 const STUDIO_LOGIN_MARKER = "studio-login.json";
-/**
- * The host's ownership-lock records, in a folder beside the engine home and never inside it: any
- * folder in a Codex home reads as a sign-in (`hasCredentials`), and Codex runs with that home. The
- * app keeps its engine homes side by side in one folder no agent may read.
- */
-const LOCK_RECOVERY_DIR = "ownership-locks";
 
 /** A still's file name keeps at most this much of its label. */
 const STILL_NAME_CHARS = 40;
@@ -838,7 +827,7 @@ export class CodexEngine implements Engine {
     return StudioBridge.open({
       cwd: runDir,
       tools,
-      onCall: async (name, args) => this.#handleBridgeCall(name, args, request),
+      onCall: async (name, args) => answerBridgeCall(name, args, request),
     });
   }
 
@@ -1063,30 +1052,6 @@ export class CodexEngine implements Engine {
     // above us. Anything else left real work on disk and reports as an outcome.
     if (classified.kind !== EngineFailureKind.Other) throw classified;
     return partialDelegateResult(this.id, { stopReason: StopReason.Error, errorText: failure }, partialState());
-  }
-
-  /** One bridge call, routed to whichever studio handler this delegation was given. */
-  async #handleBridgeCall(
-    name: string,
-    args: Record<string, unknown>,
-    request: DelegateRequest,
-  ): Promise<LiveToolResult> {
-    if (name === StudioTool.Checkpoint) {
-      const note = String(args.note ?? "").slice(0, CHECKPOINT_NOTE_CHARS);
-      request.onEvent?.({ type: DelegateEventType.Checkpoint, payload: { note } });
-      return CHECKPOINT_TOOL.reply;
-    }
-    if (name === StudioTool.Capture && request.onCapture) {
-      return request.onCapture(captureArgs(args));
-    }
-
-    if (request.onLiveTool && (request.liveTools ?? []).some((tool) => tool.name === name)) {
-      // The file bridge materializes attached images beside its response for Codex to view.
-      return request.onLiveTool(name, args);
-    }
-    // Intake tools only record: the harness executes the real thing once the reply ends.
-    if ((request.interviewTools ?? []).some((tool) => tool.name === name)) return intakeToolReply(name);
-    return `the studio has no tool called '${name}' in this session`;
   }
 
   async #exec(invocation: {
@@ -1445,7 +1410,7 @@ async function writeStills(
 }
 
 /** A builder's stills, in a folder of their own that the caller removes afterwards. */
-async function writeDelegateStills(all: DelegateImage[]): Promise<{ dir: string | null; paths: string[] }> {
+export async function writeDelegateStills(all: DelegateImage[]): Promise<{ dir: string | null; paths: string[] }> {
   const images = all.filter((image) => image?.data);
   if (!images.length) return { dir: null, paths: [] };
   const dir = await mkdtemp(path.join(os.tmpdir(), "studio-stills-"));
@@ -1905,38 +1870,6 @@ async function isRegularFile(file: string): Promise<boolean> {
 /** Each still as an `-i` image argument. */
 function imageArgs(paths: string[]): string[] {
   return paths.flatMap((file) => ["-i", file]);
-}
-
-/** The studio tools this delegation actually grants — the bridge declares exactly these. */
-export function bridgeTools(request: DelegateRequest): BridgeTool[] {
-  const tools: BridgeTool[] = [];
-  if (!request.readOnly) {
-    tools.push({
-      name: StudioTool.Checkpoint,
-      description: CHECKPOINT_TOOL.description,
-      parameters: {
-        type: "object",
-        properties: { note: { type: "string", description: CHECKPOINT_TOOL.note } },
-        required: ["note"],
-      },
-    });
-  }
-  if (request.onCapture) {
-    tools.push({
-      name: StudioTool.Capture,
-      description: CODEX_CAPTURE_TOOL.description,
-      parameters: {
-        type: "object",
-        properties: {
-          cameras: { type: "string", description: CODEX_CAPTURE_TOOL.cameras },
-          page: { type: "string", description: CODEX_CAPTURE_TOOL.page },
-        },
-      },
-    });
-  }
-  if (request.onLiveTool) tools.push(...(request.liveTools ?? []));
-  tools.push(...(request.interviewTools ?? []));
-  return tools;
 }
 
 // ── small shared pieces ────────────────────────────────────────────────────────────────────

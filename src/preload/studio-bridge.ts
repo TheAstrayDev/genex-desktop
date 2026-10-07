@@ -270,6 +270,9 @@ function accountCalls(bridge: BridgeCalls) {
     claudeLoginCode: (code) => invoke("studio:claude-login.code", { code }),
     claudeLoginOpenBrowser: () => invoke("studio:claude-login.browser"),
     claudeLoginCancel: () => invoke("studio:claude-login.cancel"),
+    openCodeSignIn: () => invoke("studio:opencode.signin"),
+    openRouterKeySave: (key) => invoke("studio:openrouter.key.save", { key }),
+    openRouterKeyClear: () => invoke("studio:openrouter.key.clear"),
     onClaudeLogin: (listener) => subscribe("studio:claude-login", listener),
     codexLoginState: () => invoke("studio:codex-login.state"),
     codexLoginCancel: () => invoke("studio:codex-login.cancel"),
@@ -294,6 +297,7 @@ function terminalCalls(bridge: BridgeCalls) {
     terminalAcknowledge: (id, count) => invoke("studio:terminal.ack", { id, count }),
     terminalStop: (id) => invoke("studio:terminal.stop", { id }),
     terminalRemove: (id) => invoke("studio:terminal.remove", { id }),
+    terminalOpenLink: (id) => invoke("studio:terminal.open-link", { id }),
     onTerminal: (listener) => subscribe("studio:terminal", listener),
   } satisfies Partial<StudioApi>;
 }

@@ -713,7 +713,7 @@ export interface ModelCatalogStatus {
 }
 // ↑ src/shared/model-catalog.ts
 
-export type CodingProvider = "codex" | "claude-code";
+export type CodingProvider = "codex" | "claude-code" | "opencode";
 // ↑ src/shared/coding-cli.ts
 
 export interface CodingCliStatus {
@@ -739,8 +739,13 @@ export interface EngineAccount {
 }
 // ↑ src/shared/engine-descriptor.ts
 
-/** How a subscription signs in: Claude through a piped or embedded terminal plus status polling, Codex through its native login reported from the in-app console. */
-export type LoginKind = "terminal" | "console" | "none";
+/**
+ * How a provider signs in: Claude through a piped or embedded terminal plus status polling, Codex
+ * through its native login reported from the in-app console, OpenCode through its own `auth login`
+ * in the embedded terminal (which keeps every provider it signs in to), `none` for an engine with
+ * no sign-in of its own (a local model, or OpenRouter, whose key is pasted in Settings).
+ */
+export type LoginKind = "terminal" | "console" | "cli" | "none";
 // ↑ src/shared/providers.ts
 
 /**
@@ -748,6 +753,15 @@ export type LoginKind = "terminal" | "console" | "none";
  * `shared/model-roles.ts`, `sessions` can cross roles without presets, `single` runs one model.
  */
 export type RoleSupport = "presets" | "sessions" | "single";
+// ↑ src/shared/providers.ts
+
+/**
+ * Who pays for a provider's work: nobody (`local`), a plan the person already has
+ * (`subscription`, throttled server-side, never billed per call), or per token (`metered`). A
+ * choice the app makes on its own — a fallback, a first ready engine — never lands on a metered
+ * provider: only the person's explicit pick spends their credits.
+ */
+export type Billing = "local" | "subscription" | "metered";
 // ↑ src/shared/providers.ts
 
 /** What the sign-in card and the Models room say for a subscription. */
@@ -772,6 +786,7 @@ export interface ProviderInfo {
   readonly subscription: boolean;
   readonly login: LoginKind;
   readonly roles: RoleSupport;
+  readonly billing: Billing;
   /** Subscriptions only. */
   readonly signIn: SignInCopy | null;
 }

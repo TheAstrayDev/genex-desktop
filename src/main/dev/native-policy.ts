@@ -20,6 +20,14 @@ const NATIVE_CHANNELS = [
   "studio:plugins.genex-publish",
   "studio:subscription.signin",
   "studio:subscription.forget-studio-login",
+  // OpenCode's sign-in runs its CLI in a terminal and reaches the provider the person picks.
+  "studio:opencode.signin",
+  // Opens the sign-in page a terminal printed in the person's browser.
+  "studio:terminal.open-link",
+  // Saving checks the key with OpenRouter and writes it to the OS secret store; forgetting it
+  // deletes it there. A fixture profile has no key and no network.
+  "studio:openrouter.key.save",
+  "studio:openrouter.key.clear",
   "studio:codex-login.browser",
   "studio:codex-login.retry",
   "studio:claude-login.browser",

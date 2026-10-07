@@ -63,6 +63,10 @@ import { BonsaiEngine } from "../substrate/engines/bonsai.ts";
 import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
 import { OllamaEngine, OllamaSidecar } from "../substrate/engines/ollama.ts";
+import { OpenCodeEngine } from "../substrate/engines/opencode.ts";
+import { LOCK_RECOVERY_DIR } from "../substrate/engines/ownership-locks.ts";
+import { OpenRouterEngine } from "../substrate/engines/openrouter.ts";
+import { OPENROUTER_KEY_SECRET, secretKeyStore } from "../substrate/provider-keys.ts";
 import { EngineRegistry } from "../substrate/engines/registry.ts";
 import type { Engine, LiveToolResult } from "../substrate/engines/types.ts";
 import { EventStore } from "../substrate/event-store.ts";
@@ -951,8 +955,15 @@ export class StudioCore {
     const engines = this.options.engines ?? this.#defaultEngines();
     for (const engine of engines) this.engines.register(engine);
     // Local first: it is the one engine that cannot be rate limited, which is what makes it
-    // the fallback when a subscription throttles mid-run.
-    this.engines.setPreferredOrder([EngineId.Bonsai, EngineId.Ollama, ...SUBSCRIPTION_ENGINES]);
+    // the fallback when a subscription throttles mid-run. The metered engines come last, and
+    // the registry never picks them on its own anyway (`isMetered`).
+    this.engines.setPreferredOrder([
+      EngineId.Bonsai,
+      EngineId.Ollama,
+      ...SUBSCRIPTION_ENGINES,
+      EngineId.OpenCode,
+      EngineId.OpenRouter,
+    ]);
   }
 
   #defaultEngines(): Engine[] {
@@ -979,6 +990,23 @@ export class StudioCore {
         engineHome: path.join(this.layout.engineHomes, EngineId.Codex),
         protectedPaths: this.#protectedPaths(),
         ...(this.options.codexExecutable ? { executable: this.options.codexExecutable } : {}),
+      }),
+      // Metered: OpenCode on whatever the person signed it in to, OpenRouter on the key pasted in
+      // Settings. Registered like the subscriptions, so the picker can offer them.
+      new OpenCodeEngine({
+        scratchRoot: path.join(this.layout.scratch, EngineId.OpenCode),
+        protectedPaths: this.#protectedPaths(),
+        toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
+        lockRecovery: path.join(this.layout.engineHomes, LOCK_RECOVERY_DIR),
+        onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.OpenCode }),
+      }),
+      new OpenRouterEngine({
+        root: path.join(this.layout.engineHomes, EngineId.OpenRouter),
+        scratchRoot: path.join(this.layout.scratch, EngineId.OpenRouter),
+        protectedPaths: this.#protectedPaths(),
+        toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
+        keys: secretKeyStore(path.join(this.layout.secrets, "providers"), OPENROUTER_KEY_SECRET),
+        onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.OpenRouter }),
       }),
     ];
   }

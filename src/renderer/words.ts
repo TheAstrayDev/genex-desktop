@@ -1457,6 +1457,58 @@ export const MODEL_PICKER_WORDS = {
   signIn: "sign in",
 } as const;
 
+/** Settings → Model Providers: the metered rows, OpenCode and OpenRouter (`panels/MeteredProviders.tsx`). */
+export const METERED_PROVIDER_WORDS = {
+  connected: "Connected",
+  notConnected: "Not connected",
+  notInstalled: "Not installed",
+  installing: "Installing…",
+  updating: "Updating…",
+  checking: "Checking…",
+  signingIn: "Signing in…",
+  saving: "Saving…",
+  couldNotCheck: "Couldn't check",
+  checkAgain: "Check again",
+  tryAgain: "Try again",
+  account: "Account",
+  checkConnection: "Check connection",
+  checkConnectionLine: "Also refreshes the model list",
+  openCode: {
+    name: "OpenCode",
+    guide: "https://opencode.ai/docs/",
+    install: "Install OpenCode",
+    installLine: "Install it to run models from any provider you sign in to.",
+    installingLine: "Installing OpenCode. This can take a minute.",
+    signIn: "Sign in",
+    signInLine: "Sign in to a provider in OpenCode to run its models.",
+    freeOnly: "Free models only",
+    freeOnlyLine: "No provider signed in. OpenCode's free models run without an account.",
+    signingIn: "Choose a provider below and finish signing in. OpenCode keeps the sign-in.",
+    cancelSignIn: "Cancel",
+    openSignInPage: "Open sign-in page",
+    addProvider: "Sign in to another provider…",
+    addProviderLine: "OpenCode keeps each sign-in",
+    update: "Update OpenCode",
+    connectedLine: "Billed by each provider you use",
+    unreachable: "OpenCode didn't answer. Check the installation, then try again.",
+  },
+  openRouter: {
+    name: "OpenRouter",
+    keysUrl: "https://openrouter.ai/settings/keys",
+    keyLabel: "OpenRouter API key",
+    keyPlaceholder: "sk-or-…",
+    save: "Save key",
+    getKey: "Get a key",
+    notConnectedLine: "Paste an API key. Requests are billed to your OpenRouter credits.",
+    connectedLine: "Billed to your OpenRouter credits",
+    refused: "OpenRouter didn't accept that key. Check it and paste it again.",
+    replace: "Replace key…",
+    replaceLine: "The new key is checked before it's saved",
+    remove: "Remove key",
+    cancel: "Cancel",
+  },
+} as const;
+
 /** Settings → Model Providers: which models the picker lists (`panels/PickerModels.tsx`). */
 export const PICKER_MODELS_WORDS = {
   title: "Show in the model picker",
@@ -1466,6 +1518,9 @@ export const PICKER_MODELS_WORDS = {
   olderShown: (shown: number, total: number) => (shown ? `${shown} of ${total} shown` : String(total)),
   defaultModel: "Default",
   alwaysShown: "The default model is always in the picker",
+  search: "Search models",
+  searchLabel: (provider: string) => `Search ${provider} models`,
+  noMatch: (query: string) => `No models match “${query.trim()}”`,
 } as const;
 
 // ── notifications ─────────────────────────────────────────────────────────────────────────

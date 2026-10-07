@@ -9,7 +9,7 @@
 import type { Engine, EngineError, EngineModel } from "./types.ts";
 import { EngineKind, EngineStatusCode, type EngineDescriptor } from "../../shared/engine-descriptor.ts";
 import { EngineFailureKind } from "../../shared/engine-requests.ts";
-import { providerInfo } from "../../shared/providers.ts";
+import { isMetered, providerInfo } from "../../shared/providers.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 
 /** What the UI reads about an engine is a contract; it lives in `shared/engine-descriptor.ts`. */
@@ -53,11 +53,14 @@ export class EngineRegistry {
     }
   }
 
-  /** The engines in preference order that pass `keep`, each asked whether it is ready, side by side. */
+  /**
+   * The engines in preference order that pass `keep`, each asked whether it is ready, side by side.
+   * A metered engine is never among them: a choice the app makes on its own never spends credits.
+   */
   async #readyInOrder(keep: (engine: Engine) => boolean): Promise<Engine[]> {
     const engines = this.#preferredOrder
       .map((id) => this.#engines.get(id))
-      .filter((engine): engine is Engine => Boolean(engine) && keep(engine as Engine));
+      .filter((engine): engine is Engine => Boolean(engine) && !isMetered(engine?.id) && keep(engine as Engine));
     const ready = await Promise.all(engines.map((engine) => this.#readyWithin(engine)));
     return engines.filter((_, index) => ready[index]);
   }

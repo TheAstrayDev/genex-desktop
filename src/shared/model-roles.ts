@@ -64,9 +64,12 @@ export function isDelegated(engine: string | null | undefined): boolean {
   return engine === EngineId.ClaudeCode || engine === EngineId.Codex;
 }
 
-/** Session engines: the delegated ones and Bonsai, which can cross roles too. */
+/** Session engines that are not delegated presets: they hold a session and can cross roles too. */
+const SESSION_ENGINES: readonly string[] = [EngineId.Bonsai, EngineId.OpenCode, EngineId.OpenRouter];
+
+/** Session engines: the delegated ones, and the others that hold a session (`SESSION_ENGINES`). */
 export function hasSessionRoles(engine: string | null | undefined): boolean {
-  return isDelegated(engine) || engine === EngineId.Bonsai;
+  return isDelegated(engine) || SESSION_ENGINES.includes(engine as string);
 }
 
 /** The catalog for a session provider, or `[]` for a completion-only engine. */
