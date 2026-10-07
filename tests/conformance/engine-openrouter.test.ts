@@ -46,7 +46,7 @@ describe("OpenRouter's catalog", () => {
       "a model without tool calling cannot run the studio's loop",
     );
     const [sonnet, qwen] = rows;
-    assert.equal(sonnet?.label, "Anthropic: Claude Sonnet 4.5");
+    assert.equal(sonnet?.label, "Claude Sonnet 4.5", "the model's name, without OpenRouter's vendor prefix");
     assert.equal(sonnet?.contextWindow, 200_000);
     assert.equal(sonnet?.maxTokens, 32_768, "the reply cap is the studio's, under the provider's own");
     assert.equal(sonnet?.supportsVision, true);
@@ -57,6 +57,15 @@ describe("OpenRouter's catalog", () => {
     assert.equal(qwen?.supportsVision, false);
     assert.equal(qwen?.efforts, undefined, "a model that does not think has no dial");
     assert.equal(qwen?.note, "Free");
+  });
+
+  it("names a model without its vendor, and keeps a name that has none", () => {
+    const named = (name: string) =>
+      openRouterModels({ data: [{ id: "v/m", name, supported_parameters: ["tools"] }] })[0]?.label;
+    assert.equal(named("OpenAI: GPT-6.1 Sol"), "GPT-6.1 Sol");
+    assert.equal(named("Google: Gemini 3.1 Pro: Preview"), "Gemini 3.1 Pro: Preview", "only the vendor goes");
+    assert.equal(named("Grok 4"), "Grok 4");
+    assert.equal(named("Weird:"), "Weird:", "a name that would be left empty stays whole");
   });
 
   it("leaves out models that answer with images or audio, though they call tools", () => {

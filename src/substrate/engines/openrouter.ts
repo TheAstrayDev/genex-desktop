@@ -133,6 +133,16 @@ const positive = (value: unknown): number | undefined =>
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
+/** OpenRouter's "Vendor: " before a model's name; the picker already groups models by provider. */
+const VENDOR_PREFIX = /^[^:]+:\s+/;
+
+/** A model's name without its vendor ("OpenAI: GPT-6.1 Sol" → "GPT-6.1 Sol"); the id when it has none. */
+function modelLabel(entry: CatalogEntry, id: string): string {
+  const name = typeof entry.name === "string" ? entry.name.trim() : "";
+  if (!name) return id;
+  return name.replace(VENDOR_PREFIX, "") || name;
+}
+
 /** The one output a build reads back: a model that answers with images or audio is no coding model. */
 const TEXT_OUTPUT = "text";
 
@@ -158,7 +168,7 @@ export function openRouterModel(entry: CatalogEntry): EngineModel | null {
   const output = perMillion(entry.pricing?.completion) ?? 0;
   const row: EngineModel = {
     id: entry.id,
-    label: typeof entry.name === "string" && entry.name ? entry.name : entry.id,
+    label: modelLabel(entry, entry.id),
     contextWindow,
     contextSource: positive(entry.context_length) ? ModelContextSource.Catalog : ModelContextSource.Unknown,
     maxTokens,
