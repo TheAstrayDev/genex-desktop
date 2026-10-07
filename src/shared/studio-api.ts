@@ -313,6 +313,8 @@ export interface StudioApi {
   }): Promise<StudioSettingsView>;
   /** Settings → Copy diagnostics: versions, provider status and the recent log, already redacted. */
   diagnostics(): Promise<string>;
+  /** Send feedback (the sidebar's bug button): posts the report to genex.games; throws when it was not taken. */
+  sendFeedback(draft: import("./feedback.ts").FeedbackDraft): Promise<void>;
   /** Settings → Licenses: Genex's MIT license and the third-party notices this build ships. */
   licenses(): Promise<import("./licenses.ts").LicenseTexts>;
   /** Settings → Privacy: whether Share build metrics is on, paused or offered at all. */

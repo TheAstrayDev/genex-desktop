@@ -89,6 +89,7 @@ import { RELEASE_CHECK_INTERVAL_MS, latestRelease } from "./release-check.ts";
 import { UpdateAction } from "../shared/app-update.ts";
 import { gatedHostTool } from "./core/genex-cli.ts";
 import { diagnosticsText, gatherDiagnostics } from "./diagnostics.ts";
+import { type FeedbackSources, sendFeedback } from "./feedback.ts";
 import { renderGameCover } from "./game-cover-renderer.ts";
 import { createIpcHandle, pushToRenderer } from "./ipc-handle.ts";
 import { registerBootIpc } from "./ipc/boot.ts";
@@ -1042,6 +1043,18 @@ async function diagnosticsReport(studio: StudioCore): Promise<string> {
   );
 }
 
+/** Send feedback's report: this build and OS, the diagnostics report and the open chat's newest events. */
+function feedbackSources(studio: StudioCore): FeedbackSources {
+  return {
+    app: { version: app.getVersion(), packaged: app.isPackaged },
+    os: { platform: process.platform, release: os.release(), arch: process.arch },
+    home: app.getPath("home"),
+    diagnostics: () => diagnosticsReport(studio),
+    chatEvents: (threadId, count) => studio.store.listEvents(threadId, { limit: count, tail: true }),
+    fetch,
+  };
+}
+
 /** Every IPC channel, registered once per launch by its domain's registrar in `./ipc/`. */
 function registerIpc(studio: StudioCore): void {
   const handle = createIpcHandle(ipcMain, {
@@ -1086,6 +1099,7 @@ function registerIpc(studio: StudioCore): void {
   registerSettingsIpc(handle, {
     core: studio,
     diagnostics: () => diagnosticsReport(studio),
+    feedback: (payload) => sendFeedback(payload, feedbackSources(studio)),
     licenses: () => readLicenseTexts(resources),
   });
   registerRunSharingIpc(handle, { sharing: runSharing });

@@ -1549,6 +1549,22 @@ export const UPDATE_WORDS = {
   downloadHint: "Opens the release page",
 } as const;
 
+/** Send feedback, from the bug button at the top of the sidebar (`panels/FeedbackDialog.tsx`). */
+export const FEEDBACK_WORDS = {
+  title: "Send feedback",
+  field: "Feedback",
+  placeholder: "What happened, and what did you expect?",
+  appLogs: "Attach app logs",
+  appLogsDetail: "Versions, provider status and the app's recent log, with keys and emails removed.",
+  /** The chat switch, shown only while a chat is open: its game's title, or Harness. */
+  chat: "Attach this chat",
+  chatDetail: (chat: string) => `Recent activity in ${chat}, with keys and emails removed.`,
+  send: "Send",
+  sending: "Sending…",
+  sent: "Feedback sent. Thank you.",
+  failed: "Unable to send feedback. Try again in a moment.",
+} as const;
+
 /** Settings → About: the running version and Check for Updates (`panels/AboutSection.tsx`). */
 export const ABOUT_WORDS = {
   tab: "About",

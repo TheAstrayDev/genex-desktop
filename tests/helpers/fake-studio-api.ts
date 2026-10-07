@@ -97,6 +97,7 @@ const METHODS = [
   "settings",
   "setSettings",
   "diagnostics",
+  "sendFeedback",
   "licenses",
   "recheckEngines",
   "subscriptionSignIn",

@@ -47,6 +47,8 @@ const NATIVE_CHANNELS = [
   "studio:cli.update",
   // Delete what I shared asks the Genex API to remove this install's rows: the network.
   "studio:run-sharing.delete",
+  // Send feedback posts the report to genex.games: the network.
+  "studio:feedback.send",
   "studio:cancel-model-download",
   "studio:export",
   // The one channel that opens the network: "Install packages" runs the folder's own

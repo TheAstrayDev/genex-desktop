@@ -66,6 +66,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:settings": "settings",
   "studio:settings.set": "setSettings",
   "studio:diagnostics": "diagnostics",
+  "studio:feedback.send": "sendFeedback",
   "studio:licenses": "licenses",
   "studio:run-sharing.status": "runSharingStatus",
   "studio:run-sharing.set": "setRunSharing",
@@ -244,6 +245,7 @@ export interface StudioInvokePayloads {
   "studio:settings": undefined;
   "studio:settings.set": Arg<"setSettings", 0>;
   "studio:diagnostics": undefined;
+  "studio:feedback.send": Arg<"sendFeedback", 0>;
   "studio:licenses": undefined;
   "studio:run-sharing.status": undefined;
   "studio:run-sharing.set": { on: Arg<"setRunSharing", 0> };

@@ -1,6 +1,6 @@
 # Desktop data and privacy
 
-Updated October 2, 2026. Contact: **team@genex.games**. This describes the desktop
+Updated October 7, 2026. Contact: **team@genex.games**. This describes the desktop
 application. Connected providers, plugins and the hosted Genex service have separate policies.
 
 ## Local storage
@@ -105,4 +105,21 @@ send. A self-built copy can point sharing at its own server with `STUDIO_RUNS_UR
 by setting that variable empty.
 
 The bundled Genex CLI's crash reporting defaults off. Coding providers have separate controls.
+
+## Send feedback
+
+**Send feedback** (the bug at the top of the sidebar) sends only when you press Send. It carries
+what you wrote, the screen you were on (home, a game's chat, Harness or Plugins), the app version
+and the operating system's version to the Genex API (`https://api.genex.games/api/feedback`),
+where the Genex team reads it. It carries no account id or game files and is sent without a
+sign-in.
+
+Two switches add more, each on its own and off each time the dialog opens. **Attach app logs**
+adds the Copy diagnostics text: versions, data paths, provider status and the newest 100 lines
+of the app log. **Attach this chat**, shown while a chat is open, adds that chat's newest 200
+events: your messages, the replies, tool calls and their results, each text cut to 2,000
+characters, at most 256 KB in all. Keys, tokens, email addresses and your home folder are
+removed by their shape before it leaves the Mac; like Publication's scan, this is not a
+universal detector, so leave a chat that holds something private off.
+
 Report suspected exposure privately using [SECURITY.md](SECURITY.md).

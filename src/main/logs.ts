@@ -34,7 +34,10 @@ function homePattern(home: string): RegExp | null {
 }
 
 function scrubWithPattern(text: string, pattern: RegExp | null): string {
-  const out = redactSecrets(text).replace(EMAIL, "[email]");
+  const redacted = redactSecrets(text);
+  // The email pattern retries from every letter of a long word (a base64 image takes seconds);
+  // text without an @ holds no address to find.
+  const out = redacted.includes("@") ? redacted.replace(EMAIL, "[email]") : redacted;
   return pattern ? out.replace(pattern, "~") : out;
 }
 
