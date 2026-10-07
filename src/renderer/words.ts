@@ -1518,6 +1518,9 @@ export const PICKER_MODELS_WORDS = {
   olderShown: (shown: number, total: number) => (shown ? `${shown} of ${total} shown` : String(total)),
   defaultModel: "Default",
   alwaysShown: "The default model is always in the picker",
+  search: "Search models",
+  searchLabel: (provider: string) => `Search ${provider} models`,
+  noMatch: (query: string) => `No models match “${query.trim()}”`,
 } as const;
 
 // ── notifications ─────────────────────────────────────────────────────────────────────────
