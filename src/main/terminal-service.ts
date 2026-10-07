@@ -6,6 +6,7 @@ import {
   terminalSize,
   type TerminalEvent,
   type TerminalSession,
+  revealsDock,
 } from "../shared/terminal.ts";
 import { commandOutput, keepTail } from "./terminal-command.ts";
 
@@ -103,7 +104,7 @@ export class TerminalService {
     // A second command would take the first one's place in the chat that offered it.
     if (existing && launch.kind === TerminalKind.Command) throw new Error(MESSAGE.commandRunning);
     if (existing) {
-      this.emit({ type: "session", session: { ...existing.state }, reveal: true });
+      this.emit({ type: "session", session: { ...existing.state }, reveal: revealsDock(launch.kind) });
       return { ...existing.state };
     }
     this.#makeRoom();
@@ -141,8 +142,9 @@ export class TerminalService {
       const expected = state.phase === "stopping" || state.phase === "exited";
       this.#finish(entry, code || 1, expected ? undefined : MESSAGE.endedUnexpectedly);
     });
-    // A command a reply offered shows its output in the chat; the dock opens only when asked.
-    this.#state(entry, launch.kind !== TerminalKind.Command);
+    // A command a reply offered shows its output in the chat, a Settings sign-in in Settings; the
+    // dock opens for them only when asked.
+    this.#state(entry, revealsDock(launch.kind));
     return { ...state };
   }
   /** The live session of this kind for this project, if one is open. */

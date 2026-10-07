@@ -4,7 +4,15 @@ import { describe, it } from "node:test";
 import { TerminalFlow } from "../../src/main/terminal-flow.ts";
 import { TerminalService, type TerminalHost } from "../../src/main/terminal-service.ts";
 import { LoginTerminalOutput } from "../../src/main/terminal-login-output.ts";
-import { TERMINAL_LIMITS, terminalSize, type TerminalEvent } from "../../src/shared/terminal.ts";
+import {
+  inDock,
+  liveSignIn,
+  TERMINAL_LIMITS,
+  TerminalKind,
+  terminalSize,
+  type TerminalEvent,
+  type TerminalSession,
+} from "../../src/shared/terminal.ts";
 import { commandShell, terminalShell } from "../../src/main/terminal-shell.ts";
 
 describe("the shell a game's terminal opens", () => {
@@ -249,5 +257,45 @@ describe("a command a chat reply offered", () => {
     } finally {
       await manager.dispose();
     }
+  });
+});
+
+describe("OpenCode's sign-in terminal", () => {
+  const signIn = { ...launch, args: ["auth", "login"], kind: TerminalKind.OpenCodeLogin, project: undefined };
+  it("opens in Settings, never popping up the dock, even when asked again while it runs", async () => {
+    const { manager, events } = service();
+    try {
+      const first = manager.open(signIn);
+      const again = manager.open(signIn);
+      assert.equal(again.id, first.id, "one sign-in at a time");
+      const shown = events.filter((event) => event.type === "session");
+      assert.ok(shown.length >= 2);
+      assert.ok(
+        shown.every((event) => event.type === "session" && !event.reveal),
+        "Settings shows it; the dock would close Settings",
+      );
+    } finally {
+      await manager.dispose();
+    }
+  });
+
+  it("is left out of the dock, and is the sign-in Settings shows while it runs", () => {
+    const session = (kind: TerminalKind, phase: TerminalSession["phase"]): TerminalSession => ({
+      id: `${kind}-${phase}`,
+      title: kind,
+      kind,
+      phase,
+    });
+    const sessions = [
+      session(TerminalKind.Shell, "running"),
+      session(TerminalKind.OpenCodeLogin, "exited"),
+      session(TerminalKind.OpenCodeLogin, "running"),
+    ];
+    assert.deepEqual(
+      sessions.filter(inDock).map((each) => each.kind),
+      [TerminalKind.Shell],
+    );
+    assert.equal(liveSignIn(sessions, TerminalKind.OpenCodeLogin)?.id, "opencode-login-running");
+    assert.equal(liveSignIn(sessions.slice(0, 2), TerminalKind.OpenCodeLogin), undefined, "a finished one is over");
   });
 });

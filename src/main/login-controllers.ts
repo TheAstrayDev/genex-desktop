@@ -128,9 +128,9 @@ export function createLoginControllers({
 }
 
 /**
- * OpenCode's sign-in: its own `opencode auth login`, in the terminal dock, for any of the providers
- * it supports. OpenCode keeps what it is given in its own store; the studio rereads the models
- * OpenCode can run once the terminal closes.
+ * OpenCode's sign-in: its own `opencode auth login`, in a terminal in its Settings row, for any
+ * of the providers it supports. OpenCode keeps what it is given in its own store; the studio
+ * rereads the models OpenCode can run once the terminal closes.
  */
 export interface OpenCodeLogin {
   start(): Promise<{ started: boolean; missingCli?: boolean }>;

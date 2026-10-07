@@ -6,9 +6,10 @@
  * straight to main, which checks it with OpenRouter and keeps it in the OS secret store; it is
  * never shown again, and the field forgets it the moment it is sent.
  */
-import { type JSX, useEffect, useState } from "react";
+import { type JSX, lazy, Suspense, useState } from "react";
 import { type EngineStatus, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { TerminalKind, type TerminalSession } from "../../shared/terminal.ts";
 import { useCliInstall } from "../cli-install.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
@@ -20,13 +21,15 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu.tsx";
 import { Icon } from "../ui/icons.tsx";
+import { Pending } from "../ui/Pending.tsx";
 import { METERED_PROVIDER_WORDS, problemWords } from "../words.ts";
 import { OpenCodeRowState, openCodeRowState } from "./opencode-row.ts";
 import { PickerModels } from "./PickerModels.tsx";
 import { type ProviderWords, RowHeading, RowTone, type RowView } from "./provider-row.tsx";
-import { SHOW_TERMINAL_EVENT } from "./terminal-events.ts";
+import { useSignInTerminal } from "./use-sign-in-terminal.ts";
 
 const WORDS = METERED_PROVIDER_WORDS;
+const TerminalView = lazy(() => import("./TerminalView.tsx"));
 
 /** What the metered rows need: the engines, and a way to read them again. */
 export type MeteredProviderProps = { engines: EngineDescriptor[]; onEnginesRefresh: () => Promise<void> | void };
@@ -139,8 +142,14 @@ function useRecheck(engineId: string, onEnginesRefresh: () => Promise<void> | vo
 
 const OPEN_CODE_WORDS: ProviderWords = { name: WORDS.openCode.name, plans: "", guide: WORDS.openCode.guide };
 
-/** What OpenCode's row can do: install, recheck, sign in to a provider, update. */
-type OpenCodeActions = { install: () => void; recheck: () => void; signIn: () => void; update: () => void };
+/** What OpenCode's row can do: install, recheck, sign in to a provider or stop signing in, update. */
+type OpenCodeActions = {
+  install: () => void;
+  recheck: () => void;
+  signIn: () => void;
+  cancelSignIn: () => void;
+  update: () => void;
+};
 
 /** OpenCode's row by its state: installing, missing, signing in, free models only, connected or unreachable. */
 function openCodeView(state: OpenCodeRowState, act: OpenCodeActions): RowView {
@@ -188,21 +197,25 @@ function openCodeView(state: OpenCodeRowState, act: OpenCodeActions): RowView {
   }
 }
 
-/** OpenCode's own sign-in runs in the terminal: where to finish it. */
+/** OpenCode's own sign-in runs in the row's terminal, below: finish it there, or stop it. */
 function openCodeSigningInView(act: OpenCodeActions): RowView {
   return {
     tone: RowTone.Busy,
     status: WORDS.signingIn,
     line: WORDS.openCode.signingIn,
-    actions: (
-      <>
-        <Button onClick={() => window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT))}>
-          {WORDS.openCode.showTerminal}
-        </Button>
-        <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
-      </>
-    ),
+    actions: <Button onClick={act.cancelSignIn}>{WORDS.openCode.cancelSignIn}</Button>,
   };
+}
+
+/** The sign-in's terminal inside the row, so Settings stays open while OpenCode asks its questions. */
+function SignInTerminal({ session, onError }: { session: TerminalSession; onError: (error: string) => void }) {
+  return (
+    <div data-keeps-escape data-sign-in-terminal className="h-72 min-h-0 overflow-hidden rounded-lg border border-line">
+      <Suspense fallback={<Pending label={WORDS.signingIn} className="px-3 text-xs" />}>
+        <TerminalView session={session} visible onError={onError} />
+      </Suspense>
+    </div>
+  );
 }
 
 /** No provider signed in: OpenCode's free models run, and Sign in comes first. */
@@ -250,25 +263,25 @@ function OpenCodeRow({
   const install = useCliInstall(EngineId.OpenCode);
   const { run, error } = useRun();
   const { checking, recheck } = useRecheck(EngineId.OpenCode, onEnginesRefresh);
-  const [signingIn, setSigningIn] = useState(false);
+  // The sign-in runs in this row's terminal; when it exits, the host rechecks OpenCode's models.
+  const terminal = useSignInTerminal(TerminalKind.OpenCodeLogin);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
   const ready = engine.status.code === EngineStatusCode.Ready;
-  const state = openCodeRowState(engine, { installing: install.installing, signingIn });
-  const signedIn = state === OpenCodeRowState.Connected;
-  // A sign-in is over once OpenCode lists a provider's models: the terminal's exit rechecks them.
-  useEffect(() => {
-    if (signedIn) setSigningIn(false);
-  }, [signedIn]);
+  const state = openCodeRowState(engine, { installing: install.installing, signingIn: Boolean(terminal) });
   const signIn = (): void =>
     void run(async () => {
+      setTerminalError(null);
       const started = await window.studio.openCodeSignIn();
-      if (!started.started) return recheck();
-      setSigningIn(true);
-      window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT));
+      if (!started.started) await recheck();
     });
+  const cancelSignIn = (): void => {
+    if (terminal) void run(() => window.studio.terminalStop(terminal.id));
+  };
   const view = openCodeView(state, {
     install: () => void install.install(),
     recheck: () => void run(recheck),
     signIn,
+    cancelSignIn,
     update: () => void install.update(),
   });
   return (
@@ -278,8 +291,10 @@ function OpenCodeRow({
       view={view}
       checking={checking}
       connected={ready && !install.installing}
-      problem={error ?? install.problem}
-    />
+      problem={error ?? terminalError ?? install.problem}
+    >
+      {terminal && <SignInTerminal session={terminal} onError={setTerminalError} />}
+    </ProviderCard>
   );
 }
 
