@@ -28,11 +28,8 @@ interface Lineage {
 
 /** The id that means "whatever the CLI is set to"; it is no model of its own. */
 const DEFAULT_MODEL = "default";
-/**
- * Catalogs too long to list whole, and how many of their first models the picker lists: three
- * rows each, OpenCode's default row counted among its three.
- */
-const FIRST_FEW: Partial<Record<string, number>> = { [EngineId.OpenRouter]: 3, [EngineId.OpenCode]: 2 };
+/** Catalogs too long to list whole, and how many of their first models the picker lists. */
+const FIRST_FEW: Partial<Record<string, number>> = { [EngineId.OpenRouter]: 3, [EngineId.OpenCode]: 3 };
 
 /** `claude-opus-5-5`, `claude-opus-5`, `claude-haiku-4-5-20251001`. */
 const CLAUDE_ID = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/;

@@ -359,14 +359,15 @@ test("metered engines sit in groups of their own, never among local models, and 
   );
   const openCode = choices.filter((choice) => choice.key.startsWith("opencode::"));
   assert.ok(openCode.every((choice) => choice.group === "OpenCode"));
-  assert.ok(
-    openCode.some((choice) => choice.key === "opencode::default"),
-    "OpenCode runs its own default model",
+  assert.equal(
+    openCode.find((choice) => choice.key === "opencode::default")?.hidden,
+    true,
+    "OpenCode's own default is never offered, though a pick saved on it still resolves",
   );
   assert.equal(
     openCode.filter((choice) => !choice.hidden).length,
     3,
-    "OpenCode's default and its first two, until Settings says more",
+    "OpenCode's first three models, until Settings says more",
   );
 
   const signedOut = toChoices([{ ...metered[0]!, status: { code: "needs_login", detail: "no key" }, models: [] }]);
@@ -402,10 +403,10 @@ test("OpenCode on a ChatGPT plan lists the GPT models Codex says the plan runs, 
     toChoices(all)
       .filter((choice) => choice.key.startsWith("opencode::") && !choice.hidden)
       .map((choice) => choice.key);
-  assert.deepEqual(listed(engines), ["opencode::default", "opencode::openai/gpt-6-luna"]);
+  assert.deepEqual(listed(engines), ["opencode::openai/gpt-6-luna"]);
   assert.deepEqual(
     listed([{ ...engines[0]!, status: { code: "needs_login", detail: "" } }, engines[1]!]),
-    ["opencode::default", "opencode::openai/gpt-6-luna", "opencode::openai/gpt-6.1-sol"],
+    ["opencode::openai/gpt-6-luna", "opencode::openai/gpt-6.1-sol"],
     "without a Codex sign-in to ask, the newest are listed too",
   );
 });

@@ -6,21 +6,20 @@ The model button opens Main agent, Workers and Reviewers, grouped by provider; A
 opens setup. Blocked plans keep the request and offer model settings or retry. Fast mode is hidden.
 
 Claude Code and Codex discover models without generating. The list names each family's newest
-model of the newest generation; older ones switch on in Settings; a model
-in use stays listed. An unset pick shows and runs the provider's named default, else a default row.
-Aliases follow the CLI; explicit versions stay pinned.
+model of the newest generation; older ones switch on in Settings; a model in use stays listed.
+An unset pick runs the CLI's named default, else a default row. Aliases follow the CLI;
+versions stay pinned. OpenRouter and OpenCode show three, newest first, no default.
 
 Settings shows CLI versions; connected rows list picker models; Account rechecks
 (refreshing models) or updates the CLI. Failed refreshes offer Try again, keeping names stale. Unavailable picks block sends; without models, Connect AI model replaces the
 model pill. New models may need a CLI update; listing does not prove access.
 
 Each chat keeps its model, effort and Loop; fresh games inherit the last picks. One effort
-serves every role: the slider offers the main agent's levels and others use their closest level.
-Workers and Reviewers run only in Loop. A new main-agent model keeps worker/reviewer picks.
+serves every role: the slider offers the main agent's levels; others use their closest.
+Workers and Reviewers run only in Loop; a new main-agent model keeps their picks.
 
-Local Models (Bonsai/Ollama) downloads and deletes. Metered OpenCode and OpenRouter (Keychain key) get
-groups of their own and are never chosen automatically
-([details](../connections-and-context.md#openrouter-and-opencode)).
+Local Models (Bonsai/Ollama) downloads and deletes. Metered OpenCode and OpenRouter get their own
+groups and are never auto-chosen ([details](../connections-and-context.md#openrouter-and-opencode)).
 
 ## What the model knows
 

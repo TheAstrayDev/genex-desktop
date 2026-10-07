@@ -105,7 +105,9 @@ function subscriptionModelChoices(
   const concrete = engine.models.filter((model) => model.id !== DEFAULT_MODEL);
   const listed = concrete.some((model) => model.providerDefault) ? concrete : [defaultRow(engine), ...concrete];
   const shown = shownModels(engine.id, concrete, picker, runnable);
-  return listed.map((model) => subscriptionChoice(engine, model, model.id === DEFAULT_MODEL || shown.has(model.id)));
+  const offersDefault = !UNOFFERED_DEFAULT.has(engine.id);
+  const listedNow = (model: EngineModel) => (model.id === DEFAULT_MODEL ? offersDefault : shown.has(model.id));
+  return listed.map((model) => subscriptionChoice(engine, model, listedNow(model)));
 }
 
 /**
@@ -116,6 +118,13 @@ function apiModelChoices(engine: EngineDescriptor, picker: PickerChoices[string]
   const shown = shownModels(engine.id, engine.models, picker);
   return engine.models.map((model) => subscriptionChoice(engine, model, shown.has(model.id)));
 }
+
+/**
+ * Engines whose own CLI default the picker never offers: OpenCode's default can be a model its
+ * sign-in cannot run (a free model, or a GPT a ChatGPT plan refuses). The row stays a hidden
+ * choice, so a pick saved on it still resolves.
+ */
+const UNOFFERED_DEFAULT: ReadonlySet<string> = new Set([EngineId.OpenCode]);
 
 /** The provider-default row: the catalog's own, else one made for it. */
 function defaultRow(engine: EngineDescriptor): EngineModel {
