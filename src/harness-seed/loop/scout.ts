@@ -1,11 +1,9 @@
 /**
- * The scout — the look before the plan (computer use, 2026-09-07).
+ * The scout — the look before the plan.
  *
- * The 2026-09-06 skate-prod run planned six parallel facets from the brief alone, and every
- * one of them built and judged the wrong map: the game boots into "Downtown Block", the brief
- * was about the MACBA plaza behind a map picker, and nothing in the harness had ever opened
- * the game. The planner's own assumptions said so ("existing files … have not been
- * independently inspected here").
+ * A plan made from the brief alone can send every facet to build and judge the wrong map: a game
+ * that boots into one map while the brief is about another behind a map picker, and nothing in
+ * the harness has opened the game.
  *
  * So before decomposition a read-only session with the computer tool opens the build, plays
  * to the place the brief is about, reads what it needs, and answers three questions the
@@ -49,6 +47,8 @@ export interface ScoutSetup {
   gesture?: boolean | { x?: number; y?: number; keys?: string[] };
   verify?: { path: string; equals?: unknown; truthy?: boolean };
   note?: string;
+  /** `false` keeps the game's own title, menu or countdown on screen: the worker that builds them is judged on them. */
+  begin?: boolean;
 }
 
 /** What the scout saw and advises, as the run keeps it. */
@@ -203,7 +203,9 @@ export function normalizeScoutSetup(raw: AnyRecord | null | undefined): ScoutSet
   const verify = setupVerify(raw.verify);
   if (verify) setup.verify = verify;
   if (typeof raw.note === "string" && raw.note.trim()) setup.note = clip(raw.note.trim(), CLIP_REASON);
-  const setsSomethingUp = setup.actions || setup.demo || setup.verify || setup.gesture;
+  if (typeof raw.begin === "boolean") setup.begin = raw.begin;
+  // `begin: false` alone is a setup: the front-end's own worker opens on the title, not past it.
+  const setsSomethingUp = setup.actions || setup.demo || setup.verify || setup.gesture || setup.begin === false;
   return setsSomethingUp ? setup : null;
 }
 

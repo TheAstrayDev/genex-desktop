@@ -412,7 +412,7 @@ export class LocalSessions {
     run.summary = response.message.content;
     addUsage(run.usage, response.usage);
     if (response.stopReason === StopReason.Length) return this.#repairTruncatedReply(run);
-    // The allowance is for cuts in a row: a whole reply between them starts it again (P04-F5).
+    // The allowance is for cuts in a row: a whole reply between them starts it again.
     run.outputRepairs = 0;
     const { reasoning: _reasoning, ...assistantMessage } = response.message;
     run.messages.push(assistantMessage);

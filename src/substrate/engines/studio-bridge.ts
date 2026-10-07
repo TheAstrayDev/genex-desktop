@@ -26,6 +26,7 @@ import type { DelegateRequest, LiveToolResult } from "./types.ts";
 import { DelegateEventType } from "./types.ts";
 import { CHECKPOINT_NOTE_CHARS } from "./common.ts";
 import { CHECKPOINT_TOOL, CODEX_CAPTURE_TOOL, intakeToolReply, StudioTool } from "./studio-tool-prompts.ts";
+import { captureArgs } from "./capture-args.ts";
 import { openNoFollow, readRegularFile } from "../fsx.ts";
 import { schemaType } from "./tool-schema.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -524,7 +525,10 @@ export function bridgeTools(request: DelegateRequest): BridgeTool[] {
       description: CODEX_CAPTURE_TOOL.description,
       parameters: {
         type: "object",
-        properties: { cameras: { type: "string", description: CODEX_CAPTURE_TOOL.cameras } },
+        properties: {
+          cameras: { type: "string", description: CODEX_CAPTURE_TOOL.cameras },
+          page: { type: "string", description: CODEX_CAPTURE_TOOL.page },
+        },
       },
     });
   }
@@ -545,7 +549,7 @@ export async function answerBridgeCall(
     return CHECKPOINT_TOOL.reply;
   }
   if (name === StudioTool.Capture && request.onCapture) {
-    return request.onCapture({ ...(args.cameras ? { cameras: String(args.cameras) } : {}) });
+    return request.onCapture(captureArgs(args));
   }
   if (request.onLiveTool && (request.liveTools ?? []).some((tool) => tool.name === name)) {
     // The file bridge materializes attached images beside its response for the session to view.

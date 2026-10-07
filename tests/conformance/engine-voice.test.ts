@@ -1,7 +1,7 @@
 /**
  * One engine voice (M4.8b).
  *
- * The studio runs a night on somebody's own subscription, and the two engines it hires spell a
+ * The studio runs a run on somebody's own subscription, and the two engines it hires spell a
  * tool call differently: Claude Code receives the studio's tools as MCP tools and calls them by
  * name, Codex has no tool channel at all and runs a bridge script the studio writes into the
  * workspace. That difference is the ONLY thing in the whole harness that branches on the engine
@@ -241,8 +241,8 @@ describe("one engine voice", () => {
 });
 
 /**
- * Two subscriptions in one night (cross-provider roles): a worker's brief is read by the
- * workers' engine, the director's by its own. On a night planned on Claude Code and built on
+ * Two subscriptions in one run (cross-provider roles): a worker's brief is read by the
+ * workers' engine, the director's by its own. On a run planned on Claude Code and built on
  * Codex the worker briefs must spell the bridge and the director's brief the MCP names — the
  * same rule as above, now with two engines on one run.
  */
@@ -287,7 +287,7 @@ describe("one engine voice on a run with two engines", () => {
       } as never),
     ];
     for (const brief of forWorkers) {
-      assert.ok(brief.includes(BRIDGE_TOOL_CMD), "a Codex worker on a Claude-planned night reads the bridge");
+      assert.ok(brief.includes(BRIDGE_TOOL_CMD), "a Codex worker on a Claude-planned run reads the bridge");
       assert.equal(brief.includes("mcp__studio__"), false, "and never an mcp__ name it cannot call");
     }
     const forDirector = director.directorBrief({

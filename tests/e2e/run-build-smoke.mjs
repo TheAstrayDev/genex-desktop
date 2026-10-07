@@ -6,7 +6,7 @@ import { startFakeOllama } from "../helpers/fake-ollama.ts";
 /** The run controls the build smoke must always exercise: the composer Stop and the keep-awake hold. */
 const REQUIRED_CHECKS = [
   "running build shows only Stop in an empty composer",
-  "Escape closes the menu and leaves the night running",
+  "Escape closes the menu and leaves the run running",
   "Wrap up asks the run to finish instead of stopping it",
   "Stop in the composer immediately interrupts its own chat",
   "a running build holds the Mac awake",

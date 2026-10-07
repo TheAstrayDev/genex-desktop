@@ -15,7 +15,8 @@ import type { ConversationRecord, EventEnvelope, SnapshotRecord } from "./event-
 import type { EngineDescriptor } from "./engine-descriptor.ts";
 import type { FolderInspection, GameLocation, GameName, GameNameRequest, GameProject } from "./game-project.ts";
 import type { BuildProblem, InstallResult } from "./build-problem.ts";
-import type { NightReview } from "./run-review.ts";
+import type { LoopRunReview } from "./run-review.ts";
+import type { StagedTarget } from "./self-change-files.ts";
 import type { CodexLoginState } from "./codex-login.ts";
 import type { ClaudeLoginState } from "./claude-login.ts";
 import type { ProjectAsset, ProjectAssets } from "./game-assets.ts";
@@ -83,11 +84,14 @@ export interface SelfChange {
 }
 
 export interface StagedProposal {
+  /** What it changes (`self-change-files.ts`): a skill when absent, or the lessons every brief carries. */
+  target?: StagedTarget;
   skill: string;
   file: string;
   proposedText: string;
   currentText: string;
-  gate: { accept: boolean; votes: string; reason: string };
+  /** The blind gate's verdict on a skill edit; lessons are not gated, so they carry none. */
+  gate?: { accept: boolean; votes: string; reason: string };
   rationale: string;
   /** Plain-language description for the person using the app; absent on older proposals. */
   title?: string;
@@ -157,8 +161,11 @@ export interface StudioApi {
   pluginAction(id: string, name: string, args: unknown, project?: string, ticket?: string): Promise<unknown>;
   /** The files Publish would put online for a game, for Studio's Publish dialog to show. Uploads nothing. */
   genexPublishReview(project: string): Promise<ExportReview>;
-  /** Publish the game to the Genex gallery from Studio's Publish dialog, after the person approved `review`. */
-  genexPublish(project: string, review: ExportReview): Promise<void>;
+  /**
+   * Publish the game to the Genex gallery from Studio's Publish dialog: its Publish press approved
+   * the files in `review`; `title` is the name players see.
+   */
+  genexPublish(project: string, review: ExportReview, title?: string): Promise<void>;
   pluginsIndex(refresh?: boolean): Promise<PluginIndexView>;
   pluginInstallGithub(spec: string): Promise<void>;
   /** What a pasted GitHub link leads to, pinned to one exact commit; nothing is installed. */
@@ -292,7 +299,7 @@ export interface StudioApi {
     runId: string,
     listener: (summary: import("./run-summary.ts").RunSummary) => void,
   ): () => void;
-  runReview(project: string, runId?: string): Promise<NightReview>;
+  runReview(project: string, runId?: string): Promise<LoopRunReview>;
   staged(): Promise<StagedProposal[]>;
   settings(): Promise<StudioSettingsView>;
   setSettings(patch: {
@@ -302,9 +309,12 @@ export interface StudioApi {
     buildersMax?: number;
     agentsMax?: number;
     blender?: boolean;
+    autoResume?: boolean;
   }): Promise<StudioSettingsView>;
   /** Settings → Copy diagnostics: versions, provider status and the recent log, already redacted. */
   diagnostics(): Promise<string>;
+  /** Send feedback (the sidebar's bug button): posts the report to genex.games; throws when it was not taken. */
+  sendFeedback(draft: import("./feedback.ts").FeedbackDraft): Promise<void>;
   /** Settings → Licenses: Genex's MIT license and the third-party notices this build ships. */
   licenses(): Promise<import("./licenses.ts").LicenseTexts>;
   /** Settings → Privacy: whether Share build metrics is on, paused or offered at all. */
@@ -370,7 +380,7 @@ export interface StudioApi {
   buildPreview(
     request: import("./build-preview.ts").BuildPreviewRequest,
   ): Promise<import("./build-preview.ts").BuildPreviewFrame | null>;
-  /** Every window a worker is driving right now, with its last frame (computer use, 2026-09-07). */
+  /** Every window a worker is driving right now, with its last frame. */
   agentScreens(): Promise<import("./agent-screen.ts").AgentScreenFrame[]>;
   readRunStill(file: string, maxPx?: number): Promise<{ mimeType: string; data: string } | null>;
   readReferenceStills(project: string): Promise<{
@@ -511,7 +521,7 @@ export interface StudioApi {
    * as `pathLabel`, never as the path it holds here.
    */
   pickProject(): Promise<string | null>;
-  /** What a folder holds — games in it and one level down, how each runs, what would stop a night. Writes nothing. */
+  /** What a folder holds — games in it and one level down, how each runs, what would stop a run. Writes nothing. */
   inspectFolder(dir: string): Promise<FolderInspection>;
   /**
    * Open a folder as a game: the Open Game sheet's button, and the first thing that writes.
@@ -544,6 +554,8 @@ export interface StudioSettingsView {
   agentsMax?: number;
   /** may builders model in Blender (AG-930); on by default */
   blender?: boolean;
+  /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
+  autoResume?: boolean;
 }
 
 declare global {

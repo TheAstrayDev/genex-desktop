@@ -422,7 +422,9 @@ Available services are capability checked and scoped to the calling plugin:
   under the plugin's own storage (`publish/<project>/dist`) and returns the export result; it
   needs a project binding and is `Export unavailable` in sessions without the host export. The
   target is Studio's, never the game folder: the plugin names no path and the same audited
-  exporter the Export button uses does the copying.
+  exporter the Export button uses does the copying. The copy carries no package.json, so the
+  result's `genex` field holds what the game's own one tells Genex (its Genex SDK versions and
+  `genex` settings), read only when that file lives inside the game.
 - `credentials.read/write/clear`: plugin-scoped protected storage. Reserved account actions
   `unlock`, `connect`, `disconnect` authorize these operations; agents cannot invoke actions.
   Cache unlocked credentials only in the backend session. Background status must never unlock.

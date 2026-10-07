@@ -12,7 +12,7 @@ Qwen 3.8 Flash Next. Every other model the architecture can run is under More mo
 first, with "Needs a N GB Mac" when it does not fit. One build per model is shown: MLX on Apple
 Silicon, the portable GGUF elsewhere. The fit rule is weights + KV cache (0.5–3 GB) + 1.5 GB
 within 72% of unified memory on Apple Silicon (⅔ elsewhere). Recommendations are estimates; the
-large-Mac models added on 22 September 2026 have not been measured in Studio.
+large-Mac models have not been measured in Studio yet.
 
 An installed model's row offers Delete (a trash button, then Cancel or Delete on the row). A Bonsai
 delete removes the receipt first, stops a server loaded with that model, then deletes its weights

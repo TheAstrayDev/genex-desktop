@@ -104,7 +104,7 @@ const MESSAGE = {
 const diagnostics = new Map<string, { at: number; value: CliInstallation }>();
 /**
  * The login shell's PATH, read once and shared by every discovery: a login shell takes seconds to
- * start (2.1–2.3 s on a developer's Mac, 2026-10-01), and every session start discovers its CLI.
+ * start (2.1–2.3 s on a developer's Mac), and every session start discovers its CLI.
  * Recheck and a settings change read it again; a read that failed is not kept.
  */
 let loginPathRead: Promise<string | null> | null = null;

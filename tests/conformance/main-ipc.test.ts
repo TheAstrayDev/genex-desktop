@@ -82,7 +82,7 @@ function blockerAndTimers() {
   return { blocker, timers, log };
 }
 
-describe("the Mac stays awake until the night actually settles", () => {
+describe("the Mac stays awake until the run actually settles", () => {
   it("a run holds the blocker once, and run.settled or run.failed is what releases it", () => {
     const { blocker, timers, log } = blockerAndTimers();
     const keep = new KeepAwake(blocker, timers);
@@ -147,6 +147,11 @@ function runsFixture(
         return dispatch(action, timeoutMs);
       },
     },
+    // The core's own stop keeps the user's word for host auto-resume, then dispatches.
+    stopRun: async (runId: string, timeoutMs?: number) => {
+      calls.push(`stopRun ${runId} ${timeoutMs}`);
+      await dispatch({ type: "run_stop", runId }, timeoutMs);
+    },
     newRunId: () => "run_1",
     saveRunArtifact: async (_runId: string, name: string) => {
       calls.push(`save ${name}`);
@@ -171,13 +176,13 @@ function runsFixture(
 }
 
 describe("the run controls", () => {
-  it("a stop request does not release the blocker: it arms the fallback, with the dispatch bounded to 30 s", async () => {
+  it("a stop request goes through the core and does not release the blocker: it arms the fallback, with the dispatch bounded to 30 s", async () => {
     const { invoke, keepAwake, timers, calls } = runsFixture(async () => true);
     keepAwake.hold();
     assert.deepEqual(await invoke("studio:run.stop", { runId: "run_1" }), { ok: true, value: true });
     assert.equal(keepAwake.held, true, "the close pass runs after the request");
     assert.equal(timers.armed(), 1);
-    assert.deepEqual(calls, ['dispatch {"type":"run_stop","runId":"run_1"} 30000']);
+    assert.deepEqual(calls, ["stopRun run_1 30000"], "the stop goes through the core, which keeps the user's word");
   });
 
   it("the fallback is armed however the dispatch ends — a wedged harness is exactly the case it exists for", async () => {

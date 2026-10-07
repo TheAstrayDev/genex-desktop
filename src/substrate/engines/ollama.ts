@@ -1,6 +1,6 @@
 /**
  * Local-model engine (Ollama is v1's primary workhorse,
- * because an unlimited overnight loop at zero marginal cost is the whole point of local).
+ * because an unlimited unattended loop at zero marginal cost is the whole point of local).
  *
  * Two pieces:
  *  - {@link OllamaClient}: the management API (detect, list, pull with progress, capabilities).
@@ -267,7 +267,7 @@ function cutConnection(engineId: string, message: string): EngineError {
   return failure;
 }
 
-/** An HTTP failure; a 404 is Ollama saying it does not have the model (P04-F8). */
+/** An HTTP failure; a 404 is Ollama saying it does not have the model. */
 function httpFailure(engineId: string, status: number, body: string, model: string): EngineError {
   if (status === HTTP_NOT_FOUND && model)
     return new EngineError(EngineFailureKind.Unavailable, engineId, MESSAGE.ModelMissing(model));
@@ -486,7 +486,7 @@ export class OllamaEngine implements Engine {
 
   /**
    * A cut connection with the server no longer answering at all is Ollama not running — nothing
-   * a partial turn lost, and a failure another engine can take over (P04-F8).
+   * a partial turn lost, and a failure another engine can take over.
    */
   async #unlessServerGone(failure: EngineError): Promise<EngineError> {
     if (!CUT_CONNECTIONS.has(failure)) return failure;
