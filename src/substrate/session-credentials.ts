@@ -1,4 +1,4 @@
-import { SecretStorageUnavailableError } from "./secrets.ts";
+import { secretStorageIssueOf } from "../shared/secret-storage.ts";
 
 /** Whether this process holds the saved account's token. Reported to the renderer: never rename a value. */
 export const CredentialState = {
@@ -102,7 +102,7 @@ export class SessionCredentials {
 
   /** The error to raise for a failed storage call: the store's own reason when it is locked, else `generic`. */
   #failure(cause: unknown, epoch: number, refused: (reason: string) => string, generic: string): Error {
-    if (!(cause instanceof SecretStorageUnavailableError)) return new Error(generic);
+    if (!(cause instanceof Error) || secretStorageIssueOf(cause) === null) return new Error(generic);
     const error = new Error(refused(cause.message));
     if (epoch === this.#epoch) this.#refusal = error;
     return error;

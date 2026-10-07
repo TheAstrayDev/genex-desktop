@@ -54,7 +54,7 @@ Enabled, connected, authenticated and service-ready are separate facts.
 Worker session activity carries role/run/task identity and cannot replace the orchestrator's
 phase. Reply text streams are thread/delegation-scoped and reconciled to durable messages;
 tool completion alone does not imply that a build or its independent checks passed.
-Plugin rows put account state beneath the description and one aligned recovery/settings button beside the toggle. Recovery unlocks saved authorization or begins browser sign-in; status polling never unlocks credentials. A recovery the locked secret store refuses says why (for example, no system keyring is running). Optional connections remain opt-in.
+Plugin rows put account state beneath the description and one aligned recovery/settings button beside the toggle. Recovery unlocks saved authorization or begins browser sign-in; status polling never unlocks credentials. A recovery the locked secret store refuses says why (for example, no unlocked system keyring is available). Optional connections remain opt-in.
 An idle plugin backend is lazy, not failed. MCP readiness and tool counts belong to the selected
 project's transport; another project's successful connection is not evidence of readiness here.
 A plugin's missing account or required setting is a global setup requirement, so it remains

@@ -63,6 +63,13 @@ describe("secret store backends", () => {
     assert.deepEqual(await readdir(dir), []);
   });
 
+  it("tells a person with no usable keyring what to do, in the app's name", () => {
+    const { message } = new SecretStorageUnavailableError(SecretStorageIssue.NoKeyring);
+    assert.match(message, /No unlocked system keyring is available/);
+    assert.match(message, /Start GNOME Keyring or KWallet and unlock it, then restart Genex\./);
+    assert.doesNotMatch(message, /Studio/);
+  });
+
   it("refuses basic_text even when the caller would accept plaintext", async () => {
     const backend = safeStorageBackend(fakeSafeStorage({ backend: "basic_text" }));
     await rejectsWith(

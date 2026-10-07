@@ -65,6 +65,26 @@ test("a locked secret store names its cause when unlock or save is refused", asy
   assert.equal(credentials.takeRefusal(), null, "a lock forgets the refusal");
 });
 
+test("a refusal is recognised by the issue it carries, not by the store's class", async () => {
+  const carrying = (issue: string) => () => {
+    throw Object.assign(new Error("the store says so"), { issue });
+  };
+  const known = new SessionCredentials({
+    get: async () => carrying("no-keyring")(),
+    set: async () => {},
+    clear: async () => {},
+  });
+  await assert.rejects(known.unlock(), /could not be unlocked\. the store says so Automatic retries are paused\./);
+  assert.ok(known.takeRefusal());
+  const unknown = new SessionCredentials({
+    get: async () => carrying("bogus")(),
+    set: async () => {},
+    clear: async () => {},
+  });
+  await assert.rejects(unknown.unlock(), /Automatic retries are paused; retry only when/);
+  assert.equal(unknown.takeRefusal(), null, "an issue outside the vocabulary is an ordinary failure");
+});
+
 test("a plain storage failure leaves no refusal to pass on", async () => {
   const credentials = new SessionCredentials({
     get: async () => {
