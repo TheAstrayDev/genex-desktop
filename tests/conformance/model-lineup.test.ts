@@ -103,3 +103,31 @@ test("the metered catalogs start with their first few: OpenRouter's three, OpenC
   assert.equal(shownModels(EngineId.OpenRouter, listed, { "vendor/m15": true }).has("vendor/m15"), true);
   assert.equal(shownModels(EngineId.OpenRouter, listed, { "vendor/m0": false }).has("vendor/m0"), false);
 });
+
+test("a metered catalog starts with the newest GPT and Claude, a vendor at a time, before the rest", () => {
+  const listed = [
+    row("openai/gpt-5.3-codex-spark", "GPT-5.3 Codex Spark"),
+    row("openai/gpt-5.4", "GPT-5.4"),
+    row("openai/gpt-6-astra", "GPT-6 Astra"),
+    row("openai/gpt-6.1-sol-fast", "GPT-6.1 Sol Fast"),
+    row("openai/gpt-6.1-sol", "GPT-6.1 Sol"),
+    row("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5"),
+    row("anthropic/claude-opus-5-5", "Claude Opus 5.5"),
+    row("opencode/big-pickle", "Big Pickle"),
+  ];
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenCode, listed)],
+    ["openai/gpt-6.1-sol", "anthropic/claude-opus-5-5"],
+    "OpenCode's two: each vendor's newest, never a fast variant or an older release",
+  );
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenRouter, listed)],
+    ["openai/gpt-6.1-sol", "anthropic/claude-opus-5-5", "openai/gpt-6-astra"],
+  );
+  const unread = [row("google/gemini-x", "Gemini X"), row("opencode/big-pickle", "Big Pickle")];
+  assert.deepEqual(
+    [...latestModels(EngineId.OpenCode, unread)],
+    ["google/gemini-x", "opencode/big-pickle"],
+    "ids it cannot read keep the catalog's order",
+  );
+});

@@ -3,9 +3,9 @@
  * family, from the provider's newest generation. A model's family and version are read from its
  * provider id (Claude's resolved model, Codex's slug), never from its display name, so a new
  * release replaces the one before it without a table to keep. An id that cannot be read stays
- * in the picker: a model named some new way must never vanish. A catalog of hundreds with no
- * version scheme (OpenRouter, OpenCode) starts instead with its first few, in the order the provider lists
- * them. Settings choices (`state/model-picker.ts`) override the rule per model; the provider's
+ * in the picker: a model named some new way must never vanish. A catalog of hundreds (OpenRouter,
+ * OpenCode) starts instead with its first few: the newest GPT and Claude it lists, a vendor at a
+ * time, then the rest in the order the provider lists them. Settings choices (`state/model-picker.ts`) override the rule per model; the provider's
  * default always shows.
  */
 import { EngineId } from "../shared/providers.ts";
@@ -37,6 +37,8 @@ const FIRST_FEW: Partial<Record<string, number>> = { [EngineId.OpenRouter]: 3, [
 const CLAUDE_ID = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/;
 /** `gpt-6.1-sol`, `gpt-6-astra`, `gpt-5.5`. */
 const CODEX_ID = /^gpt-(\d+)(?:\.(\d+))?(?:-([a-z]+))?$/;
+/** A Claude id in a metered catalog: `claude-opus-5-5`, or OpenRouter's `claude-sonnet-4.5`. */
+const VENDOR_CLAUDE_ID = /^claude-([a-z]+)-(\d+)(?:[-.](\d{1,2}))?(?:-\d{8})?$/;
 /** A context variant such as `[1m]` names the same model. */
 const VARIANT_SUFFIX = /\[[^\]]*\]$/;
 
@@ -58,6 +60,45 @@ const LINEAGE: Partial<Record<string, (model: LineupModel) => Lineage | undefine
 };
 
 const lineageOf = (engine: string, model: LineupModel): Lineage | undefined => LINEAGE[engine]?.(model);
+
+/** The vendors a metered catalog's `vendor/model` ids are read for, and how. */
+const VENDOR_LINEAGE: Partial<Record<string, (id: string) => Lineage | undefined>> = {
+  anthropic: (id) => {
+    const match = VENDOR_CLAUDE_ID.exec(id);
+    return match ? { family: match[1] ?? "", major: Number(match[2]), minor: Number(match[3] ?? 0) } : undefined;
+  },
+  openai: (id) => codexLineage({ id, label: id }),
+};
+
+/** A metered catalog's model as its vendor and version, when its id can be read. */
+function vendorRead(model: LineupModel): (Read & { vendor: string }) | undefined {
+  const slash = model.id.indexOf("/");
+  const vendor = model.id.slice(0, slash);
+  const lineage = slash > 0 ? VENDOR_LINEAGE[vendor]?.(model.id.slice(slash + 1)) : undefined;
+  return lineage ? { model, lineage, vendor } : undefined;
+}
+
+/**
+ * A long catalog's models, best first: each vendor's newest GPT or Claude in turn (a vendor at a
+ * time, in the order the catalog first names them), then every model it cannot read, as listed.
+ */
+function newestFirst(listed: readonly LineupModel[]): LineupModel[] {
+  const byVendor = new Map<string, Read[]>();
+  for (const read of listed.map(vendorRead)) {
+    if (read) byVendor.set(read.vendor, [...(byVendor.get(read.vendor) ?? []), read]);
+  }
+  const queues = [...byVendor.values()].map((reads) =>
+    reads.toSorted((a, b) => Number(isNewer(b.lineage, a.lineage)) - Number(isNewer(a.lineage, b.lineage))),
+  );
+  const ranked: LineupModel[] = [];
+  for (let round = 0; queues.some((queue) => round < queue.length); round++) {
+    for (const queue of queues) {
+      const read = queue[round];
+      if (read) ranked.push(read.model);
+    }
+  }
+  return [...ranked, ...listed.filter((model) => !ranked.includes(model))];
+}
 
 /**
  * A model id without its context variant. The CLI lists one model under different ids as its
@@ -85,7 +126,12 @@ function preferred(kept: Read | undefined, next: Read): Read {
 export function latestModels(engine: string, models: readonly LineupModel[]): Set<string> {
   const listed = models.filter((model) => model.id !== DEFAULT_MODEL);
   const firstFew = FIRST_FEW[engine];
-  if (firstFew !== undefined) return new Set(listed.slice(0, firstFew).map((model) => model.id));
+  if (firstFew !== undefined)
+    return new Set(
+      newestFirst(listed)
+        .slice(0, firstFew)
+        .map((model) => model.id),
+    );
   const read = listed.flatMap((model) => {
     const lineage = lineageOf(engine, model);
     return lineage ? [{ model, lineage }] : [];
