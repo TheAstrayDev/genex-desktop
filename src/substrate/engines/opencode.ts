@@ -48,7 +48,7 @@ import { stopChild } from "../process-tree.ts";
 import type { Usage } from "../types.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
-import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts";
+import { type EngineAccount, EngineKind, EngineStatusCode, LoginSource } from "../../shared/engine-descriptor.ts";
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { ModelCatalogSource } from "../../shared/model-catalog.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
@@ -140,6 +140,8 @@ export class OpenCodeEngine implements Engine {
   readonly #resolveCli: () => Promise<{ ready: boolean; path?: string; version?: string; detail: string }>;
   readonly #lockRecovery: string | undefined;
   #hosts = new Map<string, string | null>();
+  /** Whether the last listing named a model some provider's sign-in runs, not only OpenCode's free ones. */
+  #signedIn = false;
 
   constructor(options: OpenCodeEngineOptions) {
     this.#scratchRoot = options.scratchRoot ?? path.join(os.tmpdir(), `studio-${EngineId.OpenCode}`);
@@ -163,6 +165,24 @@ export class OpenCodeEngine implements Engine {
     return { code: EngineStatusCode.Ready, detail: MESSAGE.Ready(cli.version, count) };
   }
 
+  /**
+   * Whose sign-in OpenCode runs on: its own (`system`) once it lists a provider's model, and no
+   * one's while it lists only its free models, which still run. Genex never reads the sign-ins.
+   */
+  async account(): Promise<EngineAccount> {
+    const cli = await this.#resolveCli();
+    if (cli.ready) await this.refreshModels().catch(() => {});
+    return {
+      source: this.#signedIn ? LoginSource.System : LoginSource.None,
+      afterSignOut: "signed-out",
+      cli: {
+        state: cliState(cli),
+        ...(cli.path ? { path: cli.path } : {}),
+        ...(cli.version ? { version: cli.version } : {}),
+      },
+    };
+  }
+
   catalogSnapshot = () => this.#catalog.snapshot();
 
   async models(): Promise<EngineModel[]> {
@@ -183,6 +203,7 @@ export class OpenCodeEngine implements Engine {
     const stdout = this.#listModels ? await this.#listModels() : await listOpenCodeModels(binary);
     const listed = parseOpenCodeModels(stdout);
     this.#hosts = new Map(listed.map((model) => [model.row.id, model.host]));
+    this.#signedIn = listed.some((model) => !model.anonymous);
     return { models: listed.map((model: OpenCodeModel) => model.row), source: ModelCatalogSource.Provider };
   }
 
@@ -614,6 +635,12 @@ function metered(result: DelegateResult): DelegateResult {
 function failureError(engine: string, failure: { message: string; status: number | null }): EngineError {
   if (failure.status !== null) return classifyHttpFailure(engine, failure.status, failure.message);
   return new EngineError(EngineFailureKind.Other, engine, failure.message);
+}
+
+/** The CLI's state for its account row: working, installed but unusable, or missing. */
+function cliState(cli: { ready: boolean; path?: string }): EngineAccount["cli"]["state"] {
+  if (cli.ready) return CodingCliState.Ready;
+  return cli.path ? CodingCliState.Incompatible : CodingCliState.Missing;
 }
 
 /** Where the CLI is, whether it works, and its version. */

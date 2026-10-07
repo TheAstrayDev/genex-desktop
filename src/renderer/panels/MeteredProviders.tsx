@@ -21,6 +21,7 @@ import {
 } from "../ui/dropdown-menu.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { METERED_PROVIDER_WORDS, problemWords } from "../words.ts";
+import { OpenCodeRowState, openCodeRowState } from "./opencode-row.ts";
 import { PickerModels } from "./PickerModels.tsx";
 import { type ProviderWords, RowHeading, RowTone, type RowView } from "./provider-row.tsx";
 import { SHOW_TERMINAL_EVENT } from "./terminal-events.ts";
@@ -138,78 +139,106 @@ function useRecheck(engineId: string, onEnginesRefresh: () => Promise<void> | vo
 
 const OPEN_CODE_WORDS: ProviderWords = { name: WORDS.openCode.name, plans: "", guide: WORDS.openCode.guide };
 
-/** OpenCode's row by its state: installing, missing, signing in, signed out, connected or unreachable. */
-function openCodeView(
-  engine: EngineDescriptor,
-  state: { installing: boolean; signingIn: boolean },
-  act: { install: () => void; recheck: () => void; signIn: () => void; update: () => void },
-): RowView {
-  const code = engine.status.code;
-  if (state.installing)
-    return { tone: RowTone.Busy, status: WORDS.installing, line: WORDS.openCode.installingLine, actions: null };
-  if (code === EngineStatusCode.NotInstalled)
-    return {
-      tone: RowTone.Off,
-      status: WORDS.notInstalled,
-      line: WORDS.openCode.installLine,
-      actions: (
-        <>
-          <Button variant="default" onClick={act.install}>
-            {WORDS.openCode.install}
-          </Button>
-          <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
-        </>
-      ),
-    };
-  if (code === EngineStatusCode.Ready)
-    return {
-      tone: RowTone.Connected,
-      status: WORDS.connected,
-      line: WORDS.openCode.connectedLine,
-      actions: (
-        <AccountMenu name={WORDS.openCode.name} onCheck={act.recheck}>
+/** What OpenCode's row can do: install, recheck, sign in to a provider, update. */
+type OpenCodeActions = { install: () => void; recheck: () => void; signIn: () => void; update: () => void };
+
+/** OpenCode's row by its state: installing, missing, signing in, free models only, connected or unreachable. */
+function openCodeView(state: OpenCodeRowState, act: OpenCodeActions): RowView {
+  switch (state) {
+    case OpenCodeRowState.Installing:
+      return { tone: RowTone.Busy, status: WORDS.installing, line: WORDS.openCode.installingLine, actions: null };
+    case OpenCodeRowState.NotInstalled:
+      return {
+        tone: RowTone.Off,
+        status: WORDS.notInstalled,
+        line: WORDS.openCode.installLine,
+        actions: (
           <>
-            <DropdownMenuItem onSelect={act.signIn}>
-              <ItemWords title={WORDS.openCode.addProvider} line={WORDS.openCode.addProviderLine} />
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={act.update}>{WORDS.openCode.update}</DropdownMenuItem>
+            <Button variant="default" onClick={act.install}>
+              {WORDS.openCode.install}
+            </Button>
+            <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
           </>
-        </AccountMenu>
-      ),
-    };
-  if (code === EngineStatusCode.NeedsLogin) return openCodeSignInView(state.signingIn, act);
+        ),
+      };
+    case OpenCodeRowState.SigningIn:
+      return openCodeSigningInView(act);
+    case OpenCodeRowState.SignedOut:
+      return {
+        tone: RowTone.Off,
+        status: WORDS.notConnected,
+        line: WORDS.openCode.signInLine,
+        actions: (
+          <Button variant="default" onClick={act.signIn}>
+            {WORDS.openCode.signIn}
+          </Button>
+        ),
+      };
+    case OpenCodeRowState.FreeOnly:
+      return openCodeFreeOnlyView(act);
+    case OpenCodeRowState.Connected:
+      return openCodeConnectedView(act);
+    default:
+      return {
+        tone: RowTone.Danger,
+        status: WORDS.couldNotCheck,
+        line: WORDS.openCode.unreachable,
+        actions: <Button onClick={act.recheck}>{WORDS.tryAgain}</Button>,
+      };
+  }
+}
+
+/** OpenCode's own sign-in runs in the terminal: where to finish it. */
+function openCodeSigningInView(act: OpenCodeActions): RowView {
   return {
-    tone: RowTone.Danger,
-    status: WORDS.couldNotCheck,
-    line: WORDS.openCode.unreachable,
-    actions: <Button onClick={act.recheck}>{WORDS.tryAgain}</Button>,
+    tone: RowTone.Busy,
+    status: WORDS.signingIn,
+    line: WORDS.openCode.signingIn,
+    actions: (
+      <>
+        <Button onClick={() => window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT))}>
+          {WORDS.openCode.showTerminal}
+        </Button>
+        <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
+      </>
+    ),
   };
 }
 
-/** Signed out: Sign in, or — while OpenCode's own sign-in runs in the terminal — where to finish it. */
-function openCodeSignInView(signingIn: boolean, act: { recheck: () => void; signIn: () => void }): RowView {
-  if (signingIn)
-    return {
-      tone: RowTone.Busy,
-      status: WORDS.signingIn,
-      line: WORDS.openCode.signingIn,
-      actions: (
-        <>
-          <Button onClick={() => window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT))}>
-            {WORDS.openCode.showTerminal}
-          </Button>
-          <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
-        </>
-      ),
-    };
+/** No provider signed in: OpenCode's free models run, and Sign in comes first. */
+function openCodeFreeOnlyView(act: OpenCodeActions): RowView {
   return {
-    tone: RowTone.Off,
-    status: WORDS.notConnected,
-    line: WORDS.openCode.signInLine,
+    tone: RowTone.Warning,
+    status: WORDS.openCode.freeOnly,
+    line: WORDS.openCode.freeOnlyLine,
     actions: (
-      <Button variant="default" onClick={act.signIn}>
-        {WORDS.openCode.signIn}
-      </Button>
+      <>
+        <Button variant="default" onClick={act.signIn}>
+          {WORDS.openCode.signIn}
+        </Button>
+        <AccountMenu name={WORDS.openCode.name} onCheck={act.recheck}>
+          <DropdownMenuItem onSelect={act.update}>{WORDS.openCode.update}</DropdownMenuItem>
+        </AccountMenu>
+      </>
+    ),
+  };
+}
+
+/** A provider signed in: billed by each one, and another can be added. */
+function openCodeConnectedView(act: OpenCodeActions): RowView {
+  return {
+    tone: RowTone.Connected,
+    status: WORDS.connected,
+    line: WORDS.openCode.connectedLine,
+    actions: (
+      <AccountMenu name={WORDS.openCode.name} onCheck={act.recheck}>
+        <>
+          <DropdownMenuItem onSelect={act.signIn}>
+            <ItemWords title={WORDS.openCode.addProvider} line={WORDS.openCode.addProviderLine} />
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={act.update}>{WORDS.openCode.update}</DropdownMenuItem>
+        </>
+      </AccountMenu>
     ),
   };
 }
@@ -223,10 +252,12 @@ function OpenCodeRow({
   const { checking, recheck } = useRecheck(EngineId.OpenCode, onEnginesRefresh);
   const [signingIn, setSigningIn] = useState(false);
   const ready = engine.status.code === EngineStatusCode.Ready;
-  // A sign-in is over once OpenCode lists models: the terminal's exit rechecks them.
+  const state = openCodeRowState(engine, { installing: install.installing, signingIn });
+  const signedIn = state === OpenCodeRowState.Connected;
+  // A sign-in is over once OpenCode lists a provider's models: the terminal's exit rechecks them.
   useEffect(() => {
-    if (ready) setSigningIn(false);
-  }, [ready]);
+    if (signedIn) setSigningIn(false);
+  }, [signedIn]);
   const signIn = (): void =>
     void run(async () => {
       const started = await window.studio.openCodeSignIn();
@@ -234,16 +265,12 @@ function OpenCodeRow({
       setSigningIn(true);
       window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT));
     });
-  const view = openCodeView(
-    engine,
-    { installing: install.installing, signingIn },
-    {
-      install: () => void install.install(),
-      recheck: () => void run(recheck),
-      signIn,
-      update: () => void install.update(),
-    },
-  );
+  const view = openCodeView(state, {
+    install: () => void install.install(),
+    recheck: () => void run(recheck),
+    signIn,
+    update: () => void install.update(),
+  });
   return (
     <ProviderCard
       words={OPEN_CODE_WORDS}

@@ -76,6 +76,10 @@ describe("OpenCode's model list", () => {
     assert.equal(pickle?.row.efforts, undefined, "no variants, no dial");
     assert.equal(pickle?.row.note, "opencode · Free");
     assert.equal(pickle?.host, "opencode.ai", "the provider's host, for the sandbox's network");
+    assert.ok(
+      listed.every((model) => model.anonymous),
+      "OpenCode's own free models run with no sign-in at all",
+    );
     assert.deepEqual(ling?.row.efforts?.slice(0, 1), ["low"]);
     assert.equal(ling?.row.defaultEffort, "low");
   });
@@ -88,6 +92,15 @@ describe("OpenCode's model list", () => {
     assert.equal(parseOpenCodeModels(entry({ api: { url: "http://insecure.example/v1" } }))[0]?.host, null);
     assert.equal(parseOpenCodeModels(entry({ api: { url: "not a url" } }))[0]?.host, null);
     assert.deepEqual(parseOpenCodeModels(""), [], "an empty listing is nothing signed in, not an error");
+    assert.equal(parseOpenCodeModels(entry({}))[0]?.anonymous, false, "another provider's model needs its sign-in");
+    const zen = (cost: Record<string, unknown>) =>
+      `opencode/m\n${JSON.stringify({ id: "m", providerID: "opencode", capabilities: { toolcall: true }, cost }, null, 2)}`;
+    assert.equal(parseOpenCodeModels(zen({ input: 0, output: 0 }))[0]?.anonymous, true);
+    assert.equal(
+      parseOpenCodeModels(zen({ input: 3, output: 15 }))[0]?.anonymous,
+      false,
+      "a paid OpenCode model is listed only once its account is signed in",
+    );
     assert.throws(() => parseOpenCodeModels("Error: something broke\n"), /could not be read/);
   });
 });
@@ -111,6 +124,43 @@ describe("OpenCode's status", () => {
     assert.match(signedOut.remedy ?? "", /Sign in/);
     const go = await status(ready, await fixture("opencode-models-1.18.txt"));
     assert.equal(go.code, "ready");
+  });
+});
+
+describe("OpenCode's account", () => {
+  const signedIn = (listing: string) =>
+    `${listing}\nanthropic/claude-x\n${JSON.stringify(
+      {
+        id: "claude-x",
+        providerID: "anthropic",
+        capabilities: { toolcall: true },
+        cost: { input: 3, output: 15 },
+      },
+      null,
+      2,
+    )}`;
+  const account = async (listing: string) => {
+    const root = await tmpDir("opencode-account-");
+    return new OpenCodeEngine({ scratchRoot: root, resolveCli: ready, listModels: async () => listing }).account();
+  };
+
+  it("is no one's while OpenCode lists only its own free models, though they stay ready to run", async () => {
+    const listing = await fixture("opencode-models-1.18.txt");
+    const anonymous = await account(listing);
+    assert.equal(anonymous.source, "none");
+    assert.equal(anonymous.afterSignOut, "signed-out");
+    assert.deepEqual(anonymous.cli, { state: "ready", path: "/usr/local/bin/opencode", version: "1.18.34" });
+    const root = await tmpDir("opencode-account-");
+    const status = await new OpenCodeEngine({
+      scratchRoot: root,
+      resolveCli: ready,
+      listModels: async () => listing,
+    }).status();
+    assert.equal(status.code, "ready", "the free models still run");
+  });
+
+  it("is OpenCode's own sign-in once it lists a provider's model", async () => {
+    assert.equal((await account(signedIn(await fixture("opencode-models-1.18.txt")))).source, "system");
   });
 });
 
@@ -260,6 +310,8 @@ describe("OpenCode sessions", () => {
   it("hands back what a stopped or timed-out session did, with the id Continue resumes", async () => {
     const hang: OpenCodeExec = async function* (invocation) {
       yield { type: "text", sessionID: "ses_long", part: { type: "text", text: "Working on it" } };
+      // A busy machine may stop the session before this listens: an abort already made ends it too.
+      if (invocation.signal.aborted) return;
       await new Promise((resolve) => invocation.signal.addEventListener("abort", resolve, { once: true }));
     };
     const cwd = await game();

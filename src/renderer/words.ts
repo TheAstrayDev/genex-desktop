@@ -1481,6 +1481,8 @@ export const METERED_PROVIDER_WORDS = {
     installingLine: "Installing OpenCode. This can take a minute.",
     signIn: "Sign in",
     signInLine: "Sign in to a provider in OpenCode to run its models.",
+    freeOnly: "Free models only",
+    freeOnlyLine: "No provider signed in. OpenCode's free models run without an account.",
     signingIn: "Finish signing in in Studio's terminal.",
     showTerminal: "Show terminal",
     addProvider: "Sign in to another provider…",

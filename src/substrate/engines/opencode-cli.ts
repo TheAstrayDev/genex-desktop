@@ -20,6 +20,8 @@ const DEFAULT_REPLY_TOKENS = 8_192;
 const MODEL_LINE = /^([\w.@-]+)\/(\S+)$/;
 /** The model status OpenCode marks a retired model with. */
 const DEPRECATED = "deprecated";
+/** OpenCode's own provider (OpenCode Zen): it lists its free models to anyone, signed in or not. */
+const OWN_PROVIDER = "opencode";
 
 const MESSAGE = {
   Malformed: "OpenCode's model list could not be read.",
@@ -47,6 +49,8 @@ export interface OpenCodeModel {
   row: EngineModel;
   /** The provider API's host (`opencode.ai`, `api.anthropic.com`), or null when the listing names none. */
   host: string | null;
+  /** One of OpenCode's own free models, which it runs with no sign-in at all. */
+  anonymous: boolean;
 }
 
 const positive = (value: unknown): number | undefined =>
@@ -90,6 +94,8 @@ export function openCodeModel(listed: ListedModel): OpenCodeModel | null {
   const contextWindow = positive(listed.limit?.context) ?? DEFAULT_CONTEXT_TOKENS;
   const efforts = variants(listed.variants);
   const thinking = listed.capabilities?.reasoning === true;
+  const input = price(listed.cost?.input);
+  const output = price(listed.cost?.output);
   const row: EngineModel = {
     id: `${provider}/${model}`,
     label: typeof listed.name === "string" && listed.name ? listed.name : model,
@@ -102,9 +108,10 @@ export function openCodeModel(listed: ListedModel): OpenCodeModel | null {
     ...(efforts.length
       ? { efforts, defaultEffort: efforts.includes(ReasoningEffort.Low) ? ReasoningEffort.Low : efforts[0] }
       : {}),
-    note: priceNote(provider, price(listed.cost?.input), price(listed.cost?.output)),
+    note: priceNote(provider, input, output),
   };
-  return { row, host: apiHost(listed.api?.url) };
+  const anonymous = provider === OWN_PROVIDER && input === 0 && output === 0;
+  return { row, host: apiHost(listed.api?.url), anonymous };
 }
 
 /**
