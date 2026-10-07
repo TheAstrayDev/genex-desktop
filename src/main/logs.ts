@@ -10,7 +10,7 @@ import path from "node:path";
 import { redactSecrets } from "../shared/redact.ts";
 
 export const LOG_FILE = "studio.log";
-/** 5 files of 5 MB: a few nights of harness stderr. */
+/** 5 files of 5 MB: a few runs of harness stderr. */
 export const LOG_MAX_BYTES = 5 * 1024 * 1024;
 export const LOG_FILES = 5;
 

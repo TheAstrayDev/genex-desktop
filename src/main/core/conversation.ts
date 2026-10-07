@@ -158,7 +158,7 @@ function payloadsOf(events: readonly EventEnvelope[], name: CustomEvent): AnyCus
 }
 
 /**
- * The steers this chat's own turns recorded. One a night's lead took from a message (`how: "lead"`,
+ * The steers this chat's own turns recorded. One a run's lead took from a message (`how: "lead"`,
  * live chat) is not: the lead heard it, or it came back to the chat, which records its words anew.
  */
 function chatSteers(events: readonly EventEnvelope[]): AnyCustomPayload[] {
@@ -503,7 +503,7 @@ export class ConversationService {
   /**
    * An Autopilot or Loop commission to a harness whose loop code predates the feature must be
    * refused loudly, never silently downgraded to a plain chat message: a Loop commission is a
-   * promise of an overnight run, and the user would wake to nothing. Gated on "ready" only: a
+   * promise of an unattended run, and the user would wake to nothing. Gated on "ready" only: a
    * starting/restarting harness has not claimed anything yet.
    */
   #commissionRefusal(options: ComposerSendOptions): string | null {
@@ -549,7 +549,7 @@ export class ConversationService {
   }
 
   /**
-   * The run's controls the chat's own session keeps after a night it led (`runControls`: status,
+   * The run's controls the chat's own session keeps after a run it led (`runControls`: status,
    * show and land), answered as the coordinator's tools are, for the session asking (`asker`).
    */
   async runControl(
@@ -586,7 +586,7 @@ export class ConversationService {
       case CoordinatorTool.ContinueBuild:
         return this.#continueBuild(call);
       // Seeing and landing a build are for any run — finished, paused or running. A user who
-      // asks "run the project" after a night must get the game, not "the run is finished".
+      // asks "run the project" after a run must get the game, not "the run is finished".
       case CoordinatorTool.ShowBuild:
         return this.#showBuild(call);
       case CoordinatorTool.LandBuild:
@@ -644,7 +644,7 @@ export class ConversationService {
           threadId,
         ),
       );
-    // A lead's build goes on with the working time it had left (the harness's journal.ts `nightClock`).
+    // A lead's build goes on with the working time it had left (the harness's journal.ts `loopRunClock`).
     return "Resume requested for the same run. Its saved plan and completed work will be retained; a lead's build goes on with the working time it had left, and time spent paused does not count.";
   }
 

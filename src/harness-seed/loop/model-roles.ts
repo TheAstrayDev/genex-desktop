@@ -73,7 +73,7 @@ export const CLAUDE_CODE_MODELS: ModelRow[] = [];
  */
 export const CODEX_MODELS: ModelRow[] = [];
 
-/** Every subscription engine the studio can run a night on, and the models each offers. */
+/** Every subscription engine the studio can run a run on, and the models each offers. */
 export const ENGINE_MODELS: Record<string, ModelRow[]> = {
   [EngineId.ClaudeCode]: CLAUDE_CODE_MODELS,
   [EngineId.Codex]: CODEX_MODELS,
@@ -238,7 +238,7 @@ export function withRoles<T extends RoleRun>(run: T): T & RoleRun & { roles: Run
   const next: RoleRun = { ...run, roles, rolesApplied: true };
   if (roles.builder === undefined) delete next.model;
   else next.model = roles.builder;
-  // The workers' engine is written only when it is not the run's own, so a night on one
+  // The workers' engine is written only when it is not the run's own, so a run on one
   // subscription carries nothing new; every build site reads `roleEngine(run, RoleKey.Builder)`.
   const builderEngine = engineOfRole(engine, roles, RoleKey.Builder);
   if (builderEngine !== engine) next.builderEngine = builderEngine;
@@ -272,7 +272,7 @@ export function roleEngine(run: RoleRun | null | undefined, key: string): string
 /**
  * A model id that is valid on `engine`, or undefined for that engine's own default. The
  * builders' pick where the builders run there, else the orchestrator's, else the judges'.
- * Before two subscriptions could share a night every job's model was valid everywhere; now a
+ * Before two subscriptions could share a run every job's model was valid everywhere; now a
  * Codex slug handed to the Claude CLI is a session that never starts, so a site that speaks to
  * an engine other than the one its model was picked on asks here.
  */

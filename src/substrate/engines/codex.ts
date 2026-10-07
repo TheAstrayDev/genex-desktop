@@ -89,6 +89,7 @@ import {
   COMPLETE_TIMEOUT_MS,
   hasCredentials,
   interruption,
+  isAccessLost,
   type PartialDelegateState,
   partialDelegateResult,
   STOPPED_BY_USER,
@@ -101,6 +102,8 @@ import {
   StudioTool,
   studioToolName,
 } from "./studio-tool-prompts.ts";
+import { captureArgs } from "./capture-args.ts";
+import { limitResetMs } from "./limit-reset.ts";
 import { JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
@@ -712,7 +715,7 @@ export class CodexEngine implements Engine {
     // A read-only session is started somewhere of its own, so the only folder its sandbox lets
     // it write is the studio's bridge — the build it is judging stays untouchable. A lead that is
     // its chat's own session is resumed from there by id (a Codex session is found by its id,
-    // wherever it is started), and the chat resumes it from the game folder after the night.
+    // wherever it is started), and the chat resumes it from the game folder after the run.
     const { scratch, bridge } = await this.#openRunDir(request, cwd, locks);
     const runDir = scratch ?? cwd;
     // Interview tools are read off the bridge's own record — the authoritative list of what the
@@ -811,7 +814,7 @@ export class CodexEngine implements Engine {
    * Where the session runs and its bridge. A read-only session is started somewhere of its own,
    * so the only folder its sandbox lets it write is the studio's bridge. The locks and the scratch
    * folder are this call's: a bridge that cannot open (a planted `.studio`) must not leave the
-   * game read-only until the next delegation (P03-V1).
+   * game read-only until the next delegation.
    */
   async #openRunDir(
     request: DelegateRequest,
@@ -1074,7 +1077,7 @@ export class CodexEngine implements Engine {
       return CHECKPOINT_TOOL.reply;
     }
     if (name === StudioTool.Capture && request.onCapture) {
-      return request.onCapture({ ...(args.cameras ? { cameras: String(args.cameras) } : {}) });
+      return request.onCapture(captureArgs(args));
     }
 
     if (request.onLiveTool && (request.liveTools ?? []).some((tool) => tool.name === name)) {
@@ -1138,13 +1141,17 @@ export class CodexEngine implements Engine {
     }
     // A weekly cap won't reset within any run's lifetime — it must end the run with an honest
     // reason, not burn retry strikes. A shorter window stays a rate limit the loop can wait out.
+    // Either carries the wait its text names ("try again in 1 hour 30 minutes"), so the run can
+    // wait it out and the host can resume a paused run after it.
+    const resetMs = limitResetMs(text) ?? undefined;
     if (USAGE_LIMIT_PATTERNS.some((re) => re.test(text))) {
-      return new EngineError(EngineFailureKind.UsageLimit, this.id, text);
+      return new EngineError(EngineFailureKind.UsageLimit, this.id, text, resetMs);
     }
     if (RATE_LIMIT_PATTERNS.some((re) => re.test(text))) {
-      return new EngineError(EngineFailureKind.RateLimit, this.id, text);
+      return new EngineError(EngineFailureKind.RateLimit, this.id, text, resetMs);
     }
-    if (AUTH_PATTERNS.some((re) => re.test(text))) {
+    // A sign-in gone stale, or the account's access taken away (the table both engines share).
+    if (AUTH_PATTERNS.some((re) => re.test(text)) || isAccessLost(text)) {
       return new EngineError(EngineFailureKind.Auth, this.id, `${text} — ${this.loginHint()}`);
     }
     if (UNAVAILABLE_PATTERN.test(text)) return new EngineError(EngineFailureKind.Unavailable, this.id, text);
@@ -1571,7 +1578,7 @@ type CodexItemRecord = Record<string, unknown>;
 /**
  * Codex's JSONL → the studio's log vocabulary. Every consumer downstream (the chat rows, the
  * run graph, SkillOpt's miner, the morning review) already speaks the Claude Code shape, so
- * translating here is what makes a Codex night indistinguishable from a Claude one everywhere
+ * translating here is what makes a Codex run indistinguishable from a Claude one everywhere
  * that matters.
  */
 export function translateEvent(event: Record<string, unknown>, cwd?: string): Translated | null {
@@ -1608,7 +1615,7 @@ function threadStarted(event: Record<string, unknown>): Translated {
  * A turn finished: its tokens. Codex's `output_tokens` already holds its reasoning (its
  * `total_tokens` is input plus output), so `reasoning_tokens` is that part of it, never added
  * again; its `input_tokens` already holds the cache reads. A count the CLI did not report — an
- * older CLI writes no cache writes — stays absent (P03-F10).
+ * older CLI writes no cache writes — stays absent.
  */
 function turnCompleted(event: Record<string, unknown>): Translated {
   const raw = (event.usage ?? {}) as Record<string, number>;
@@ -1920,7 +1927,10 @@ export function bridgeTools(request: DelegateRequest): BridgeTool[] {
       description: CODEX_CAPTURE_TOOL.description,
       parameters: {
         type: "object",
-        properties: { cameras: { type: "string", description: CODEX_CAPTURE_TOOL.cameras } },
+        properties: {
+          cameras: { type: "string", description: CODEX_CAPTURE_TOOL.cameras },
+          page: { type: "string", description: CODEX_CAPTURE_TOOL.page },
+        },
       },
     });
   }

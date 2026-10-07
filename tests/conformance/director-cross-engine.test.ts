@@ -1,5 +1,5 @@
 /**
- * Two subscriptions in one night (cross-provider roles, 2026-09-10) — through the real core and
+ * Two subscriptions in one run — through the real core and
  * the real harness child. A director on Claude Code hires workers on Codex and asks Codex to
  * judge: every delegation and every judge call must reach the engine the roles named, with a
  * model that engine knows and a brief in that engine's own tool voice. And when the workers'
@@ -30,7 +30,7 @@ const text = (result: LiveToolResult): string => (typeof result === "string" ? r
 const json = (result: LiveToolResult): Record<string, any> => JSON.parse(text(result));
 
 const planFor = (...ids: string[]): Record<string, unknown> => ({
-  summary: "Tonight: make the plaza somewhere you would want to skate.",
+  summary: "This run: make the plaza somewhere you would want to skate.",
   workers: JSON.stringify(
     ids.map((id) => ({
       id,
@@ -78,7 +78,7 @@ const ROLES = {
   engines: { builder: "codex", judge: "codex" },
 };
 
-describe("a night on two subscriptions", () => {
+describe("a run on two subscriptions", () => {
   it("a Claude Code director hires Codex workers and Codex judges, each in its own voice and on its own model", async () => {
     const rig = await startRig(
       { replies: [] },
@@ -113,7 +113,7 @@ describe("a night on two subscriptions", () => {
         results.judged = json(
           await call("judge", { target: "integration", against: "none", question: "is the plaza red?" }),
         );
-        // Counted here, inside the night: the self-improvement pass that follows a finished run
+        // Counted here, inside the run: the self-improvement pass that follows a finished run
         // asks the run's own engine by design, and is not a judge call.
         results.judgeCalls = {
           claude: completes["claude-code"]!.length,
@@ -121,7 +121,7 @@ describe("a night on two subscriptions", () => {
           codexModels: completes.codex!.map((r) => r.model),
         };
         results.finished = text(await call("finish", { summary: "the plaza is red", land: "yes", victory: "yes" }));
-        return { ok: true, engine, turns: 7, usage: {}, sessionId: "director-cross", summary: "night done" };
+        return { ok: true, engine, turns: 7, usage: {}, sessionId: "director-cross", summary: "run done" };
       }
       await mkdir(path.join(request.cwd, "src"), { recursive: true });
       await writeFile(path.join(request.cwd, "src", "plaza.js"), "export const plaza = 'red';\n");

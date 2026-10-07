@@ -27,7 +27,7 @@ export const CLAUDE_CODE_MODELS: readonly EngineModelRow[] = [];
 /** The fallback rows under Codex when the account's own catalogue has never been written. */
 export const CODEX_MODELS: readonly EngineModelRow[] = [];
 
-/** Every subscription engine the studio can run a night on, and the models each offers. */
+/** Every subscription engine the studio can run a run on, and the models each offers. */
 export const ENGINE_MODELS: Readonly<Record<string, readonly EngineModelRow[]>> = {
   [EngineId.ClaudeCode]: CLAUDE_CODE_MODELS,
   [EngineId.Codex]: CODEX_MODELS,

@@ -590,10 +590,9 @@ runtime decoder retention. Verify real original/derivative models and audio in C
 an external export, then one authorized unlisted hosted draft and a changed-marker update.
 Record unexecuted gates explicitly. Never regenerate an existing asset to make a test pass.
 
-2026-09-22 implementation evidence: real Blender 4.5.4 imported the fishing run's retained
-5,895,508-byte trout through the public native transform recipe, exported a derivative and two
-renders, preserving the original SHA-256. This proves staged import/export, not in-game use
-or hosted readiness. Retain the actual observation in local evidence and summarize its limits in the PR.
+Implementation evidence: real Blender 4.5.4 imported a retained 5.9 MB generated model through
+the public native transform recipe, exported a derivative and two renders, preserving the
+original SHA-256. This proves staged import/export, not in-game use or hosted readiness. Retain the actual observation in local evidence and summarize its limits in the PR.
 
 Reliability acceptance also guards preview-pool exhaustion and candidate load failure without
 Live navigation (`preview-candidate.test.ts`), renamed native derivative provenance, and

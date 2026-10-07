@@ -255,13 +255,13 @@ async function completionFailed(
   // worktree. Swallowing the error here would blind all of them: rethrow instead.
   const inRun = Boolean(options.runId);
   if (inRun && !fallbackReady) throw err;
-  // A weekly/monthly cap outlives any wait, and a night on the wrong model is not the
-  // night the user paid for — stop honestly instead of substituting.
+  // A weekly/monthly cap outlives any wait, and a run on the wrong model is not the
+  // run the user paid for — stop honestly instead of substituting.
   if (kind === EngineFailure.UsageLimit) {
     await sayInTurn(ctx, turnId, MESSAGE.outOfUsage(engine, err?.message));
     return { outcome: { stopped: TurnStop.EngineLimited, round, engine } };
   }
-  // Subscription throttles must not end the night (PLAN.md §6.3 / M2 acceptance) — but a
+  // Subscription throttles must not end the run (PLAN.md §6.3 / M2 acceptance) — but a
   // swap the user never hears about reads as deception. Fall back only mid-run or
   // mid-commission, and say so in the chat, not just in a log event.
   const commissioned = inRun || Boolean(options.loop || options.autopilot);
