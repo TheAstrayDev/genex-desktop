@@ -92,7 +92,9 @@ function OlderSearch({
         value={query}
         onChange={(event) => onQuery(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Escape" && query) onQuery("");
+          if (event.key !== "Escape" || !query) return;
+          event.stopPropagation();
+          onQuery("");
         }}
         className="h-8 w-full rounded-control border border-input bg-field px-2.5 text-chat-sub text-foreground outline-none placeholder:text-muted-foreground focus:border-accent-ink"
       />
