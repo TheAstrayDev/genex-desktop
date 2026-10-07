@@ -123,13 +123,15 @@ Durable history the UI or the harness reads later.
    `EngineError` kinds, never to matched message text.
 2. Add a row to `PROVIDERS` in `src/shared/providers.ts`: `id` (= `Engine.id`), the `label` a
    person says, `subscription`, `login` (`terminal` | `console` | `none`), `roles` (`presets` |
-   `sessions` | `single`) and, for a subscription, the `signIn` copy. `SUBSCRIPTION_ENGINES` in
+   `sessions` | `completion` | `single`) and, for a subscription, the `signIn` copy. `SUBSCRIPTION_ENGINES` in
    main and the renderer, the sign-in card, chat labels and `EngineDescriptor.provider` from
    `describe()` follow from it. Register the engine in `StudioCore.init`
    (`src/main/studio-core.ts`); the preferred order already appends `SUBSCRIPTION_ENGINES`.
 3. Harness roles: for `roles: "presets"`, add model rows and tool syntax in
    `src/harness-seed/loop/model-roles.ts` (`ENGINE_MODELS`, `toolCall`, `toolSyntax`) and the same
-   rows in `src/shared/model-roles.ts` (see [Seed contract](#seed-contract));
+   rows in `src/shared/model-roles.ts` (see [Seed contract](#seed-contract)); a `sessions` or
+   `completion` engine joins `hasSessionRoles` or `COMPLETION_ROLE_ENGINES` in both copies, which
+   decides the jobs it may take (`takesRoles`, `crossesTo`);
    `tests/conformance/providers.test.ts` fails when either copy disagrees with the table. Run
    `node scripts/gen-harness-types.ts` if the descriptor shape changed.
 4. Fixtures: add a scripted variant in `fixtureEngines()` in `src/main/dev/fixture-engines.ts` so

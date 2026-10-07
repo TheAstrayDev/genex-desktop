@@ -427,14 +427,15 @@ persisted. Hide keeps the process; Stop ends the shell and captured descendants 
 checks (on Windows `taskkill /T`); reload, window close and quit dispose sessions.
 
 **Roles across providers.** The orchestrator is always the run's engine. Workers and judges may run
-on another ready session provider: `roles.engines.builder`/`judge` (`RunRoles` in
+on another ready provider the job may cross to (`crossesTo`, [local models](../local-models.md#sessions-workers-and-roles)):
+`roles.engines.builder`/`judge` (`RunRoles` in
 [`src/shared/protocol.ts`](../../src/shared/protocol.ts)) and `withRoles` stamps `builderEngine`
 beside `judgeEngine` only when a slot is crossed. The loop never reads `run.engine` for a builder or
 critic: `roleEngine(run, role)` names the engine and `modelOn`/`plannerModel` a model that engine
-knows. The director, coordinator, planner, replan and scout stay on the orchestrator's engine;
-workers, contract wiring, the base, the integrator, spikes, the gauntlet builder and optimization
-go to the workers' engine; the judge, replan's vision and the playtester (session engines only) go
-to the judges' engine. A worker's `usage_limit`/`rate_limit` becomes `state.workerLimit` (never
+knows. The director, coordinator, planner, replan and scout (session engines only) stay on the
+orchestrator's engine; workers, contract wiring, the base, the integrator, spikes, the gauntlet
+builder and optimization go to the workers' engine; the judge, replan's vision and the playtester
+(while its model can play there) go to the judges' engine. A worker's `usage_limit`/`rate_limit` becomes `state.workerLimit` (never
 `state.limit`, which pauses the run), reported as `workersEngineLimit`. A reopen resolves its
 message's picks with `withRoles`, planned on the session's model; the coordinator's keeps the
 build's (`reopenedRun`). An unready provider's remembered pick is kept; a Loop send with it is

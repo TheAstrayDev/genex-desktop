@@ -57,6 +57,32 @@ export function hasSessionRoles(engine: string | null | undefined): boolean {
   return isDelegated(engine) || engine === EngineId.Bonsai;
 }
 
+/**
+ * This copy crosses a game run's jobs to and from a completion-only local engine (`crossesTo`).
+ * main.ts claims the local-roles capability only when it does (local-roles-served.ts): a kept
+ * older copy drops such a cross but keeps the slot's model on the run's own engine.
+ */
+export const SERVES_LOCAL_ROLES = true;
+
+/** The completion-only local engines whose jobs run on their own models in the classic loop. */
+const COMPLETION_ROLE_ENGINES = new Set<string>([EngineId.Ollama]);
+
+/** Can this engine take a job of a game run: a session engine, or a completion-only local one. */
+export function takesRoles(engine: string | null | undefined): boolean {
+  return hasSessionRoles(engine) || (engine != null && COMPLETION_ROLE_ENGINES.has(engine));
+}
+
+/**
+ * May a run on `engine` send this job to `other`? Never the orchestrator, never to its own engine,
+ * and both must take roles. Workers go only to a session engine, since the director hires every
+ * worker as a session; reviewers ask `engine.complete`, so any engine that takes roles serves.
+ */
+export function crossesTo(engine: string | null | undefined, key: string, other: string | null | undefined): boolean {
+  if (!CROSSABLE.has(key) || !other || other === engine) return false;
+  if (!takesRoles(engine) || !takesRoles(other)) return false;
+  return key === RoleKey.Judge || hasSessionRoles(other);
+}
+
 export const FABLE = "claude-fable-5-1";
 export const OPUS = "opus";
 export const SOL = "gpt-5.6-sol";
@@ -122,7 +148,7 @@ export function resolveRoles(
   return { planner: picked, builder: picked, judge: picked };
 }
 
-/** The jobs the composer may send to the other subscription. Never the orchestrator. */
+/** The jobs the composer may send to another engine. Never the orchestrator. */
 const CROSSABLE = new Set<string>([RoleKey.Builder, RoleKey.Judge]);
 
 /**
@@ -130,11 +156,11 @@ const CROSSABLE = new Set<string>([RoleKey.Builder, RoleKey.Judge]);
  * default), unknown keys dropped. Null when nothing usable was given, so callers fall back to
  * the preset table.
  *
- * `roles.engines` may put the workers or the judges on the other subscription. It is kept only
- * where it means something: a session engine other than the run's own, on a run whose own
- * engine supports session roles too. Completion-only local engines cannot cross. The record carries
- * `engines` with just those slots — and none at all when nothing is crossed, so a
- * single-subscription record reads byte for byte as it always did.
+ * `roles.engines` may put the workers or the judges on another engine. It is kept only where it
+ * means something: an engine other than the run's own that the run may send that job to
+ * (`crossesTo`) — workers only to a session engine, reviewers to a completion-only local engine
+ * too. The record carries `engines` with just those slots — and none at all when nothing is
+ * crossed, so a single-subscription record reads byte for byte as it always did.
  */
 export function normalizeRoles(engine: string, input: unknown): RunRoles | null {
   if (!input || typeof input !== "object") return null;
@@ -173,12 +199,10 @@ function slotModel(raw: unknown, crossed: boolean): { given: boolean; model?: st
   return { given: true, model: id && id !== "default" ? id : undefined };
 }
 
-/** The other session engine a slot was sent to, or "" when it stays on the run's own. */
+/** The other engine a slot was sent to, or "" when it stays on the run's own. */
 function crossedEngine(engine: string, key: string, given: AnyRecord): string {
-  const canCross = CROSSABLE.has(key) && hasSessionRoles(engine) && typeof given[key] === "string";
-  const other = canCross ? given[key].trim() : "";
-  const crosses = other !== "" && other !== engine && hasSessionRoles(other);
-  return crosses ? other : "";
+  const other = typeof given[key] === "string" ? given[key].trim() : "";
+  return crossesTo(engine, key, other) ? other : "";
 }
 
 /** The efforts the composer named, one per role, and nothing else it sent. */

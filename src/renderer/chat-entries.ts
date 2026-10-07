@@ -995,6 +995,11 @@ function narrateSkillAccepted(chat: ChatDraft, event: EventEnvelope): void {
   chat.entries.push({ id: event.id, kind: EntryKind.Learning, text, link: TRANSCRIPT_WORDS.seeInHarness });
 }
 
+/** An engine's name as a person says it: the provider table's, else the role table's. */
+function providerName(engine: string): string {
+  return providerInfo(engine)?.label ?? engineLabel(engine);
+}
+
 /** An unattended run narrates itself in the game's own chat: start, verdicts, ending, lessons. */
 function narrateRunStart(chat: ChatDraft, event: EventEnvelope): void {
   const started = customPayload(event.data, CustomEvent.RunStarted);
@@ -1006,7 +1011,7 @@ function narrateRunStart(chat: ChatDraft, event: EventEnvelope): void {
   const judgeEngine = started.judgeEngine ?? started.engine ?? "";
   const judgeName = judge ? roleName(judgeEngine, judge) : null;
   const crossProvider = Boolean(judgeName && started.engine && judgeEngine !== started.engine);
-  const judgeWords = crossProvider ? `${judgeName} on ${engineLabel(judgeEngine)}` : judgeName;
+  const judgeWords = crossProvider ? `${judgeName} on ${providerName(judgeEngine)}` : judgeName;
   say(chat, event.id, SystemTag.Run, runStartWords(started.reference ?? null, judgeWords));
 }
 

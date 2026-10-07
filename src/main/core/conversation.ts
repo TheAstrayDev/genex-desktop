@@ -17,6 +17,7 @@ import {
 } from "../../shared/coordinator.ts";
 import { CustomEvent, customEventData, customRecord, type AnyCustomPayload } from "../../shared/custom-events.ts";
 import { EventKind, ThreadKind, type ConversationRecord, type EventEnvelope } from "../../shared/event-log.ts";
+import { crossesCompletionEngine } from "../../shared/model-roles.ts";
 import { ToolPermissionBy } from "../../shared/permissions.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
@@ -88,6 +89,10 @@ const MESSAGE = {
     "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the " +
     "studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's " +
     "harness-seed/loop needs to be merged into it, or the seed copies restored so the next launch upgrades them.)",
+  localRolesOutdated:
+    "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — " +
+    "your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge " +
+    "the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.",
   loopOutdated:
     "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to " +
     "run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling " +
@@ -511,6 +516,8 @@ export class ConversationService {
     if (host.state !== HarnessState.Ready) return null;
     if (options.autopilot && !host.hasCapability(HarnessCapability.Autopilot)) return MESSAGE.autopilotOutdated;
     if (options.loop && !host.hasCapability(HarnessCapability.Loop)) return MESSAGE.loopOutdated;
+    const localRoles = crossesCompletionEngine(options.engine ?? "", options.autopilot?.roles);
+    if (localRoles && !host.hasCapability(HarnessCapability.LocalRoles)) return MESSAGE.localRolesOutdated;
     return null;
   }
 

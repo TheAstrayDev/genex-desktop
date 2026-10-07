@@ -214,6 +214,8 @@ export const HarnessCapability = {
   Rewind: "rewind",
   /** A message sent while the chat's own turn works joins that turn (`engine.steer`). */
   Steer: "steer",
+  /** A build whose jobs cross to or from a completion-only local engine (`crossesCompletionEngine`). */
+  LocalRoles: "local-roles",
 } as const;
 export type HarnessCapability = (typeof HarnessCapability)[keyof typeof HarnessCapability];
 

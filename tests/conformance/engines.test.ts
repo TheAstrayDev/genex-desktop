@@ -703,6 +703,11 @@ describe("which model judges the run", () => {
       started({ engine: "claude-code", judgeEngine: "codex", judgeModel: "gpt-6-astra" }),
       /GPT-6-astra on Codex, reviewing/i,
     );
+    assert.match(
+      started({ engine: "claude-code", judgeEngine: "ollama", judgeModel: "qwen2.5vl" }),
+      /qwen2\.5vl on Ollama, reviewing/,
+      "a local reviewer's engine is named as a person says it",
+    );
     assert.match(started({ engine: "claude-code" }), /a reviewer that cannot see which is which picks the winner/);
   });
 

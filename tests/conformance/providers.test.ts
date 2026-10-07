@@ -16,7 +16,13 @@ import {
 } from "../../src/renderer/subscription-auth.ts";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import * as roles from "../../src/shared/model-roles.ts";
-import { PROVIDERS, SUBSCRIPTION_ENGINES, loginKind, providerInfo } from "../../src/shared/providers.ts";
+import {
+  PROVIDERS,
+  SUBSCRIPTION_ENGINES,
+  loginKind,
+  providerInfo,
+  type RoleSupport,
+} from "../../src/shared/providers.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
 import type { Engine } from "../../src/substrate/engines/types.ts";
 
@@ -89,7 +95,12 @@ describe("provider table", () => {
       ] as const) {
         const where = `${name} ${provider.id}`;
         assert.equal(table.isDelegated(provider.id), provider.roles === "presets", where);
-        assert.equal(table.hasSessionRoles(provider.id), provider.roles !== "single", where);
+        assert.equal(
+          table.hasSessionRoles(provider.id),
+          provider.roles === "presets" || provider.roles === "sessions",
+          where,
+        );
+        assert.equal(table.takesRoles(provider.id), takesRolesBy(provider.roles), where);
         if (provider.roles === "presets") assert.equal(table.engineLabel(provider.id), provider.label, where);
       }
     }
@@ -98,6 +109,11 @@ describe("provider table", () => {
     assert.deepEqual([...seedRoles.DELEGATED_ENGINES], presets);
   });
 });
+
+/** Does a provider row's role support take roles? No row runs one model today; one that did would not. */
+function takesRolesBy(support: RoleSupport): boolean {
+  return support !== "single";
+}
 
 describe("sign-in polling", () => {
   const login = (phase: ClaudeLoginState["phase"]): ClaudeLoginState => ({ revision: 1, phase, hasBrowserUrl: false });

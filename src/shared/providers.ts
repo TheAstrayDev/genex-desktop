@@ -12,9 +12,11 @@ export type LoginKind = "terminal" | "console" | "none";
 
 /**
  * Which roles a provider can run: `presets` has the model rows and single-pick presets of
- * `shared/model-roles.ts`, `sessions` can cross roles without presets, `single` runs one model.
+ * `shared/model-roles.ts`, `sessions` can cross roles without presets, `completion` gives each
+ * job its own model without sessions (its reviewers may join a session run, its main agent may
+ * hand its jobs to one), and `single` runs one model.
  */
-export type RoleSupport = "presets" | "sessions" | "single";
+export type RoleSupport = "presets" | "sessions" | "completion" | "single";
 
 /** What the sign-in card and the Models room say for a subscription. */
 export interface SignInCopy {
@@ -85,7 +87,7 @@ export const PROVIDERS = [
     },
   },
   { id: EngineId.Bonsai, label: "Bonsai", subscription: false, login: "none", roles: "sessions", signIn: null },
-  { id: EngineId.Ollama, label: "Ollama", subscription: false, login: "none", roles: "single", signIn: null },
+  { id: EngineId.Ollama, label: "Ollama", subscription: false, login: "none", roles: "completion", signIn: null },
 ] as const satisfies readonly ProviderInfo[];
 
 type Provider = (typeof PROVIDERS)[number];

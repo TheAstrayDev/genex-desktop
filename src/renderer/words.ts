@@ -1453,6 +1453,7 @@ export const MODEL_PICKER_WORDS = {
   localStale: "local · stale",
   noTools: "no tools",
   cannotCallTools: "This model cannot call tools, so it cannot build",
+  cannotSeeImages: "This model cannot see images, so it cannot review screenshots",
   subscription: "subscription",
   signIn: "sign in",
 } as const;
