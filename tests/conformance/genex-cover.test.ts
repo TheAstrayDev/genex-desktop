@@ -5,7 +5,7 @@
  * `genex cover <file> --json`: after a publish has been recorded, or at once with genex__cover-set.
  *
  * Studio never sends a frame nobody staged, never reads the game folder for one, and a cover can
- * never block or fail a publish: it is sent only after the job is recorded, and whatever Genex
+ * never block or fail a publish: it is sent only after the upload is recorded, and whatever Genex
  * answers (refused, limited, down, silent) leaves the publish done with a warning.
  *
  * The publish cases run the real pinned CLI against a fixture Genex API on 127.0.0.1, with a bare
@@ -13,7 +13,8 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { chmod, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, it, test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -100,6 +101,8 @@ function camera(answer: () => unknown, invokedAt = Date.now()): CoverCamera & { 
   };
   return lens;
 }
+
+const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
 const run = (command: string, args: string[]) =>
   new Promise<boolean>((resolve) => {
@@ -255,39 +258,41 @@ type CoverAnswerView = {
   hosted: unknown;
 };
 
+/** The backend for a game bound as `project`, with a host that answers a still with `answer`, recording every host call. */
+async function coverBackend(answer: () => unknown, project = PROJECT) {
+  const temp = await tmpDir("studio-genex-cover-tool-");
+  const storage = path.join(temp, "storage");
+  const game = path.join(temp, "game");
+  await mkdir(path.join(game, ".genex", "scratch"), { recursive: true });
+  // A frame the CLI's own lane would pick up: Studio never reads it, nor anything else in the game.
+  await writeFile(path.join(game, ".genex", "scratch", "cover.png"), png("planted in the game"));
+  await writeFile(path.join(game, "index.html"), "<!doctype html><title>Racing</title>");
+  const calls: Array<{ method: string; args: unknown }> = [];
+  const plugin = await createGenexPlugin("http://127.0.0.1:9");
+  const ctx = {
+    project,
+    directory: game,
+    host: async (method: string, args?: unknown) => {
+      calls.push({ method, args });
+      if (method === "storage.root") return storage;
+      if (method === "credentials.session") return null;
+      if (method === "observe") return answer();
+      if (method === "events.emit") return true;
+      throw new Error(`unexpected host call ${method}`);
+    },
+  };
+  const tool = (args: Record<string, unknown>) => plugin.tool("cover", args, ctx) as Promise<CoverAnswerView>;
+  const set = () => plugin.tool("cover-set", {}, ctx);
+  return { temp, storage, game, calls, tool, set };
+}
+
 describe("genex__cover", () => {
-  /** The backend with a host that answers the still with `answer`, recording every host call. */
-  async function backend(answer: () => unknown) {
-    const temp = await tmpDir("studio-genex-cover-tool-");
-    const storage = path.join(temp, "storage");
-    const game = path.join(temp, "game");
-    await mkdir(path.join(game, ".genex", "scratch"), { recursive: true });
-    // A frame the CLI's own lane would pick up: Studio never reads it, nor anything else in the game.
-    await writeFile(path.join(game, ".genex", "scratch", "cover.png"), png("planted in the game"));
-    await writeFile(path.join(game, "index.html"), "<!doctype html><title>Racing</title>");
-    const calls: Array<{ method: string; args: unknown }> = [];
-    const plugin = await createGenexPlugin("http://127.0.0.1:9");
-    const ctx = {
-      project: PROJECT,
-      directory: game,
-      host: async (method: string, args?: unknown) => {
-        calls.push({ method, args });
-        if (method === "storage.root") return storage;
-        if (method === "credentials.session") return null;
-        if (method === "observe") return answer();
-        if (method === "events.emit") return true;
-        throw new Error(`unexpected host call ${method}`);
-      },
-    };
-    const tool = (args: Record<string, unknown>) => plugin.tool("cover", args, ctx) as Promise<CoverAnswerView>;
-    return { storage, game, calls, tool };
-  }
   const observeCalls = (calls: Array<{ method: string; args: unknown }>) =>
     calls.filter((call) => call.method === "observe").map((call) => call.args);
 
   it("photographs only the genex-cover demo into its own storage and answers with the preview", async () => {
     let frame: unknown = still("first");
-    const fx = await backend(() => frame);
+    const fx = await coverBackend(() => frame);
     const posix = process.platform !== "win32";
     // Locked: a read anywhere in the game folder would fail the shot.
     if (posix) await chmod(fx.game, 0o000);
@@ -351,6 +356,40 @@ describe("genex__cover", () => {
   });
 });
 
+describe("the cover's storage is named by the game, never by a path", () => {
+  /** Project names a binding could carry that are no folder name of their own. */
+  const HOSTILE_PROJECTS: Array<[label: string, project: string]> = [
+    ["a parent step", "../x"],
+    ["a nested path", "a/b"],
+    ["a backslash path", "a\\b"],
+    ["empty", ""],
+    ["the folder itself", "."],
+    ["its parent", ".."],
+    ["a NUL", "x\u0000"],
+    ["a right-to-left override", "\u202eevil"],
+    ["an absolute path", "/etc"],
+  ];
+  for (const [label, project] of HOSTILE_PROJECTS) {
+    it(`refuses ${label} before the host is asked for a shot or anything is written`, async () => {
+      const fx = await coverBackend(() => still("never asked for"), project);
+      const named = /Invalid project|A project is required/;
+      await assert.rejects(fx.tool({ operation: "shoot" }), named);
+      await assert.rejects(fx.tool({ operation: "status" }), named);
+      await assert.rejects(fx.set(), named);
+      assert.deepEqual(
+        fx.calls.filter((call) => call.method === "observe"),
+        [],
+        "no still was asked of the host",
+      );
+      assert.deepEqual(
+        await filesUnder(fx.temp),
+        ["game/.genex/scratch/cover.png", "game/index.html"],
+        "nothing was written in the plugin's storage or anywhere beside it",
+      );
+    });
+  }
+});
+
 let hasGit = false;
 const originalPath = process.env.PATH;
 before(async () => {
@@ -393,10 +432,18 @@ interface CoverSeen {
   steps: string[];
 }
 
-/** What the fixture answers about the cover, changed mid-test: who chose it and how a commit goes. */
+/**
+ * What the fixture answers, changed mid-test: who chose the cover, how a commit goes, and whether
+ * the game is listed (set here as the owner's own dashboard does, with no deploy from Studio).
+ */
 interface Live {
   coverSource: string | null;
   commit: Commit;
+  game: { status: string; stagingCommitSha: string };
+  /** Whether the draft's page serves the upload: while false, a draft's readiness check fails. */
+  serving: boolean;
+  /** Runs once, the next time Genex is asked about the game by its slug, before it answers. */
+  whileAsked?: () => Promise<unknown>;
 }
 
 const UPLOAD_LIMITS = {
@@ -413,15 +460,19 @@ const UPLOAD_LIMITS = {
  */
 function publishRoutes(pushUrl: string, live: Live, api: () => string) {
   const files = new Map<string, string>();
-  const game = { status: "draft", stagingCommitSha: "" };
+  const { game } = live;
   const thumbnail = () => (live.coverSource === "owner" ? OWNER_COVER : live.coverSource && AGENT_COVER);
   const exact: Record<string, (request: GenexRequest, reply: GenexReply) => unknown> = {
     "POST /api/projects": (_request, reply) =>
       reply.json({
         project: { id: "p1", slug: SLUG, cloneUrl: pushUrl, playUrl: "https://racing-demo.genex.technology/" },
       }),
-    [`GET /api/projects/by-slug/${SLUG}`]: (_request, reply) =>
-      reply.json({ project: { slug: SLUG, ...game, thumbnailUrl: thumbnail(), coverSource: live.coverSource } }),
+    [`GET /api/projects/by-slug/${SLUG}`]: async (_request, reply) => {
+      const meanwhile = live.whileAsked;
+      live.whileAsked = undefined;
+      await meanwhile?.();
+      return reply.json({ project: { slug: SLUG, ...game, thumbnailUrl: thumbnail(), coverSource: live.coverSource } });
+    },
     "POST /api/projects/p1/push-token": (_request, reply) => reply.json({ pushUrl, managed: true }),
     "POST /api/projects/p1/publish": (_request, reply) => {
       game.status = "published";
@@ -451,13 +502,16 @@ function publishRoutes(pushUrl: string, live: Live, api: () => string) {
       files.set(decodeURIComponent(url.slice("/upload/".length)), body);
       return reply.json({ ok: true });
     }
-    if (url.startsWith("/live/")) {
-      const served = files.get(decodeURIComponent(url.slice("/live/".length).split("?")[0] ?? ""));
-      return reply.text(served ?? "missing", served === undefined ? 404 : 200);
-    }
+    if (url.startsWith("/live/")) return serveLive(url, live.serving ? files : new Map(), reply);
     if (url.startsWith("/api/gallery/world/")) return reply.json({ item: null });
     return undefined;
   };
+}
+
+/** The draft's page: a file the last upload sent, or 404 for any other (all of them while it serves none). */
+function serveLive(url: string, files: Map<string, string>, reply: GenexReply): unknown {
+  const served = files.get(decodeURIComponent(url.slice("/live/".length).split("?")[0] ?? ""));
+  return reply.text(served ?? "missing", served === undefined ? 404 : 200);
 }
 
 /** Genex's cover routes: each upload's start (noting Studio's record of the publish job), its PUT and its commit. */
@@ -496,7 +550,12 @@ async function coverFixture(options: { sendMs?: number } = {}) {
   const bare = path.join(temp, "source.git");
   await mkdir(bare, { recursive: true });
   assert.ok(await run("git", ["init", "--bare", "-q", bare]));
-  const live: Live = { coverSource: null, commit: "applied" };
+  const live: Live = {
+    coverSource: null,
+    commit: "applied",
+    game: { status: "draft", stagingCommitSha: "" },
+    serving: true,
+  };
   const seen: CoverSeen = { mints: [], puts: [], commits: 0, steps: [] };
   let api = "";
   const host = path.join(temp, "host");
@@ -632,6 +691,38 @@ describe("a cover never fails a publish", () => {
   });
 });
 
+describe("a cover the plugin cannot keep never holds up a publish", () => {
+  it("publishes, says the new shot was not kept, and lets the next publish start", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await coverFixture();
+    try {
+      // The plugin's own storage cannot take the shot (a full disk, a permission): a file where its folder goes.
+      const blocked = path.join(fx.host, "covers", PROJECT);
+      await mkdir(path.dirname(blocked), { recursive: true });
+      await writeFile(blocked, "not a folder");
+      const done = await fx.publish(
+        "gallery",
+        camera(() => still("first")),
+      );
+      assert.equal(done.job?.state, "done", done.job?.error);
+      assert.equal(done.job?.phase, "ready");
+      assert.ok(done.warnings?.includes(COVER_MESSAGE.ShotNotKept), JSON.stringify(done.warnings));
+      assert.ok(!JSON.stringify(done).includes(blocked), "Studio's storage path is never in the answer");
+      assert.deepEqual(fx.seen.mints, [], "no frame was sent");
+      await rm(blocked);
+      const next = await fx.publish(
+        "gallery",
+        camera(() => still("second")),
+      );
+      assert.notEqual(next.job?.id, done.job?.id, "a new publish started");
+      assert.equal(next.job?.state, "done", next.job?.error);
+      assert.deepEqual(fx.seen.puts, [png("second")]);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
 describe("when a publish shoots and sends", () => {
   it("with no genex-cover demo sends nothing and says Genex keeps its own cover", async (t) => {
     if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
@@ -730,6 +821,58 @@ describe("when a publish shoots and sends", () => {
   });
 });
 
+describe("a draft's cover", () => {
+  it("sends a first draft's frame once its upload is recorded, while its page is still being checked", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await coverFixture();
+    try {
+      // The draft landed but its page does not serve it yet: the check is retried, the job runs on.
+      fx.live.serving = false;
+      const draft = await fx.publish(
+        "draft",
+        camera(() => still("draft")),
+      );
+      assert.ok(draft.job?.uploadedAt, draft.job?.error);
+      assert.equal(draft.job?.state, "running");
+      assert.equal(draft.job?.phase, "verifying-deployment");
+      assert.deepEqual(
+        fx.seen.mints,
+        [{ jobId: draft.job?.id, jobState: "running" }],
+        "sent after the upload, not the check",
+      );
+      assert.equal(draft.cover?.last?.kind, CoverOutcomeKind.Applied);
+      assert.equal(draft.cover?.last?.jobId, draft.job?.id);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("never sends from a draft of a game its owner listed on genex.games, whatever Studio last recorded", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await coverFixture();
+    try {
+      const first = await fx.publish(
+        "draft",
+        camera(() => still("draft")),
+      );
+      assert.equal(first.cover?.last?.kind, CoverOutcomeKind.Applied, first.job?.error);
+      // The owner lists the game with the dashboard's Publish button: Studio deploys nothing and
+      // its own record still says draft until it next asks Genex.
+      fx.live.game.status = "published";
+      const draft = await fx.publish(
+        "draft",
+        camera(() => still("later")),
+      );
+      assert.ok(draft.job?.uploadedAt, draft.job?.error);
+      assert.equal(draft.status, "published", "the draft's record learned the game is listed");
+      assert.equal(fx.seen.mints.length, 1, "and its cover was not sent");
+      assert.notEqual(draft.cover?.last?.jobId, draft.job?.id);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
 describe("genex__cover-set", () => {
   it("sends nothing without a hosted project: the shot goes with the first publish", async (t) => {
     if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
@@ -773,6 +916,40 @@ describe("genex__cover-set", () => {
       assert.equal(outranked.kind, CoverOutcomeKind.Outranked);
       assert.equal(outranked.coverUrl, OWNER_COVER);
       assert.equal(fx.seen.puts.length, 3);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
+describe("a shot taken while a send runs", () => {
+  it("never changes what that send uploads or records: the bytes sent are the bytes it names", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await coverFixture();
+    try {
+      await fx.publish(
+        "gallery",
+        camera(() => still("first")),
+      );
+      await fx.genex.coverShoot(
+        PROJECT,
+        camera(() => still("second")),
+      );
+      // The agent shoots again while cover-set's send asks Genex who chose the cover.
+      fx.live.whileAsked = () =>
+        fx.genex.coverShoot(
+          PROJECT,
+          camera(() => still("third")),
+        );
+      const sent = await fx.genex.coverSet(PROJECT);
+      assert.equal(sent.kind, CoverOutcomeKind.Applied);
+      assert.deepEqual(fx.seen.puts.at(-1), png("second"), "the send uploads the shot it set out with");
+      assert.equal(sent.sha256, sha256(png("second")), "and records those bytes");
+      const next = await fx.genex.coverSet(PROJECT);
+      assert.equal(next.kind, CoverOutcomeKind.Applied, "the newer shot is not mistaken for one Genex has");
+      assert.deepEqual(fx.seen.puts.at(-1), png("third"));
+      const left = await filesUnder(path.join(fx.host, "covers", PROJECT));
+      assert.deepEqual(left, ["sent.json", "shot.json", "shot.png"], "no copy of a sent frame is left behind");
     } finally {
       await fx.close();
     }

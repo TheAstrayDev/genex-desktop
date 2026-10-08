@@ -46,6 +46,7 @@ import {
   COVER_VIEW_TIMEOUT_MS,
   decideSend,
   DELIVERY_GUIDANCE,
+  freezeShot,
   type GenexPublishView,
   INVOCATION_BUDGET_MS,
   keptOwnerRecord,
@@ -64,7 +65,6 @@ import {
   reshootLine,
   saveShot,
   sentRecord,
-  shotPath,
   statusGuidance,
   unchangedRecord,
   writeSent,
@@ -320,6 +320,8 @@ export class GenexTools {
   #publishJobs = new Map<string, { job: GenexPublishJob; done: Promise<void> }>();
   /** The cover send running per game: the one a publish leaves behind it, or genex__cover-set's. */
   #coverSteps = new Map<string, CoverStep>();
+  /** The last write to a game's kept shot, or a send's read of it: each waits for the one before. */
+  #coverWrites = new Map<string, Promise<unknown>>();
   /** How long a publish's new draft has to pass its test before the publish gives up on going public. */
   readonly #draftTestMs: number;
   readonly #coverTimeouts: CoverTimeouts;
@@ -747,8 +749,10 @@ export class GenexTools {
   /**
    * The upload itself, detached from the invocation that asked for it. Every phase is persisted. A
    * publish tests the uploaded draft before anything goes public, and only then promotes and lists it.
-   * Only once the outcome is recorded does `cover` send the game's frame, as a step of its own: a
-   * cover can never hold up or fail a publish, and a quit mid-send loses only the cover.
+   * Only once the upload is recorded does `cover` send the game's frame, as a step of its own: a
+   * cover can never hold up or fail a publish, and a quit mid-send loses only the cover. A draft
+   * asks again then, from what Genex just said: a game its owner listed on genex.games since
+   * Studio last looked is public, and its draft sends nothing.
    */
   async #runPublishJob(project: string, kind: GenexPublishKind, job: GenexPublishJob, cover: boolean): Promise<void> {
     const dir = this.#publishDir(project);
@@ -765,7 +769,7 @@ export class GenexTools {
       const listing = { title: job.title };
       for (const phase of publicSteps(meta, kind, relist)) outs.push(await this.#runStep(run, phase, listing));
       await this.#recordUpload(project, dir, kind, job, meta, outs);
-      if (cover) this.#startCoverStep(project, job.id);
+      if (cover && coverRides(kind, await this.#pages(project))) this.#startCoverStep(project, job.id);
     } catch (error) {
       await this.#failPublishJob(project, job, run.attempt, error);
     } finally {
@@ -1008,7 +1012,7 @@ export class GenexTools {
     const deadline = Date.now() + Math.max(MIN_PUBLISH_WAIT_MS, Math.min(maxMs, PUBLISH_WAIT_MS));
     const live = this.#publishJobs.get(project);
     if (live && (!jobId || live.job.id === jobId)) await within(live.done, deadline - Date.now());
-    // The cover goes out after the job is recorded: an agent waiting on the job hears how it went.
+    // The cover goes out after the upload is recorded: an agent waiting on the job hears how it went.
     const step = this.#coverSteps.get(project);
     const left = deadline - Date.now();
     if (step && (!jobId || step.jobId === jobId) && left > 0) await within(step.done, left);
@@ -1069,7 +1073,8 @@ export class GenexTools {
         guidance: PROBLEM_GUIDANCE[problem.code],
       };
     }
-    const shot = await saveShot(dir, reading.still, new Date(this.#now()).toISOString());
+    const takenAt = new Date(this.#now()).toISOString();
+    const shot = await this.#coverWrite(project, () => saveShot(dir, reading.still, takenAt));
     const delivery = coverDelivery(await this.#pages(project));
     return {
       operation: CoverOperation.Shoot,
@@ -1123,6 +1128,7 @@ export class GenexTools {
   /**
    * Shoot the genex-cover demo again for a publish, inside the invocation that asked and only with
    * enough of it left. Any problem keeps the last shot; the lines say why, for the publish's warnings.
+   * Never throws: by now the job is exporting, and a cover may not hold it up or fail it.
    */
   async #reshoot(project: string, camera: CoverCamera): Promise<string[]> {
     const left = INVOCATION_BUDGET_MS - (this.#now() - camera.invokedAt);
@@ -1131,8 +1137,14 @@ export class GenexTools {
     if (answer === TIMED_OUT) return [COVER_MESSAGE.ShotTimedOut];
     const reading = readStillAnswer(answer);
     if ("problem" in reading) return [reshootLine(reading.problem.code)];
-    await saveShot(this.#coverDir(project), reading.still, new Date(this.#now()).toISOString());
-    return [];
+    const takenAt = new Date(this.#now()).toISOString();
+    try {
+      await this.#coverWrite(project, () => saveShot(this.#coverDir(project), reading.still, takenAt));
+      return [];
+    } catch {
+      // The plugin's storage could not take it (a full disk, a permission): the last shot, if any, goes.
+      return [COVER_MESSAGE.ShotNotKept];
+    }
   }
   /** Start a cover send for a game: after publish `jobId`, or (none) for genex__cover-set. */
   #startCoverStep(project: string, jobId?: string): CoverStep {
@@ -1155,25 +1167,52 @@ export class GenexTools {
     step.controller.abort();
     await step.done;
   }
+  /** Run one write to a game's kept shot (or a send's read of it) once the one before it has ended. */
+  async #coverWrite<T>(project: string, write: () => Promise<T>): Promise<T> {
+    const turn = (this.#coverWrites.get(project) ?? Promise.resolve()).catch(() => {}).then(write);
+    this.#coverWrites.set(project, turn);
+    try {
+      return await turn;
+    } finally {
+      if (this.#coverWrites.get(project) === turn) this.#coverWrites.delete(project);
+    }
+  }
+  /**
+   * The send's own view of the kept shot: its record, the last answer, whether to send, and when
+   * it does, a private copy of the image, all read with no shot being written meanwhile.
+   */
+  #planSend(project: string, dir: string) {
+    return this.#coverWrite(project, async () => {
+      const [shot, last] = await Promise.all([readShot(dir), readSent(dir)]);
+      const decision = decideSend(shot, last);
+      const copy = decision.send && shot ? await freezeShot(dir, shot) : null;
+      return { shot: copy ? shot : null, last, decision, copy };
+    });
+  }
   /**
    * Send the kept shot unless Genex has settled these exact bytes, and upload nothing over the
-   * owner's own pick. Genex's answer, whatever it is, is the outcome written; a send stopped midway
-   * writes nothing, so the next one decides afresh. Null when stopped.
+   * owner's own pick. What goes out is a copy taken when the send began, and the hash written is
+   * that copy's: a shot taken meanwhile waits for the next send. Genex's answer, whatever it is, is
+   * the outcome written; a send stopped midway writes nothing, so the next one decides afresh. Null
+   * when stopped.
    */
   async #sendCover(project: string, signal: AbortSignal, jobId?: string): Promise<CoverSent | null> {
     const dir = this.#coverDir(project);
-    const [shot, last] = await Promise.all([readShot(dir), readSent(dir)]);
+    const { shot, last, decision, copy } = await this.#planSend(project, dir);
     const at = () => new Date(this.#now()).toISOString();
-    const decision = decideSend(shot, last);
-    if (!decision.send || !shot) {
+    if (!shot || !copy) {
       const unchanged = decision.send === false && decision.kind === CoverOutcomeKind.Unchanged && last;
       return this.#keepSent(dir, signal, unchanged ? unchangedRecord(last, at(), jobId) : noneRecord(at(), jobId));
     }
-    const view = await this.#hostedCoverView(project, signal);
-    if (signal.aborted) return null;
-    if (view && ownerHolds(view)) return this.#keepSent(dir, signal, keptOwnerRecord(shot, view, at(), jobId));
-    const answer = await this.#uploadCover(project, shotPath(dir, shot), signal);
-    return this.#keepSent(dir, signal, sentRecord(answer, shot, at(), jobId));
+    try {
+      const view = await this.#hostedCoverView(project, signal);
+      if (signal.aborted) return null;
+      if (view && ownerHolds(view)) return this.#keepSent(dir, signal, keptOwnerRecord(shot, view, at(), jobId));
+      const answer = await this.#uploadCover(project, copy, signal);
+      return this.#keepSent(dir, signal, sentRecord(answer, shot, at(), jobId));
+    } finally {
+      await rm(copy, { force: true });
+    }
   }
   /** Write a send's outcome, unless the send was stopped. */
   async #keepSent(dir: string, signal: AbortSignal, record: CoverSent): Promise<CoverSent | null> {

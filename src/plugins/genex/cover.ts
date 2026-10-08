@@ -10,13 +10,13 @@
  * one; Genex decides everything that matters (who outranks whom, the dark and flat gate, the
  * stored size), so every threshold here is an advisory mirror.
  */
-import { createHash } from "node:crypto";
-import { lstat, mkdir, open, readFile, rm } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { lstat, mkdir, open, readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { GenexHostedStatus, GenexPublishKind, type GenexPublishState } from "../../shared/genex.ts";
 import { PluginStillProblemCode, type PluginStillProblem } from "../../shared/plugins.ts";
-import { type StillExposure, StillMimeType } from "../../shared/preview-contract.ts";
+import { CaptureSource, type StillExposure, StillMimeType } from "../../shared/preview-contract.ts";
 import { atomicWriteText, isJsonObject, replaceFile } from "../../substrate/fsx.ts";
 import { stripAnsi } from "./cli.ts";
 
@@ -52,6 +52,8 @@ const AVAILABLE_MAX = 32;
 const SHOT_FILE = "shot";
 const SHOT_RECORD = "shot.json";
 const SENT_RECORD = "sent.json";
+/** A send's own copy of the shot it uploads, beside the shot: removed when the send ends. */
+const SEND_COPY_PREFIX = ".send-";
 const PRIVATE_FILE = 0o600;
 const PRIVATE_DIR = 0o700;
 
@@ -124,7 +126,7 @@ export interface CoverShot {
   height: number;
   mimeType: StillMimeType;
   bytes: number;
-  source: "page" | "compositor";
+  source: CaptureSource;
   stats: StillExposure;
   takenAt: string;
 }
@@ -196,7 +198,7 @@ export interface CoverStill {
   mimeType: StillMimeType;
   width: number;
   height: number;
-  source: "page" | "compositor";
+  source: CaptureSource;
   stats: StillExposure;
   preview: Buffer;
 }
@@ -224,6 +226,7 @@ export const MESSAGE = {
   ShotSkipped: (code: string) =>
     `The cover was not shot again (${code}), so the last genex-cover shot, if any, was sent.`,
   ShotTimedOut: "The cover shot did not finish in time, so the last genex-cover shot, if any, was sent.",
+  ShotNotKept: "The new cover shot could not be kept, so the last genex-cover shot, if any, was sent.",
   NoDemoAtPublish:
     "This game has no demo named genex-cover, so no new cover frame was taken; the last genex-cover shot, if any, was sent.",
   Small: (w: number, h: number) =>
@@ -316,7 +319,7 @@ const isBytes = (value: unknown): value is Uint8Array => value instanceof Uint8A
 const asBuffer = (bytes: Uint8Array) => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 const STILL_TYPES = new Set<string>(Object.values(StillMimeType));
 const PROBLEM_CODES = new Set<string>(Object.values(PluginStillProblemCode));
-const SOURCES = new Set(["page", "compositor"]);
+const SOURCES = new Set<string>(Object.values(CaptureSource));
 
 /** The exposure numbers of a still or a kept shot, or null when any is missing or out of range. */
 function exposure(value: unknown): StillExposure | null {
@@ -343,7 +346,7 @@ function stillOf(raw: unknown): CoverStill | null {
     mimeType: mimeType as StillMimeType,
     width,
     height,
-    source: source as CoverStill["source"],
+    source: source as CaptureSource,
     stats,
     preview: asBuffer(preview),
   };
@@ -609,6 +612,22 @@ export async function saveShot(dir: string, still: CoverStill, takenAt: string):
   const other = shot.mimeType === StillMimeType.Png ? StillMimeType.Jpeg : StillMimeType.Png;
   await rm(shotPath(dir, { mimeType: other }), { force: true });
   return shot;
+}
+
+/**
+ * The kept shot's image, copied to a private file of its own for one send, so a shot taken while
+ * the send runs never changes what it uploads or the hash it records. Null when the image on disk
+ * is not the one its record names. A copy a stopped Studio left behind is cleared first: one send
+ * runs per game at a time.
+ */
+export async function freezeShot(dir: string, shot: CoverShot): Promise<string | null> {
+  for (const name of await readdir(dir).catch(() => [] as string[]))
+    if (name.startsWith(SEND_COPY_PREFIX)) await rm(path.join(dir, name), { force: true });
+  const bytes = await readFile(shotPath(dir, shot)).catch(() => null);
+  if (!bytes || sha256(bytes) !== shot.sha256) return null;
+  const file = path.join(dir, `${SEND_COPY_PREFIX}${randomUUID()}${path.extname(shotPath(dir, shot))}`);
+  await writePrivateFile(file, bytes);
+  return file;
 }
 
 /** Keep the last send. */
