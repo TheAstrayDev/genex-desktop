@@ -88,8 +88,24 @@ Model roles accept Bonsai, Claude Code, Codex, OpenCode and OpenRouter as orches
 providers; engine/model pairs remain together. OpenRouter runs these same local sessions under its
 own engine id (`LocalSessions` `engine` option), with each model's catalog context. A single-model pick fills all roles; explicit crosses win.
 Existing saved subscription roles keep their version and choices. Session-capable local
-models get the Models role flyouts and model-specific effort sliders. Plain completion-only Ollama models keep the classic
-local loop.
+models get the Models role flyouts and model-specific effort sliders.
+
+Ollama holds no sessions (`roles: "completion"` in `shared/providers.ts`), yet a game chat on an
+Ollama model with tools gets the same three roles (`splitsRoles`): each job takes its own
+installed model and the run uses the classic local loop. One rule, `crossesTo` in both copies of
+`model-roles.ts`, decides which jobs leave the main agent's engine. An Ollama main agent may hand
+its workers and reviewers to a session provider; a session main agent may hand its reviewers to
+Ollama, never its workers, because the director hires every worker as a session. Reviewers look
+at screenshots, so an Ollama model without vision is listed but disabled in their menu, and a pick
+that cannot see leaves reviewing to the first installed model that can (or to itself when none
+can). The playtester plays on the reviewers' model when it calls tools and sees, else on the main
+agent's engine with that engine's own model; the scout is skipped under an Ollama main agent. A
+build turn on a model that cannot see receives a note instead of the turn's pictures
+(`unseen-pictures-prompts.ts`). A send that crosses a job to or from Ollama needs the
+`local-roles` harness capability, which `main.ts` claims only when `model-roles.ts`,
+`playtester.ts` and `scout.ts` all export `SERVES_LOCAL_ROLES` (`local-roles-served.ts`): an
+agent-edited older copy would put an Ollama model id on a subscription, so main refuses the send
+instead.
 
 `engines/local-session.ts` owns local session history under the engine home, separately for
 workers, directors and coordinators; its tools and path confinement live in

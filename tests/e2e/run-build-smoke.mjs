@@ -13,7 +13,19 @@ const REQUIRED_CHECKS = [
   "the Mac is still held awake while the stopped build settles",
   "the blocker is released when the run settles",
 ];
-const server = await startFakeOllama({ respond: () => ({ text: "Smoke fixture" }) });
+// Two local models: one that sees, and a coding model that cannot, for the local roles checks.
+const server = await startFakeOllama({
+  respond: () => ({ text: "Smoke fixture" }),
+  models: [
+    {
+      name: "qwen3.6:27b",
+      size: 17_000_000_000,
+      capabilities: ["completion", "tools", "vision"],
+      contextLength: 262144,
+    },
+    { name: "coder:7b", size: 4_000_000_000, capabilities: ["completion", "tools"], contextLength: 32768 },
+  ],
+});
 try {
   const args = process.argv
     .slice(2)

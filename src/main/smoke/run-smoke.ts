@@ -830,6 +830,7 @@ async function checkChatModelRoles(buildSmoke: BuildSmoke): Promise<void> {
     await sleep(300);
     await fs.writeFile(bonsaiShot.replace(/\.png$/, "-bonsai.png"), (await wc.capturePage()).toPNG());
   }
+  await checkLocalModelRoles(buildSmoke);
   await wc.executeJavaScript(
     `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));localStorage.setItem(${JSON.stringify(`studio.model.${threadId}`)},'codex::gpt-5.6-sol')`,
   );
@@ -840,6 +841,67 @@ async function checkChatModelRoles(buildSmoke: BuildSmoke): Promise<void> {
       `document.body.innerText.includes('Ready for your first idea')&&document.querySelector('[aria-label="Model settings"]')?.textContent.includes('Sol')`,
     ),
   );
+}
+
+/**
+ * A game chat on a completion-only local engine gives each job its own model: the fake Ollama
+ * lists one model that sees and a coding model that cannot, and a reviewer must see.
+ */
+async function checkLocalModelRoles(buildSmoke: BuildSmoke): Promise<void> {
+  const { wc, check, waitFor } = buildSmoke;
+  await wc.executeJavaScript(`localStorage.removeItem('studio.roles.ollama')`);
+  await openGameChatOn(buildSmoke, "ollama::coder:7b", "coder");
+  check(
+    "an Ollama main agent offers Workers and Reviewers",
+    await waitFor(`!!document.querySelector('[data-model-view="roles"] [data-role="builder"]')`),
+  );
+  check(
+    "a main agent that cannot see leaves reviewing to the local model that can",
+    await waitFor(`JSON.parse(localStorage.getItem('studio.roles.ollama')||'{}').roles?.judge==='qwen3.6:27b'`),
+  );
+  await wc.executeJavaScript(`document.querySelector('[data-model-view="roles"] [data-role="judge"]')?.click()`);
+  check(
+    "Ollama reviewers offer the model that sees and the subscription, and refuse the one that cannot see",
+    await waitFor(
+      `!!document.querySelector('[data-model-list="judge"] [data-model-choice="ollama::qwen3.6:27b"]:not(:disabled)')&&!!document.querySelector('[data-model-list="judge"] [data-model-choice="ollama::coder:7b"]:disabled')&&!!document.querySelector('[data-model-list="judge"] [data-model-choice^="codex::"]')`,
+    ),
+  );
+  const localShot = flagValue(StudioFlag.BuildShot);
+  if (localShot) {
+    await sleep(300);
+    await fs.writeFile(localShot.replace(/\.png$/, "-ollama-roles.png"), (await wc.capturePage()).toPNG());
+  }
+  await openGameChatOn(buildSmoke, "codex::gpt-5.6-sol", "Sol");
+  await wc.executeJavaScript(`document.querySelector('[data-model-view="roles"] [data-role="judge"]')?.click()`);
+  check(
+    "Codex reviewers offer the local model that sees",
+    await waitFor(
+      `!!document.querySelector('[data-model-list="judge"] [data-model-choice="ollama::qwen3.6:27b"]:not(:disabled)')`,
+    ),
+  );
+  await wc.executeJavaScript(`document.querySelector('[data-model-view="roles"] [data-role="builder"]')?.click()`);
+  check(
+    "Codex workers offer no Ollama model",
+    await waitFor(
+      `!!document.querySelector('[data-model-list="builder"] [data-model-choice^="codex::"]')&&!document.querySelector('[data-model-list="builder"] [data-model-choice^="ollama::"]')`,
+    ),
+  );
+}
+
+/** Reload on a model for the game's chat, open that chat itself and its model menu. */
+async function openGameChatOn(buildSmoke: BuildSmoke, modelKey: string, shown: string): Promise<void> {
+  const { wc, threadId, waitFor } = buildSmoke;
+  await wc.executeJavaScript(
+    `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));localStorage.setItem(${JSON.stringify(`studio.model.${threadId}`)},${JSON.stringify(modelKey)})`,
+  );
+  wc.reload();
+  // Open the game's chat itself: the reload is not relied on to land there.
+  await waitFor(`!!document.querySelector('nav [data-thread="${threadId}"]')`);
+  await wc.executeJavaScript(`document.querySelector('nav [data-thread="${threadId}"]')?.click()`);
+  await waitFor(
+    `document.querySelector('[data-chat-composer] [aria-label="Model settings"]')?.textContent.includes(${JSON.stringify(shown)})`,
+  );
+  await wc.executeJavaScript(`document.querySelector('[data-chat-composer] [aria-label="Model settings"]')?.click()`);
 }
 
 /** Plugins is a workspace page with bundled Genex, and it hides the native preview. */

@@ -30,6 +30,7 @@ import { handleRunStart, resumeRun } from "./run-dispatch.ts";
 import { handleBootNotice } from "./boot-notice.ts";
 import { buildHolds, chatWaitsFor, leadDoor, stopRun, stopRunsOf } from "./live-chat.ts";
 import { serveLiveChat } from "./live-chat-served.ts";
+import { LOCAL_ROLES_CAPABILITY, servesLocalRoles } from "./local-roles-served.ts";
 import { heldRuns, StatusLane, type Studio } from "./studio-state.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, Host, HostCall } from "../types/harness.d.ts";
 import type { DispatchAction } from "../types/host-api.d.ts";
@@ -128,7 +129,8 @@ export async function createStudio(host: Host) {
 
   return {
     status: () => status.summarize(),
-    capabilities: [...CAPABILITIES],
+    // A build whose jobs cross to or from a local engine only when every part it needs serves it.
+    capabilities: [...CAPABILITIES, ...(servesLocalRoles() ? [LOCAL_ROLES_CAPABILITY] : [])],
 
     async healthcheck() {
       // Prove the loaded self can talk to the substrate and read its own state.

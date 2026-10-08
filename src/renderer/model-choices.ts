@@ -5,12 +5,12 @@ import { ModelCatalogState } from "../shared/model-catalog.ts";
  */
 import { EngineKind, isEngineReady, needsSignIn } from "../shared/engine-descriptor.ts";
 import { ReasoningEffort } from "../shared/model-preferences.ts";
-import { resolveRoles } from "../shared/model-roles.ts";
+import { crossesTo, resolveRoles } from "../shared/model-roles.ts";
 import { EngineId, isMetered } from "../shared/providers.ts";
 import { modelKey, parseModelKey } from "./model-key.ts";
 import { modelBase, modelName, runnableModels, shownModels } from "./model-lineup.ts";
 import type { EngineDescriptor } from "./types.ts";
-import type { ModelChoice, RoleRecord } from "./ui/ModelMenu.tsx";
+import type { ModelChoice, RoleKey, RoleRecord } from "./ui/ModelMenu.tsx";
 import { MODEL_PICKER_WORDS } from "./words.ts";
 
 type EngineModel = EngineDescriptor["models"][number];
@@ -84,6 +84,7 @@ function localChoice(engine: EngineDescriptor, model: EngineModel): ModelChoice 
     contextWindow: model.contextWindow,
     supportsFast: model.supportsFast,
     supportsSessions: engine.supportsSessions ?? false,
+    supportsVision: model.supportsVision,
     ...(model.efforts?.length ? { efforts: model.efforts } : {}),
     ...(model.defaultEffort ? { defaultEffort: model.defaultEffort } : {}),
     tag: localTag(model),
@@ -180,6 +181,38 @@ function subscriptionRow(engine: EngineDescriptor, ready: boolean): ModelChoice 
     disabled: !ready && !signIn,
     ...(engine.status.remedy ? { title: engine.status.remedy } : {}),
   };
+}
+
+/**
+ * The rows a job's list offers. The main agent runs on any model; the workers and reviewers on the
+ * main agent's own engine, or on a model row of an engine the job may cross to (`crossesTo`). A
+ * reviewer looks at screenshots, so a local row that cannot see images is listed, disabled, with
+ * the reason.
+ */
+export function roleChoices(
+  choices: ModelChoice[],
+  role: RoleKey,
+  orchestrator: ModelChoice | undefined,
+): ModelChoice[] {
+  if (role === "planner" || !orchestrator) return choices;
+  const engine = parseModelKey(orchestrator.key).engine;
+  const rows = choices.filter((choice) => runsJob(choice, role, engine));
+  return role === "judge" ? rows.map(asReviewer) : rows;
+}
+
+/** Can this row run the job under a main agent on `engine`: its own engine, or one the job crosses to? */
+function runsJob(choice: ModelChoice, role: RoleKey, engine: string): boolean {
+  const on = parseModelKey(choice.key).engine;
+  if (on === engine) return true;
+  // A subscription with no models to list has one row for the engine itself, which runs nothing.
+  const modelRow = choice.supportsSessions !== undefined;
+  return modelRow && crossesTo(engine, role, on);
+}
+
+/** A row in the reviewers' list: one that runs without sessions and cannot see images is disabled. */
+function asReviewer(choice: ModelChoice): ModelChoice {
+  const blind = choice.supportsSessions === false && choice.supportsVision === false;
+  return blind ? { ...choice, disabled: true, title: MODEL_PICKER_WORDS.cannotSeeImages } : choice;
 }
 
 /**

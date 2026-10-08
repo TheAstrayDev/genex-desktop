@@ -329,6 +329,14 @@ describe("model roles (shared/model-roles.ts ↔ loop/model-roles.ts)", () => {
     for (const engine of engines) {
       assert.equal(roles.isDelegated(engine), seedRoles.isDelegated(engine), String(engine));
       assert.equal(roles.hasSessionRoles(engine), seedRoles.hasSessionRoles(engine), String(engine));
+      assert.equal(roles.takesRoles(engine), seedRoles.takesRoles(engine), String(engine));
+      for (const key of ["planner", "builder", "judge"] as const)
+        for (const other of engines)
+          assert.equal(
+            roles.crossesTo(engine, key, other),
+            seedRoles.crossesTo(engine, key, other),
+            `${engine} ${key} → ${other}`,
+          );
       assert.equal(roles.engineLabel(engine), seedRoles.engineLabel(engine), String(engine));
       assert.deepEqual(roles.modelsFor(engine), seedRoles.modelsFor(engine), String(engine));
       for (const model of models) {
@@ -351,6 +359,9 @@ describe("model roles (shared/model-roles.ts ↔ loop/model-roles.ts)", () => {
       { builder: roles.SOL, engines: { builder: "codex" } },
       { engines: { judge: "codex", planner: "codex" } },
       { judge: roles.OPUS, engines: { judge: "claude-code", builder: "ollama" } },
+      { judge: "vl", engines: { judge: "ollama" } },
+      { builder: roles.OPUS, judge: "vl", engines: { builder: "claude-code", judge: "ollama" } },
+      { builder: "coder", engines: { builder: "ollama", judge: "bonsai" } },
       { planner: "sonnet", efforts: { planner: "high", builder: 3, judge: "low" } },
       { planner: "sonnet", efforts: { builder: 3 } },
       { builder: 7, judge: null, unknown: "x" },

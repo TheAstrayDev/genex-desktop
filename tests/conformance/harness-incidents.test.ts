@@ -11458,3 +11458,199 @@ describe("growth has a way into the move", () => {
     assert.equal(unowned.source, MoveSource.Planner);
   });
 });
+
+/**
+ * Issue #47: a game run with a model per job. Local runs played their playtest on the workers'
+ * model even when the reviewers had picked a model that sees, and a run whose reviewers sat on
+ * another engine handed that engine's model id to whichever engine actually played.
+ */
+describe("the playtester of a run with a model per job (issue #47)", () => {
+  const described = [
+    {
+      id: "ollama",
+      label: "Ollama",
+      kind: "direct",
+      status: { code: "ready", detail: "" },
+      defaultModel: "coder",
+      models: [
+        { id: "coder", label: "coder", contextWindow: 32_000, supportsTools: true, supportsVision: false },
+        { id: "vl", label: "vl", contextWindow: 32_000, supportsTools: true, supportsVision: true },
+        { id: "seer", label: "seer", contextWindow: 32_000, supportsTools: false, supportsVision: true },
+      ],
+    },
+    {
+      id: "claude-code",
+      label: "Claude Code",
+      kind: "delegated",
+      supportsSessions: true,
+      status: { code: "ready", detail: "" },
+      defaultModel: null,
+      models: [{ id: "opus", label: "Opus", contextWindow: 200_000, supportsTools: true, supportsVision: true }],
+    },
+  ];
+  const answer = JSON.stringify({ answers: { wade: { answer: "yes" } }, report: "waded" });
+  /** Where a playtest of `run` plays: the engine and the model each completion or session asks for. */
+  async function played(
+    run: Record<string, unknown>,
+  ): Promise<Array<{ via: string; engine: unknown; model: unknown }>> {
+    const { runPlaytest } = await import("../../src/harness-seed/loop/playtester.ts");
+    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.describe": () => described,
+        "engine.complete": () => ({ message: { role: "assistant", content: answer } }),
+        "engine.delegate": () => ({ summary: answer, turns: 2 }),
+        "preview.load": () => ({ ok: true }),
+        "preview.call": () => null,
+      },
+    });
+    await runPlaytest(recorder.ctx as never, {
+      run: { runId: "run_lr", project: "marsh", ...run } as never,
+      checks: [{ id: "wade", kind: "play", ask: "Could you wade into the marsh?", weight: "normal" }] as never,
+      root: "/fake/root",
+      maxActions: 2,
+    });
+    return recorder.calls
+      .filter((call) => call.method === "engine.complete" || call.method === "engine.delegate")
+      .map((call) => ({ via: call.method, engine: call.params.engine, model: call.params.model }));
+  }
+
+  it("LR1. plays on the reviewers' model when it calls tools and sees, and never sends one engine's model to another", async () => {
+    const local = { engine: "ollama", model: "coder", judgeEngine: "ollama", judgeModel: "vl" };
+    assert.deepEqual(
+      await played(local),
+      [{ via: "engine.complete", engine: "ollama", model: "vl" }],
+      "an all-local run plays on the reviewers' model",
+    );
+    assert.deepEqual(
+      await played({ ...local, judgeModel: "seer" }),
+      [{ via: "engine.complete", engine: "ollama", model: "coder" }],
+      "a reviewer that cannot call tools leaves play to the workers' model, as before",
+    );
+    const subscription = { engine: "claude-code", model: "opus", judgeEngine: "ollama", judgeModel: "vl" };
+    assert.deepEqual(
+      await played(subscription),
+      [{ via: "engine.complete", engine: "ollama", model: "vl" }],
+      "local reviewers under a subscription play on their own engine",
+    );
+    assert.deepEqual(
+      await played({ ...subscription, judgeModel: "seer" }),
+      [{ via: "engine.delegate", engine: "claude-code", model: "opus" }],
+      "the run's own engine plays with its own model, never the local reviewer's id",
+    );
+    assert.deepEqual(
+      await played({
+        engine: "ollama",
+        model: "opus",
+        builderEngine: "claude-code",
+        judgeEngine: "ollama",
+        judgeModel: "seer",
+        roles: { planner: "coder", builder: "opus", judge: "seer" },
+      }),
+      [{ via: "engine.complete", engine: "ollama", model: "coder" }],
+      "a local main agent with subscription workers plays on its own model, never the workers' id",
+    );
+  });
+});
+
+/**
+ * Issue #47: a coding model that cannot see images, picked as the workers' or the main agent's
+ * model on a local engine. A screenshot a tool took, or a frame the person attached, went to it as
+ * pixels, Ollama refused the request as unavailable, and the turn died or fell back to another
+ * engine. A model that cannot see is told the pictures exist instead.
+ */
+describe("a local model that cannot see images (issue #47)", () => {
+  const describedWith = (supportsVision: boolean) => [
+    {
+      id: "ollama",
+      label: "Ollama",
+      kind: "direct",
+      status: { code: "ready", detail: "" },
+      defaultModel: "coder",
+      models: [{ id: "coder", label: "coder", contextWindow: 32_000, supportsTools: true, supportsVision }],
+    },
+  ];
+  /** The messages a direct turn's one completion carries, for a model that sees or not. */
+  async function sent(supportsVision: boolean): Promise<Array<{ role: string; content: string; images: number }>> {
+    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
+    const recorder = ctxRecorder({
+      unknown: { value: null },
+      handlers: {
+        "engine.describe": () => describedWith(supportsVision),
+        "engine.complete": () => ({ message: { role: "assistant", content: "done" } }),
+        "plugins.tools": () => ({ tools: [] }),
+        "mcp.tools": () => ({ tools: [] }),
+      },
+    });
+    await runTurn(
+      recorder.ctx as never,
+      {
+        turnId: "t1",
+        threadId: "th",
+        engine: "ollama",
+        model: "coder",
+        input: [],
+        stills: [{ label: "plaza", mimeType: "image/jpeg", data: "AAAA" }],
+      } as never,
+    );
+    const [complete] = recorder.paramsOf("engine.complete") as Array<{
+      messages: Array<{ role: string; content: unknown; images?: unknown[] }>;
+    }>;
+    return (complete?.messages ?? []).map((m) => ({
+      role: m.role,
+      content: String(m.content),
+      images: m.images?.length ?? 0,
+    }));
+  }
+
+  it("LR2. a turn on a model that cannot see sends no pixels and says the pictures exist; one that sees gets them", async () => {
+    const blind = await sent(false);
+    assert.ok(blind.length > 0, "the turn asked its model");
+    assert.equal(
+      blind.reduce((n, m) => n + m.images, 0),
+      0,
+      "no pixels reach a model that cannot see them",
+    );
+    assert.match(blind.at(-1)?.content ?? "", /plaza/, "the model hears which pictures it was not shown");
+    const seeing = await sent(true);
+    assert.equal(seeing.at(-1)?.images, 1, "a model that sees gets the picture, as before");
+  });
+});
+
+/**
+ * Issue #47: a local main agent whose workers are a subscription runs the classic loop with
+ * delegated workers, so the scout ran, and asked the host to delegate its session to the main
+ * agent's engine: Ollama, which holds no sessions ("ollama is a direct engine").
+ */
+describe("the scout under a local main agent (issue #47)", () => {
+  it("LR3. a main agent that holds no sessions skips the scout, even when its workers are a subscription's", async () => {
+    const { runScout } = await import("../../src/harness-seed/loop/scout.ts");
+    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.describe": () => [
+          { id: "ollama", kind: "direct", models: [] },
+          { id: "claude-code", kind: "delegated", supportsSessions: true, models: [] },
+        ],
+        "engine.delegate": (params) => {
+          throw new Error(`${String(params.engine)} is a direct engine; use engine.complete`);
+        },
+      },
+    });
+    const answer = await runScout(recorder.ctx as never, {
+      threadId: "th",
+      run: {
+        runId: "run_lr3",
+        project: "marsh",
+        engine: "ollama",
+        builderEngine: "claude-code",
+        model: "opus",
+      } as never,
+      profile: { delegated: true } as never,
+      projectDir: "/fake/marsh",
+    });
+    assert.deepEqual(recorder.paramsOf("engine.delegate"), [], "no session is asked of an engine that holds none");
+    assert.equal(answer.report, null);
+    assert.equal(answer.skipped, "direct engine");
+  });
+});

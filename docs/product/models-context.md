@@ -11,12 +11,13 @@ An unset pick runs the CLI's named default, else a default row. Aliases follow t
 versions stay pinned. OpenRouter and OpenCode show three, newest first, no default.
 
 Settings shows CLI versions; connected rows list picker models; Account rechecks
-(refreshing models) or updates the CLI. Failed refreshes offer Try again, keeping names stale. Unavailable picks block sends; without models, Connect AI model replaces the
+or updates the CLI. Failed refreshes offer Try again, keeping names stale. Unavailable picks block sends; without models, Connect AI model replaces the
 model pill. New models may need a CLI update; listing does not prove access.
 
-Each chat keeps its model, effort and Loop; fresh games inherit the last picks. One effort
-serves every role: the slider offers the main agent's levels; others use their closest.
-Workers and Reviewers run only in Loop; a new main-agent model keeps their picks.
+Each chat keeps its model, effort and Loop; fresh games inherit the last picks. One effort,
+on the main agent's levels, serves every role at its closest.
+Workers and Reviewers run only in Loop and survive a main-agent change. Each Ollama job takes its
+own model; Reviewers must see images.
 
 Local Models (Bonsai/Ollama) downloads and deletes. Metered OpenCode and OpenRouter get their own
 groups and are never auto-chosen ([details](../connections-and-context.md#openrouter-and-opencode)).
@@ -28,7 +29,7 @@ offers Compact now, also typed as `/compact` (Claude Code and Codex use
 [their own](../connections-and-context.md#compact-now); others hand over); every provider, workers
 included, also compacts automatically at its own point. Then plan limits ([details](../connections-and-context.md#plan-limits)).
 
-Ollama uses a loaded model's reported runtime context, not its theoretical maximum; an unloaded
+Ollama uses a loaded model's reported runtime context; an unloaded
 model's budget is an estimate marked unknown. Tools and images need reported capability;
 unsupported requests fail before inference.
 

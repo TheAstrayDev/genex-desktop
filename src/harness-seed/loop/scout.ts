@@ -21,7 +21,7 @@
  * works as it did before, and the decision card says the run went in blind.
  */
 import { MIN_DELEGATE_TIMEOUT_MS } from "./config.ts";
-import { EngineId, modelOn, roleEffort, roleEngine, RoleKey, toolCall } from "./model-roles.ts";
+import { EngineId, modelOn, roleEffort, roleEngine, RoleKey, supportsSessions, toolCall } from "./model-roles.ts";
 import { parseVerdict } from "./judge.ts";
 import { describePlayScript, GAME_KINDS, isGameKind, KIND_NAMES, normalizePlayScript } from "./kinds.ts";
 import { EngineFailure, outageDelays, withProviderPatience } from "./outage.ts";
@@ -338,14 +338,23 @@ interface ScoutAnswer {
 }
 
 /**
+ * The scout never asks a session of a main agent that holds none, so main.ts may claim the
+ * local-roles capability (local-roles-served.ts): a kept older copy would delegate to Ollama.
+ */
+export const SERVES_LOCAL_ROLES = true;
+
+/**
  * Run the scout: a delegated read-only session with the computer tool over the live folder.
  * Returns `{ report, transcript }`; `report` null when the engine is direct, the scout failed,
  * or its JSON was unusable — the caller records that as a decision, not a crash.
  */
 export async function runScout(ctx: HarnessCtx, options: ScoutOptions): Promise<ScoutAnswer> {
   const { run, profile, projectDir } = options;
-  if (!profile?.delegated || !projectDir)
-    return { report: null, transcript: "", skipped: profile?.delegated ? "no project folder" : "direct engine" };
+  // The scout's session runs on the main agent's engine, so delegated workers are not enough: a
+  // local main agent with a subscription's workers holds no session to scout in.
+  const delegated = Boolean(profile?.delegated) && (await mainAgentHoldsSessions(ctx, run));
+  if (!delegated || !projectDir)
+    return { report: null, transcript: "", skipped: delegated ? "no project folder" : "direct engine" };
   ctx.setStatus?.(`run ${run.runId} · scouting the game`);
   let result: DelegateResult;
   try {
@@ -369,6 +378,13 @@ export async function runScout(ctx: HarnessCtx, options: ScoutOptions): Promise<
     ? "the scout returned no usable JSON"
     : `the scout did not finish: ${result?.errorText || result?.stopReason || "unknown"}`;
   return { report: null, transcript, skipped };
+}
+
+/** Does the main agent's engine hold sessions? An engine list the host cannot give leaves it to try. */
+async function mainAgentHoldsSessions(ctx: HarnessCtx, run: Run): Promise<boolean> {
+  const described = await ctx.call(HostMethod.EngineDescribe, {}).catch(() => null);
+  if (!described) return true;
+  return supportsSessions(described.find((e) => e.id === (run.engine ?? EngineId.Ollama)));
 }
 
 /**
