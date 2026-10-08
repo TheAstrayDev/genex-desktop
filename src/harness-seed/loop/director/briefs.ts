@@ -19,6 +19,8 @@ import { DIRECTOR_TOOLS } from "./tool-specs.ts";
 import { WAKE_BRIEF, wakeTools } from "./wake-prompts.ts";
 import { DirectorLoop } from "./wake-schedule.ts";
 import { workingGoal } from "../goal-prompts.ts";
+import { CoreFact, type FactRef, ProjectTool } from "../folder-facts.ts";
+import { appIdentity } from "../project-prompts.ts";
 import type { AnyRecord, Run } from "../../types/harness.d.ts";
 // Type-only: erased at runtime, so this module still imports no part of the night.
 import type { Worker } from "./night.ts";
@@ -95,13 +97,29 @@ export interface DirectorBriefFacts {
   startObserved?: boolean;
   gameLessons?: string[];
   contract?: AnyRecord | null;
-  /** How the session is driven: a waking lead is told it ends its turn and has no `wait` (default: the long turn's words). */
+  /** How the session is driven: a waking lead is told it ends its turn and has no `worker_wait` (default: the long turn's words). */
   loop?: DirectorLoop;
   /**
    * A lead that is its chat's own session (one session): where it sits. It reads the lines written
    * for a lead that writes nothing; absent, a director with its own hands in `integrationWorktree`.
    */
   lead?: { gameFolder: string } | null;
+  /** What the game's folder holds (`game.list`'s `facts`); absent: a web game at its root, the game a director builds. */
+  facts?: readonly FactRef[] | null;
+  /** The game's own folder, which the brief names by its last two parts; absent: the lead's, or the run's project. */
+  gameFolder?: string | null;
+}
+
+/** What a lead is told of Genex's plugin search, by the tools' own names (the TOOLS header spells them). */
+const PLUGIN_SEARCH_LINE = `- Genex's plugin search: ${ProjectTool.PluginsFind}; ${ProjectTool.PluginsSuggest} shows the person its card.`;
+
+/** The game a director builds when its run says nothing else: a web game at the folder's root. */
+const WEB_AT_ROOT: readonly FactRef[] = [{ id: CoreFact.WebGame, path: "." }];
+
+/** The folder a brief names: the last two parts of the game's folder (or the lead's), else the run's project. */
+function folderLabelOf(run: Run, lead: { gameFolder: string } | null, gameFolder: string | null): string {
+  const folder = gameFolder || lead?.gameFolder;
+  return folder ? folder.split("/").slice(-2).join("/") : String(run.project ?? "");
 }
 
 /**
@@ -181,10 +199,10 @@ function planReviewWords(run: Run, loop: DirectorLoop): string {
   return ' THE USER ASKED TO READ IT FIRST: your first worker_start waits for their word (they may simply say "go"), and builds the plan as it stands if they say nothing.';
 }
 
-/** Where the user's words reach the lead: the message that wakes it, or `wait` and run_status in the long turn. */
+/** Where the user's words reach the lead: the message that wakes it, or `worker_wait` and run_status in the long turn. */
 function userSaysWords(loop: DirectorLoop): string {
   if (loop === DirectorLoop.Wake) return WAKE_BRIEF.userSays;
-  return `- The user may speak during the run (USER SAYS in wait and run_status). Their instruction outranks your plan; acknowledge it with a note and act on it.`;
+  return `- The user may speak during the run (USER SAYS in worker_wait and run_status). Their instruction outranks your plan; acknowledge it with a note and act on it.`;
 }
 
 /**
@@ -234,12 +252,16 @@ export function directorBrief({
   contract = null,
   loop = DirectorLoop.Turn,
   lead = null,
+  facts = null,
+  gameFolder = null,
 }: DirectorBriefFacts): string {
   const pool = poolWords(capacity);
   const tools = loop === DirectorLoop.Wake ? wakeTools(DIRECTOR_TOOLS) : DIRECTOR_TOOLS;
   const leads = Boolean(lead);
   return joinLines([
     openingLine(run, leads),
+    // Who runs the session, right after who it is: Genex, the game's folder and what it holds.
+    appIdentity({ folderLabel: folderLabelOf(run, lead, gameFolder), facts: facts ?? WEB_AT_ROOT }),
     ``,
     `GAME GOAL: ${workingGoal(run)}`,
     referenceLine(run),
@@ -255,7 +277,7 @@ export function directorBrief({
     startingPointLine(startingPoint, leads),
     leads
       ? LEAD_BRIEF.baseMustRun
-      : `THE BASE MUST RUN: worker_start looks at the commit a worker forks from before it starts anyone, whatever it forked from (a console error there costs every worker its first iteration); a refusal names the problems — fix them in your worktree, commit, and start again. An integration head that fails its health pass cannot land: fix it, or judge it (a passing judge counts).`,
+      : `THE BASE MUST RUN: worker_start looks at the commit a worker forks from before it starts anyone (a console error there costs every worker its first iteration); a refusal names the problems — fix them in your worktree, commit, and start again. An integration head that fails its health pass cannot land: fix it, or judge it (a passing judge counts).`,
     ``,
     // What earlier nights on this exact game already paid for (loop/ledger.ts). The studio keeps
     // its own ledger of outcomes per game; these are the patterns it found in them.
@@ -268,6 +290,7 @@ export function directorBrief({
     `YOUR TOOLS — ${toolSyntax(run.engine)}:`,
     `- Your window shows one build at a time: look points it (target=integration|live|<worker id>), computer is your hands and eyes on it, capture takes every registered camera of it at once. Start every look with a screenshot.`,
     `- The run's own tools: ${tools.map((t) => t.name).join(", ")}.`,
+    PLUGIN_SEARCH_LINE,
     ``,
     skill ? `THE PLAYBOOK:\n${skill.trim()}` : "",
     ...rulesThatNeverMove(run, loop, leads),
@@ -292,7 +315,7 @@ function whereLine({
   baseCommit: string | null;
 }): string {
   if (gameFolder) return LEAD_BRIEF.whereYouAre({ gameFolder, integrationWorktree, baseCommit });
-  return `WHERE YOU ARE: your cwd is the run's integration worktree (${integrationWorktree}), a git worktree of the game at commit ${shortSha(baseCommit ?? "")} — the integration branch. Edit here yourself for what is quicker to do than to delegate; commit what workers should fork from. The live game folder the user sees stays untouched until finish lands this branch. Never git push, never edit outside this worktree. Workers get worktrees of their own; the studio commits for them.`;
+  return `WHERE YOU ARE: your cwd is the run's integration worktree (${integrationWorktree}), a git worktree of the game at commit ${shortSha(baseCommit ?? "")} — the integration branch. Edit here yourself for what is quicker to do than to delegate; commit what workers should fork from. The live game folder the user sees stays untouched until finish lands this branch. Never git push, never edit outside this worktree.`;
 }
 
 /**
@@ -365,21 +388,35 @@ function ownSeamLine(worker: Worker, shape: AnyRecord | null): string {
   return `${shape?.main ?? "The entry module"}, the studio contract and index.html are not yours — if your work needs a change in one of them, say so in your report and leave it.`;
 }
 
-/** The brief a single-session worker gets around the director's own words. */
+/** Who runs a builder, the first thing its brief says: Genex, the run's game folder and what it holds. */
+function builderIdentity(run: Run, facts: readonly FactRef[] | null, gameFolder: string | null): string {
+  return appIdentity({ folderLabel: folderLabelOf(run, null, gameFolder), facts: facts ?? WEB_AT_ROOT });
+}
+
+/**
+ * The brief a single-session worker gets around the director's own words, Genex's identity first:
+ * the game's folder (`gameFolder`) and what it holds (`facts`), as the night found them.
+ */
 export function singleWorkerBrief({
   run,
   worker,
   shape = null,
   ownShape = false,
   setup = null,
+  facts = null,
+  gameFolder = null,
 }: {
   run: Run;
   worker: Worker;
   shape?: AnyRecord | null;
   ownShape?: boolean;
   setup?: AnyRecord | null;
+  facts?: readonly FactRef[] | null;
+  gameFolder?: string | null;
 }): string {
   return joinLines([
+    builderIdentity(run, facts, gameFolder),
+    ``,
     `You are a BUILDER for run ${run.runId} on the game "${run.project}", working in an isolated copy of the game (this folder). The run's director wrote your brief; build exactly that, then stop.`,
     ``,
     `GAME GOAL (context): ${workingGoal(run)}`,

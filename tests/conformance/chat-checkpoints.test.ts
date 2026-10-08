@@ -7,6 +7,7 @@ import {
   CHAT_CHECKPOINTS_KEPT,
   CHECKPOINT_FILE_MAX_BYTES,
   ChatCheckpoints,
+  CheckpointPhase,
   chatCheckpointRef,
 } from "../../src/main/chat-checkpoints.ts";
 import { ensureRepo, git } from "../../src/substrate/snapshots.ts";
@@ -284,11 +285,38 @@ test("files too large to keep are never deleted or overwritten by a restore, and
     outsideUnknown: false,
     nested: [],
     tooLarge: 2,
+    tooLargeFiles: ["intro.mp4", "music.ogg"],
   });
   await checkpoints.restore(dir, "thread-1", "msg_a");
   assert.equal(await read(dir, "intro.mp4"), "compressed");
   assert.equal((await fs.stat(path.join(dir, "music.ogg"))).size, CHECKPOINT_FILE_MAX_BYTES + 1);
   assert.equal(await read(dir, "src/main.js"), "jump();\n");
+});
+
+test("names what a checkpoint left out, and what a rewind left as it is", async (t) => {
+  const { dir, checkpoints } = await game(t);
+  await fs.writeFile(path.join(dir, "theme.wav"), "small");
+  const before = await checkpoints.take(dir, "thread-1", "msg_a");
+  assert.ok(before);
+  assert.deepEqual(await checkpoints.leftOut(dir, before), { nested: [], skipped: [] }, "nothing left out");
+  await fs.truncate(path.join(dir, "theme.wav"), CHECKPOINT_FILE_MAX_BYTES + 1);
+  await fs.writeFile(path.join(dir, "src", "main.js"), "changed();\n");
+  const after = await checkpoints.take(dir, "thread-1", "msg_a", CheckpointPhase.After);
+  assert.ok(after);
+  assert.deepEqual(await checkpoints.leftOut(dir, after), { nested: [], skipped: ["theme.wav"] });
+  const plan = await checkpoints.plan(dir, "thread-1", "msg_a");
+  assert.equal(plan.state, "restore");
+  assert.deepEqual(plan.state === "restore" && plan.tooLargeFiles, ["theme.wav"], "the plan names it");
+  const restored = await checkpoints.restore(dir, "thread-1", "msg_a");
+  assert.deepEqual(restored.stayed, ["theme.wav"], "the restore says it stayed");
+  assert.equal((await fs.stat(path.join(dir, "theme.wav"))).size, CHECKPOINT_FILE_MAX_BYTES + 1);
+  assert.equal(await read(dir, "src/main.js"), "jump();\n");
+  // Nothing held back: no list at all.
+  await fs.writeFile(path.join(dir, "theme.wav"), "small");
+  await fs.writeFile(path.join(dir, "src", "main.js"), "again();\n");
+  const plain = await checkpoints.plan(dir, "thread-1", "msg_a");
+  assert.equal(plain.state === "restore" && "tooLargeFiles" in plain, false);
+  assert.equal("stayed" in (await checkpoints.restore(dir, "thread-1", "msg_a")), false);
 });
 
 test("a folder standing where the checkpoint had a file is kept while it holds anything never saved", async (t) => {
@@ -405,7 +433,11 @@ test("a file too large to save standing where the checkpoint had a folder is lef
   await fs.rm(path.join(dir, "intro"), { recursive: true });
   await fs.writeFile(path.join(dir, "intro"), "");
   await fs.truncate(path.join(dir, "intro"), CHECKPOINT_FILE_MAX_BYTES + 1);
-  assert.deepEqual(await checkpoints.plan(dir, "thread-1", "msg_a"), { state: "unavailable", reason: "too-large" });
+  assert.deepEqual(await checkpoints.plan(dir, "thread-1", "msg_a"), {
+    state: "unavailable",
+    reason: "too-large",
+    tooLargeFiles: ["intro/frame1.png"],
+  });
   await checkpoints.restore(dir, "thread-1", "msg_a");
   assert.equal((await fs.stat(path.join(dir, "intro"))).size, CHECKPOINT_FILE_MAX_BYTES + 1);
 });

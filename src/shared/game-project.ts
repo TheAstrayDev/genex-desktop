@@ -3,7 +3,9 @@
  * Game sheet shows about a picked folder. `substrate/game-workspace.ts` decides and writes these
  * and re-exports the types; the renderer reads them through `window.studio`.
  */
+import type { EngineBinding } from "./game-engine.ts";
 import type { GameLibraryEntry } from "./game-library.ts";
+import type { FolderHolds, ProjectFact } from "./project-facts.ts";
 
 export interface GameProject {
   primaryThreadId?: string;
@@ -22,6 +24,31 @@ export interface GameProject {
   shape: ProjectShape;
   /** `shape.own`: the folder brought its own game, so the studio builds it and serves its output. */
   built: boolean;
+  /** The engine project Genex linked this game to; absent for a web game (`shared/game-engine.ts`). */
+  engine?: EngineBinding;
+  /**
+   * What the folder holds, by `shared/project-facts.ts`: the core table, the enabled plugins'
+   * `detect` and the engine link. Empty while the first message has not picked a kind.
+   */
+  facts: ProjectFact[];
+  /**
+   * What the folder holds while it has no facts (`FolderHolds`): nothing or notes (no kind yet), files
+   * of its own of a kind no rule knows, or unreadable. Absent once it has facts, and from older lists.
+   */
+  holds?: FolderHolds;
+  /** What a port replaced, kept in the folder as the reference and no longer a kind of this game. */
+  portedFrom?: ProjectFact[];
+  /**
+   * Whether `facts` hold `web-game` at the root; kept for parts that read it. Absent from a
+   * descriptor made before it was recorded, read as a web game.
+   */
+  web?: boolean;
+  /**
+   * The folder's content stamp (`game.contentStamp`'s `all`) as New game made it from the template;
+   * absent for a folder the studio did not make that way. While the folder's stamp still equals
+   * it, nothing has been built in the game yet.
+   */
+  scaffoldStamp?: string;
   /** Named before anyone said what the game is: its first idea renames it in place (`nameFromIdea`). */
   provisional?: boolean;
 }
@@ -153,12 +180,20 @@ export interface FolderInspection {
   /** Repositories of their own directly inside the picked folder — what keeping it has to answer for. */
   nested: string[];
   /**
-   * What opening the picked folder *itself* would write into it: the starter game when no game
-   * was found, and only the studio's own files when the game is one level down (keeping the
-   * parent never writes a game beside the real one). Empty when the folder is a game of its own
-   * — its own candidate answers that instead.
+   * What opening the picked folder *itself* would write into it: the starter game when the folder
+   * holds nothing of its own, and only Genex's bookkeeping when it holds files of its own and no
+   * web page, including a folder whose game is one level down (keeping the parent never writes a
+   * game beside the real one). Empty when the folder is a game of its own — its own candidate
+   * answers that instead.
    */
   starter: string[];
+  /** The folder holds files of its own and no web page: opening it writes only Genex's bookkeeping. */
+  ownFiles: boolean;
+  /**
+   * Opening the folder itself writes the web starter's missing files: it is a web game by the
+   * starter's stamp in its studio.json, though no page of its own is a candidate.
+   */
+  webStarter: boolean;
 }
 
 export interface ProjectRecent {

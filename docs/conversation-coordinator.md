@@ -92,7 +92,7 @@ Delivery and wrap-up are read from the log (`loop/run-inbox.ts`): a resumed sess
 run hands over only steers with no `run_steering_delivered` yet, and a `finish` counts only after
 the run's latest `run_registered` (`finishRequested`, the app's copy in `shared/coordinator.ts`).
 A resumed night never inherits an earlier wrap-up, and `finish_run` after Resume is recorded again.
-Its director's first message (its first `wait` on the long turn, `directorLoop: "turn"`) still says
+Its director's first message (its first `worker_wait` on the long turn, `directorLoop: "turn"`) still says
 every earlier steer once, since the night may have opened a fresh session that never heard them —
 all but the chat's messages a night's lead heard or gave back ([live chat](#live-chat-during-a-build));
 on the wake loop they open that message's digest, read from the journal (THE USER SAYS: the newest
@@ -523,7 +523,10 @@ restated. A finished build no Loop can go on from — no lead seated (the long t
 director, the classic pipeline, a gauntlet, no journal), a coordinator on a model without sessions,
 or a kept older part (the own session's or the coordinator's) — is answered as with Loop off, and
 the chat says so once per finished build while the loop lives (`firstLoopUnused`,
-`MESSAGE.loopUnused`). Mode still offers Loop after any finished build. Not solved, an owner
+`MESSAGE.loopUnused`). A game built in Unreal is not one of these: a Loop message the person sends
+after its finished run goes to no run, as [before a run exists](#intake-approval-before-a-run-exists),
+and the session's launch starts the next Unreal Loop (`chat-dispatch.ts` `startsNextUnrealLoop`).
+Mode still offers Loop after any finished build. Not solved, an owner
 decision: a chat whose finished build cannot be continued (the classic pipeline or a gauntlet, as
 on a local model without sessions) has no way to start another timed build there, since "Start a
 new build" was removed.
@@ -571,7 +574,12 @@ through a private index with executable Git configuration disabled. It preserves
 bytes instead of running clean/smudge filters, including LFS. Chat links also read stored blobs
 without downloading or converting LFS pointers. It never captures `.env` or `.env.*`, packages, build output or nested repositories,
 and leaves out files over 50 MB and the largest ones past 1 GB of new content; each checkpoint
-records what it left out, and a restore never touches those paths. It commits as the studio on
+records what it left out, and a restore never touches those paths. Leaving them out is never
+silent: a checkpoint that skips a new set of files for their size appends the host-only
+`checkpoint_skipped` (`by: checkpoint`, each file's size), the confirmation names the changed ones
+(`tooLargeFiles`), and a restore that left some appends it with `by: rewind`. Each report is also
+noted for the thread (`unsaved-files.ts`, memory only): its next delegated session with host tools
+reads them after the cut-off notice (`delegation-prompts.ts` `unsavedFilesNotice`) until one settles. It commits as the studio on
 `refs/studio/chat/<thread>/before|after/<message>` with hooks off, without moving HEAD, branches
 or the user's index. Restoring changes the working tree only, and only while HEAD is the
 checkpoint's parent. The pre-rewind folder is saved on `.../rewound/<id>`; a restore that fails
@@ -582,10 +590,24 @@ chat's answers (between an `after` and the next `before`) are named in the confi
 later answer left no checkpoint the confirmation says it cannot tell, and the switch starts off.
 The preview's `files` is `unavailable` with a reason when they cannot come back: `build-running`,
 `joined-answer`, `build-changed` (a build after the message landed, or moved HEAD), or the
-checkpoint's `no-checkpoint`, `history-changed` and `too-large`; `stopsBuild` says a build is
+checkpoint's `no-checkpoint`, `history-changed` and `too-large` (every changed file too large to
+save, named in `tooLargeFiles`; the rewind records them as `checkpoint_skipped` by `rewind` even
+when only the chat goes back); `stopsBuild` says a build is
 stopped first. The host restores nothing then: it ignores the request for a running or landed
 build, a joined message and a message with no checkpoint (no queue record, or none kept), and a
 checkpoint that no longer applies refuses it.
+The person may clear Rewind history (`studio:game.history.clear`, `core/history-space.ts`): every
+`refs/studio/chat/**` of the game and the `refs/studio/runs/<run>/**` of runs that ended go in one
+`update-ref` transaction, Genex's own copies under its scratch folder whose folder is gone are
+forgotten (never `worktree prune`: a worktree of the person's on an unmounted drive keeps its
+commits), then `repack -A -d` and `prune` remove what nothing else reaches and is older than an
+hour (reflogs stay): like git's own `gc`, the grace keeps objects a save point, a checkpoint or the
+person's own command has just written. The space it reports matches: `clearableBytes` is what a
+clear removes now (with copies an earlier clear left once they are old enough), `recentBytes` what
+is younger than the hour and goes at a later clear. It is refused while a contractor builds
+in the game or a run of it is going, clears nothing in a folder inside another repository or in a
+linked worktree, and runs in `ChatCheckpoints.exclusive`, which resets the private index afterwards.
+The ref roots are `REWIND_REFS` and `RUN_REFS` in `shared/game-history.ts`.
 After the rewind takes effect (the thread index is written), clearing coordinator sessions,
 the marker and the harness notice are best effort and never undo it.
 
@@ -670,10 +692,32 @@ question is asked (after the preview health pass when game sources changed); a r
 starts from the folder as the session left it; a turn that records neither is reported like an
 Auto chat build. A non-launching turn that changed game sources takes the preview health pass and a
 `build_observation`; one that only wrote docs/ or Markdown (a plan, research notes) takes neither
-(`game.contentStamp` `split`: both stamps from one walk). The health pass waits on the page's own
-readiness (`preview.ready` with `gesture: false`, so the user's window is never clicked): up to
-the project's boot budget (15 s by default) for a page that signals readiness, the old short grace
-for one that signals nothing, and the old settle only when the host cannot answer.
+(`game.contentStamp` `split`: both stamps from one walk). Nor does any turn on a game that is no web
+page (`holdsWebGame` in `loop/web-game.ts`): one linked to an Unreal project (`engine` on its
+`game.list` descriptor), which instead saves and snapshots the editor work it left unsaved
+([plugins](plugins.md#a-games-engine)), one whose facts hold no `web-game` at its root
+([project facts](plugins.md#project-facts); an older descriptor's `web: false`), or one with no kind
+yet (no facts: nothing to look at until its first message picks one). The pass goes by the game as the turn ends, read from
+`game.list` again, so the turn that links the game through `unreal__new-game` takes none either; a
+host that cannot answer leaves the descriptor the turn started with. A brief's rules, capture tool,
+contract check and checkpoint line go by the folder's facts (`servedAsWeb` in `loop/folder-facts.ts`:
+a web game at the root, or no kind yet; never a folder of a kind Genex can't name): a Godot folder
+gets none of the web's. An Unreal game's brief swaps the web template's rules for the
+Unreal ones (`loop/unreal-prompts.ts`), with no capture tool, window or web checkpoint line, and plugin
+tools, guidance and connectors by the game's facts ([scope by facts](plugins.md#scope-by-facts)): no
+web-only skills, and the Unreal editor's tools only for a game that holds an Unreal project. A game with
+no kind yet, on any fresh brief until it has one, while an engine plugin offers a kind (`plugins.tools`'s `kinds`), is
+briefed to ask Web or that engine first, unless the message names one, with `ask_user` bridged in even with Loop off,
+and Unreal offered by what the plugin's `engine-status` says this computer has; the recorded
+question is asked like a Loop chat's, and the next turn resumes the same session, which calls
+`unreal__new-game` for Unreal. A chat turn whose game's served facts changed (a port, or files it
+wrote) goes on by itself in the same session, with the tools and a fresh brief writer for the new
+kind (`continueOnNewFacts`, [plugins](plugins.md#scope-by-facts)); one that linked an Unreal
+project, or switched its link to another, first waits for Unreal to open it. A delegation that gave
+a game with no kind its kind by files it wrote tells the app the game changed when it ends. The health pass waits on the page's own readiness (`preview.ready`
+with `gesture: false`, so the user's window is never clicked): up to the project's boot budget
+(15 s by default) for a page that signals readiness, the old short grace for one that signals
+nothing, and the old settle only when the host cannot answer.
 `build_observation` keeps the delegation's duration, turns and usage and that answer (`ready`:
 ready, ms, pageMs, timedOut, via, phase, reason); the turn's reply carries the same usage marked
 `usage_source: delegation`, so field rows and the evals count that call once. A project's first ready preview on a thread after

@@ -156,6 +156,7 @@ const gameProject = (name: string, extra: Partial<GameProject> = {}): GameProjec
     serve: ".",
   },
   built: false,
+  facts: [{ id: "web-game", path: ".", source: "core" }],
   ...extra,
 });
 const studioThread = thread("studio", { kind: "studio" });

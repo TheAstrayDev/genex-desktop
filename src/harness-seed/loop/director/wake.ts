@@ -25,10 +25,13 @@ import { durationCommission } from "./commission.ts";
  */
 import { isResumeFailure } from "../chat-session.ts";
 import { HostMethod } from "../host-methods.ts";
+import { jobEndLine } from "../jobs/prompts.ts";
+import { JOB_POLL_MS, jobEnds } from "../jobs/watch.ts";
 import { EngineFailure, StopReason, outageDelays, withProviderPatience } from "../outage.ts";
 import { RunEvent } from "../run-events.ts";
 import { SteerDelivery } from "../steer-delivery.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
+import { rejectedNews, unrejected } from "../workers/director-pool.ts";
 import { limitResumePrompt, wrapUpPrompt } from "./briefs.ts";
 import { MAX_WORKERS, workerWindows } from "./budgets.ts";
 import { waitDigest } from "./digests.ts";
@@ -180,6 +183,8 @@ export interface WakeState {
   freshSessions: number;
   /** The turn whose failure started the wrap-up. */
   failed: Partial<DelegateResult> | null;
+  /** When the run's job ends were last asked for (null: not yet), so the host is asked at most every `JOB_POLL_MS`. */
+  jobsPolledAt: number | null;
 }
 
 /** How the loop ended: the last turn's answer, why the wrap-up started, and the turn that failed. */
@@ -231,6 +236,7 @@ function newWakeState(restored: RestoredWake = { idleAsked: false, wakesAt: [] }
     limitWaits: 0,
     freshSessions: restored.freshSessions ?? 0,
     failed: null,
+    jobsPolledAt: null,
   };
 }
 
@@ -388,10 +394,25 @@ function settleTurn(night: Night, wake: WakeState, verdict: TurnVerdict, result:
   startWrapUp(night, wake, verdict.wrapCause ?? WrapCause.Deadline, now);
 }
 
-/** Read the inbox while the lead rests: what the user said, a finish request, and steers addressed to a worker. */
+/**
+ * The run's jobs (the lead's and its workers') that ended since the lead last heard, each a line
+ * of the night's log that wakes it soon; asked at most every `JOB_POLL_MS`. The cursor moves past
+ * every end read, the agent's own stops included, and the journal keeps it with the next save.
+ */
+async function watchJobs(night: Night, wake: WakeState, now: number): Promise<void> {
+  if (wake.jobsPolledAt !== null && now - wake.jobsPolledAt < JOB_POLL_MS) return;
+  wake.jobsPolledAt = now;
+  const { ctx, run, state } = night;
+  const read = await jobEnds(ctx, { project: run.project, runId: run.runId }, state.jobsCursor ?? 0);
+  state.jobsCursor = read.cursor;
+  for (const end of read.ends) night.note(jobEndLine(end), NoteKind.JobEnded);
+}
+
+/** Read the inbox while the lead rests: what the user said, a finish request, steers addressed to a worker, and job ends. */
 async function collect(night: Night, wake: WakeState, now: number): Promise<void> {
   const { inbox, routeUserSteers, state } = night;
   await reviewProgress(night, now);
+  await watchJobs(night, wake, now);
   const untold = await inbox.steering(undefined, false, { onlyNew: true }).catch(() => []);
   wake.userWaiting = wake.owed.length > 0 || unheard(wake, untold).length > 0;
   wake.finishNew = !wake.finishSaid && (await inbox.finishing().catch(() => false));
@@ -410,7 +431,8 @@ function wakeView(night: Night, wake: WakeState, now: number): WakeView {
   const { state } = night;
   return {
     now,
-    unread: night.notesSince(night.waitSeq),
+    // A worker the lead rejected wakes it no more (`worker_mark rejected`).
+    unread: night.notesSince(night.waitSeq).filter((entry) => !rejectedNews(night, entry.text)),
     asleepFromSeq: wake.asleepFromSeq,
     asleepSince: wake.asleepSince ?? now,
     userWaiting: wake.userWaiting,
@@ -464,7 +486,7 @@ function readUnread(night: Night): string[] {
   const unread = night.notesSince(night.waitSeq);
   const last = unread.at(-1);
   if (last) night.waitSeq = Math.max(night.waitSeq, last.seq);
-  return unread.map((entry) => entry.text);
+  return unread.map((entry) => entry.text).filter((text) => !rejectedNews(night, text));
 }
 
 /** Record the wake: the cap's window, and every timer and request it says, so none is said twice. */
@@ -592,7 +614,7 @@ function digestFacts(
     integrationHealthy: state.integrationHealthy,
     defects: state.ledger.length ? ledgerLines() : [],
     workers: [
-      ...[...state.workers.values()].map((worker) => digestWorker(worker, said.now)),
+      ...unrejected(night, [...state.workers.values()]).map((worker) => digestWorker(worker, said.now)),
       ...(priorInFull ? priorDigestWorkers(night) : []),
     ],
     room: workerRoom(night),

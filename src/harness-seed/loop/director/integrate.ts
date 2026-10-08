@@ -49,6 +49,7 @@ import { LEAD_DIRTY, LEAD_FIX_NEXT, LEAD_SET_ASIDE } from "./lead-session-prompt
 import type { SetAside } from "./lead-session.ts";
 import { BuildTarget, WindowLease } from "./night.ts";
 import { LandingHow, landingWords } from "./rules.ts";
+import { closeReaders } from "../workers/director-pool.ts";
 import type { LastJudge, Night, Worker } from "./night.ts";
 import type { Evidence } from "../evidence.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
@@ -535,6 +536,8 @@ export async function closeTheNight(
   const { closeRun, ctx, report, runningWorkers, settleWorkers, stopWorker } = night;
   for (const worker of runningWorkers()) await stopWorker(worker, stopWhy, "finalization");
   await settleWorkers(settleMs);
+  // The readers of the run's shared pool stop with its builders.
+  await closeReaders(night).catch(() => {});
   let landed: AnyRecord;
   if (ctx.cancelled) landed = notLanded(STOPPED_BY_USER, NotLandedReason.Stopped);
   else if (!land) landed = notLanded("land=no", NotLandedReason.NotAsked);

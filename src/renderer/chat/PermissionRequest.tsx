@@ -18,13 +18,18 @@ import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
 import { useMoreBelow } from "../ui/scroll-fade.ts";
 import { SyntaxCode } from "../ui/SyntaxCode.tsx";
-import { alwaysWords, permissionLineWords, permissionPath, permissionTitleWords } from "../words.ts";
+import {
+  alwaysWords,
+  permissionCommandWords,
+  permissionLineWords,
+  permissionPath,
+  permissionTitleWords,
+} from "../words.ts";
 import { ChatDisclosure } from "./ChatDisclosure.tsx";
 import { type ChatChoice, ChatQuestion } from "./ChatQuestion.tsx";
 
 /** The card's own words. */
 const WORDS = {
-  runCommand: "Claude wants to run a command",
   allow: "Allow",
   allowOnce: "Just this once.",
   deny: "Deny",
@@ -174,7 +179,7 @@ export function PermissionRequest({
 }): JSX.Element {
   if (isPlanRequest(event)) return <PlanRequest event={event} onAnswer={onAnswer} planModes={planModes} />;
   // The command is on the card in full, so the question does not repeat it.
-  const question = commandOf(event) ? WORDS.runCommand : permissionTitleWords(event);
+  const question = commandOf(event) ? permissionCommandWords(event) : permissionTitleWords(event);
   const description = event.description || event.reason;
   const choices: ChatChoice[] = [
     { id: PermissionDecision.Allow, label: WORDS.allow, description: WORDS.allowOnce },

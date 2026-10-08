@@ -12,6 +12,19 @@ import os from "node:os";
 import path from "node:path";
 
 /**
+ * The person's other sign-in stores under the home folder, by their segments: SSH keys, the
+ * keychains, cloud and GitHub logins, `.netrc`. No agent process reads them (`baseDenyRead`), no
+ * worker reaches them (the never-touch list) and no plugin folder is or holds one.
+ */
+export const HOME_SIGN_IN_STORES: readonly (readonly string[])[] = [
+  [".ssh"],
+  ["Library", "Keychains"],
+  [".aws"],
+  [".config", "gh"],
+  [".netrc"],
+];
+
+/**
  * The sign-in homes to protect: both default homes, the homes the environment points at, and any
  * resolved login home the caller names. Never the home folder itself, one of its ancestors or a
  * relative path — denying those would take the whole machine away from every build.

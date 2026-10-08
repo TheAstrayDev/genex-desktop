@@ -322,6 +322,23 @@ export interface LiveToolSpec extends StudioToolSpec {
 }
 // ↑ src/shared/engine-requests.ts
 
+/**
+ * What the harness asks for when it starts a worker: its id and title, the run or the chat turn it
+ * belongs to, and whether it may search the web as a reader. Honoured only by the host's own
+ * finding; a grant it cannot confirm leaves the session unattended.
+ */
+export interface WorkerGrant {
+  id: string;
+  title: string;
+  /** The run whose lead started it: a run started in this game's open chat, still running. */
+  runId?: string;
+  /** The chat message whose turn started it: the one the chat's own session answers now. */
+  turn?: string;
+  /** It may search and read the web even as a reader. */
+  research?: boolean;
+}
+// ↑ src/shared/workers.ts
+
 /** What `engine.delegate` takes: a delegation's serializable half plus the routing fields. */
 export interface HarnessDelegateParams {
   coordinator?: { runId: string; messageId?: string };
@@ -368,7 +385,37 @@ export interface HarnessDelegateParams {
   computer?: boolean;
   /** The director (director, 2026-09-07): the run's orchestrating session, with the harness's run tools forwarded. */
   director?: DelegateDirectorGrant & { tools?: LiveToolSpec[] };
+  /**
+   * A run's sub-agent: every plugin call this session makes carries the run and the agent's id (its
+   * part id, recorded as `facetId`), so what it makes is recorded under that run and lands on the
+   * agent's own node in the Builds graph.
+   */
+  attribution?: { runId: string; agentId: string };
+  /**
+   * Plugin tool and connector names (or name prefixes, such as `blender__`) this session may use:
+   * a tool whose agent name starts with none of them is not offered; a plugin with an offered tool
+   * also keeps its skill reader `<plugin>__skill` and its guidance. Absent, every tool is offered.
+   */
+  toolAllow?: string[];
+  /**
+   * The Genex credits the paid jobs of this session's run (its `attribution` or `director` run) may
+   * commit, counted across every session of the run: once they have, the run's next paid Genex job
+   * is refused before Genex is asked. Anything but a whole number allows none; absent, no cap.
+   */
+  creditCap?: number;
   candidateId?: string;
+  /**
+   * A worker of a chat's lead: honoured only by the host's own finding (a running run started in
+   * this game's open chat, or the chat turn its own session answers now), and then run in the
+   * chat's permission mode, asking in the chat. A grant the host cannot confirm runs unattended.
+   */
+  worker?: WorkerGrant;
+  /**
+   * The worker tools the chat's own session may call (`WorkerTool`), answered by the harness's pool
+   * for this turn (`worker_tool`). Honoured only for the chat's own session answering a chat turn,
+   * on a harness that claims `workers`, and never for a worker: depth is one.
+   */
+  workers?: { tools?: LiveToolSpec[] };
 }
 // ↑ src/shared/harness-api.ts
 
@@ -634,6 +681,66 @@ export interface PluginTool {
   confirmation?: string;
 }
 // ↑ src/shared/plugins.ts
+
+/**
+ * A tool a plugin offers that makes a kind of project (its manifest's `makes`), as a session's
+ * snapshot lists it: the plugin's id and name, the tool's agent name `<plugin>__<tool>`, and the facts.
+ */
+export interface PluginKindOffer {
+  plugin: string;
+  name: string;
+  tool: string;
+  makes: string[];
+}
+// ↑ src/shared/plugins.ts
+
+export type WorkerIsolation = 'read' | 'copy' | 'lock';
+// ↑ src/shared/workers.ts
+
+/**
+ * A kind of worker a plugin declares (`PluginManifest.workerTypes`), as the registry hands it to a
+ * lead: `tools` are agent names (`<plugin>__<tool>`) or name prefixes (`<plugin>__`) a worker of
+ * this kind is offered.
+ */
+export interface WorkerType {
+  pluginId: string;
+  id: string;
+  description: string;
+  tools: string[];
+  isolation: WorkerIsolation;
+}
+// ↑ src/shared/workers.ts
+
+export type PluginOffer = 'turn-on' | 'install';
+// ↑ src/shared/project-tools.ts
+
+/** One Genex plugin `plugins_find` found: `offer` absent when it is on already; `facts` it detects, serves or makes. */
+export interface PluginFound {
+  id: string;
+  name: string;
+  description: string;
+  offer?: PluginOffer;
+  facts: string[];
+}
+// ↑ src/shared/project-tools.ts
+
+export type FindNext = 'suggest' | 'use' | 'write-plugin';
+// ↑ src/shared/project-tools.ts
+
+/** What `plugins_find` answers: the plugins found (on, then off, then Genex's catalog), what to do next, and a note. */
+export interface PluginsFindAnswer {
+  plugins: PluginFound[];
+  next: FindNext;
+  note: string;
+}
+// ↑ src/shared/project-tools.ts
+
+/** What `plugins_suggest` answers: whether the card was shown, and what the session is told. */
+export interface PluginsSuggestAnswer {
+  shown: boolean;
+  message: string;
+}
+// ↑ src/shared/project-tools.ts
 
 /** A connector tool as an engine sees it: the flat projection plus the schema it came from. */
 export interface McpLiveTool {
@@ -1022,6 +1129,8 @@ export interface GameLibraryEntry {
   trustProjectSettings?: boolean;
   cover?: GameCover;
   primaryThreadId?: string;
+  /** The folder's content stamp as New game made it (`GameProject.scaffoldStamp`). */
+  scaffoldStamp?: string;
   /** The title waits for the game's first idea; any title given since clears it. */
   provisional?: boolean;
 }
@@ -1086,6 +1195,31 @@ export interface ProjectShape {
 }
 // ↑ src/shared/game-project.ts
 
+/** A game linked to an Unreal project: its `.uproject` (absolute, real path) and when Genex linked it. */
+export type EngineBinding = { kind: 'unreal'; project: string; linkedAt: string; };
+// ↑ src/shared/game-engine.ts
+
+export type FactSource = 'core' | 'link';
+// ↑ src/shared/project-facts.ts
+
+/** Where a fact came from: the core table, an engine link, or the `detect` of the plugin named. */
+export type ProjectFactSource = FactSource | `plugin:${string}`;
+// ↑ src/shared/project-facts.ts
+
+/**
+ * One thing a folder holds. `path` is POSIX and relative to the game, `"."` for its root; a link's
+ * fact may be absolute when its project lies outside the folder.
+ */
+export interface ProjectFact {
+  id: string;
+  path: string;
+  source: ProjectFactSource;
+}
+// ↑ src/shared/project-facts.ts
+
+export type FolderHolds = 'nothing' | 'notes' | 'own-files' | 'unreadable';
+// ↑ src/shared/project-facts.ts
+
 export interface GameProject {
   primaryThreadId?: string;
   pinned?: boolean;
@@ -1103,6 +1237,31 @@ export interface GameProject {
   shape: ProjectShape;
   /** `shape.own`: the folder brought its own game, so the studio builds it and serves its output. */
   built: boolean;
+  /** The engine project Genex linked this game to; absent for a web game (`shared/game-engine.ts`). */
+  engine?: EngineBinding;
+  /**
+   * What the folder holds, by `shared/project-facts.ts`: the core table, the enabled plugins'
+   * `detect` and the engine link. Empty while the first message has not picked a kind.
+   */
+  facts: ProjectFact[];
+  /**
+   * What the folder holds while it has no facts (`FolderHolds`): nothing or notes (no kind yet), files
+   * of its own of a kind no rule knows, or unreadable. Absent once it has facts, and from older lists.
+   */
+  holds?: FolderHolds;
+  /** What a port replaced, kept in the folder as the reference and no longer a kind of this game. */
+  portedFrom?: ProjectFact[];
+  /**
+   * Whether `facts` hold `web-game` at the root; kept for parts that read it. Absent from a
+   * descriptor made before it was recorded, read as a web game.
+   */
+  web?: boolean;
+  /**
+   * The folder's content stamp (`game.contentStamp`'s `all`) as New game made it from the template;
+   * absent for a folder the studio did not make that way. While the folder's stamp still equals
+   * it, nothing has been built in the game yet.
+   */
+  scaffoldStamp?: string;
   /** Named before anyone said what the game is: its first idea renames it in place (`nameFromIdea`). */
   provisional?: boolean;
 }
@@ -1126,6 +1285,22 @@ export interface ProjectRecent {
   openedAt: string;
 }
 // ↑ src/shared/game-project.ts
+
+export type ProjectStarter = 'web';
+// ↑ src/shared/project-facts.ts
+
+export type PluginCallBlocker = 'plan_mode';
+// ↑ src/shared/plugins.ts
+
+/**
+ * What a start of the web starter answers instead of writing it while its chat is in Plan mode: the
+ * chat's own `start_web_game` (as JSON) and the harness's `game.start` for a local model's.
+ */
+export interface StartHeldInPlan {
+  blocker: PluginCallBlocker;
+  message: string;
+}
+// ↑ src/shared/project-tools.ts
 
 export type ContractWord = 'loaded' | 'attached' | 'missing';
 // ↑ src/shared/game-project.ts
@@ -1389,6 +1564,36 @@ export interface AgentScreenFrame extends AgentScreen {
 }
 // ↑ src/shared/agent-screen.ts
 
+export type JobRole = 'lead' | 'chat' | 'worker';
+// ↑ src/shared/jobs.ts
+
+export type JobState = 'failed' | 'running' | 'succeeded' | 'stopped' | 'timed_out' | 'interrupted';
+// ↑ src/shared/jobs.ts
+
+export type JobStopper = 'agent' | 'person' | 'scope_ended' | 'quit';
+// ↑ src/shared/jobs.ts
+
+/**
+ * One job as the harness reads it (`jobs.list`): what it is, who started it and how it ended,
+ * never where its folder, log or process is. `endSeq` orders the ends of one game's jobs.
+ */
+export interface JobView {
+  id: string;
+  title: string;
+  role: JobRole;
+  /** The title of the worker that started it, when one did. */
+  worker?: string;
+  command: string;
+  state: JobState;
+  exitCode: number | null;
+  endedAt: string | null;
+  endSeq: number | null;
+  /** How long it ran, once it ended. */
+  durationMs: number | null;
+  stoppedBy: JobStopper | null;
+}
+// ↑ src/shared/jobs.ts
+
 /**
  * Every method the host serves the harness: `params` is what `ctx.call` sends, `result` what the
  * call resolves to. A method that takes nothing has `void` params.
@@ -1484,11 +1689,48 @@ export interface HarnessHostApi {
     params: { project: string; threadId?: string };
     result: { ready: boolean; reason: string; hostedVerified: false };
   };
-  "plugins.tools": { params: void; result: { tools: PluginTool[]; guidance: string; revision: number } };
+  /**
+   * The plugin tools and guidance for the game `project` names, by its facts (none named, or a
+   * game with no kind yet: a web game's), and the tools on offer that make a kind of project.
+   */
+  "plugins.tools": {
+    params: { project?: string | null };
+    result: { tools: PluginTool[]; guidance: string; revision: number; kinds: PluginKindOffer[] };
+  };
+  /**
+   * The kinds of worker the plugins on offer declare for the game `project` names, by its facts
+   * (`PluginManifest.workerTypes`), each with its tools as agent names: what a lead may start.
+   */
+  "plugins.workerTypes": { params: { project: string }; result: WorkerType[] };
+  /**
+   * The agent's search for a Genex plugin, by a fact or words: installed plugins (on, then off) and
+   * Genex's catalog, never another source; read-only.
+   */
+  "plugins.find": {
+    params: { project?: string | null; fact?: string | null; text?: string | null };
+    result: PluginsFindAnswer;
+  };
+  /**
+   * The turn-it-on card in `threadId`, a chat of `project`, for a plugin that is installed but off
+   * or in Genex's catalog; it turns nothing on. Refused (`shown: false`, nothing written) otherwise.
+   */
+  "plugins.suggest": {
+    params: { project: string; threadId: string; plugin: string; reason?: string };
+    result: PluginsSuggestAnswer;
+  };
   /** What this game's builders can use, for a conversation that cannot call it (the local coordinator). */
   "capabilities.describe": { params: { threadId: string; project?: string }; result: string };
   "plugins.invoke": {
-    params: { project: string; threadId?: string; name: string; args: Record<string, unknown> };
+    params: {
+      project: string;
+      threadId?: string;
+      name: string;
+      args: Record<string, unknown>;
+      /** The harness's own step: a tool the plugin keeps for the harness. An agent's call never sets it. */
+      step?: boolean;
+      /** The step writes (a chat's checkpoint, a run's save point or editor change), which Plan mode holds back. */
+      checkpoint?: boolean;
+    };
     result: unknown;
   };
   "mcp.tools": {
@@ -1521,10 +1763,19 @@ export interface HarnessHostApi {
   /** The Self-improvement switch, asked by the harness before each thing it would learn. */
   "learning.enabled": { params: void; result: boolean };
   "engine.complete": { params: HarnessCompleteParams; result: CompleteResponse };
-  /** Stop: aborts a thread's completions, a project's delegations, or the delegation in one worktree. */
-  "engine.abort": { params: { threadId?: string; cwd?: string; project?: string }; result: { aborted: number } };
-  /** Steering that cannot wait (M3.4): cuts one worktree's build turn short so its caller can resume it. */
-  "engine.interrupt": { params: { cwd: string }; result: { interrupted: boolean } };
+  /**
+   * Stop: aborts a thread's completions, a project's delegations, or the delegation in one worktree
+   * (with `worker`, the in-place worker of that id working in `cwd`).
+   */
+  "engine.abort": {
+    params: { threadId?: string; cwd?: string; project?: string; worker?: string };
+    result: { aborted: number };
+  };
+  /**
+   * Steering that cannot wait (M3.4): cuts one worktree's build turn short so its caller can resume
+   * it (with `worker`, the in-place worker of that id working in `cwd`).
+   */
+  "engine.interrupt": { params: { cwd: string; worker?: string }; result: { interrupted: boolean } };
   "engine.delegate": { params: HarnessDelegateParams; result: DelegateResult };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
@@ -1557,7 +1808,21 @@ export interface HarnessHostApi {
    */
   "game.contentStamp": { params: { project: string; split?: boolean }; result: string | ContentStamps | null };
   "game.recents": { params: void; result: ProjectRecent[] };
+  /**
+   * Make a game's folder: Genex's bookkeeping only, or with the starter `kind` names (`"web"`, or
+   * an older caller's `"studio-template"`); any other kind is refused.
+   */
   "game.scaffold": { params: { name: string; title?: string; threadId?: string; kind?: string }; result: GameProject };
+  /**
+   * Write a starter into a game that has no kind yet (no facts); a game with a kind is refused.
+   * `threadId`, the chat a local model's `start_web_game` answers: while that chat (this game's) is
+   * in Plan mode nothing is written and the Plan answer comes back instead. A call with no thread (a
+   * Loop's start, which runs only once its run is approved) is not checked.
+   */
+  "game.start": {
+    params: { project: string; starter: ProjectStarter; threadId?: string };
+    result: GameProject | StartHeldInPlan;
+  };
   "game.validate": {
     params: { project: string; candidateId?: string };
     result: { ok: boolean; problems: string[]; warnings: string[]; contract: ContractWord };
@@ -1676,6 +1941,18 @@ export interface HarnessHostApi {
       headless: boolean;
       memory: { freeMb: number; totalMb: number };
     };
+  };
+
+  // — jobs: the long processes the agents start, which the app owns —
+  /**
+   * A game's jobs, read-only: only those that ended after `endedAfter` (an end number) when it is
+   * given, only `runId`'s (its lead's and its workers') when that is, and the game's last end
+   * number, read together so a reader that goes on from `seq` misses none and hears none twice.
+   * The harness can neither start nor stop a job.
+   */
+  "jobs.list": {
+    params: { project: string; runId?: string | null; endedAfter?: number | null };
+    result: { jobs: JobView[]; seq: number };
   };
 
   // — runs, guardian, ui —
@@ -1892,6 +2169,11 @@ export type DispatchAction =
    * Unlike every other dispatch this one answers with a value — the tool's result.
    */
   | { type: "director_tool"; runId: string; name: string; args: Record<string, unknown> }
+  /**
+   * A worker tool (`WorkerTool`) the chat's own session called during the chat turn `turn` (its
+   * message id), forwarded to the harness's worker pool for that turn. Answers with the tool's result.
+   */
+  | { type: "worker_tool"; threadId: string; turn: string; name: string; args: Record<string, unknown> }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };
 // ↑ src/shared/protocol.ts

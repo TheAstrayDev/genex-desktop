@@ -13,6 +13,11 @@ export type StudioLayout = {
   updates: string;
   engineHomes: string;
   exports: string;
+  /**
+   * Agent jobs' records and logs, one folder per game. Never writable by an agent process: it sits
+   * outside every writable root and inside the never-touch list's Genex data.
+   */
+  jobs: string;
 };
 
 export function layoutFor(userData: string): StudioLayout {
@@ -27,5 +32,6 @@ export function layoutFor(userData: string): StudioLayout {
     updates: path.join(userData, "updates"),
     engineHomes: path.join(userData, "engine-homes"),
     exports: path.join(userData, "exports"),
+    jobs: path.join(userData, "jobs"),
   };
 }

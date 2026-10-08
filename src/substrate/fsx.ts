@@ -14,6 +14,7 @@ import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { StudioPlatform } from "../shared/boot.ts";
+import { SECOND_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 /** `readRegularFile` reads in chunks of at most this many bytes. */
@@ -26,6 +27,13 @@ const REPLACE_ATTEMPTS = 8;
 const REPLACE_RETRY_MS = 50;
 /** The codes Windows refuses a rename with while another handle holds the target. */
 const TRANSIENT_REPLACE = new Set(["EPERM", "EACCES", "EBUSY"]);
+/**
+ * How long a new folder's rename keeps trying on Windows, and the first wait between tries (each
+ * wait grows by it): OneDrive, an antivirus or the search indexer can hold a new folder's files
+ * for seconds, longer than {@link REPLACE_ATTEMPTS} allows a single file.
+ */
+const FOLDER_RENAME_BUDGET_MS = 30 * SECOND_MS;
+const FOLDER_RENAME_STEP_MS = 100;
 
 const MESSAGE = {
   DanglingLink: (file: string) => `refused: ${file} is a symlink to something that does not exist`,
@@ -182,6 +190,42 @@ export interface ReplaceOptions {
   rename?: (from: string, to: string) => Promise<void>;
   /** The wait between tries on Windows (default {@link REPLACE_RETRY_MS}). */
   retryDelayMs?: number;
+}
+
+/** How {@link renameFolder} renames, waits and looks; the defaults are this platform's own. */
+export interface RenameFolderOptions {
+  platform?: NodeJS.Platform;
+  rename?: (from: string, to: string) => Promise<void>;
+  sleep?: (ms: number) => Promise<unknown>;
+  exists?: (target: string) => Promise<boolean>;
+}
+
+const somethingAt = async (target: string) => Boolean(await lstat(target).catch(() => null));
+
+/**
+ * Renames a folder to `to`, which must not exist. On Windows a refusal while another app holds a
+ * file inside it (EPERM, EACCES, EBUSY) is tried again with growing waits for up to
+ * {@link FOLDER_RENAME_BUDGET_MS}, never once something has appeared at `to`; anything else, and
+ * every error elsewhere, fails at once with the rename's own error.
+ */
+export async function renameFolder(from: string, to: string, options: RenameFolderOptions = {}): Promise<void> {
+  const move = options.rename ?? rename;
+  const wait = options.sleep ?? sleep;
+  const exists = options.exists ?? somethingAt;
+  const windows = (options.platform ?? process.platform) === StudioPlatform.Windows;
+  let waited = 0;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await move(from, to);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      const transient = windows && TRANSIENT_REPLACE.has(code) && waited < FOLDER_RENAME_BUDGET_MS;
+      if (!transient || (await exists(to))) throw error;
+      const ms = Math.min(FOLDER_RENAME_STEP_MS * attempt, FOLDER_RENAME_BUDGET_MS - waited);
+      await wait(ms);
+      waited += ms;
+    }
+  }
 }
 
 /**

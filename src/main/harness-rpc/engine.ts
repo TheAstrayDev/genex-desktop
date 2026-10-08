@@ -2,10 +2,27 @@
 import path from "node:path";
 import { HostMethod, type HarnessHostHandlers } from "../../shared/harness-api.ts";
 import { ToolPermissionBy } from "../../shared/permissions.ts";
+import { workerLockKey } from "../../shared/workers.ts";
 import { steerIntoChat } from "../core/chat-steer.ts";
 import { CompletionService } from "../core/completion.ts";
 import { hardwareReport } from "../core/hardware-report.ts";
+import type { ActiveDelegation } from "../core/internals.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
+
+/**
+ * The delegation Stop or an interrupt reaches in `cwd`: the one keyed by it, or with `worker`, that
+ * worker's alone (an in-place worker runs under `workerLockKey`, beside the chat's own session in
+ * the same folder; a worker in its own copy, or one the host did not seat, is keyed by its folder
+ * and found by the id its grant named, `askedWorker`). Never another session there.
+ */
+function delegationAt(x: CoreInternals, cwd: string, worker: string | undefined): ActiveDelegation | undefined {
+  const key = path.resolve(cwd);
+  if (typeof worker !== "string") return x.activeDelegations.get(key);
+  const inPlace = x.activeDelegations.get(workerLockKey(key, worker));
+  if (inPlace) return inPlace;
+  const atFolder = x.activeDelegations.get(key);
+  return atFolder?.askedWorker === worker ? atFolder : undefined;
+}
 
 export function engineRpc(core: StudioCore, x: CoreInternals) {
   const completion = new CompletionService(core, x);
@@ -27,7 +44,7 @@ export function engineRpc(core: StudioCore, x: CoreInternals) {
       }
       // One worker (director, 2026-09-07): the delegation building in this worktree, nothing else.
       if (p.cwd) {
-        const running = x.activeDelegations.get(path.resolve(p.cwd));
+        const running = delegationAt(x, p.cwd, p.worker);
         if (running) {
           running.abort.abort();
           aborted += 1;
@@ -64,7 +81,7 @@ export function engineRpc(core: StudioCore, x: CoreInternals) {
      * rounds, and reads its queue at the top of the next one anyway.
      */
     [HostMethod.EngineInterrupt]: async (p) => {
-      const running = p.cwd ? x.activeDelegations.get(path.resolve(p.cwd)) : undefined;
+      const running = p.cwd ? delegationAt(x, p.cwd, p.worker) : undefined;
       if (!running) return { interrupted: false };
       running.abort.abort();
       return { interrupted: true };

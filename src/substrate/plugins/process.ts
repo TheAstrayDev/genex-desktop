@@ -1,9 +1,9 @@
 import { fork, type ChildProcess } from "node:child_process";
-import type { PluginBinding } from "../../shared/plugins.ts";
+import { CallCutOff, type PluginBinding } from "../../shared/plugins.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { windowsBaseEnv } from "../child-env.ts";
-import { envPath } from "../toolchain.ts";
+import { envPath, envValue } from "../toolchain.ts";
 
 /** What the backend bootstrap (`plugin-sdk/backend.mjs`) and the host say to each other. Wire values. */
 const MessageKind = {
@@ -32,9 +32,32 @@ const DEFAULT_CALL_TIMEOUT_MS = 190 * SECOND_MS;
 /** A stopped backend gets this long after SIGTERM before SIGKILL. */
 const KILL_GRACE_MS = 3 * SECOND_MS;
 
+/** What a cut-off call answers, by why it was cut off; the backend's own end keeps its exit text. */
+const CUT_OFF_MESSAGE: Record<CallCutOff, string> = {
+  [CallCutOff.HarnessEnded]:
+    "The studio's loop ended while this call ran, so whether it took effect is unknown; accepted remote jobs may still continue. Look before you repeat it.",
+  [CallCutOff.PluginEnded]: "The plugin stopped while this call ran, so whether it took effect is unknown.",
+  [CallCutOff.AppLost]: "The app this call drives went away while it ran, so whether it took effect is unknown.",
+};
+
+/**
+ * A call that had gone out to its plugin and was ended before it answered, so whether it took
+ * effect is unknown (`reason` says why). Never replayed: the caller records it and looks first.
+ * It keeps Error's own name: a call's record drops only a leading "Error:" from its text, and the
+ * chat row shows the rest as it is.
+ */
+export class PluginCallCutOff extends Error {
+  readonly reason: CallCutOff;
+  constructor(reason: CallCutOff, message: string = CUT_OFF_MESSAGE[reason]) {
+    super(message);
+    this.reason = reason;
+  }
+}
+
 /**
  * A plugin backend's whole environment, built from scratch: PATH, HOME, TMPDIR, the credential
- * opt-out and, on Windows, what any program needs to start there. Nothing else of Studio's.
+ * opt-out and, on Windows, what any program needs to start there plus ProgramData and Program
+ * Files (x86). Nothing else of Studio's.
  * `toolPath` is the user's login PATH when known: an app started from the Finder has a bare one,
  * on which a backend finds none of the user's tools (Genex's publish needs git-lfs from Homebrew).
  */
@@ -50,6 +73,11 @@ export function pluginBackendEnv(
     TMPDIR: parent.TMPDIR,
     ELECTRON_RUN_AS_NODE: "1",
     STUDIO_DISABLE_OS_CREDENTIALS: parent.STUDIO_DISABLE_OS_CREDENTIALS,
+    // Where Windows keeps shared app data and 32-bit programs, which a plugin may need to find an
+    // installed app (Epic's launcher keeps its list of engines there); neither is secret.
+    ...(platform === "win32"
+      ? { ProgramData: envValue(parent, "ProgramData"), "ProgramFiles(x86)": envValue(parent, "ProgramFiles(x86)") }
+      : {}),
   };
   return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined));
 }
@@ -184,7 +212,7 @@ export class PluginProcess {
       this.#child = undefined;
       for (const p of this.#pending.values()) {
         p.cleanup();
-        p.reject(new Error(error));
+        p.reject(new PluginCallCutOff(CallCutOff.PluginEnded, error));
       }
       this.#pending.clear();
       this.failed(error);
@@ -248,11 +276,24 @@ export class PluginProcess {
     for (const [id, p] of this.#pending) {
       if (binding.project && p.context?.project !== binding.project) continue;
       if (binding.threadId && p.context?.threadId !== binding.threadId) continue;
-      if (this.#child?.connected) this.#child.send({ kind: MessageKind.Cancel, id });
-      this.#pending.delete(id);
-      p.cleanup();
-      p.reject(new Error("Stopped local plugin work; accepted remote jobs may continue."));
+      this.#endPending(id, new Error("Stopped local plugin work; accepted remote jobs may continue."));
     }
+  }
+  /**
+   * End every call in flight as cut off, for `reason`: each is told to stop, and its caller learns
+   * that whether it took effect is unknown. The backend keeps running for the calls that follow.
+   */
+  cutOff(reason: CallCutOff) {
+    for (const id of [...this.#pending.keys()]) this.#endPending(id, new PluginCallCutOff(reason));
+  }
+  /** Tell the backend to stop one call and answer its caller with `error`. */
+  #endPending(id: number, error: Error) {
+    const p = this.#pending.get(id);
+    if (!p) return;
+    if (this.#child?.connected) this.#child.send({ kind: MessageKind.Cancel, id });
+    this.#pending.delete(id);
+    p.cleanup();
+    p.reject(error);
   }
   stop() {
     for (const p of this.#pending.values()) {

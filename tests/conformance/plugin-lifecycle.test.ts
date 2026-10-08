@@ -28,13 +28,26 @@ test("a plugin backend starts with the basics and nothing else of Studio's envir
     TMP: "C:\\Temp",
     PATHEXT: ".EXE;.CMD",
     ComSpec: "C:\\Windows\\system32\\cmd.exe",
+    ProgramData: "D:\\ProgramData",
+    "ProgramFiles(x86)": "D:\\Program Files (x86)",
   };
   const mac = pluginBackendEnv(parent, "darwin");
   assert.deepEqual(Object.keys(mac).sort(), ["ELECTRON_RUN_AS_NODE", "HOME", "PATH", "TMPDIR"]);
   const { PATH: _unused, ...windowsParent } = parent;
   const windows = pluginBackendEnv({ ...windowsParent, Path: "C:\\Windows" }, "win32");
   assert.equal(windows.PATH, "C:\\Windows", "PATH is read whatever its case");
-  for (const name of ["SystemRoot", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "PATHEXT", "ComSpec"])
+  for (const name of [
+    "SystemRoot",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "TEMP",
+    "TMP",
+    "PATHEXT",
+    "ComSpec",
+    "ProgramData",
+    "ProgramFiles(x86)",
+  ])
     assert.equal(windows[name], parent[name as keyof typeof parent], name);
   assert.equal(windows.GITHUB_TOKEN, undefined);
 });

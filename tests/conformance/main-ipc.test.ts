@@ -13,6 +13,7 @@ import { registerLoginIpc, type LoginIpcDeps } from "../../src/main/ipc/login.ts
 import { badgeText, registerNotificationsIpc } from "../../src/main/ipc/notifications.ts";
 import { registerModelsIpc, type ModelsIpcDeps } from "../../src/main/ipc/models.ts";
 import { registerUpdateIpc } from "../../src/main/ipc/update.ts";
+import { registerGameHistoryIpc } from "../../src/main/ipc/game-history.ts";
 import { createLoginControllers, type SubscriptionEngine } from "../../src/main/login-controllers.ts";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import type { CodexLoginState } from "../../src/shared/codex-login.ts";
@@ -528,6 +529,33 @@ it("model refresh validates provider identities before invoking discovery", asyn
   }
   assert.deepEqual(await invoke("studio:models.refresh", { provider: "codex" }), { ok: true, value: true });
   assert.equal(calls, 1);
+});
+
+it("a game's history is read and cleared only for a game named as one", async () => {
+  const calls: string[] = [];
+  const space = { totalBytes: 2, clearableBytes: 1, recentBytes: 0, rewindTracks: 1, finishedRunTracks: 0 };
+  const core = {
+    gameHistory: async (project: string) => {
+      calls.push(`space ${project}`);
+      return space;
+    },
+    clearGameHistory: async (project: string) => {
+      calls.push(`clear ${project}`);
+      return { removedTracks: 1, freedBytes: 1 };
+    },
+  };
+  const { handle, invoke } = registrar();
+  registerGameHistoryIpc(handle, { core });
+  for (const payload of [undefined, null, {}, { project: 1 }, { project: "../x" }, { project: "" }, { project: "A b" }])
+    for (const channel of ["studio:game.history", "studio:game.history.clear"])
+      assert.equal((await invoke(channel, payload)).ok, false, `${channel} ${JSON.stringify(payload)}`);
+  assert.deepEqual(calls, [], "nothing was asked of the core");
+  assert.deepEqual(await invoke("studio:game.history", { project: "pond" }), { ok: true, value: space });
+  assert.deepEqual(await invoke("studio:game.history.clear", { project: "pond" }), {
+    ok: true,
+    value: { removedTracks: 1, freedBytes: 1 },
+  });
+  assert.deepEqual(calls, ["space pond", "clear pond"]);
 });
 
 describe("the in-window update prompt", () => {

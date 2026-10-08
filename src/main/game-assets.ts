@@ -23,17 +23,17 @@ import {
   type AssetAvailability,
   type AssetKind,
   type AssetSource,
+  assetExtension,
   assetKind,
   type ProjectAsset,
   type ProjectAssets,
 } from "../shared/game-assets.ts";
+import { type AssetFolder, DEFAULT_ASSET_FOLDERS, wholeFolderEnters } from "../shared/project-workspace.ts";
 import type { EventEnvelope } from "../substrate/types.ts";
 import { CustomEvent } from "../shared/custom-events.ts";
 import { EventKind } from "../shared/event-log.ts";
 import type { AssetDeliveryRecord } from "./asset-checkpoints.ts";
 
-/** The folders a game keeps generated and dropped-in assets in. `public/assets` is the bundled shape. */
-const ASSET_ROOTS = ["assets", "public/assets"] as const;
 /** Blender scripts live in `assets/src`; they are inputs, not assets. */
 const EXCLUDED_PREFIX = "assets/src/";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -76,9 +76,22 @@ function byText(a: string, b: string): number {
 interface WalkState extends AssetWalk {
   maxEntries: number;
   maxDepth: number;
+  /** Every file listed so far, so a file two folders reach is listed once. */
+  listed: Set<string>;
 }
 
-async function walkAssetDir(state: WalkState, dir: string, rel: string, depth: number): Promise<void> {
+/** The folder being walked: the formats it lists (any, when absent) and whether it is the game itself. */
+interface WalkFolder {
+  formats?: ReadonlySet<string>;
+  whole: boolean;
+}
+
+/** A path inside a folder, relative to the game; the game's root (`""`) adds no prefix. */
+const childPath = (rel: string, name: string): string => (rel ? `${rel}/${name}` : name);
+/** The folder a game-relative path is in (`""` for the game's root). */
+const parentPath = (rel: string): string => rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
+
+async function walkAssetDir(state: WalkState, at: WalkFolder, dir: string, rel: string, depth: number): Promise<void> {
   if (depth > state.maxDepth) {
     state.truncated = true;
     return;
@@ -87,59 +100,105 @@ async function walkAssetDir(state: WalkState, dir: string, rel: string, depth: n
   if (!names) return;
   for (const name of names.sort()) {
     if (name.startsWith(".")) continue;
-    const childRel = `${rel}/${name}`;
+    const childRel = childPath(rel, name);
     if (childRel.startsWith(EXCLUDED_PREFIX)) continue;
     if (state.entries.length >= state.maxEntries) {
       state.truncated = true;
       return;
     }
-    await visitAssetEntry(state, path.join(dir, name), childRel, depth);
+    await visitAssetEntry(state, at, path.join(dir, name), childRel, depth);
   }
 }
 
-async function visitAssetEntry(state: WalkState, child: string, childRel: string, depth: number): Promise<void> {
+/** Report a refused entry once, however many folders reach it. */
+function skip(state: WalkState, file: string, why: string): void {
+  if (!state.skipped.some((entry) => entry.file === file)) state.skipped.push({ file, why });
+}
+
+async function visitAssetEntry(
+  state: WalkState,
+  at: WalkFolder,
+  child: string,
+  childRel: string,
+  depth: number,
+): Promise<void> {
   const st = await lstat(child).catch(() => null);
   if (!st) return;
   if (st.isSymbolicLink()) {
-    state.skipped.push({ file: childRel, why: "symlink" });
+    skip(state, childRel, "symlink");
     return;
   }
   if (st.isDirectory()) {
-    await walkAssetDir(state, child, childRel, depth + 1);
+    // A walk of the whole game never enters dependencies, what engines write while they run,
+    // build output or Genex's mood boards.
+    if (at.whole && !wholeFolderEnters(parentPath(childRel), path.basename(child))) return;
+    await walkAssetDir(state, at, child, childRel, depth + 1);
     return;
   }
   if (!st.isFile()) {
-    state.skipped.push({ file: childRel, why: "not a regular file" });
+    skip(state, childRel, "not a regular file");
     return;
   }
   if (/\.md$/i.test(childRel)) return;
+  if (at.formats && !at.formats.has(assetExtension(childRel))) return;
+  if (state.listed.has(childRel)) return;
+  state.listed.add(childRel);
   state.entries.push({ file: childRel, bytes: st.size, mtime: new Date(st.mtimeMs).toISOString() });
 }
 
 /**
- * Every regular file under `assets/` and `public/assets/`, capped. Dotfiles, `*.md` and
- * `assets/src/**` are left out; a symlink anywhere — the asset roots themselves included — is
- * listed in `skipped` and the walk carries on past it, because one hostile link must not hide
- * the rest of a folder.
+ * The folder `folder` names inside the game, found part by part: each part a real folder (a link
+ * at any part is reported and left alone, so a link cannot make another folder read as this
+ * game's) spelled exactly as the disk has it, so on a disk that ignores case `assets` never walks
+ * `Assets/` a second time. Null when there is no such folder.
+ */
+async function exactFolder(state: WalkState, root: string, folder: string): Promise<string | null> {
+  let dir = root;
+  let rel = "";
+  for (const part of folder.split("/")) {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);
+    const entry = entries?.find((candidate) => candidate.name === part);
+    rel = childPath(rel, part);
+    if (!entry) return null;
+    if (entry.isSymbolicLink()) {
+      skip(state, rel, "symlink");
+      return null;
+    }
+    if (!entry.isDirectory()) return null;
+    dir = path.join(dir, part);
+  }
+  return dir;
+}
+
+/** Walk one asset folder: the game's root as it is, any other folder only when it is a real folder. */
+async function walkAssetFolder(state: WalkState, root: string, { folder, formats }: AssetFolder): Promise<void> {
+  const at: WalkFolder = { whole: folder === ".", ...(formats ? { formats: new Set(formats) } : {}) };
+  if (at.whole) {
+    await walkAssetDir(state, at, root, "", 1);
+    return;
+  }
+  const dir = await exactFolder(state, root, folder);
+  if (dir) await walkAssetDir(state, at, dir, folder, 1);
+}
+
+/**
+ * Every regular file in a game's asset folders (`assets/` and `public/assets/` unless `folders`
+ * names others, as `shared/project-workspace.ts` `assetFoldersFor` finds them), each of a format its
+ * folder lists, each once, capped over the whole walk. Dotfiles, `*.md` and `assets/src/**` are left
+ * out, and the game's root folder (`"."`) enters no folder `wholeFolderEnters` refuses; a symlink anywhere —
+ * the asset folders themselves included — is listed in `skipped` and the walk carries on past it,
+ * because one hostile link must not hide the rest of a folder.
  */
 export async function walkGameAssets(
   root: string,
-  { maxEntries = WALK_MAX_ENTRIES, maxDepth = WALK_MAX_DEPTH }: { maxEntries?: number; maxDepth?: number } = {},
+  {
+    maxEntries = WALK_MAX_ENTRIES,
+    maxDepth = WALK_MAX_DEPTH,
+    folders = DEFAULT_ASSET_FOLDERS,
+  }: { maxEntries?: number; maxDepth?: number; folders?: readonly AssetFolder[] } = {},
 ): Promise<AssetWalk> {
-  const state: WalkState = { entries: [], skipped: [], truncated: false, maxEntries, maxDepth };
-  for (const base of ASSET_ROOTS) {
-    const dir = path.join(root, ...base.split("/"));
-    // The root itself is lstat-ed like every entry under it: a symlinked `assets/` is reported and
-    // left alone, never walked, so a link cannot make another folder read as this game's.
-    const st = await lstat(dir).catch(() => null);
-    if (!st) continue;
-    if (st.isSymbolicLink()) {
-      state.skipped.push({ file: base, why: "symlink" });
-      continue;
-    }
-    if (!st.isDirectory()) continue;
-    await walkAssetDir(state, dir, base, 1);
-  }
+  const state: WalkState = { entries: [], skipped: [], truncated: false, maxEntries, maxDepth, listed: new Set() };
+  for (const folder of folders) await walkAssetFolder(state, root, folder);
   state.entries.sort((a, b) => byText(a.file, b.file));
   return { entries: state.entries, truncated: state.truncated, skipped: state.skipped };
 }

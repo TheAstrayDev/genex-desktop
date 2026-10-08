@@ -603,6 +603,18 @@ export interface OutcomeView {
   verification: "attention" | "incomplete";
 }
 
+/** The outcome states of a run that ended: it finished, was cancelled or failed. */
+const ENDED_STATES: ReadonlySet<OutcomeView["state"]> = new Set([
+  "finished",
+  ExecutionStatus.Cancelled,
+  ExecutionStatus.Failed,
+]);
+
+/** Whether a run has ended; a running, paused or unknown run has not. */
+export function outcomeEnded(outcome: OutcomeView): boolean {
+  return ENDED_STATES.has(outcome.state);
+}
+
 /** Is this execution one the outcome shows as it is (anything else closed as finished)? */
 function isShownAsIs(execution: string): execution is OutcomeView["state"] {
   return OPEN_OR_FAILED_STATES.has(execution);

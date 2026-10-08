@@ -110,11 +110,12 @@ export function resultDigest(record: unknown): string {
 
 /**
  * Which session asked. There is no `role` on a delegate request: the worker path sets
- * `selfCapture`, the director path sets `director`, and a plain chat build sets neither.
+ * `selfCapture`, a run's sub-agent sets `attribution`, the director path sets `director`, and a
+ * plain chat build sets none of them.
  */
-export function roleOf(context: { director?: unknown; selfCapture?: unknown }): PluginToolRole {
+export function roleOf(context: { director?: unknown; selfCapture?: unknown; attribution?: unknown }): PluginToolRole {
   if (context.director) return "director";
-  if (context.selfCapture) return "builder";
+  if (context.selfCapture || context.attribution) return "builder";
   return "chat";
 }
 

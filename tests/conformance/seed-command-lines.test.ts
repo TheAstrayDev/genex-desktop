@@ -16,8 +16,12 @@ import { describe, it } from "node:test";
 import ts from "@typescript/typescript6";
 
 const seedRoot = path.resolve("src/harness-seed");
-/** Where git command lines may be written. */
-const OWNERS = new Set(["loop/git.ts", "loop/repo.ts", "loop/shell.ts"]);
+/**
+ * Where git command lines may be written. Flipped: the worker pool owns its one read-only command
+ * (`changedSince`, its hash checked by `shell.ts`), because a shipped `git.ts` may gain no key another
+ * module reads: an in-app agent's kept older copy would lack it.
+ */
+const OWNERS = new Set(["loop/git.ts", "loop/repo.ts", "loop/shell.ts", "loop/workers/pool-merge.ts"]);
 /** A git subcommand (or the global options the harness puts before one). */
 const SUBCOMMAND = String.raw`(?:-c\s|--no-optional-locks\b|\$\{|(?:add|am|apply|bisect|blame|branch|cat-file|checkout|cherry-pick|clean|clone|commit|config|diff|fetch|for-each-ref|init|log|ls-files|ls-tree|merge|merge-base|merge-file|mv|pull|push|rebase|reset|restore|rev-list|rev-parse|revert|rm|show|show-ref|stash|status|switch|tag|update-index|update-ref|worktree)\b)`;
 /**

@@ -85,7 +85,8 @@ test("a backend written against the SDK declaration compiles clean", (t) => {
         const job: unknown = await ctx.host('jobs.read', { id: 'job-1' });
         await ctx.host('events.emit', { kind: 'toolbar', item: 'publish', badge: 'Draft', tone: 'info' });
         await ctx.host('observe', { project: 'g', root: '/games/g', files: ['index.html'] });
-        return { root, text, written, delivered, dir: exported.dir, files: exported.files, token, job };
+        const snapshot: { snapshotId: string } = await ctx.host('game.snapshot', { reason: 'Before an update' });
+        return { root, text, written, delivered, dir: exported.dir, files: exported.files, token, job, snapshot };
       }
     `,
     "panel.ts": `
@@ -94,8 +95,9 @@ test("a backend written against the SDK declaration compiles clean", (t) => {
         const context: PluginPanelContext = await window.studioPlugin.call('context');
         await window.studioPlugin.call('settings');
         await window.studioPlugin.call('action', 'hello', {});
+        const chosen: string | null = await window.studioPlugin.chooseFile({ title: 'Choose a project', extensions: ['uproject'] });
         window.studioPlugin.ui?.status('Status', 'ready');
-        return context.project;
+        return chosen ?? context.project;
       }
     `,
   });
@@ -136,6 +138,20 @@ test("the SDK manifest mirror, its skills and tool hosts, and src/shared/plugins
       declare const sdkHost: SdkHost; declare const sharedHost: SharedHost;
       export const hostToShared: SharedHost = sdkHost;
       export const hostToSdk: SdkHost = sharedHost;
+    `,
+  });
+  assert.equal(diagnostics.length, 0, report(diagnostics));
+});
+
+test("the panel's Choose file request and src/shared/plugin-file-request.ts are mutually assignable", (t) => {
+  const request = path.resolve("src/shared/plugin-file-request.ts");
+  const diagnostics = compile(t, {
+    "file-request.ts": `
+      import type { PluginFileRequest as SdkRequest } from ${quote(sdk)};
+      import type { PluginFileRequest as SharedRequest } from ${quote(request)};
+      declare const sdkRequest: SdkRequest; declare const sharedRequest: SharedRequest;
+      export const requestToShared: SharedRequest = sdkRequest;
+      export const requestToSdk: SdkRequest = sharedRequest;
     `,
   });
   assert.equal(diagnostics.length, 0, report(diagnostics));

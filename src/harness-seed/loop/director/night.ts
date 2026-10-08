@@ -27,6 +27,7 @@ import {
   saveJournal as saveRunJournal,
   writeRunArtifact,
 } from "../run-events.ts";
+import type { FactRef } from "../folder-facts.ts";
 import { isCommit } from "../shell.ts";
 import { verdictRecord } from "../verdict.ts";
 import { readFile } from "node:fs/promises";
@@ -205,6 +206,11 @@ export interface NightState {
   plays: number;
   softDeadline: number;
   finalDeadline: number;
+  /**
+   * The end number of the run's last job end the lead has had (`jobs.list`, loop/jobs/watch.ts):
+   * the journal keeps it, so a restart reads on from there. Absent: none read yet.
+   */
+  jobsCursor?: number;
 }
 
 /**
@@ -233,6 +239,8 @@ export interface NightData {
   memoryRestored: boolean;
   ownShape: boolean;
   shape: NightShape;
+  /** What the game's folder holds once it is ready (`game.list`'s `facts`); absent on a night a kept older setup.ts made. */
+  gameFacts?: FactRef[];
   capacity: HarnessResult<"preview.capacity"> | null;
   contractMissing: boolean;
   gameKind: string;

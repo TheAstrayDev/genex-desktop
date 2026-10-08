@@ -90,6 +90,7 @@ warnings); the UI clears its per-render timing measures each minute there. `npm 
 | Profile `workspaces/harness/` | Active editable game-building harness; upgrades preserve self-edits |
 | Profile `engine-homes/`, `runs/`, `exoharness/` | Provider/plugin/runtime state, run artifacts and persisted events |
 | Profile `scratch/`, `exports/` | App-managed build workspaces and export destinations |
+| Profile `jobs/<game>/<id>/` | Agent jobs' records (`job.json`) and logs (`output.log`); the last 50 ended jobs per game are kept |
 | Profile `opened-files/` | Read-only copies of build-only files a chat link opened in their app |
 | Profile `Crashpad/` | Local crash dumps, never uploaded. Dumps hold process memory; review before sharing |
 | Profile `run-sharing/` | Share build metrics' state, install identity and unsent rows (owner-only files) |
@@ -328,6 +329,8 @@ transport credentials from reports. No permanent monitor or performance threshol
 into `.studio-dev/builds/<build-id>`, creates fresh owned fixture state and returns actual
 readiness/identity JSON. `npm run studio:dev -- fixtures` lists the named fixtures. Among them:
 build-graph (two sword-in-ice nights: folded tries, an undone step, a lead-merged unjudged round),
+lead-graph (two Unreal lead runs: milestone columns, save points, sub-agents with their cards, the
+critic's advice on a round),
 first-launch (an empty library and the welcome; Claude Code needs a sign-in, Codex is not
 installed, and sign-in, links and downloads are refused as in every fixture) and notifications
 (six games; about four seconds after launch a question, a plan, a plugin permission, a sign-out
@@ -335,7 +338,11 @@ and delivered, failed and stopped builds arrive as news; macOS notifications are
 sandbox-setup (the window opens on "Set up the protected workspace" for a Linux machine missing
 bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]` opens the studio) and
 update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
-itself is refused as native).
+itself is refused as native) and unreal-game (the game linked to a stand-in Unreal project inside
+its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card, and the
+steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
+and unreal-chat (a short synthetic Unreal chat, `tests/fixtures/unreal-chat/sample-chat.json`:
+connector rows in words, Worked in Unreal headings, failures, play views and a Blender delivery).
 Use `--reuse` explicitly for a stopped existing profile with the same fixture/provider mode.
 `--providers live` is explicit, retained, and uses existing ambient account semantics; no auth
 or account copying is performed. Fixtures park background improvement but keep the real core,

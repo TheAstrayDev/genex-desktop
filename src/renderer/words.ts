@@ -19,8 +19,12 @@
  *      director invented with a sha in it comes out readable.
  */
 
+import type { GameEngine } from "../shared/game-engine.ts";
 import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "../shared/boot.ts";
 import { ChatFileOpen } from "../shared/chat-files.ts";
+import { sizeWords } from "../shared/byte-size.ts";
+import type { GameHistoryCleared, GameHistorySpace } from "../shared/game-history.ts";
+import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import type { CustomEvent, CustomPayload } from "../shared/custom-events.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
@@ -45,8 +49,10 @@ import type { IterationStatus } from "./run-graph.ts";
 import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
 import { plural } from "../shared/skill-words.ts";
+import { JOB_PERMISSION_TOOL } from "../shared/jobs.ts";
 import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
+import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -325,6 +331,24 @@ export function wasStopped(source: string | null | undefined): boolean {
   return stoppedSource(source);
 }
 
+/** The harness's verdict source for a save point the Unreal lead made itself (its `VerdictSource.Lead`). */
+const LEAD_SAVE = "lead";
+
+/**
+ * A round the Unreal lead kept by saving it, after looking at its own captures: no reviewer judged
+ * it and nothing compared it side by side, so it is never worded as a reviewer's verdict.
+ */
+export function savedByLead(source: string | null | undefined): boolean {
+  return source === LEAD_SAVE;
+}
+
+/** How a save the lead made itself reads, beside the reviewers' verdicts. */
+const LEAD_SAVE_WORDS: VerdictWords = {
+  word: "saved",
+  because: "the lead looked at its own captures and saved it",
+  label: "saved — the lead looked at its own captures and saved it",
+};
+
 /**
  * "the judge", "no judges'", "the taste judge's": the role as a noun, after the word that makes it
  * one. A bare "judge it" is the verb and never matches.
@@ -383,6 +407,7 @@ export function verdictWords(verdict: Verdict): VerdictWords {
       : "the lead ended it before it was finished, so nobody reviewed it and the work it had done is kept";
     return { word: "stopped", because, label: written || `stopped — ${because}` };
   }
+  if (savedByLead(verdict.source) && !written) return LEAD_SAVE_WORDS;
   // A round with no winner recorded was neither kept nor undone: nobody's verdict reached the log.
   const outcome = roundOutcome({ winner: verdict.winner, verdictSource: verdict.source });
   const word = verdictWord(verdict, outcome);
@@ -439,6 +464,7 @@ export function buildingRoundLabel(asked: string | null | undefined): string {
 export function sideBySideWords(node: { status: IterationStatus; satisfied: boolean; source: string | null }): string {
   if (node.status === "building") return "";
   if (node.status === "stopped") return "Not reviewed — the lead stopped this round.";
+  if (savedByLead(node.source)) return "Not reviewed — the lead saved it after looking at its own captures.";
   if (node.status === "unjudged") return "Not reviewed — no verdict was recorded for this round.";
   if (node.status === "rolled") {
     if (node.source === "taste-veto") return "The reviewer preferred the round before.";
@@ -931,6 +957,34 @@ const BYTES_PER_KB = 1024;
 /** A size in whole kilobytes: "12 KB". */
 export const kilobyteWords = (bytes: number): string => `${Math.round(bytes / BYTES_PER_KB)} KB`;
 
+/** How many files a line about files too large to save names before "and N more". */
+const SKIPPED_FILES_NAMED = 3;
+
+/** A listed file a `checkpoint_skipped` record can be read for: its path and its size. */
+function isSkippedFile(entry: unknown): entry is SkippedFile {
+  const file = entry as Partial<SkippedFile> | null;
+  return typeof file?.file === "string" && file.file !== "" && typeof file.bytes === "number" && file.bytes >= 0;
+}
+
+/**
+ * Files too large to save, which Rewind cannot bring back, as the chat says it: left out by a
+ * message's checkpoint, or left as they were by a rewind. Up to three names with their sizes, then
+ * how many more. Null when the record names no file it can read.
+ */
+export function checkpointSkippedWords(skipped: CustomPayload<typeof CustomEvent.CheckpointSkipped>): string | null {
+  const listed: unknown[] = Array.isArray(skipped.files) ? skipped.files : [];
+  const files = listed.filter(isSkippedFile);
+  if (!files.length) return null;
+  const total = Math.max(files.length, typeof skipped.total === "number" ? skipped.total : 0);
+  const shown = files.slice(0, SKIPPED_FILES_NAMED);
+  const named = shown.map((file) => `${file.file.split("/").pop()} (${sizeWords(file.bytes)})`).join(", ");
+  const which = total > shown.length ? `${named} and ${total - shown.length} more` : named;
+  if (skipped.by !== SkippedBy.Rewind)
+    return `Rewind can’t bring back ${plural(total, "file")} that ${total === 1 ? "is" : "are"} too large to save: ${which}.`;
+  if (total === 1) return `This file was too large to save, so the rewind left it as it is: ${which}.`;
+  return `These files were too large to save, so the rewind left them as they are: ${which}.`;
+}
+
 /** What the GPU draws for a model: its triangles when counted, else its polygons. */
 function modelShape(asset: { triangles?: number | null; polygons?: number | null }): string {
   if (typeof asset.triangles === "number") return `${asset.triangles} triangles`;
@@ -984,27 +1038,222 @@ export function pluginToolWords(call: PluginToolCallLine): string {
   return `${where}: ${plugin} ran ${tool}${brought ? ` — ${brought}` : ""}`;
 }
 
+// ── connector steps ───────────────────────────────────────────────────────────────────────
+
 /**
- * A connector tool call, as a line in the chat. A connector is not a plugin: it is a server
- * outside this Mac (or a program on it) that the user attached, so the line says who was asked
- * and for what, and nothing about how the answer was carried.
- *
- * The connector's id is the only name the record carries — a display name would have to be
- * looked up in a list the chat does not hold, and would go stale in a log. It still passes
- * through `withoutIds`, because a connector's own error text is as free as a model's.
+ * A connector or plugin as the chat names it in a work heading ("Worked in Unreal"): a bundled
+ * plugin by its short name, any other by the name its record carries.
  */
-export function connectorWords(call: {
-  connectorId?: string | null;
-  tool?: string | null;
-  ok?: boolean;
-  error?: string | null;
-}): string {
-  const connector = withoutIds((call.connectorId ?? "").trim()) || "a connector";
-  const tool = bareToolName(call.tool ?? "") || "a tool";
-  if (call.ok === false) {
-    return `${connector} · ${tool} failed — ${withoutIds((call.error ?? "unknown error").trim())}`;
-  }
-  return `asked ${connector} for ${tool}`;
+const SOURCE_SHORT_NAMES: Readonly<Record<string, string>> = {
+  unreal: "Unreal",
+  blender: "Blender",
+  genex: "Genex",
+};
+
+/** The name a step's plugin or connector goes by in the chat; the id only when nothing else names it. */
+export function chatSourceName(source: { pluginId?: string | null; name?: string | null; id?: string | null }): string {
+  const short = source.pluginId ? SOURCE_SHORT_NAMES[source.pluginId] : undefined;
+  return short ?? (withoutIds((source.name ?? "").trim()) || withoutIds((source.id ?? "").trim()));
+}
+
+/** A step's three phrasings: the row once it ran, the live status while it runs, an error line's opening. */
+interface StepPhrases {
+  done: string;
+  active: string;
+  failed: string;
+}
+
+/** A shape a primitive tool adds, from its own name (`add_cube` → `cube`). */
+const shapeOf = (tool: string): string => tool.replace(/^add_/, "").replace(/_/g, " ");
+
+/** Three phrasings around one object, or around the words for "one of those" when the call named none. */
+const about = (object: string | undefined, none: string, done: string, active: string, failed: string): StepPhrases => {
+  const it = object ?? none;
+  return { done: `${done} ${it}`, active: `${active} ${it}`, failed: `${failed} ${it}` };
+};
+
+const fixed = (done: string, active: string, failed: string): StepPhrases => ({ done, active, failed });
+
+/** What each kind of step says, in the user's words (`chat/connector-steps.ts` decides the kind). */
+const STEP_WORDS: Readonly<Record<StepAction, (step: ConnectorStep) => StepPhrases>> = {
+  [StepAction.WroteBlueprint]: (s) =>
+    s.object
+      ? { done: `Wrote Blueprint ${s.object}`, active: `Writing ${s.object}`, failed: `Couldn't write ${s.object}` }
+      : fixed("Wrote a Blueprint", "Writing a Blueprint", "Couldn't write a Blueprint"),
+  [StepAction.MadeBlueprint]: (s) =>
+    about(s.object, "a Blueprint", "Made Blueprint", "Making Blueprint", "Couldn't make Blueprint"),
+  [StepAction.CompiledBlueprint]: (s) => about(s.object, "a Blueprint", "Compiled", "Compiling", "Couldn't compile"),
+  [StepAction.ReadBlueprint]: (s) => about(s.object, "a Blueprint", "Read Blueprint", "Reading", "Couldn't read"),
+  [StepAction.EditedBlueprint]: (s) => about(s.object, "a Blueprint", "Edited Blueprint", "Editing", "Couldn't edit"),
+  [StepAction.LookedUpNodes]: () =>
+    fixed("Looked up Blueprint nodes", "Looking up Blueprint nodes", "Couldn't look up Blueprint nodes"),
+  [StepAction.ReadGuide]: () =>
+    fixed("Read the Blueprint guide", "Reading the Blueprint guide", "Couldn't read the Blueprint guide"),
+  [StepAction.Placed]: (s) => about(s.object, "an actor", "Placed", "Placing", "Couldn't place"),
+  [StepAction.AddedShape]: (s) => about(`a ${shapeOf(s.tool)}`, "", "Added", "Adding", "Couldn't add"),
+  [StepAction.Removed]: (s) => about(s.object, "an actor", "Removed", "Removing", "Couldn't remove"),
+  [StepAction.Moved]: (s) => about(s.object, "an actor", "Moved", "Moving", "Couldn't move"),
+  [StepAction.OpenedLevel]: (s) => about(s.object, "a level", "Opened level", "Opening", "Couldn't open"),
+  [StepAction.LookedAtLevel]: () => fixed("Looked at the level", "Looking at the level", "Couldn't look at the level"),
+  [StepAction.LookedUpAssets]: () =>
+    fixed("Looked through the assets", "Looking through the assets", "Couldn't look through the assets"),
+  [StepAction.SavedAssets]: (s) =>
+    s.count
+      ? fixed(`Saved ${plural(s.count, "asset")}`, `Saving ${plural(s.count, "asset")}`, "Couldn't save the assets")
+      : fixed("Saved the assets", "Saving the assets", "Couldn't save the assets"),
+  [StepAction.MadeMaterial]: (s) =>
+    about(s.object, "a material", "Made material", "Making material", "Couldn't make material"),
+  [StepAction.ImportedAsset]: (s) => about(s.object, "an asset", "Imported", "Importing", "Couldn't import"),
+  [StepAction.RanScript]: (s) => about(s.object, "a script", "Ran", "Running", "Couldn't run"),
+  [StepAction.Played]: () => fixed("Played the level", "Playing the level", "Couldn't play the level"),
+  [StepAction.StoppedPlay]: () => fixed("Stopped play", "Stopping play", "Couldn't stop play"),
+  [StepAction.CheckedPlay]: () => fixed("Checked whether play runs", "Checking play", "Couldn't check play"),
+  [StepAction.Screenshot]: () => fixed("Took a screenshot", "Taking a screenshot", "Couldn't take a screenshot"),
+  [StepAction.PlayShot]: () =>
+    fixed("Took a play-view shot", "Taking a play-view shot", "Couldn't take a play-view shot"),
+  [StepAction.HeroShot]: (s) =>
+    about(s.object, "a hero camera", "Took a still from", "Taking a still from", "Couldn't take a still from"),
+  [StepAction.MotionStrip]: () => fixed("Took a motion strip", "Taking a motion strip", "Couldn't take a motion strip"),
+  [StepAction.ListedCameras]: () =>
+    fixed("Listed the hero cameras", "Listing the hero cameras", "Couldn't list the hero cameras"),
+  [StepAction.ViewportShot]: () =>
+    fixed(
+      "Took a screenshot of the level",
+      "Taking a screenshot of the level",
+      "Couldn't take a screenshot of the level",
+    ),
+  [StepAction.PictureOf]: (s) =>
+    about(s.object, "an asset", "Took a picture of", "Taking a picture of", "Couldn't take a picture of"),
+  [StepAction.ReadLog]: () => fixed("Read the editor log", "Reading the editor log", "Couldn't read the editor log"),
+  [StepAction.HeldInput]: (s) => about(s.object, "an input", "Held", "Holding", "Couldn't hold"),
+  [StepAction.LetGo]: () =>
+    fixed("Let go of every input", "Letting go of every input", "Couldn't let go of every input"),
+  [StepAction.ReadPlayer]: () =>
+    fixed("Read the player's state", "Reading the player's state", "Couldn't read the player's state"),
+  [StepAction.ReadControls]: () => fixed("Read the controls", "Reading the controls", "Couldn't read the controls"),
+  [StepAction.AppliedPart]: (s) => about(s.object, "a part", "Applied part", "Applying part", "Couldn't apply part"),
+  [StepAction.Retargeted]: () => fixed("Retargeted clips", "Retargeting clips", "Couldn't retarget clips"),
+  [StepAction.Audited]: () => fixed("Audited the level", "Auditing the level", "Couldn't audit the level"),
+  [StepAction.SetRoute]: () => fixed("Set the route", "Setting the route", "Couldn't set the route"),
+  [StepAction.LaidTerrain]: () => fixed("Laid the terrain", "Laying the terrain", "Couldn't lay the terrain"),
+  [StepAction.Settled]: () => fixed("Let the game settle", "Letting the game settle", "Couldn't let the game settle"),
+  [StepAction.DroveRoute]: () => fixed("Drove the route", "Driving the route", "Couldn't drive the route"),
+  [StepAction.MeasuredRoute]: () => fixed("Measured the route", "Measuring the route", "Couldn't measure the route"),
+  [StepAction.CheckedProject]: () => fixed("Checked the project", "Checking the project", "Couldn't check the project"),
+  [StepAction.ListedToolsets]: () => fixed("Listed the toolsets", "Listing the toolsets", "Couldn't list the toolsets"),
+  [StepAction.ReadToolset]: (s) => {
+    const it = s.object ? `the ${s.object} toolset` : "a toolset";
+    return { done: `Read ${it}`, active: `Reading ${it}`, failed: `Couldn't read ${it}` };
+  },
+  [StepAction.Other]: (s) => fixed(`${s.toolset ?? ""} · ${s.tool}`, "", `${s.toolset ?? ""} · ${s.tool}`),
+};
+
+/** The icon a step's row carries: what kind of work it was. */
+const STEP_ICONS: Readonly<Record<StepAction, ToolIcon>> = {
+  [StepAction.WroteBlueprint]: "write",
+  [StepAction.MadeBlueprint]: "write",
+  [StepAction.CompiledBlueprint]: "write",
+  [StepAction.EditedBlueprint]: "write",
+  [StepAction.Placed]: "write",
+  [StepAction.AddedShape]: "write",
+  [StepAction.Removed]: "write",
+  [StepAction.Moved]: "write",
+  [StepAction.SavedAssets]: "write",
+  [StepAction.MadeMaterial]: "write",
+  [StepAction.ImportedAsset]: "write",
+  [StepAction.AppliedPart]: "write",
+  [StepAction.Retargeted]: "write",
+  [StepAction.SetRoute]: "write",
+  [StepAction.LaidTerrain]: "write",
+  [StepAction.ReadBlueprint]: "read",
+  [StepAction.LookedUpNodes]: "read",
+  [StepAction.ReadGuide]: "read",
+  [StepAction.LookedAtLevel]: "read",
+  [StepAction.LookedUpAssets]: "read",
+  [StepAction.ReadLog]: "read",
+  [StepAction.ReadControls]: "read",
+  [StepAction.ReadPlayer]: "read",
+  [StepAction.ListedToolsets]: "read",
+  [StepAction.ReadToolset]: "read",
+  [StepAction.ListedCameras]: "read",
+  [StepAction.Audited]: "read",
+  [StepAction.MeasuredRoute]: "read",
+  [StepAction.CheckedProject]: "read",
+  [StepAction.Screenshot]: "see",
+  [StepAction.PlayShot]: "see",
+  [StepAction.ViewportShot]: "see",
+  [StepAction.PictureOf]: "see",
+  [StepAction.HeroShot]: "see",
+  [StepAction.MotionStrip]: "see",
+  [StepAction.Played]: "game",
+  [StepAction.StoppedPlay]: "game",
+  [StepAction.CheckedPlay]: "game",
+  [StepAction.HeldInput]: "game",
+  [StepAction.LetGo]: "game",
+  [StepAction.Settled]: "game",
+  [StepAction.DroveRoute]: "game",
+  [StepAction.OpenedLevel]: "game",
+  [StepAction.RanScript]: "run",
+  [StepAction.Other]: "run",
+};
+
+/** What a connector is called when nothing names it. */
+const A_CONNECTOR = "a connector";
+/** How long a failed step's line may be before it is clipped: one line in a narrow chat. */
+const FAILURE_LINE_MAX = 120;
+
+/**
+ * An error's first sentence, on one line: its first line (with the next when the first only
+ * introduces it, ending in a colon), up to its first full stop. The whole text stays in the step's
+ * detail, line by line; only this opening passes through `withoutIds`.
+ */
+export function firstSentence(error: string): string {
+  const lines = error
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const [first = "", second] = lines;
+  const head = first.endsWith(":") && second ? `${first} ${second}` : first;
+  const stop = head.search(/[.!?]\s/);
+  return withoutIds(stop >= 0 ? head.slice(0, stop + 1) : head);
+}
+
+/**
+ * A connector step's row: what it did once it ran (a failure leads with what it could not do and
+ * the error's first sentence, clipped to one line), and what it is doing while it runs, with where
+ * ("Writing BP_Lamp in Unreal"). A tool the table does not know reads as its toolset and tool,
+ * or its connector and tool.
+ */
+export function connectorStepWords(
+  step: ConnectorStep,
+  where: string,
+  outcome: { ok?: boolean; error?: string | null } = {},
+): { label: string; active: string; icon: ToolIcon } {
+  const icon = STEP_ICONS[step.action];
+  const named = step.action === StepAction.Other && !step.toolset ? { ...step, toolset: where } : step;
+  const phrases = STEP_WORDS[named.action](named);
+  const active = phrases.active
+    ? `${phrases.active}${where ? ` in ${where}` : ""}`
+    : `Working in ${where || A_CONNECTOR}`;
+  if (outcome.ok !== false) return { label: phrases.done, active, icon };
+  const why = firstSentence(outcome.error ?? "");
+  return { label: clip(why ? `${phrases.failed}: ${why}` : phrases.failed, FAILURE_LINE_MAX), active, icon };
+}
+
+/** A connector's pictures in the chat: the work's play views and a row's own screenshots. */
+export const CHAT_SHOT_WORDS = {
+  /** A picture's tooltip, as a file the chat opens beside it says (`MAC_FILE_WORDS`). */
+  opensBeside: "Opens beside the chat",
+  playView: (n: number) => `Play view ${n}`,
+  screenshot: "Screenshot",
+} as const;
+
+/** "Worked in Blender and Unreal · 3 steps": the plugins a work group ran in, and how many steps. */
+export function workSummaryWords(sources: readonly string[], steps: number): string {
+  const counted = plural(steps, "step");
+  if (!sources.length) return `Worked on ${counted}`;
+  const named = sources.length === 1 ? sources[0] : `${sources.slice(0, -1).join(", ")} and ${sources.at(-1)}`;
+  return `Worked in ${named} · ${counted}`;
 }
 
 /** A part the harness stopped because two builds running could not be judged for the same reason. */
@@ -1230,10 +1479,50 @@ export const PLAN_WORDS = {
 /** Who asks, when a plugin's question names no plugin. */
 export const A_PLUGIN = "A plugin";
 
+/** The steps card's own words; its rows are the plugin's. */
+export const STEPS_WORDS = { notNow: "Not now", done: "(done)", copy: "Copy", copied: "Copied" } as const;
+
+/** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
+export const PLUGIN_SUGGESTION_WORDS = {
+  title: (name: string) => `Genex plugin: ${name}`,
+  turnOn: "Turn on",
+  install: "Install…",
+  on: "On",
+  onlyYou: "Only you turn a Genex plugin on. It runs with your access to this Mac.",
+} as const;
+
+/**
+ * "Don't wait for me" (`shared/dont-wait.ts`): the Loop menu's switch, the card an agent may show
+ * (`chat/DontWaitOfferCard.tsx`) and the line the person's switch leaves in the chat.
+ */
+export const DONT_WAIT_WORDS = {
+  label: "Don't wait for me",
+  description: "Workers carry on without asking you; their questions stay in the chat",
+  cardTitle: "Let workers carry on without you?",
+  onlyYou: "Only you can turn this on.",
+  button: "Don't wait for me",
+  on: "On",
+  /** The line a switch leaves: on or off, for the run going now or the chat's next run. */
+  set: (on: boolean, forRun: boolean) =>
+    `You turned ${on ? "on" : "off"} Don't wait for me for ${forRun ? "this run" : "the next run"}`,
+} as const;
+
+/** Each game engine as the chat names it. */
+export const GAME_ENGINE_WORDS = { web: "the web", unreal: "Unreal" } as const satisfies Record<GameEngine, string>;
+
 // ── the chat transcript ───────────────────────────────────────────────────────────────────
 
 /** The fixed lines, labels and prefills `chat-entries.ts` writes into the transcript. */
 export const TRANSCRIPT_WORDS = {
+  /** A game's engine link (`engine_linked`): one line with Undo, then what Undo did. */
+  engineLinked: (game: string | undefined, engine: string, project: string) =>
+    `${game ?? "This game"} now builds in ${engine} · ${project}`,
+  engineUndone: (game: string | undefined, restored: string | undefined) =>
+    restored
+      ? `Undone. ${game ?? "This game"} builds in ${restored} again.`
+      : `Undone. ${game ?? "This game"} is a web game again.`,
+  engineUndo: "Undo",
+  engineUndoTitle: "Take this back: the game builds where it did before",
   planCancelled: "Plan cancelled.",
   studioRestarted: "Studio restarted",
   workspaceRestored: "Workspace restored",
@@ -1630,6 +1919,8 @@ const STUDIO_TOOLS: Record<string, ToolWords> = {
   worker_status: { icon: "read", label: "checked on a worker", active: "Checking on a worker" },
   worker_steer: { icon: "run", label: "redirected a worker" },
   worker_stop: { icon: "run", label: "stopped a worker" },
+  worker_wait: { icon: "think", label: "waited on the workers", active: "Waiting on the workers" },
+  worker_mark: { icon: "write", label: "marked a worker's work" },
   wait: { icon: "think", label: "waited", active: "Waiting" },
   judge: { icon: "see", label: "reviewed a build", active: "Reviewing a build" },
   playtest: { icon: "game", label: "had a build playtested", active: "Playtesting a build" },
@@ -1690,7 +1981,7 @@ export function consentAskWords(ask: {
   prompt?: string | null;
 }): string {
   const who = (ask.pluginName ?? "").trim() || A_PLUGIN;
-  const tool = (ask.tool ?? "").split("__").pop()?.replace(/[-_]+/g, " ").trim() || "a tool";
+  const tool = consentToolWords(ask.tool);
   const digest = Object.entries(ask.args ?? {})
     .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
     .join(", ");
@@ -1698,6 +1989,39 @@ export function consentAskWords(ask: {
   const prompt = (ask.prompt ?? "").trim();
   return `${who} asks to run ${tool}${args}${prompt ? ` — ${prompt}` : ""}`;
 }
+
+/** A dotted identifier's last part (`editor_toolset.toolsets.asset.AssetTools` → `AssetTools`). */
+const lastPart = (value: string): string => (/^[\w.]+$/.test(value) ? (value.split(".").pop() ?? value) : value);
+/** Words a consent card shows per detail, and how many details. */
+const CONSENT_DETAIL_CHARS = 40;
+const CONSENT_DETAILS = 2;
+
+/** What a connector call does, in a few words: the tool, then its first short text arguments. */
+export function consentActionWords(
+  tool: string | null | undefined,
+  args: Record<string, unknown> | null | undefined,
+): string {
+  const words = consentToolWords(tool);
+  const details = Object.values(args ?? {})
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .slice(0, CONSENT_DETAILS)
+    .map((value) => clip(lastPart(value.trim()), CONSENT_DETAIL_CHARS));
+  return [words, ...details].join(" · ");
+}
+
+/** A connector tool's name as words (`unreal-editor__call_tool` → `call tool`). */
+export const consentToolWords = (tool: string | null | undefined): string =>
+  (tool ?? "").split("__").pop()?.replace(/[-_]+/g, " ").trim() || "a tool";
+
+/** The consent card's choices. Always allow is offered on a connector's card only. */
+export const CONSENT_CHOICE_WORDS = {
+  once: { label: "Allow once", description: "Ask again next time." },
+  always: (tool: string, source: string) => ({
+    label: "Always allow",
+    description: `Don't ask again for “${tool}” in ${source}.`,
+  }),
+  decline: { label: "Don't allow", description: "The agent carries on without it." },
+} as const;
 
 /** A settled consent row's line when the plugin wrote no prompt of its own. */
 export const consentRequestedWords = (source: string | undefined): string =>
@@ -1707,9 +2031,13 @@ export const consentRequestedWords = (source: string | undefined): string =>
 export const consentNeededWords = (source: string | undefined): string => `${source || A_PLUGIN} needs your permission`;
 
 /** How a consent question ended, once it is no longer waiting on the user. */
-export function consentOutcomeWords(outcome: { state?: string | null; by?: string | null }): string {
-  if (outcome.state === "approved") return "Approved by you";
-  if (outcome.by === "timeout") return "No answer — declined";
+export function consentOutcomeWords(outcome: {
+  state?: string | null;
+  by?: string | null;
+  always?: boolean | null;
+}): string {
+  if (outcome.state === "approved") return outcome.always ? "Always allowed by you" : "Approved by you";
+  if (outcome.by === "timeout") return "Nobody answered";
   if (outcome.by === "restart") return "Withdrawn when the studio restarted";
   if (outcome.by === "stop" || outcome.by === "turn") return "Withdrawn when the turn stopped";
   return "Declined";
@@ -1751,34 +2079,60 @@ function webHost(address: string): string {
   }
 }
 
+/** Who asks: a worker of the chat's lead by its title, else Claude. */
+function permissionAsker(event: Partial<ToolPermissionEvent>): string {
+  if (!event.worker) return "Claude";
+  return nonEmpty(event.worker.title) ?? "A worker";
+}
+
 /** What a tool that is neither a command nor a plan is about to do. */
 function toolAskWords(event: Partial<ToolPermissionEvent>, tool: string): string {
+  const who = permissionAsker(event);
   if (PERMISSION_EDIT_TOOLS.has(tool)) {
     const name = permissionPath(event)?.split("/").filter(Boolean).pop();
-    return name ? `Claude wants to edit ${name}` : "Claude wants to edit a file";
+    return name ? `${who} wants to edit ${name}` : `${who} wants to edit a file`;
   }
   if (PERMISSION_READ_TOOLS.has(tool)) {
     const path = permissionPath(event);
-    return path ? `Claude wants to read ${path}` : "Claude wants to read files";
+    return path ? `${who} wants to read ${path}` : `${who} wants to read files`;
   }
   if (tool === "WebFetch") {
     const address = nonEmpty(event.subject) ?? nonEmpty(event.input?.url);
-    return address ? `Claude wants to open ${webHost(address)}` : "Claude wants to open a web page";
+    return address ? `${who} wants to open ${webHost(address)}` : `${who} wants to open a web page`;
   }
-  if (tool.startsWith(`${MCP_TOOL}__`)) return `Claude wants to use ${permissionToolName(tool)}`;
-  return `Claude wants to use ${nonEmpty(event.displayName) ?? (permissionToolName(tool) || "a tool")}`;
+  if (tool.startsWith(`${MCP_TOOL}__`)) return `${who} wants to use ${permissionToolName(tool)}`;
+  return `${who} wants to use ${nonEmpty(event.displayName) ?? (permissionToolName(tool) || "a tool")}`;
+}
+
+/**
+ * A job's card: who wants to run what in the background, by the job's plain title. A lead's card
+ * keeps its own words; a worker's and the chat's own name who asks. Never the command: it sits
+ * folded under the card's Details.
+ */
+function jobAskWords(event: Partial<ToolPermissionEvent>): string {
+  const own = event.worker ? undefined : nonEmpty(event.title);
+  if (own) return own;
+  const title = nonEmpty(event.input?.title);
+  return `${permissionAsker(event)} wants to run ${title ?? "something"} in the background`;
+}
+
+/** A command card's question: the command itself is on the card in full. */
+export function permissionCommandWords(event: Partial<ToolPermissionEvent>): string {
+  return `${permissionAsker(event)} wants to run a command`;
 }
 
 /**
  * The card's question: Claude Code's own sentence when it wrote one, else what the tool is about
- * to do. A plan waiting for approval is always "Approve this plan?".
+ * to do. A worker's card says what that worker wants (Claude Code's sentence names Claude). A plan
+ * waiting for approval is always "Approve this plan?".
  */
 export function permissionTitleWords(event: Partial<ToolPermissionEvent>): string {
   if (isPlanRequest(event)) return "Approve this plan?";
-  const title = nonEmpty(event.title);
+  if (event.tool === JOB_PERMISSION_TOOL) return jobAskWords(event);
+  const title = event.worker ? undefined : nonEmpty(event.title);
   if (title) return title;
   const tool = event.tool ?? "";
-  if (tool === "Bash") return "Claude wants to run a command";
+  if (tool === "Bash") return permissionCommandWords(event);
   return toolAskWords(event, tool);
 }
 
@@ -1855,6 +2209,7 @@ const PERMISSION_WITHDRAWN: Partial<Record<string, string>> = {
   [ToolPermissionBy.Turn]: "Withdrawn when the turn ended",
   [ToolPermissionBy.Restart]: "Withdrawn by a restart",
   [ToolPermissionBy.Timeout]: "Withdrawn: nobody answered",
+  [ToolPermissionBy.NotWaited]: "Not asked: you said not to wait",
 };
 
 /** How a permission request ended, once it no longer waits on the person. */
@@ -1920,6 +2275,47 @@ export function toolActivityWords(icon: ToolIcon): string {
 }
 
 // ── The chat panel ─────────────────────────────────────────────────────────────────────────
+
+/** The chat ⋯ menu's history item and its confirmation. */
+export const HISTORY_WORDS = {
+  menu: "Clear Rewind history…",
+  title: "Clear Rewind history?",
+  keep: "Keep",
+  clear: "Clear",
+  cleared: "Cleared Rewind history.",
+  nothingCleared: "There was nothing to clear.",
+} as const;
+
+/** The confirmation's body: how much space history takes, what clearing frees now and later, and what stays. */
+export function historySpaceWords(space: GameHistorySpace): string {
+  const total = `Version history takes ${sizeWords(space.totalBytes)}.`;
+  const recent = sizeWords(space.recentBytes);
+  const later = space.recentBytes > 0 ? ` About ${recent} from the last hour stays until a later clear.` : "";
+  if (space.rewindTracks + space.finishedRunTracks === 0) {
+    if (space.clearableBytes > 0)
+      return `${total} Copies cleared earlier still take about ${sizeWords(space.clearableBytes)} of it. Clearing frees that space.${later}`;
+    if (space.recentBytes > 0)
+      return `${total} Nothing beside it to clear now; about ${recent} from the last hour goes at a later clear.`;
+    return `${total} Nothing beside it to clear.`;
+  }
+  return (
+    `${total} Rewind’s saved copies and finished builds’ side tracks hold about ` +
+    `${sizeWords(space.clearableBytes)} of it. Clearing them frees that space.${later} Your save points, the ` +
+    "game’s own history and paused builds stay; older messages can still rewind the chat, but not " +
+    "its files, and builds you didn’t make live can no longer be opened."
+  );
+}
+
+/** The menu item's size beside its label: what clearing frees, once it is known. */
+export function historyMenuSize(space: GameHistorySpace | null): string | null {
+  return space ? sizeWords(space.clearableBytes) : null;
+}
+
+/** The notice after clearing a game's Rewind history. */
+export function historyClearedWords(cleared: GameHistoryCleared): string {
+  if (cleared.freedBytes > 0) return `Cleared ${sizeWords(cleared.freedBytes)}.`;
+  return cleared.removedTracks > 0 ? HISTORY_WORDS.cleared : HISTORY_WORDS.nothingCleared;
+}
 
 /** How many included files an export notice names before it says "and N more". */
 const EXPORT_LIST_LIMIT = 12;
@@ -2145,6 +2541,9 @@ export const PLUGINS_WORDS = {
     showAll: "Show all",
     showFewer: "Show fewer",
     connections: "Connections",
+    /** A connection with tools the person always allowed, and the button that takes it back. */
+    alwaysAllowed: (tools: string) => `Runs without asking: ${tools}.`,
+    askEveryTime: "Ask every time",
     ready: "Ready",
     off: "Off",
     connecting: "Connecting…",
@@ -2537,3 +2936,69 @@ export function privacyDeleteWords(result: RunSharingDeleteResult): string {
   };
   return words[result.outcome];
 }
+
+/** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
+export const PLUGIN_TOOLBAR_WORDS = {
+  update: {
+    badge: "Update",
+    title: (plugin: string, version: string) =>
+      `The ${plugin} plugin ${version} is ready. Press to update it in Plugins.`,
+  },
+} as const;
+
+/** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */
+export const UNREAL_WORDS = {
+  /** The Live tab's line under the project's name, in place of the web page. */
+  stageStatus: "Plays in the Unreal editor.",
+  open: "Open in Unreal",
+  opening: "Opening…",
+  /** The Live card for each step of the game's own project (`stage-status`). */
+  stage: {
+    getUnreal: "Unreal Engine 5.8 isn’t on this computer yet.",
+    getUnrealButton: "Get Unreal Engine",
+    setUpAndOpen: "Set up and open",
+    setUp: "Genex sets it up for agents first; you confirm what changes.",
+    /** Set up only, while Unreal has another project open: Genex keeps one Unreal at a time. */
+    setUpButton: "Set up",
+    setUpBeside: (project: string) => `Genex sets ${project} up for agents now; you confirm what changes.`,
+    /** What to do once what holds Unreal lets go: another project closes, or a Loop ends. */
+    openWhenFree: "Open it once Unreal is free.",
+    openAfterLoop: "Open it after the Loop ends.",
+    openProjectWhenFree: (project: string) => `Open ${project} once Unreal is free.`,
+    /** Unreal has a project open that it can't name. */
+    anotherOpen: "Unreal has another project open.",
+    portTaken: (project: string) =>
+      `Another app is using the port Genex gave ${project}. Set it up again to move it to a free one.`,
+    starting: "Opening in Unreal…",
+    startingHint: "The first start can take several minutes.",
+    ready: "Ready in Unreal",
+    otherOpen: (other: string) => `Unreal has ${other} open.`,
+    switchTo: (project: string) => `Switch to ${project}`,
+    notAnswering: (project: string) => `${project} isn’t answering in Unreal.`,
+    portBlocked: (project: string) => `Unreal couldn’t use the port Genex gave ${project}.`,
+    restart: "Restart Unreal",
+    quitFirst: (project: string) =>
+      `${project} is open in Unreal. Quit Unreal to set it up; Unreal asks you to save first.`,
+    quit: "Quit Unreal",
+    severalEditors: "Two Unreal editors are open. Quit the one you want from its own window.",
+    /** While a Loop is using Unreal, nothing here quits it: which Loop, and what to do once it ends. */
+    busyRun: (game: string) => `A Loop in ${game} is using Unreal.`,
+    busyHere: "This game’s Loop is using Unreal.",
+    setUpAfter: (project: string) => `Set up ${project} after it ends.`,
+    openAfter: (project: string) => `Open ${project} after it ends.`,
+    leaveOpen: "Genex leaves it open until the Loop ends.",
+    choose: (project: string) => `${project} isn’t where it was. Choose it again in the Unreal panel.`,
+    panel: "Open the Unreal panel",
+  },
+  /** The plugin page's name and line for the Unreal plugin's editor connection. */
+  connection: { title: "Editor", text: "Your open Unreal Editor, where agents build Unreal games." },
+  /** The latest play shot's alt text. */
+  playShot: (project: string) => `${project} in play`,
+  /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
+  rewindNote: (project: string) => `Rewind doesn’t undo changes made in Unreal: ${project} is outside the game folder.`,
+  /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
+  loopUnavailable: (project: string | null, place: string) =>
+    project
+      ? `Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the Unreal button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
+      : "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Each message runs one turn.",
+} as const;

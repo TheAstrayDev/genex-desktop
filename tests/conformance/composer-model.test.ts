@@ -19,6 +19,7 @@ import {
   composerLoopView,
   lastLoop,
   loopCommissions,
+  modeMenuReach,
   pinChatLoop,
   rememberChatLoop,
   reportCommissions,
@@ -413,6 +414,34 @@ describe("what a chat's Loop is", () => {
       assert.deepEqual(storedChatLoop(storage({ ...globals, "studio.loop.A": bad }), "A"), { on: true, hours: 1 }, bad);
     }
     assert.deepEqual(storedChatLoop(storage(globals)), { on: true, hours: 1 }, "no chat reads the last pick");
+  });
+
+  it("while a build owns the chat, Mode opens read-only so the person can still switch Don't wait for me, on and off", () => {
+    const off = { on: false, hours: null };
+    const running = composerLoopView({ own: halfHour, build: { state: "running", loop: infinite } });
+    for (const coordinating of [false, true])
+      assert.deepEqual(
+        modeMenuReach({ view: running, coordinating, threadId: "t1" }),
+        { opens: true, changes: false, dontWaitThread: "t1" },
+        `coordinating: ${coordinating}`,
+      );
+    const own = composerLoopView({ own: halfHour, build: null });
+    assert.deepEqual(modeMenuReach({ view: own, coordinating: false, threadId: "t1" }), {
+      opens: true,
+      changes: true,
+      dontWaitThread: "t1",
+    });
+    const offRunning = composerLoopView({ own: off, build: { state: "running", loop: off } });
+    assert.deepEqual(
+      modeMenuReach({ view: offRunning, coordinating: true, threadId: "t1" }),
+      { opens: false, changes: false },
+      "no Loop, nothing to switch: Mode stays shut while the build owns the chat",
+    );
+    assert.deepEqual(
+      modeMenuReach({ view: own, coordinating: false, threadId: undefined }),
+      { opens: true, changes: true },
+      "a composer of no chat has no switch",
+    );
   });
 
   it("Mode shows the chat's own Loop with no build or after it finished, and a running or paused build's own limit", () => {

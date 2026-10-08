@@ -42,7 +42,12 @@ describe("host-owned Genex tools", () => {
     );
     for (const key of ["user-approved", "out-dir", "env", "api-url", "approve-remesh"])
       assert.throws(() => validateGenexRequest({ operation: "model", options: { [key]: "x" } }));
-    validateGenexRequest({ operation: "creature.animate", id: "existing", options: { action: "walk", lean: true } });
+    // Flipped: the pinned CLI's creature animate reads verbs, locomotion, video, duration and lean,
+    // never a catalog action, so the host now refuses the action it would have dropped.
+    validateGenexRequest({ operation: "creature.animate", id: "existing", options: { locomotion: true, lean: true } });
+    assert.throws(() =>
+      validateGenexRequest({ operation: "creature.animate", id: "existing", options: { action: "walk" } }),
+    );
     validateGenexRequest({ operation: "creature", prompt: "fixture", options: { animation: [466, "walk"] } });
     assert.throws(() => validateGenexRequest({ operation: "creature", options: { animation: ["--user-approved"] } }));
     assert.deepEqual(parseGenexJson('progress\n{\n"id":"123"\n}\n'), { id: "123" });

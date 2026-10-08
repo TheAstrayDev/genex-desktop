@@ -5,11 +5,35 @@
  * re-briefed from the last line alone, and a chat never guesses a different game folder.
  */
 import { launchRules, RESUME_LOOP_CHAT, type LaunchGrant } from "./launch-prompts.ts";
+import { GameEngine } from "./game-engine.ts";
 import { handoverSection } from "./session-compact-prompts.ts";
 import { toolCall } from "./model-roles.ts";
 import { EventKind, InterviewMode, RunEvent } from "./run-events.ts";
+import { engineChoiceRule, unrealRules, unrealWorkHere, unrealWorkspaceRule } from "./unreal-prompts.ts";
+import type { UnrealOnComputer } from "./unreal/editor-wait.ts";
 import { TRANSCRIPT_CHARS, TRANSCRIPT_MESSAGES } from "./brief-window.ts";
+import {
+  CoreFact,
+  type FactRef,
+  FolderHolds,
+  factsOfEngine,
+  hasFact,
+  kindPending,
+  kindUnknown,
+  servedAsWeb,
+} from "./folder-facts.ts";
+import {
+  appIdentity,
+  factPrefix,
+  ownKindRules,
+  pendingKindRule,
+  UNREAL_KIND,
+  unknownKindRules,
+  unrealWithoutPlugin,
+} from "./project-prompts.ts";
+import { WORKERS_BRIEF_LINE } from "./workers/prompts.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
+import type { PluginKindOffer } from "../types/host-api.d.ts";
 
 /** How many content words of the ask a folder name keeps. */
 const NAME_WORDS = 3;
@@ -296,19 +320,106 @@ const CONVERSATION_RULE =
 /** The fence a command for the user to run goes in: the chat offers Run under a one-line block of it. */
 const USER_COMMAND_FENCE = "bash";
 
+/** Where a web game's work happens: this workspace, and no other copy or game. */
+const WORKSPACE_RULE =
+  "The game's work happens in this workspace: never in another copy of this game or in another game's folder, and a path the user named is a stills folder to look at, not a parent to walk. When the user asks about something elsewhere on their Mac (another folder, their Downloads, their disk), that is the ask: what you may reach is your session's permissions, not this brief.";
+
 /**
- * The rules every chat build follows, in the voice of the engine that reads them: a tool is
- * named once, spelled the way this session can actually call it (M4.8b).
+ * What a brief knows about the game: what its folder holds (`facts`; `[]`: none, and then `holds`
+ * says whether that is no kind yet), the Unreal project file it is linked to, and whether the Unreal
+ * plugin is off. `legacy`: the caller named the engine, not the facts (a kept older caller), and the
+ * facts stand for that engine.
  */
-function contractorRules(engine: string | undefined): string[] {
+interface GameBuild {
+  gameEngine: GameEngine;
+  facts: FactRef[];
+  /** With no facts, what the folder holds (`game.list`'s `holds`); null: not said, read as nothing. */
+  holds: FolderHolds | null;
+  engineProject: string | null;
+  /** Where an Unreal project found in the folder (not linked) is; undefined when linked or unknown. */
+  unrealFound: string | undefined;
+  pluginsOff: boolean;
+  legacy: boolean;
+}
+
+/** A web game's folder as a brief reads it: brought by the user in its own shape, and whether its page lacks the contract. */
+interface FolderShape {
+  ownShape: boolean;
+  shape: BriefShape | null;
+  contractMissing: boolean;
+}
+
+/** The game as a brief reads it, from the facts when the caller has them and from its engine when not. */
+function gameBuild(
+  facts: readonly FactRef[] | null | undefined,
+  {
+    gameEngine,
+    engineProject,
+    pluginsOff,
+    holds,
+  }: { gameEngine: GameEngine; engineProject: string | null; pluginsOff: boolean; holds: FolderHolds | null },
+): GameBuild {
+  const legacy = !Array.isArray(facts);
+  const known = legacy ? factsOfEngine(gameEngine) : facts.map(({ id, path }) => ({ id, path }));
+  const unreal = known.find((fact) => fact.id === CoreFact.UnrealProject);
+  const unrealFound = legacy || engineProject ? undefined : unreal?.path;
+  return { gameEngine, facts: known, holds, engineProject, unrealFound, pluginsOff, legacy };
+}
+
+/** The game is worked on in its Unreal project, through the Unreal tools: it holds one, is no web game at its root, and the plugin is on. */
+const inUnreal = (game: GameBuild) =>
+  !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject) && !game.pluginsOff;
+
+/** The rules of one kind the folder holds: the web template's or the game's own shape, Unreal's, or a line for any other. */
+function rulesOfFact(engine: string | undefined, fact: FactRef, game: GameBuild, folder: FolderShape): string[] {
+  if (fact.id === CoreFact.WebGame)
+    return folder.ownShape ? ownShapeRules(folder.shape, folder.contractMissing) : [TEMPLATE_RULE];
+  if (fact.id !== CoreFact.UnrealProject) return ownKindRules(engine, fact);
+  if (game.pluginsOff) return unrealWithoutPlugin(engine);
+  const found = game.unrealFound;
+  return unrealRules(engine, game.engineProject, { found, ownFiles: found !== undefined });
+}
+
+/**
+ * The rules that describe the game itself, one block per kind the folder holds, each named by its
+ * folder when there are several. A folder with no kind yet is told how its request picks one
+ * (`offered`: the kinds engine plugins on offer make; `asked`: the question card offers them), then
+ * the web template's rule its web answer builds on; one of a kind Genex can't name is looked through first.
+ */
+function factRules(
+  engine: string | undefined,
+  game: GameBuild,
+  folder: FolderShape,
+  { offered, asked, unreal }: { offered: readonly PluginKindOffer[]; asked: boolean; unreal: UnrealOnComputer | null },
+): string[] {
+  if (kindUnknown(game)) return unknownKindRules(engine, game.holds);
+  if (kindPending(game)) return [...pendingKindRule(engine, offered, unreal, game.holds, asked), TEMPLATE_RULE];
+  const several = game.facts.length > 1;
+  return game.facts.flatMap((fact) => {
+    const rules = rulesOfFact(engine, fact, game, folder);
+    const prefix = several ? factPrefix(fact) : "";
+    return rules.map((rule) => `${prefix}${rule}`);
+  });
+}
+
+/**
+ * The rules every chat build follows after the game's own, in the voice of the engine that reads
+ * them: a tool is named once, spelled the way this session can actually call it (M4.8b).
+ */
+function contractorRules(engine: string | undefined, game: GameBuild): string[] {
+  const unrealWork = !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject);
   return [
-    TEMPLATE_RULE,
     "Helper scripts of your own (an inspector, a syntax check, a probe) go under .studio/ (gitignored); source scripts for generated assets live under assets/src/.",
     "Before you build or change how the game looks, if the folder has a references/ or ref/ directory with stills, look at those pictures — they are the visual bar, not files to load as textures.",
-    "The game's work happens in this workspace: never in another copy of this game or in another game's folder, and a path the user named is a stills folder to look at, not a parent to walk. When the user asks about something elsewhere on their Mac (another folder, their Downloads, their disk), that is the ask: what you may reach is your session's permissions, not this brief.",
+    unrealWork ? unrealWorkspaceRule(game.engineProject, game.unrealFound) : WORKSPACE_RULE,
     "When your shell is sandboxed, it rejects commands it cannot statically analyze — avoid $-expansions, escaped whitespace, heredocs and long && chains; run one simple command at a time, and put multi-step logic in a script file you then run with node.",
     `When a sandbox blocks a step only the user's own Mac can do (an install or download that needs the network, such as brew or pip, a system tool, a sign-in), do not work around it: end your reply with that one command on a single line in a \`\`\`${USER_COMMAND_FENCE} block and one plain sentence on why. The chat shows it with a Run button; how it went comes back as the user's next message. Never offer a command you can run yourself, sudo, or anything piped into a shell.`,
-    `The moment the game first runs end-to-end, and after each substantial feature lands, call ${toolCall(engine, "checkpoint")} with a one-line note — the studio lights the user's Reload with your note, so they see your progress when they press it.`,
+    // The Reload a checkpoint lights is the web preview's: any other kind is seen in its own app.
+    ...(servedAsWeb(game)
+      ? [
+          `The moment the game first runs end-to-end, and after each substantial feature lands, call ${toolCall(engine, "checkpoint")} with a one-line note — the studio lights the user's Reload with your note, so they see your progress when they press it.`,
+        ]
+      : []),
     "Keep NOTES.md in the workspace root current as you build — the game's pitch, the key decisions so far and why, and its current state (features, known issues). Update it when something lands, not only at the end. A newcomer should understand the game from NOTES.md alone.",
   ];
 }
@@ -351,10 +462,19 @@ const RESUME_BUILD =
  *   ownShape?: boolean,
  *   contractMissing?: boolean,
  *   engine?: string,
+ *   gameEngine?: GameEngine,
+ *   engineProject?: string | null,
  *   launch?: LaunchGrant | null,
  *   afterNight?: string | null,
+ *   engineChoice?: boolean,
+ *   unrealEngine?: UnrealOnComputer | null,
  *   compacted?: string | null,
  *   fresh?: boolean,
+ *   facts?: FactRef[] | null,
+ *   kinds?: PluginKindOffer[],
+ *   pluginsOff?: boolean,
+ *   holds?: FolderHolds | null,
+ *   workers?: boolean,
  * }} [opts]
  */
 export function buildContractorBrief({
@@ -369,14 +489,32 @@ export function buildContractorBrief({
   contractMissing = false,
   /** Which engine reads this: the one thing in the brief that is spelled per engine. */
   engine = undefined,
+  /** Which engine the GAME builds in (game-engine.ts `engineOfGame`): an Unreal game is no web page. */
+  gameEngine = GameEngine.Web,
+  /** The Unreal project file an Unreal game is linked to, which its work lands in. */
+  engineProject = null,
   /** Loop is on: this chat may also launch a build. */
   launch = null,
   /** The build this chat's session led is over: what it is told of it (after-night-prompts.ts). */
   afterNight = null,
+  /** A new game while the Unreal plugin is on: the user picks the web or Unreal first (unreal-prompts.ts). */
+  engineChoice = false,
+  /** What this computer has of Unreal, for the engine question's Unreal option (unreal/editor-wait.ts); null: unknown. */
+  unrealEngine = null,
   /** The handover the session before this one wrote when the chat was compacted (session-compact.ts). */
   compacted = null,
   /** Nothing has been made in this game yet: the studio's template, as it was made. */
   fresh = false,
+  /** What the game's folder holds (`game.list`'s `facts`; `[]`: no kind yet). Absent: read from `gameEngine`. */
+  facts = null,
+  /** The kinds the question card offers a folder with no kind yet (`plugins.tools`'s `kinds`). */
+  kinds = [],
+  /** The folder holds an Unreal project and the Unreal plugin is off: no Unreal tools reach it. */
+  pluginsOff = false,
+  /** With no facts, what the folder holds (`game.list`'s `holds`): nothing or notes (no kind yet), or files of its own. */
+  holds = null,
+  /** This turn's session may start workers (workers/chat-workers.ts): its brief says so in one line. */
+  workers = false,
 }: {
   ask?: string;
   messages?: readonly BriefMessage[];
@@ -388,26 +526,51 @@ export function buildContractorBrief({
   ownShape?: boolean;
   contractMissing?: boolean;
   engine?: string;
+  gameEngine?: GameEngine;
+  engineProject?: string | null;
   launch?: LaunchGrant | null;
   afterNight?: string | null;
+  engineChoice?: boolean;
+  unrealEngine?: UnrealOnComputer | null;
   compacted?: string | null;
   fresh?: boolean;
+  facts?: readonly FactRef[] | null;
+  kinds?: readonly PluginKindOffer[];
+  pluginsOff?: boolean;
+  holds?: FolderHolds | null;
+  workers?: boolean;
 } = {}): string {
-  // Where the game's work goes, never what else the session may reach: that is its permissions'.
-  const workHere = folderLabel
-    ? `The game's work stays in this workspace (folder \`${folderLabel}\`).`
-    : "The game's work stays in this workspace.";
+  const game = gameBuild(facts, { gameEngine, engineProject, pluginsOff, holds });
+  const identity = appIdentity({ folderLabel, facts: game.facts, holds: game.holds });
+  const workHere = workHereLine(game, folderLabel);
   const stills = stillsBlock(extraReads);
-  const launchBlock = launch?.toolName ? launchRules(engine, launch) : [];
+  const launchBlock = launch?.toolName ? launchRules(engine, launch, gameEngine) : [];
+  const workersLine = workers ? WORKERS_BRIEF_LINE : "";
 
   if (resume)
-    return [ask, "", resumePickup(afterNight, launch), ...launchBlock, workHere, stills].filter(Boolean).join("\n");
+    return [ask, "", identity, resumePickup(afterNight, launch), ...launchBlock, workersLine, workHere, stills]
+      .filter(Boolean)
+      .join("\n");
 
   // The rules a build follows depend on whose game this is — every run brief already carries
   // the shape (autopilot.ts, director.ts, facet-loop.ts); a chat build used to carry none.
-  const baseRules = contractorRules(engine);
-  const rules = ownShape ? [...ownShapeRules(shape, contractMissing), ...baseRules.slice(1)] : baseRules;
-  const { head, followUp } = briefHead(ask, messages, { compacted, fresh: fresh || scaffolded });
+  // A folder with no kind yet hears of the kinds on offer on every message; the card only when bridged.
+  const choice = {
+    offered: engineChoice ? offeredKinds(kinds) : kinds,
+    asked: engineChoice,
+    unreal: unrealEngine,
+  };
+  const rules = [
+    ...engineQuestion(engine, game, engineChoice, unrealEngine),
+    ...factRules(engine, game, { ownShape, shape, contractMissing }, choice),
+    ...contractorRules(engine, game),
+  ];
+  const { head, followUp } = briefHead(ask, messages, {
+    compacted,
+    fresh: fresh || scaffolded,
+    pending: !game.legacy && kindPending(game),
+    notes: game.holds === FolderHolds.Notes,
+  });
 
   const recent = messages
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -417,6 +580,7 @@ export function buildContractorBrief({
     .slice(-TRANSCRIPT_CHARS);
   return [
     ...head,
+    identity,
     ...(compacted ? [`\n${handoverSection(compacted)}`] : []),
     ...(followUp && recent ? [`\nRecent conversation (retain decisions and completed work):\n${recent}`] : []),
     "",
@@ -424,11 +588,42 @@ export function buildContractorBrief({
     ...rules,
     ...launchBlock,
     ...(afterNight ? [afterNight] : []),
+    workersLine,
     workHere,
     stills,
   ]
     .filter((line) => line !== "")
     .join("\n");
+}
+
+/** The kinds the question card offers: the host's, or the Unreal plugin's alone when it lists none. */
+function offeredKinds(kinds: readonly PluginKindOffer[]): readonly PluginKindOffer[] {
+  return kinds.length > 0 ? kinds : [UNREAL_KIND];
+}
+
+/**
+ * The engine question, first, for a new web game of a caller that names the engine and not the
+ * facts; nothing otherwise (a folder with no kind yet is asked by its facts' rules).
+ */
+function engineQuestion(
+  engine: string | undefined,
+  game: GameBuild,
+  engineChoice: boolean,
+  unreal: UnrealOnComputer | null,
+): string[] {
+  const asks = engineChoice && game.legacy && game.gameEngine === GameEngine.Web;
+  return asks ? [engineChoiceRule(engine, unreal)] : [];
+}
+
+/**
+ * Where the game's work goes, never what else the session may reach: that is its permissions'.
+ * An Unreal game's lands in its project, and a resumed session is told so too.
+ */
+function workHereLine(game: GameBuild, folderLabel: string): string {
+  if (inUnreal(game)) return unrealWorkHere(game.engineProject, folderLabel, game.unrealFound);
+  return folderLabel
+    ? `The game's work stays in this workspace (folder \`${folderLabel}\`).`
+    : "The game's work stays in this workspace.";
 }
 
 /**
@@ -441,16 +636,12 @@ export function buildContractorBrief({
 function briefHead(
   ask: string | undefined,
   messages: readonly BriefMessage[],
-  { compacted, fresh }: { compacted: string | null; fresh: boolean },
+  start: { compacted: string | null; fresh: boolean; pending: boolean; notes: boolean },
 ): { head: Array<string | undefined>; followUp: boolean } {
+  const { compacted } = start;
   const original = compacted ? "" : originalAsk(messages);
   const followUp = Boolean(compacted) || Boolean(original && original !== ask);
-  if (!followUp) {
-    const origin = fresh
-      ? "This game is brand new: nothing has been built in it yet, so there is nothing to inspect. It starts from the studio's empty template."
-      : "Continue from the existing code in this workspace.";
-    return { head: [ask, "", origin], followUp };
-  }
+  if (!followUp) return { head: [ask, "", firstOrigin(start)], followUp };
   return {
     head: [
       "This is the same chat, not a new job. Continue from the code already in this workspace. Do not start over, and do not go looking through other projects for it.",
@@ -460,6 +651,19 @@ function briefHead(
     ],
     followUp,
   };
+}
+
+/**
+ * Where a first brief's game stands: a folder with no kind yet (empty, or notes only), the studio's
+ * template as made, or code to continue.
+ */
+function firstOrigin({ fresh, pending, notes }: { fresh: boolean; pending: boolean; notes: boolean }): string {
+  if (pending && notes)
+    return "This project is brand new: its folder holds notes but no game yet, so read the notes before you start.";
+  if (pending) return "This project is brand new and its folder is empty: there is nothing to inspect yet.";
+  if (fresh)
+    return "This game is brand new: nothing has been built in it yet, so there is nothing to inspect. It starts from the studio's empty template.";
+  return "Continue from the existing code in this workspace.";
 }
 
 /** How a resumed session goes on: after a night it led, that night's note; else a build's or a Loop chat's pickup. */

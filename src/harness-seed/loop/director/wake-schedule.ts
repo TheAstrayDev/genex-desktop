@@ -65,6 +65,8 @@ export const NoteKind = {
   DefectRouted: "defect_routed",
   /** The user spoke to one worker, or about a worker that is not building. */
   UserToWorker: "user_to_worker",
+  /** A job of the run (the lead's or a worker's) ended, and not by the agent's own stop. */
+  JobEnded: "job_ended",
 } as const;
 export type NoteKind = (typeof NoteKind)[keyof typeof NoteKind];
 
@@ -80,6 +82,7 @@ export const NOTE_WAKE = {
   [NoteKind.WorkerEnded]: WakeUrgency.Soon,
   [NoteKind.WorkerLimit]: WakeUrgency.Soon,
   [NoteKind.MonitorViolation]: WakeUrgency.Soon,
+  [NoteKind.JobEnded]: WakeUrgency.Soon,
   [NoteKind.WorkerStopped]: WakeUrgency.Never,
   [NoteKind.MonitorQuiet]: WakeUrgency.Never,
   [NoteKind.DefectShelved]: WakeUrgency.Never,

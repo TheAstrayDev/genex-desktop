@@ -10,9 +10,11 @@
  * Composed by `StudioCore`; its state stays here.
  */
 import path from "node:path";
-import { rm } from "node:fs/promises";
+import { lstat, rm } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
+  CHECKPOINT_SKIPPED_FILES_LISTED,
+  type CheckpointSkippedPayload,
   endsChatSessions,
   FilesStay,
   harnessView,
@@ -26,6 +28,8 @@ import {
   rewindRefusalWords,
   RewindRefusal,
   rewindsOf,
+  SkippedBy,
+  type SkippedFile,
   withoutRewound,
 } from "../../shared/chat-rewind.ts";
 import type { PlanReview } from "../../shared/composer.ts";
@@ -37,12 +41,19 @@ import { messageQueueState } from "../../shared/message-queue.ts";
 import { DispatchActionType, HarnessCapability, HarnessState, type ReferenceFrame } from "../../shared/protocol.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { latestRun } from "../../shared/coordinator.ts";
+import type { PlacedRule } from "../../shared/project-workspace.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { listDirs, pathExists } from "../../substrate/fsx.ts";
 import { isUuid } from "../../substrate/ids.ts";
 import { toolchain } from "../../substrate/toolchain.ts";
-import { CheckpointPhase, ChatCheckpoints } from "../chat-checkpoints.ts";
+import {
+  CHECKPOINT_CHANGE_MAX_BYTES,
+  CHECKPOINT_FILE_MAX_BYTES,
+  CheckpointPhase,
+  ChatCheckpoints,
+} from "../chat-checkpoints.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
+import { noteUnsaved } from "./unsaved-files.ts";
 
 /** How long a message's answer waits for the game checkpoint before going ahead without it. */
 const CHAT_CHECKPOINT_WAIT_MS = 30 * SECOND_MS;
@@ -77,6 +88,10 @@ const MESSAGE = {
     `[core] the game checkpoint before ${messageId} took too long; that message can rewind the chat, not its files`,
   checkpointFailed: (phase: CheckpointPhase, messageId: string, err: unknown) =>
     `[core] no game checkpoint ${phase} ${messageId}: ${errorMessage(err).slice(0, LOG_DETAIL_CHARS)}`,
+  rulesFailed: (err: unknown) =>
+    `[core] a game checkpoint went on without the folder's ignore rules: ${errorMessage(err).slice(0, LOG_DETAIL_CHARS)}`,
+  skippedNotReported: (threadId: string, err: unknown) =>
+    `[core] files too large to save in ${threadId} could not be reported: ${errorMessage(err).slice(0, LOG_DETAIL_CHARS)}`,
   putBackFailed: (err: unknown) => `[core] rewind could not put the game files back: ${errorMessage(err)}`,
   tidyFailed: (threadId: string, what: string, err: unknown) =>
     `[core] after rewinding ${threadId}, ${what} failed: ${errorMessage(err)}`,
@@ -113,10 +128,21 @@ interface RemainingAction {
   eventId: string;
   action: RewoundAction;
 }
-/** Game files a rewind put back, and the saved copy that undoes it. */
+/** Game files a rewind put back, the saved copy that undoes it, and files too large to put back. */
 interface RestoredFiles {
   files: number;
   saved: string;
+  stayed?: string[];
+}
+/** Who left files too large to save, for the chat's line: a message's checkpoint, or a rewind. */
+type SkippedReport = Required<Pick<CheckpointSkippedPayload, "project" | "messageId" | "by">>;
+
+/** Each file with its size now, largest first (0 for one already gone); links are never followed. */
+async function sizedFiles(dir: string, files: readonly string[]): Promise<SkippedFile[]> {
+  const sized = await Promise.all(
+    files.map(async (file) => ({ file, bytes: (await lstat(path.join(dir, file)).catch(() => null))?.size ?? 0 })),
+  );
+  return sized.sort((a, b) => b.bytes - a.bytes || a.file.localeCompare(b.file));
 }
 /** One rewind as asked for and first planned. */
 interface RewindRequest {
@@ -222,6 +248,8 @@ export class ChatRewindService {
   readonly #inFlight = new Map<string, Set<Promise<void>>>();
   /** Per chat, the game checkpoint its next answer waits for (bounded; it never fails the answer). */
   readonly #checkpointsBefore = new Map<string, Promise<void>>();
+  /** Per chat, the files too large to save its last report named (sorted, one per line). */
+  readonly #reportedSkips = new Map<string, string>();
   #checkpoints?: ChatCheckpoints;
 
   constructor(core: StudioCore, x: CoreInternals) {
@@ -234,8 +262,20 @@ export class ChatRewindService {
     this.#checkpoints ??= new ChatCheckpoints(
       path.join(this.#core.layout.scratch, "chat-checkpoints"),
       async () => (await toolchain()).path,
+      // The folder's rules for what it holds now, topped up first (one walk per checkpoint).
+      { neverCaptured: (dir) => this.#rules(dir) },
     );
     return this.#checkpoints;
+  }
+
+  /** What a game folder's rules leave out of its checkpoints; none, logged, when they cannot be read. */
+  async #rules(dir: string): Promise<PlacedRule[]> {
+    try {
+      return await this.#core.games.ensureWorkspaceRules(dir);
+    } catch (err) {
+      this.#log(MESSAGE.rulesFailed(err));
+      return [];
+    }
   }
 
   #log(line: string): void {
@@ -349,7 +389,75 @@ export class ChatRewindService {
       return;
     const before = phase === CheckpointPhase.Before;
     const taken = await this.checkpoints.take(dir, threadId, messageId, phase, before ? deadline : undefined);
-    if (!taken) this.#log(MESSAGE.checkpointLate(messageId));
+    if (!taken) {
+      this.#log(MESSAGE.checkpointLate(messageId));
+      return;
+    }
+    await this.#reportCheckpointSkips(threadId, dir, taken, {
+      project: meta.project,
+      messageId,
+      by: SkippedBy.Checkpoint,
+    });
+  }
+
+  /**
+   * A checkpoint that left files out for their size says so once per new set: the chat gets a line
+   * and the thread's next delegated session is told. A report that fails is logged, never more.
+   */
+  async #reportCheckpointSkips(threadId: string, dir: string, commit: string, report: SkippedReport): Promise<void> {
+    try {
+      const { skipped } = await this.checkpoints.leftOut(dir, commit);
+      const set = [...skipped].sort().join("\n");
+      const reported = this.#reportedSkips.get(threadId);
+      if (set === (reported ?? "")) return;
+      if (!skipped.length) {
+        this.#reportedSkips.delete(threadId);
+        return;
+      }
+      // Claimed before the report's awaits, so a checkpoint right behind it is not told twice.
+      this.#reportedSkips.set(threadId, set);
+      await this.#reportSkipped(threadId, dir, skipped, report).catch((err: unknown) => {
+        if (this.#reportedSkips.get(threadId) === set) this.#reportedSkips.delete(threadId);
+        throw err;
+      });
+    } catch (err) {
+      this.#log(MESSAGE.skippedNotReported(threadId, err));
+    }
+  }
+
+  /**
+   * Changed files a rewind left as they are for their size, reported like a checkpoint's: those a
+   * restore held back, or, when only the chat went back, every changed file if all were too large.
+   */
+  async #reportLeftTooLarge(threadId: string, project: string, applied: AppliedRewind): Promise<void> {
+    const messageId = applied.planned.rewind.messageId;
+    const dir = this.#core.games.dirFor(project);
+    const stayed = applied.restored ? (applied.restored.stayed ?? []) : await this.#allTooLarge(threadId, dir, applied);
+    if (!stayed.length) return;
+    await this.#reportSkipped(threadId, dir, stayed, { project, messageId, by: SkippedBy.Rewind });
+  }
+
+  /** The changed files, when every one was too large to save and the checkpoint could have been asked. */
+  async #allTooLarge(threadId: string, dir: string, applied: AppliedRewind): Promise<string[]> {
+    if (filesStay(applied.planned)) return [];
+    const plan = await this.checkpoints.plan(dir, threadId, applied.planned.rewind.messageId);
+    const tooLarge = plan.state === "unavailable" && plan.reason === FilesStay.TooLarge;
+    return tooLarge ? (plan.tooLargeFiles ?? []) : [];
+  }
+
+  /** Files too large to save, with their sizes: noted for the lead, and a line in the chat. */
+  async #reportSkipped(threadId: string, dir: string, files: readonly string[], report: SkippedReport): Promise<void> {
+    const sized = await sizedFiles(dir, files);
+    noteUnsaved(this.#x.unsavedFiles, threadId, sized);
+    const listed = sized.slice(0, CHECKPOINT_SKIPPED_FILES_LISTED);
+    const record = customEventData(CustomEvent.CheckpointSkipped, {
+      ...report,
+      files: listed,
+      ...(sized.length > listed.length ? { total: sized.length } : {}),
+      fileLimitBytes: CHECKPOINT_FILE_MAX_BYTES,
+      changeLimitBytes: CHECKPOINT_CHANGE_MAX_BYTES,
+    });
+    await this.#core.append([record], threadId);
   }
 
   // ── the conversation as it reads ─────────────────────────────────────────────────────────
@@ -692,6 +800,10 @@ export class ChatRewindService {
       files: applied.restored?.files ?? null,
     });
     await tidy("recording the rewind", () => this.#core.append([marker], threadId));
+    if (meta?.project) {
+      const project = meta.project;
+      await tidy("reporting files too large to put back", () => this.#reportLeftTooLarge(threadId, project, applied));
+    }
     // Rebuilt now, so the chat reloading after the marker gets it at once.
     await tidy("rebuilding the chat state", () => this.#core.store.chatState(threadId));
     // The harness keeps the Loop mood board the remaining messages gave it (best effort: the

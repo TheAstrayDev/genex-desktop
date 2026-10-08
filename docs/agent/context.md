@@ -42,9 +42,8 @@ The [design workflow](design.md) owns visual conventions and
 skill selection. Use [verification](verification.md#choose-the-verification-scope) to choose
 checks and the [field guide](../STUDIO-DEVELOPER-FIELD-GUIDE.md) to run the app.
 
-This handbook is shared developer knowledge, not a session diary: update the affected page in
-the behavior change's PR, replacing outdated statements ([AGENTS.md](../../AGENTS.md#documentation-and-prs));
-`npm run verify:context` checks its size.
+This handbook is shared knowledge, not a session diary: update the affected page in the behavior
+change's PR, replacing outdated statements; `npm run verify:context` checks its size.
 
-The external developer edits this repository. The in-app harness builds games with narrower
-authority; its conversation history and learning are separate from this handbook.
+The in-app harness builds games with narrower authority; its history and learning are separate
+from this handbook.

@@ -4,6 +4,7 @@
  * flags, and the core's views, checks and services. `StudioCore` builds the one object that
  * holds it and hands it only to what it composes.
  */
+import path from "node:path";
 import type { BuildProblem } from "../../shared/build-problem.ts";
 import type { AgentScreen, AgentScreenFrame } from "../../shared/agent-screen.ts";
 import type { Revision } from "../../shared/optimization.ts";
@@ -15,6 +16,7 @@ import type { PreviewPool } from "../../substrate/preview-pool.ts";
 import type { SeedUpgradeReport } from "../../substrate/seed-upgrade.ts";
 import type { TurnHandle } from "../../substrate/turns.ts";
 import type { EventEnvelope } from "../../substrate/types.ts";
+import { workerLockKey } from "../../shared/workers.ts";
 import type { PlanReviewController } from "../plan-review.ts";
 import type { PluginConsent } from "../plugin-consent.ts";
 import type { AssetService } from "./assets.ts";
@@ -22,6 +24,8 @@ import type { ChatPermissionService } from "./chat-permissions.ts";
 import type { SteerDoor } from "./chat-steer.ts";
 import type { CapabilityAudience } from "../planning-capabilities.ts";
 import type { ConversationService } from "./conversation.ts";
+import type { CutOffCall } from "./cut-off-calls.ts";
+import type { UnsavedFile } from "./unsaved-files.ts";
 import type { DelegationService } from "./delegation.ts";
 import type { StudioSettings } from "./settings.ts";
 import type { PluginToolService } from "./plugin-tools.ts";
@@ -51,6 +55,28 @@ export interface ActiveDelegation {
   steered?: boolean;
   /** Its engine call has returned: nothing more is handed in. */
   ended?: boolean;
+  /**
+   * A worker of a chat's lead, as the host honoured it: its id (Stop reaches an in-place one by
+   * it) and the chat it answers to, whose Settings ceiling it counts against, reader or writer.
+   */
+  worker?: { id: string; chatThreadId: string };
+  /**
+   * The worker id the harness's grant named, honoured or not: Stop and an interrupt by a worker's
+   * id find it by this (`delegationAt`), seated or not.
+   */
+  askedWorker?: string;
+}
+
+/**
+ * The delegations working in `dir`: the one keyed by the folder itself, and every in-place worker's
+ * there, each under its own lock (`workerLockKey`). What "anyone building in the folder" means.
+ */
+export function delegationsIn(delegations: ReadonlyMap<string, ActiveDelegation>, dir: string): ActiveDelegation[] {
+  const folder = path.resolve(dir);
+  const workers = workerLockKey(folder, "");
+  return [...delegations.entries()]
+    .filter(([key]) => key.startsWith(workers) || path.resolve(key) === folder)
+    .map(([, delegation]) => delegation);
 }
 
 /** Work in flight, keyed so Stop, a turn's end and a crash can find and settle it. */
@@ -70,6 +96,16 @@ export interface WorkInFlight {
     { project?: string | null; threadId?: string; outlivesTurn?: boolean }
   >;
   /**
+   * Plugin and connector calls cut off before they answered (outcome unknown), by the thread that
+   * made them, until that thread's next delegated session is told of them (`cut-off-calls.ts`).
+   */
+  readonly cutOffCalls: Map<string, CutOffCall[]>;
+  /**
+   * Files too large to save that a thread's chat said a checkpoint or a rewind left, until that
+   * thread's next delegated session is told of them (`unsaved-files.ts`).
+   */
+  readonly unsavedFiles: Map<string, UnsavedFile[]>;
+  /**
    * One contractor per *directory* (live game folder or facet worktree), keyed by resolved cwd.
    * The first live build proved why a dir takes a lock: a crash mid-delegation left the
    * contractor running detached, a second "hi" was delegated into the same folder, and the two
@@ -82,6 +118,11 @@ export interface WorkInFlight {
    * does not list it — a Stop that lands in that gap aborts a contractor that never started.
    */
   readonly activeDelegations: Map<string, ActiveDelegation>;
+  /**
+   * How many times each game was announced changed (`GameChanged`) in this app run: a session's end
+   * announces a game that took its kind during the session only when nothing else announced it.
+   */
+  readonly gameChanges: Map<string, number>;
   /** Runs currently holding keep-awake (run.keepawake → run.settled) — idle means none. */
   readonly activeRunIds: Set<string>;
   readonly openTurns: Map<string, TurnHandle>;
@@ -241,6 +282,8 @@ export interface CoreServices {
   readonly permissions: ChatPermissionService;
   /** Whether a game chat is in Plan mode, when nothing may act on its behalf (`ChatPermissionService.planning`). */
   planning(threadId: string): Promise<boolean>;
+  /** Whether a game chat is in Bypass, which asks nothing first (`ChatPermissionService.bypassing`). */
+  bypassing(threadId: string): Promise<boolean>;
 }
 
 /**
@@ -260,7 +303,10 @@ export function idleWork(): WorkInFlight {
   return {
     activeCompletions: new Map(),
     activeConnectorCalls: new Map(),
+    cutOffCalls: new Map(),
+    unsavedFiles: new Map(),
     activeDelegations: new Map(),
+    gameChanges: new Map(),
     activeRunIds: new Set(),
     openTurns: new Map(),
     harnessGeneration: 0,

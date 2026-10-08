@@ -55,6 +55,8 @@ export const storageKeyFor = {
   threadLoop: (threadId: string): string => `studio.loop.${threadId}`,
   /** A game chat's own effort; the per-model effort only seeds fresh chats. */
   threadEffort: (threadId: string): string => `studio.threadEffort.${threadId}`,
+  /** The engine steps offer a game's Not now hid, by its record id (`chat/EngineStepsCard.tsx`). */
+  engineStepsDismissed: (project: string): string => `studio.engineSteps.dismissed.${project}`,
 } as const;
 
 /** The IndexedDB database of cover sphere stills (`ui/cover-stills.ts` owns the format). */

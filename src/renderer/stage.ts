@@ -7,6 +7,7 @@
  */
 
 import { LiveBehindReason, type LiveBehindEvent } from "../shared/live-behind.ts";
+import { type FactRef, type FolderHolds, kindPending } from "../shared/project-facts.ts";
 
 /**
  * What the stage shows. `File` is a file opened from the chat; it is never remembered across
@@ -123,3 +124,26 @@ export function firstBuildShows(offer: BuildOffer | null, stage: StageWatch): bo
   const onPlaceholder = stage.visible && stage.view === StageView.Live && stage.showEmpty;
   return offer?.healthy === true && onPlaceholder;
 }
+
+/**
+ * Whether the game on the stage has no kind yet: it lists no facts and its folder nothing of its own
+ * (`kindPending`), so its first message decides what it becomes. Live shows the first-idea state and
+ * loads no page for it. A game listed without facts at all (an older listing) has a kind.
+ */
+export function kindPendingGame(game: { facts?: readonly FactRef[]; holds?: FolderHolds } | null | undefined): boolean {
+  return Array.isArray(game?.facts) && kindPending({ facts: game.facts, holds: game.holds });
+}
+
+/** The game on the stage as one render saw it: which game, and whether it had no kind yet. */
+export interface StageGameKind {
+  project: string | null;
+  pending: boolean;
+}
+
+/**
+ * Whether the stage's game took its kind between two renders (its first message started it as a
+ * web game): Live, which loaded nothing while it had none, loads its page now. A new game on the
+ * stage loads through the stage follower instead.
+ */
+export const gameStartedSince = (before: StageGameKind, now: StageGameKind): boolean =>
+  now.project !== null && before.project === now.project && before.pending && !now.pending;

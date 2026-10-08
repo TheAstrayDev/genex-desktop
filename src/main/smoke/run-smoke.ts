@@ -3117,7 +3117,7 @@ async function directNight(
     ),
   );
   for (let i = 0; i < 30; i++) {
-    dir.waited = JSON.parse(asText(await call("wait", { seconds: "3", worker: "sign" })));
+    dir.waited = JSON.parse(asText(await call("worker_wait", { seconds: "3", worker: "sign" })));
     if (dir.waited.status?.workers?.[0]?.state !== "running") break;
   }
   dir.lookWorker = await call("look", { target: "sign" });

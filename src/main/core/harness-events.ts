@@ -4,7 +4,8 @@ import { EventKind } from "../../shared/event-log.ts";
 import type { EventData } from "../../substrate/types.ts";
 
 const MESSAGE = {
-  hostOnly: "permission, consent, recovery and self-change rows are written by the studio only",
+  hostOnly:
+    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job and app access rows are written by the studio only",
 } as const;
 const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.ToolPermission,
@@ -15,6 +16,19 @@ const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.SelfEdit,
   CustomEvent.SkillEdited,
   CustomEvent.ToolInstalled,
+  // A turn-it-on card is shown by `plugins_suggest` only, after its checks: its button turns a plugin on.
+  CustomEvent.PluginSuggested,
+  // Files too large to save are reported by the host that took the checkpoint or the rewind.
+  CustomEvent.CheckpointSkipped,
+  // "Don't wait for me" is the person's alone: its card is shown by `offer_dont_wait`, its switch
+  // by the person's click, so the harness may write neither.
+  CustomEvent.DontWaitOffer,
+  CustomEvent.DontWaitSet,
+  // A job's start and end are recorded by the app that owns the job (`substrate/jobs.ts`).
+  CustomEvent.JobStarted,
+  CustomEvent.JobEnded,
+  // What macOS access `app_look` still needs is the app's own finding.
+  CustomEvent.AppLookAccess,
 ]);
 
 /** Refuse the entire batch before writing any row or updating the recovery index. */

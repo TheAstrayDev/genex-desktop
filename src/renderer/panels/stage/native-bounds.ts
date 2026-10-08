@@ -41,6 +41,8 @@ export interface StageCover {
   showEmpty: boolean;
   liveLoading: boolean;
   toolbarOpen: boolean;
+  /** Live shows the Unreal card: the game plays in the Unreal editor, so no web page belongs here. */
+  engineCard: boolean;
   /** The person stopped the game: its view holds a blank page, and the stage says it is stopped. */
   stopped: boolean;
   /** The person watches a game in Live, whatever briefly covers it (`stage.ts` `watchingLive`); main tells a chat's show by it. */
@@ -59,6 +61,7 @@ const showsGame = (cover: StageCover): boolean =>
     cover.showEmpty,
     cover.liveLoading,
     cover.toolbarOpen,
+    cover.engineCard,
     cover.stopped,
   ].some(Boolean);
 
@@ -77,6 +80,7 @@ export function useNativeViewBounds(slot: RefObject<HTMLDivElement | null>, cove
     visible,
     sidebarOverlay,
     toolbarOpen,
+    engineCard,
     watching,
     stopped,
   } = cover;
@@ -137,6 +141,7 @@ export function useNativeViewBounds(slot: RefObject<HTMLDivElement | null>, cove
     visible,
     sidebarOverlay,
     toolbarOpen,
+    engineCard,
     watching,
     stopped,
   ]);

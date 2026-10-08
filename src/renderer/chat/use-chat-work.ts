@@ -61,7 +61,7 @@ export function useChatWork(props: ChatPanelProps, chat: ChatThread, busy: boole
   const words = useWorkWords(chat, {
     activity,
     outcome,
-    details: currentDetails?.items ?? NO_ITEMS,
+    details: state.workItems.length ? state.workItems : NO_ITEMS,
     plan: plan.review,
   });
   const showsWork = state.chatWorking || running;

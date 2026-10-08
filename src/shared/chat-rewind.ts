@@ -198,12 +198,50 @@ export type RewindFiles =
       outsideUnknown: boolean;
       /** Changed files too large to have been saved: they stay as they are. */
       tooLarge: number;
+      /** Those files by path, present only when there are any. */
+      tooLargeFiles?: string[];
       /** Nested repositories keep their own history; their files stay as they are. */
       nested: string[];
     }
   | { state: "unchanged"; nested: string[] }
-  | { state: "unavailable"; reason: FilesStay }
+  /** `tooLargeFiles` names the changed files when they were all too large to save (`FilesStay.TooLarge`). */
+  | { state: "unavailable"; reason: FilesStay; tooLargeFiles?: string[] }
   | { state: "none" };
+/** What left files too large to save out: a chat checkpoint, or a rewind that left them as they were. */
+export const SkippedBy = {
+  Checkpoint: "checkpoint",
+  Rewind: "rewind",
+} as const;
+export type SkippedBy = (typeof SkippedBy)[keyof typeof SkippedBy];
+
+/** One file too large to save, and its size when it was reported (0 when it was gone). */
+export interface SkippedFile {
+  file: string;
+  bytes: number;
+}
+
+/**
+ * The `checkpoint_skipped` record: files too large to save, so Rewind cannot bring them back.
+ * Every field is optional: a partial record says nothing.
+ */
+export interface CheckpointSkippedPayload {
+  project?: string;
+  /** The queue id of the message whose checkpoint, or rewind, left them. */
+  messageId?: string;
+  by?: SkippedBy;
+  /** The files, largest first (at most `CHECKPOINT_SKIPPED_FILES_LISTED` of them). */
+  files?: SkippedFile[];
+  /** How many files were left in all, when more than `files` lists. */
+  total?: number;
+  /** A single file larger than this is never saved. */
+  fileLimitBytes?: number;
+  /** New or changed content one checkpoint saves at most; the largest files past it are left. */
+  changeLimitBytes?: number;
+}
+
+/** How many of the files a `checkpoint_skipped` record lists by name; `total` counts the rest. */
+export const CHECKPOINT_SKIPPED_FILES_LISTED = 50;
+
 export interface RewindPreview {
   files: RewindFiles;
   /** A build is running: confirming stops it first. */

@@ -106,6 +106,9 @@ function gameCalls(bridge: BridgeCalls) {
   const { invoke } = bridge;
   return {
     archiveGame: (project) => invoke("studio:game.archive", { project }),
+    gameHistory: (project) => invoke("studio:game.history", { project }),
+    clearGameHistory: (project) => invoke("studio:game.history.clear", { project }),
+    undoEngineLink: (request) => invoke("studio:game.engine.undo", request),
     createGame: (title, options) =>
       invoke("studio:game.create", { title, ...(options?.parent === undefined ? {} : { parent: options.parent }) }),
     nameGame: (request) => invoke("studio:game.name", request),
@@ -230,6 +233,7 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginReview: (id, name, args, project) => invoke("studio:plugins.review", { id, name, args, project }),
     pluginAction: (id, name, args, project, ticket) =>
       invoke("studio:plugins.action", { id, name, args, project, ticket }),
+    pluginChooseFile: (id, request) => invoke("studio:plugins.choose-file", { id, request }),
     genexPublishReview: (project) => invoke("studio:plugins.genex-publish-review", { project }),
     genexPublish: (project, review) => invoke("studio:plugins.genex-publish", { project, review }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),
@@ -238,11 +242,15 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginGithubVersions: (repo) => invoke("studio:plugins.github-versions", { repo }),
     pluginUpdate: (id) => invoke("studio:plugins.update", { id }),
     pluginWatch: (id, enabled) => invoke("studio:plugins.watch", { id, enabled }),
-    pluginConsent: (consentId, approved) => invoke("studio:plugins.consent", { consentId, approved }),
+    pluginConsent: (consentId, approved, always) =>
+      invoke("studio:plugins.consent", { consentId, approved, ...(always ? { always } : {}) }),
     permissions: () => invoke("studio:permissions.get"),
     setPermissionMode: (threadId, mode) => invoke("studio:permissions.mode", { threadId, mode }),
     answerPermission: (requestId, answer) => invoke("studio:permissions.answer", { requestId, answer }),
     forgetPermission: (project, rule) => invoke("studio:permissions.forget", { project, rule }),
+    setDontWait: (threadId, on, offerId) =>
+      invoke("studio:loop.dontWait", { threadId, on, ...(offerId ? { offerId } : {}) }),
+    dontWaitState: (threadId) => invoke("studio:loop.dontWaitState", { threadId }),
     mcpList: (project) => invoke("studio:mcp.list", project),
     connections: (threadId, project) => invoke("studio:connections", { threadId, project }),
     mcpSave: (connector, secrets) => invoke("studio:mcp.save", { connector, secrets }),
@@ -252,6 +260,7 @@ function pluginCalls(bridge: BridgeCalls) {
     mcpCancelAuthorization: (id) => invoke("studio:mcp.cancel-authorization", { id }),
     mcpDisconnectAccount: (id) => invoke("studio:mcp.disconnect-account", { id }),
     mcpTools: (id) => invoke("studio:mcp.tools", { id }),
+    mcpForgetAlwaysAllowed: (id) => invoke("studio:mcp.forget-always", { id }),
   } satisfies Partial<StudioApi>;
 }
 

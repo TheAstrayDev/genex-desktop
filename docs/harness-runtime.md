@@ -156,8 +156,11 @@ existing one that the agent may have kept at an older vintage (the wake loop's, 
 live chat's, one session's, the after-night chat's, the reopen's and goal-directed generation's
 vintages are `seed-exports-pre-wake.json`, `seed-exports-pre-journal.json`,
 `seed-exports-pre-live.json`, `seed-exports-pre-one-session.json`,
-`seed-exports-pre-after-night.json`, `seed-exports-pre-reopen.json` and
-`seed-exports-pre-goals.json`, the last kept one module at a time). Where a kept older
+`seed-exports-pre-after-night.json`, `seed-exports-pre-reopen.json`,
+`seed-exports-pre-goals.json`, the Unreal lead's `seed-exports-pre-lead.json` and the open harness's
+`seed-exports-pre-open-harness.json`; the goals' and the lead's are kept
+one module at a time, the lead's with each module's own imports as they were, so a retired module a
+kept caller still imports stays as a shim: `loop/unreal/live.ts`, `live-journal.ts`). Where a kept older
 part would contradict a newer one, the loop asks before it relies on it: a waking night seats its
 chat's session as its lead only when every part that lead depends on exports
 `SERVES_LEAD` (`director.ts` `seatsLead`), and otherwise a director with its own hands leads, as
@@ -179,10 +182,57 @@ lists what moved where, and `applySeed` reports a kept file that still defines m
 other files now import from the new home (`moved`: names, new home, callers). The
 `seed_upgraded` chat card and Studio activity name it, and every boot keeps one note per such
 file in the agent's memory (`RecoveryService.noteSeedMoves`), taken back once the kept file no
-longer defines the moved code.
+longer defines the moved code. A host call whose shape changed works the same way:
+`SEED_CALL_CHANGES` names the files whose copies must carry it (`plugins.invoke`'s `step: true` in
+`loop/delegated-turn.ts`), `applySeed` reports a kept copy without it (`outdatedCalls`), and the
+boot notes it in the agent's memory until the copy carries it.
+
+New projects start empty. `game.scaffold` with no `kind` makes a folder with Genex's bookkeeping
+only (studio.json, the ignore rules, a repository with its first commit) and no facts: its first
+message picks what it becomes; on a folder that already holds anything it writes nothing. `kind: "web"` (or an older caller's `"studio-template"`) writes the
+three.js starter; any other kind is refused. `game.start {project, starter: "web"}` writes the
+starter into a game with no kind yet and refuses one that has a kind, or a link in its folder
+where the starter would write (never written through). A game with no facts lists
+what its folder holds (`holds`: `nothing`, `notes`, `own-files` or `unreadable`); only an empty
+folder or one of notes has no kind yet (`kindPending`); what Genex's asset tools deliver into
+`assets/` (or `public/assets/`) is not the folder's own. A folder of somebody's own files of a kind
+no rule knows (a Pygame project, say) is never handed a starter: `game.start` and `start_web_game`
+refuse it, and a Loop on it stops and says it needs a kind. A Loop's launch scaffolds a
+new game as web, and a Loop on a game with no kind starts it as web before its runner is chosen
+(`startWebIfPending`, `loop/folder-facts.ts`); the web runners scaffold with `kind: "web"`. A local
+model's `new_game` takes `kind`, and its `start_web_game` calls `game.start` with its chat
+(`threadId`): while that chat (this game's) is in Plan mode the host writes nothing and answers the
+same Plan blocker as the chat's own `start_web_game`; a thread of no chat or another game's lends
+no Plan answer, and a call with no thread (a Loop's start, which runs only once approved) is not
+checked. A kept copy of any of these from before is in `SEED_CALL_CHANGES`. Its `plugins_find` and `plugins_suggest`
+(`tools/plugin-finder.ts`) call `plugins.find` and `plugins.suggest`; a shown card ends the turn
+([plugins](plugins.md#finding-and-suggesting-a-plugin)).
+
+A builder's brief is written from the game's facts (`buildContractorBrief`'s `facts`; an older
+caller that names only the engine keeps the engine's rules). Every brief opens with Genex's
+identity (`appIdentity`, `loop/project-prompts.ts`) from the game's facts: the chat's, a local
+turn's, the director's, the Unreal lead's, and every worker's (the pool's, the director's single,
+conflict, base and facet builders, the Unreal lead's typed workers; `loop/workers/identity.ts`). A
+classic Autopilot's builders keep their own brief. A folder with no
+kind yet is told to start web with `start_web_game` or find a plugin with `plugins_find` (a folder of
+notes is told to read them first); with an engine plugin's kind on offer (`plugins.tools`'s
+`kinds`) every fresh brief until it has a kind asks with the question card, and a brief without the
+card (a local turn's too) names each kind's tool for a request that names that engine. A folder of its own files of a kind no
+rule knows is told to look through them first. Each kind gets its own rules, named by folder when
+there are several. A kind no plugin covers (Godot, Unity, Blender, an Unreal plugin, an Unreal project
+with the plugin off, an unknown one) calls `plugins_find` first, shows the card with
+`plugins_suggest` and ends its reply, offers to write a plugin when none fits, and goes on with its
+files and the shell only on the person's word (`pluginFirstRule`). An Unreal project the game is not
+linked to is never worked on through the Unreal tools: they reach the Unreal panel's project until
+`use-project` links it. A local turn's
+operating rules are split: `prompts/operating-rules.md` for every turn and
+`prompts/operating-rules-web.md` only for a web game; a kept agent-edited `operating-rules.md` from
+before the split still carries the web rules, so a web game then reads them twice; it, a kept
+`loop/prompt.ts` that reads no `operating-rules-web.md` and a kept `loop/chat-session.ts` that never
+names `start_web_game` are in `SEED_CALL_CHANGES`.
 
 Scheduled for removal: the long turn (`directorLoop: "turn"`, `STUDIO_DIRECTOR_LOOP=turn`, its
-`wait` tool, continuation prompts and `.studio/DIRECTOR.md` memory), the way back from the wake
+`worker_wait` tool, continuation prompts and `.studio/DIRECTOR.md` memory), the way back from the wake
 loop. Its gate is the first release that ships the lead as the chat's own session and the chat
 after its night. A later PR deletes it once that release's own build has passed, live
 (L5, with the owner's permission), on Claude Code and on Codex each: a waking night led by the
@@ -205,10 +255,14 @@ time on the build's own models once the reply ends (`reopen-run.ts` `finishedNig
 one builder turn. A finished build no Loop can go on from — no lead seated (the long turn, a kept
 pre-lead director, the classic pipeline, a gauntlet), a coordinator without sessions, a kept older
 part — is answered as with Loop off, and the chat says so once per build while the loop lives
-(`firstLoopUnused`). Not solved, by the owner's decision: a chat whose build ran on the classic
-pipeline or a gauntlet (as on a local model without sessions) has no way to start another timed
-build in it since "Start a new build" was removed. Nothing replaces the coordinator for the cases it
-answers yet; it goes only once something does, in work of its own.
+(`firstLoopUnused`). A game built in Unreal is never reopened (its Unreal Loop's journal is the
+lead's own, `kind: "unreal-lead"`, not a director's, which is all `finishedNight` reopens): a Loop
+message the person sends after its finished run is answered as before any run, so the chat's
+session may launch the next Unreal Loop, which builds on what the game holds
+(`chat-dispatch.ts` `startsNextUnrealLoop`). Not solved, by the owner's decision: a chat whose
+build ran on the classic pipeline or a gauntlet (as on a local model without sessions) has no way
+to start another timed build in it since "Start a new build" was removed. Nothing replaces the
+coordinator for the cases it answers yet; it goes only once something does, in work of its own.
 
 `src/harness-seed/prompts/` is the LOCAL-ENGINE game chat path only (`loop/prompt.ts`): the delegated
 engines get their instructions from the briefs the loop renders, not from those files. Trimming
@@ -229,8 +283,11 @@ worktree it builds in); each question answered for that mode or carded (withdraw
 minutes), and every call but a read or a studio tool screened by the host ahead of every allow rule
 (a PreToolUse hook) only to ask first while the chat is in a mode the session could not be switched
 to. A lead also has the chat's own session's plugins and connectors, its plugins acting on the
-build it leads. Builders, workers, the playtester, scouts and judges are unattended: `acceptEdits`, a
-sandboxed shell auto-allowed inside the workspace, and no questions. A harness edit can make a
+build it leads. A lead's workers, the director's builders among them, follow the chat's mode and
+ask in it, boxed and never reaching the never-touch list in any mode
+([workers](tool-permissions.md#workers)); a classic Autopilot's builders, the playtester, scouts
+and judges are unattended: `acceptEdits`, a sandboxed shell auto-allowed inside the workspace,
+and no questions. A harness edit can make a
 session ask only about a message the person sent that is still unanswered, and never chooses its
 mode or answers a card: `thread.create` takes only a title and `events.append`/`turn.append`
 refuse `tool_permission` and `plugin_consent` rows. Nor does it write a game's `.claude` folder,
@@ -252,9 +309,28 @@ connector registry connects each enabled connector, namespaces its tools `<conne
 appends them to the same `liveTools` every path already carries, so Claude Code gets them on the
 in-process `studio` server, Codex through the file bridge and the local harness over `mcp.tools` /
 `mcp.invoke`. The harness never speaks MCP itself, and it never learns a connector's name from a
-prompt file: guidance is one short paragraph the registry composes for whatever was in scope, tool
+prompt file: guidance is one short paragraph the registry composes for whatever was in scope (the
+user's own connectors and those a plugin brings in separate blocks), tool
 schemas travel as `inputSchema` beside the flat `parameters`, and a name collision with a plugin
 tool throws rather than resolving. Nothing on the agent side can add, change or enable a connector.
+
+The job tools (`job_start`, `job_status`, `job_tail`, `job_stop`) are host-owned the same way, on
+the same `liveTools`: the chat's own session, a lead and a seated writing worker get them on a
+delegated engine. Main, not the harness, owns every job (`src/substrate/jobs.ts`), so a job
+outlives its session's turn and a harness restart, and stops when its run settles (the harness's
+`run.settled`), when its worker's chat turn returns, or when Genex quits. The harness neither starts
+one nor writes its `job_started` / `job_ended` records; a start follows the chat's mode at the call
+([tool permissions](tool-permissions.md#jobs)).
+So is `app_look`, look-only and in every mode, which a seated reader worker gets as its one host
+tool ([looking at apps](tool-permissions.md#looking-at-apps)).
+
+A run's job (its lead's or a worker's) that ends reaches its lead. The harness reads the run's ends
+with `jobs.list` (read-only: no paths, no start, no stop) after an end number the run's journal
+keeps (`jobsCursor`, on the director's night and on the Unreal lead's journal), so a resumed run
+reads on from there and hears no end twice (`loop/jobs/watch.ts`, polled at most every 5 seconds).
+A resting director is woken soon by a `job_ended` line; the Unreal lead is steered mid-turn, and an
+end no steer reached is in its next digest. An end the agent itself caused (`job_stop`) wakes
+nobody. A kept older wake loop, wake rules, night or journal is in `SEED_CALL_CHANGES`.
 
 What the evidence pass proves before it gathers. It waits for the page and records
 `readyAfterMs`; it proves the studio owns the clock (two steps, `steppedFrames` — a base fails
@@ -288,6 +364,8 @@ follow. `src/substrate/ownership.ts` and `loop/review.ts` are two copies of that
 step by a conformance test, because the seed runs outside the app, where nothing under `src/` resolves.
 
 Manual SkillOpt resolves the most recent run's model through `modelOn`, as the post-run path does.
+Its mined tasks leave out the `build_observation`s of a game that now builds in Unreal: they are
+what the web preview saw of its notes folder.
 A cross-provider run stores its builder model alongside its orchestrator engine, so those two raw
 fields must not be passed together to a completion call. Skill gates compare instruction texts against saved task descriptions; they do not execute
 candidate builds or establish better future game outcomes. The analyst sees every other mined task and
@@ -304,6 +382,92 @@ Claude Code and Codex compact it themselves at their own point (about 967K on a 
 about 90% of the window on Codex), and Studio sends neither a threshold nor a handover of its own.
 A refused resume (`facet_session_reset`) and a context overflow start a fresh session on the full
 prompt.
+
+A worker's copy of the game (`snapshot.worktree`, `harness-rpc/snapshot.ts`) holds every file the
+commit tracks; of what it receives outside history, the files of the game's nested repositories, it
+leaves out the game's ignore and `copySkip` rules (only the ignore rules when the copy versions those
+repositories). A copy larger than `WRITER_COPY_MAX_BYTES` (2 GB, `substrate/snapshots.ts`) is
+refused before anything is made (`SnapshotRefusal.CopyTooLarge`), with its size and largest
+folders; every caller gets that answer, the director's integration and play copies included, in
+words that fit each: the game is too large to copy, so the work belongs in the game folder.
+
+### Workers in a chat
+
+The chat's own session, answering a turn on a delegated engine, may start workers. The harness
+claims `workers` (`loop/main.ts`), opens a pool for the turn before its session starts and closes
+it when the turn ends, failure and Stop included (`loop/workers/chat-workers.ts`
+`withChatWorkers`). While the pool is open the turn's delegation carries `workers: { tools }`. The
+host hands those tools only to the chat's own session answering that turn, only the six worker
+tools, and never to a worker (depth one). Each call is forwarded as the `worker_tool` dispatch to
+the pool of that turn; a call for any other turn starts nothing.
+
+The pool (`loop/workers/pool.ts`, `pool-start.ts`, `pool-merge.ts`) runs up to
+`MAX_WORKERS_AT_ONCE` (8) at once, under the Settings ceiling the host keeps per chat on its
+workers, readers and writers alike. A chat turn on a local model's engine opens no pool: only a
+delegated engine carries a worker's seat.
+
+- `worker_start {title, task, isolation, type?, research?, inputs?}`: a reader (`read`) works in the
+  game folder, read-only, with web search only when `research` is `yes`. A writer in a copy
+  (`copy`) works in a copy made by `snapshot.worktree` after a game snapshot, under the copy
+  rules and size cap above; a refused copy is answered by its code, pointing at `lock` or a
+  reader. The one writer in place (`lock`) works in the game folder, one at a time per game. A
+  `type` names a kind of worker a plugin that is on declares (`plugins.workerTypes`); it gives
+  that kind's tools (`toolAllow`) and its isolation.
+- Every worker's delegation carries the `worker` grant (`{id, title, turn, research}`), which the
+  host honours by seating it in the chat's permission mode.
+- `worker_status` and `worker_wait` (at most `MAX_WORKER_WAIT_S`) read each worker's line. A worker
+  whose question waits in the chat (a pending `tool_permission` row naming it) shows as waiting for
+  the person, and `worker_wait` wakes for it.
+- `worker_steer` interrupts that worker alone (`engine.interrupt {cwd, worker}`) and resumes its
+  session with the words in front; `worker_stop` aborts it alone (`engine.abort {cwd, worker}`),
+  sent again while the host finds no session to stop (one still being seated), and a stopped
+  worker takes no further leg.
+- `worker_mark used` merges a copy's commit into the game folder with the director's merge
+  (`mergeNoFf`, conflicts listed and the merge aborted). Conflicts, and the lead's uncommitted
+  files the work also changes, go back to the lead with their names; `rejected` drops the copy.
+  Work that changes Claude Code's own folder (`.claude` at any depth, in any case,
+  `workers/claude-folder.ts`) is never merged, as no build lands it in a game.
+
+Plan holds writers: the host answers a `copy` or `lock` start (or one that names no isolation), and
+`worker_mark used`, in a planning chat without dispatching it, so no snapshot, copy, delegation or
+merge is made; a reader runs, read-only. When the turn ends, however it ends, running workers stop.
+A copy's work is committed, kept on `refs/studio/chat/<thread>/workers/<id>` unless the lead marked
+it, and its copy removed; a copy whose session is still writing is handed back once it ends. The
+records persist in the chat's artifact `chat-workers`, so `worker_mark` in a later turn still
+merges from the ref.
+
+### Workers in a run
+
+A run's lead offers the same six worker tools. The director (`loop/director/tool-specs.ts`) names
+its wait `worker_wait` (`WorkerTool.Wait`; the handler still answers the old name `wait`, which a
+kept playbook or journal may say) and adds `worker_mark`. Its `worker_start` takes `task` (a kept
+prompt's `brief` is still read), `isolation` and `research`: `copy`, the default, is its builder in
+its own worktree; `read` starts a reader from the run's shared pool (`loop/workers/run-pool.ts`,
+`director-pool.ts`) in the game folder, which never integrates, and may research the web; `lock` is
+refused, because the web method never writes in the game folder itself. A web run takes no plugin
+worker types. `worker_mark used` integrates the builder as
+`integrate` does; `rejected` stops its news in every digest and `worker_wait`. Every builder's
+delegation, a conflict worker's included, carries `worker {id, title, runId}` (`director/workers.ts`,
+and `facet/phases/build.ts` only when the facet loop runs for a director; a classic Autopilot's
+builders carry none), so the host seats it in the mode of the chat the run was started in. A
+builder that waits on the person (a pending `tool_permission` row naming it, read by
+`loop/workers/questions.ts`) is told once in the night's log, which wakes `worker_wait`, and its
+line says `waitingForPerson`; a builder the chat has no room for yet (`too_many_workers`) waits for
+room until its deadline (`withWorkerRoom`) rather than failing its round, and a stop of it ends the
+wait before its turn. While the run's chat
+plans, the host holds its lead's writer starts and `worker_mark used` as for the chat's own
+session. The run's close stops its readers.
+
+The Unreal lead's tools are the same six (`loop/unreal/lead-workers.ts`): a `type` the plugins that
+are on declare runs one of its typed workers, and no type runs a generic worker from the run's
+shared pool; see [plugins](plugins.md). A run's pool keeps its records in the run's own artifact
+(`run-workers-<run>`) and a copy's work on `refs/studio/runs/<run>/pool/<id>`; a resumed run opens it
+from that artifact on the first call naming one of its workers. Its snapshots, merges and kept refs
+in the game folder wait for the lead's own git writes there (`oneGitWrite`), and a generic worker's
+end joins the lead's news with its typed workers' (`unreal/pool-news.ts`). A typed worker always
+works in a copy: a start that asks it for another isolation is refused. A typed worker waiting on the
+person shows so in the Unreal lead's status, and its `worker_wait` wakes once for each question.
+Kept copies of the director's files from before this are in `SEED_CALL_CHANGES`.
 
 ## Acceptance evidence
 

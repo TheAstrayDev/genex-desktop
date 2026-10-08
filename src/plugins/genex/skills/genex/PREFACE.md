@@ -11,14 +11,18 @@ Where it disagrees with this preface, this preface wins.
   and never run `auth`, `tools` or `init`.
 - Skill cards are never copied into the game: no `.claude/skills`, `.agents/skills` or `AGENTS.md`
   is written. The Genex cards Studio carries are this plugin's skills, listed in your brief; read
-  one with `genex__skill {"name":"<skill>"}`.
+  one with `genex__skill {"name":"<skill>"}`. The lane cards the "Use it" section points to are
+  `genex-tool-model`, `genex-tool-character`, `genex-tool-texture`, `genex-tool-audio` and
+  `genex-tool-image`: read the one for a lane before its first call.
 
 ## Commands, as Studio tools
 
 - Generation (`image`, `model`, `model segment|rig|animate`, `texture`, `sfx`, `music`, `voice`,
   `character`, `animations search`) and `wait`: `genex__asset`. Call it with operation `status`
   first; it reports the account, credits and live lanes that `doctor` would. Its description lists
-  the operations; delivered files land in the game, so wire in those local paths.
+  the operations and which provider each lane is; its `options` parameter lists each lane's
+  options. Studio passes `--out-dir` and `--no-wait` itself, and delivered files land in the game,
+  so wire in those local paths.
 - `doctor`, `budget`, `llm models`, `llm status`, `llm cancel` and `shop list`: `genex__cli`.
   `budget --assets` is not available: Studio's own asset allowance and the user's approval govern
   asset spending.

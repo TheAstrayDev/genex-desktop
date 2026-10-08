@@ -65,6 +65,11 @@ export interface SeedUpgradeReport {
    */
   moved: SeedMoveNotice[];
   /**
+   * Kept files that still call the host the way an older seed did, which the host now refuses
+   * (SEED_CALL_CHANGES): the agent must carry the new call shape into its copy.
+   */
+  outdatedCalls?: string[];
+  /**
    * Seed `.ts` files held back because the workspace still has the JavaScript layout they replace
    * (`x.mjs`): laid down by `migrateHarnessLayout` once a fork proves the migrated self boots.
    */
@@ -227,6 +232,100 @@ export const SEED_MOVES: readonly SeedMove[] = [
   },
   { from: "loop/gauntlet.ts", to: "loop/gauntlet-prompts.ts", names: ["buildBrief"] },
   { from: "loop/kinds.ts", to: "loop/config.ts", names: ["MAX_PLAY_SCRIPT"] },
+  // The Unreal Loop's step machine gave way to one lead (loop/unreal/lead.ts).
+  { from: "loop/unreal/live-journal.ts", to: "loop/unreal/lead-journal.ts", names: ["unrealTool"] },
+  // The runner's plugin steps moved to a module of their own, which an older kept journal can't lack.
+  { from: "loop/unreal/lead-journal.ts", to: "loop/unreal/lead-steps.ts", names: ["unrealTool"] },
+];
+
+/** A host call whose shape the seed changed: a kept copy of `file` without `marker` calls the older way. */
+export interface SeedCallChange {
+  file: string;
+  /** Text every copy that calls the new way holds. */
+  marker: string;
+}
+
+/**
+ * Host calls the seed changed with the host. The host runs a plugin tool kept for the harness only
+ * when `plugins.invoke` says `step: true` (`checkpoint: true` for a write Plan mode holds back), so
+ * a kept copy of these files from before that change has every harness step refused as an unknown
+ * tool. `plugins.tools` names the game (`project`), whose facts pick its plugin tools: a kept copy
+ * that names none is offered a web game's tools whatever the game holds. `applySeed` reports such a
+ * copy (`outdatedCalls`, each file once) and the boot notes it for the agent. The Unreal lead's
+ * runner calls from `loop/unreal/lead-steps.ts`, new with the step change, so no kept copy of it is
+ * older (a kept `lead-journal.ts` that still defines its own call is a move). `game.scaffold` with
+ * no `kind` now makes an empty folder with no kind: a kept Loop launch or runner that names no kind
+ * makes its new game empty, a kept run start leaves a game with no kind unstarted before its web
+ * Loop, and a kept `tools/game-tools.ts` has no `start_web_game` for a local model. A kept
+ * `loop/prompt.ts` that never reads `prompts/operating-rules-web.md` gives a web game's local turn
+ * no web rules, so it is reported the same way; so are a kept `prompts/operating-rules.md` that
+ * still gives every turn the web rules, and a kept `loop/chat-session.ts` that briefs a new game
+ * (now empty) as the web starter and never names `start_web_game`. A kept `loop/main.ts` that never
+ * claims `workers`, a kept `loop/delegated-turn.ts` that opens no worker pool for a chat turn, and a
+ * kept `loop/chat-session.ts` whose brief never says the session runs workers leave the chat's own
+ * session without its workers (or unaware of them), so they are reported too. The director joined
+ * the same model: a kept tool list or handler without `WorkerTool.` has no `worker_mark` and no
+ * readers, a kept wake prompt or brief still names the old `wait`, kept builders delegate with no
+ * `worker` grant (they stay unattended and boxed: safe, but not in the chat's mode), a kept wake loop
+ * still names a rejected worker, and a kept close leaves the run's readers to end on their own.
+ * A kept `tools/game-tools.ts` whose `game.start` names no chat writes the web starter even while
+ * that chat is in Plan mode; kept briefs, builders and base sessions of a director's run that never
+ * open with Genex's identity leave its workers unaware they work inside Genex, on which folder.
+ * A kept director handler that never reads its builders' questions leaves the lead blind to a
+ * builder waiting on the person, a kept build turn treats a full chat as a broken build, and a kept
+ * tool list offers its readers no research. A kept wake loop that never reads the run's job ends
+ * leaves a resting lead asleep through them; kept wake rules lack their kind (such an end still
+ * wakes the lead soon, as news); and a kept night or journal that keeps no job cursor reads the
+ * run's ends again after a restart.
+ */
+export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
+  { file: "loop/delegated-turn.ts", marker: "step: true" },
+  { file: "loop/delegated-turn.ts", marker: "HostMethod.PluginsTools, { project }" },
+  { file: "tools/index.ts", marker: "HostMethod.PluginsTools, { project" },
+  { file: "loop/chat-dispatch.ts", marker: "kind: ProjectStarter.Web" },
+  { file: "loop/run-dispatch.ts", marker: "startWebIfPending(" },
+  { file: "loop/autopilot.ts", marker: "kind: ProjectStarter.Web" },
+  { file: "loop/director/setup.ts", marker: "kind: ProjectStarter.Web" },
+  { file: "loop/gauntlet.ts", marker: "kind: ProjectStarter.Web" },
+  { file: "tools/game-tools.ts", marker: "HostMethod.GameStart" },
+  // Not host calls: the web rules moved to their own file, which a kept local prompt never reads
+  // and kept rules still repeat for every turn; and a kept brief tells an empty new game nothing of
+  // its first step.
+  { file: "loop/prompt.ts", marker: '"prompts/operating-rules-web.md"' },
+  { file: "prompts/operating-rules.md", marker: "run it and look at it running" },
+  { file: "loop/chat-session.ts", marker: "pendingKindRule(" },
+  { file: "loop/main.ts", marker: '"workers"' },
+  { file: "loop/delegated-turn.ts", marker: "withChatWorkers(" },
+  { file: "loop/delegated-turn.ts", marker: "chatWorkersGrant(" },
+  { file: "loop/chat-session.ts", marker: "WORKERS_BRIEF_LINE" },
+  { file: "loop/director/tool-specs.ts", marker: "WorkerTool." },
+  { file: "loop/director/tools.ts", marker: "WorkerTool." },
+  { file: "loop/director/wake-prompts.ts", marker: "worker_wait" },
+  { file: "loop/director/briefs.ts", marker: "worker_wait" },
+  { file: "loop/director/workers.ts", marker: "workerGrant(" },
+  { file: "loop/facet/phases/build.ts", marker: "worker: loop.options.worker" },
+  { file: "loop/director/wake.ts", marker: "rejectedNews(" },
+  { file: "loop/director/integrate.ts", marker: "closeReaders(" },
+  // A local model's start_web_game names its chat, so the host holds it while that chat plans; and
+  // every worker of a director's run is told first that it works inside Genex, on which folder.
+  { file: "tools/game-tools.ts", marker: "threadId: ctx.threadId" },
+  { file: "loop/director/briefs.ts", marker: "builderIdentity(" },
+  { file: "loop/director/workers.ts", marker: "runIdentity(" },
+  { file: "loop/director/setup.ts", marker: "runIdentity(" },
+  { file: "loop/facet/phases/brief.ts", marker: "withIdentity(" },
+  // A run's own workers that wait on the person are their lead's news, a full chat is a wait for
+  // room, and a director's reader may research the web.
+  { file: "loop/director/tools.ts", marker: "waitingBuilders(" },
+  { file: "loop/facet/phases/build.ts", marker: "withWorkerRoom(" },
+  { file: "loop/director/tool-specs.ts", marker: "research: {" },
+  // A director's single worker refused for room waits for room, as its builders do.
+  { file: "loop/director/workers.ts", marker: "withWorkerRoom(" },
+  // A job of the run that ends wakes a resting lead: the wake loop reads the ends (`jobs.list`),
+  // its rules name the kind, and the night's journal keeps where it read to.
+  { file: "loop/director/wake.ts", marker: "watchJobs(" },
+  { file: "loop/director/wake-schedule.ts", marker: "JobEnded" },
+  { file: "loop/director/night.ts", marker: "jobsCursor" },
+  { file: "loop/director/journal.ts", marker: "jobsCursor" },
 ];
 
 interface SeedManifest {
@@ -347,6 +446,14 @@ async function deletedBeforeMigration(
  * first, which is why the pass refuses to run at all when no `backupDir` was passed (the
  * crash-recovery reseed path).
  *
+ * The Unreal Loop's part plan and part prompts went with the part runner, and the step machine that
+ * replaced it (its planner, keep rule, board, probes, checkpoint, helpers, prompts, tools, graph,
+ * the part runner's shim) went when one lead took over (`loop/unreal/lead.ts`); an untouched copy
+ * left behind would no longer type-check against the seed (`cpp.ts`, `live-contract.ts`). Two of
+ * its files stay as shims, because files the agent may have kept import from them:
+ * `loop/unreal/live.ts` (a kept `run-dispatch.ts`'s `runUnrealLive`, the lead now) and
+ * `loop/unreal/live-journal.ts` (a kept `restore.ts`'s `unrealTool`, in `SEED_MOVES`).
+ *
  * The JavaScript modules the TypeScript seed replaced (`loop/*.mjs` → `loop/*.ts`) are not listed
  * here: retiring an agent-edited `x.mjs` would keep it for ever beside an `x.ts` that is the one
  * loaded, dropping the edit without a word. `migrateHarnessLayout` owns them — it removes the
@@ -359,6 +466,20 @@ export const RETIRED_SEED_PATHS: readonly string[] = [
   "skills/unattended-runs.md",
   "loop/facet/handover-prompts.ts",
   "loop/facet/phases/handover.ts",
+  "loop/unreal/plan.ts",
+  "loop/unreal/unreal-loop-prompts.ts",
+  "loop/unreal/board.ts",
+  "loop/unreal/checkpoint.ts",
+  "loop/unreal/features.ts",
+  "loop/unreal/helpers.ts",
+  "loop/unreal/keep-rule.ts",
+  "loop/unreal/live-graph.ts",
+  "loop/unreal/live-prompts.ts",
+  "loop/unreal/live-run-prompts.ts",
+  "loop/unreal/live-tools.ts",
+  "loop/unreal/probe-prompts.ts",
+  "loop/unreal/probes.ts",
+  "loop/unreal/runner.ts",
 ];
 
 export interface ApplySeedOptions {
@@ -616,6 +737,8 @@ async function finishSeedPass(pass: SeedPass, body: SeedManifest | null): Promis
   // Every boot, not only an upgrading one: the answer holds until the agent acts on it, and the
   // boot keeps the agent's note in step with it (StudioCore, seed-upgrade-notice.ts).
   report.moved.push(...(await splitMoves(options.workspaceDir, report.kept)));
+  const outdated = await outdatedCalls(options.workspaceDir, report.kept);
+  if (outdated.length > 0) report.outdatedCalls = outdated;
   if (deferred.size > 0) report.deferred = [...deferred].sort();
 
   // Files the agent grew itself live outside the manifest and are never listed or touched. A
@@ -704,6 +827,18 @@ async function splitMoves(workspaceDir: string, kept: readonly string[]): Promis
     if (callers.length > 0) notices.push({ from: move.from, to: move.to, names, callers });
   }
   return notices;
+}
+
+/** The kept files of SEED_CALL_CHANGES whose copy lacks the new call's marker; a deleted copy calls nothing. */
+async function outdatedCalls(workspaceDir: string, kept: readonly string[]): Promise<string[]> {
+  const outdated: string[] = [];
+  for (const change of SEED_CALL_CHANGES) {
+    if (!kept.includes(change.file)) continue;
+    const copy = await readFile(path.join(workspaceDir, change.file), "utf8").catch(() => null);
+    const older = copy !== null && !copy.includes(change.marker);
+    if (older && !outdated.includes(change.file)) outdated.push(change.file);
+  }
+  return outdated;
 }
 
 /** `import { a, b as c } from "./x.mjs"` in the file at `rel` → resolved module rel → imported names. */

@@ -42,7 +42,7 @@ import {
   windowsSetupProblem,
 } from "./sandbox-unavailable.ts";
 import { childEnv, windowsBaseEnv } from "./child-env.ts";
-import { credentialHomes } from "./credential-homes.ts";
+import { credentialHomes, HOME_SIGN_IN_STORES } from "./credential-homes.ts";
 import { isInside } from "./paths.ts";
 import { envValue } from "./toolchain.ts";
 import {
@@ -317,11 +317,7 @@ export function baseDenyRead(
   const linuxStores =
     platform === StudioPlatform.Linux ? LINUX_SECRET_STORES.map((parts) => path.join(home, ...parts)) : [];
   return [
-    path.join(home, ".ssh"),
-    path.join(home, "Library", "Keychains"),
-    path.join(home, ".aws"),
-    path.join(home, ".config", "gh"),
-    path.join(home, ".netrc"),
+    ...HOME_SIGN_IN_STORES.map((parts) => path.join(home, ...parts)),
     ...linuxStores,
     // SEC-3: the coding CLIs' sign-in homes, wherever the environment has moved them.
     ...credentialHomes(),
@@ -370,6 +366,16 @@ export function claudeFolderDenyWrites(
   const others = gameDirs.map((dir) => path.resolve(dir)).filter((dir) => path.dirname(dir) !== root);
   const games = [path.join(literalGlob(root), "*"), ...others.map(literalGlob)];
   return [...new Set(games.map((game) => path.join(game, CLAUDE_FOLDER_GLOB)))];
+}
+
+/**
+ * Claude Code's own folder in each of `folders`, as write denies spelled as
+ * {@link claudeFolderDenyWrites} spells a game's: a later session there loads the settings and hooks
+ * it holds. A worker's box and a job's box deny it in every folder they write.
+ */
+export function claudeFoldersIn(folders: readonly string[]): string[] {
+  const resolved = [...new Set(folders.map((folder) => path.resolve(folder)))];
+  return [...new Set(resolved.flatMap((folder) => claudeFolderDenyWrites(path.dirname(folder), [folder])))];
 }
 
 export class ProcessSandbox {

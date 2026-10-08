@@ -22,6 +22,7 @@ migration path.
 | Plugin backends, MCP servers | [`src/substrate/plugins/`](../../src/substrate/plugins/), [`src/substrate/mcp/`](../../src/substrate/mcp/) | Trusted native code the user approved; a process is crash isolation, not a sandbox. |
 | Terminal hosts | [`src/main/terminal-host.ts`](../../src/main/terminal-host.ts) | One Electron utility process per node-pty session, as the user. |
 | CLI installers | [`src/substrate/cli-installer.ts`](../../src/substrate/cli-installer.ts) | Vendor installers, unsandboxed. |
+| Agent jobs | [`src/substrate/jobs.ts`](../../src/substrate/jobs.ts) | Sandboxed process groups main starts for agents (the chat's, a lead, workers); they outlive turns and harness restarts and stop on quit. |
 
 **Renderer.** It talks to main only through the named calls in
 [`src/shared/studio-api.ts`](../../src/shared/studio-api.ts); it receives no evaluation or
@@ -33,8 +34,7 @@ https in the browser; a `file:` link must be contained in a game folder lexicall
 paths, and only a regular, non-executable file with an allow-listed document or media extension
 opens (`open-path`); folders, bundles, launchers and exec-bit files are revealed in Finder;
 anything else is refused in words. Some IPC calls take a renderer-chosen absolute path by design
-(a picked folder in `studio:project.inspect`, `studio:project.adopt` and `studio:game.create`, a
-chat's file names in `studio:chat-files.resolve`/`studio:chat-file.open`); each validates it in main, and
+(a picked folder, a chat's file names); each validates it in main, and
 `main/chat-files.ts` never links credentials or the studio's secrets.
 
 **Harness child.** [`src/substrate/harness-host.ts`](../../src/substrate/harness-host.ts) starts
@@ -72,6 +72,11 @@ host for arrives over the harness RPC, which is therefore an untrusted surface:
   (`-c core.fsmonitor= -c core.hooksPath=/dev/null`), so a repository's config cannot make the
   host run a program.
 - The harness cannot choose its own rewind target; see [Snapshots and health](#snapshots-and-health).
+- Main, not the harness, owns agent jobs (`StudioCore.jobs`; records and logs in
+  `<userData>/jobs/<game>/`, outside every writable root).
+- `app_look` ([`src/substrate/app-look.ts`](../../src/substrate/app-look.ts)) runs in main, outside
+  every box, since macOS grants Screen Recording and Accessibility to the app: constant `osascript`
+  scripts (the window only as arguments), `screencapture` and `sips`; never input.
 
 `tests/conformance/rpc-authority.test.ts` holds the hostile-root table;
 `tests/conformance/harness-api.test.ts` drives the parameter check over a fake child's pipes.
@@ -86,24 +91,20 @@ must not change at `/`.
 **Child environments** come from the pure `childEnv`
 ([`src/substrate/child-env.ts`](../../src/substrate/child-env.ts)). Sandboxed children (the
 harness, `run.exec`, builds) get an allow-list: PATH, HOME, locale, terminal, temp and CA-cert
-variables. Contractors get the app's environment minus credential-shaped names in any case
-(`*TOKEN(S)`, `*SECRET`, `*KEY(S)`, `*PASSWORD`, `*_PWD`, `*_PAT`, `*_JWT`, `*_DSN`, `*SESSION`,
-`*WEBHOOK_URL`, `*ASKPASS`, `*authToken*`, `GIT_CONFIG_*`, `SSH_AUTH_SOCK`, …), any URL value
-with a password, and the other vendor's variables, plus what the engine sets. Login and status
-probes, CLI `--version`/`--help` probes and the Ollama server Studio starts use the same filter.
+variables. Contractors get the app's environment minus credential-shaped names (the list
+in `child-env.ts`), any URL value with a password, and the other vendor's variables, plus what
+the engine sets. Probes and the Ollama server Studio starts use the same filter.
 `credentialHomes()` ([`src/substrate/credential-homes.ts`](../../src/substrate/credential-homes.ts))
-is the one list of coding-CLI sign-in homes (`~/.codex`, `~/.claude`, `$CODEX_HOME`,
-`$CLAUDE_CONFIG_DIR`, a named login home) that the sandbox, Claude's absolute deny rules (its own
+is the one list of coding-CLI sign-in homes that the sandbox, Claude's absolute deny rules (its own
 config home [partly](../tool-permissions.md#rules-at-their-real-paths)), the Codex brief, Bonsai
 and native plugin jobs deny. `ProcessSandbox`
-adds its base deny-read list (`baseDenyRead` in `spawn.ts`): `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.netrc`,
-`~/Library/Keychains` and, on Linux, the desktop secret stores (`~/.local/share/keyrings`,
-`~/.gnupg`, `~/.local/share/kwalletd`, `~/.config/kwalletrc`, `~/.pki`).
+adds its base deny-read list (`baseDenyRead` in `spawn.ts`): sign-in stores such as `~/.ssh`,
+`~/.aws` and `~/Library/Keychains`, and on Linux the desktop secret stores.
 
 **Windows sandbox.** Commands run as the local `srt-sandbox` user under Git Bash through
 sandbox-runtime's srt-win backend
 ([`src/substrate/windows-sandbox.ts`](../../src/substrate/windows-sandbox.ts)). Its grants, deny
-list (`windowsDenyRead`), environment and stdin files, and residual risks are in
+list and residual risks are in
 [Windows sandbox](../windows-sandbox.md).
 
 **Contractor bridge and locks.** The bridge
@@ -114,9 +115,8 @@ answers with `O_EXCL|O_NOFOLLOW`. Ownership locks
 the marker as hostile, change modes only on in-root regular files and restore only the write bits
 they removed. Both read requests and markers with `fsx.readRegularFile`: non-blocking, no link,
 regular files only, size-capped, so a planted FIFO cannot hold a libuv thread. Every no-link open
-goes through `fsx.openNoFollow`: Windows has no `O_NOFOLLOW`, so there the name is lstat-checked
-before the open and matched by device and file index after it, and `O_TRUNC` waits for that
-check. On Windows a lock is the read-only attribute. The locks' honest
+goes through `fsx.openNoFollow` (Windows, lacking `O_NOFOLLOW`, lstat-checks the name before the
+open and matches device and file index after it; `O_TRUNC` waits for that). On Windows a lock is the read-only attribute. The locks' honest
 scope: Codex's cover pre-existing files, never directories; the Claude hook matches
 `Edit|Write|MultiEdit|NotebookEdit` only, so a Bash write is not blocked.
 
@@ -171,9 +171,9 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
   that window with the studio. On Windows, `studio:boot.setup` (native) first installs the sandbox
   with the unpacked srt-win
   ([`src/substrate/windows-sandbox-setup.ts`](../../src/substrate/windows-sandbox-setup.ts), one
-  UAC prompt) and then retries; a dismissed prompt changes nothing. Every other startup failure keeps the error dialog and exit; smoke
-  and developer launches fail as before (the `sandbox-setup` fixture shows the screen over a ready
-  core). The window's title bar comes from
+  UAC prompt) and then retries; a dismissed prompt changes nothing. Other startup failures, and
+  smoke and developer launches, keep the error dialog and exit (the `sandbox-setup` fixture shows
+  the screen over a ready core). The window's title bar comes from
   [`src/main/window-chrome.ts`](../../src/main/window-chrome.ts): `hiddenInset` on macOS
   (lights on the headers' line), a themed 48 px `titleBarOverlay` on Windows and Linux
   (`studio:window.controls`).
@@ -1055,11 +1055,10 @@ with a managed local runtime; core has no special Blender tool.
   host tool for writable builder and director sessions only. Search is a local BM25 index
   ([`src/shared/catalog-search/`](../../src/shared/catalog-search/)).
 - **Games root.** It defaults to `~/AI Games`; Settings → Games picks another in main
-  (`studio:games-root.choose`, fixture-blocked), and `userData/games-root.json` restores it at boot
-  unless its parent is missing. Every game-named folder in the root is listed as a game, so
-  `changeRoot` accepts only a folder whose such subfolders the index already knows (library or
-  removed games). It turns old-root games into aliases so names and threads hold; the sandbox gains
-  write access to the new root.
+  (`studio:games-root.choose`, fixture-blocked), restored at boot from `userData/games-root.json`
+  unless its parent is missing. Every game-named folder in the root is a game, so `changeRoot`
+  accepts only a folder whose such subfolders the index knows (library or removed games), turns
+  old-root games into aliases and opens the new root to the sandbox.
 - **Secrets.** `SecretStore` ([`src/substrate/secrets.ts`](../../src/substrate/secrets.ts)) is
   Keychain-backed through safeStorage and fails closed without OS encryption, raising
   `SecretStorageUnavailableError` with a `SecretStorageIssue` code. On Linux, safeStorage's
@@ -1076,27 +1075,27 @@ with a managed local runtime; core has no special Blender tool.
 ## Profiles, packaging and processes
 
 - Normal app behavior uses Electron's default data and `~/AI Games` with the singleton lock.
-  Electron names the data folder after the app, so before anything reads it the normal profile
-  moves `<appData>/AI Game Studio` to `<appData>/Genex` when the new folder is missing or empty
-  ([`src/main/user-data-migration.ts`](../../src/main/user-data-migration.ts)): never into a
-  folder with data, never for developer, fixture or test profiles or a `--user-data-dir`; a
-  failed rename copies through a staging folder and keeps the legacy one. It logs to `studio.log`.
+  Before anything reads it, the normal profile moves `<appData>/AI Game Studio` to
+  `<appData>/Genex` when the new folder is missing or empty
+  ([`src/main/user-data-migration.ts`](../../src/main/user-data-migration.ts); never into data,
+  never for other profiles or a `--user-data-dir`; a failed rename copies through staging and keeps
+  the legacy folder; logged to `studio.log`).
   Developer tooling sets userData and sessionData before ready, keeps core state and game roots
   separate, and has one writer per profile. Fixture profiles block native IPC before handlers run
   (`native-policy.ts`), park automatic improvements and architecture checks, use mock cookie
   encryption, disable SecretStore and strip inherited tokens and live opt-ins. See
   [verification](verification.md) and the [dev fixture recipe](recipes.md#dev-fixture).
-- Smoke and selftest set both Electron paths early and inject a real `OllamaEngine` pointed at a
-  scripted host; the plain-Node rig does the same.
+- Smoke, selftest and the plain-Node rig set both Electron paths early and inject a real
+  `OllamaEngine` pointed at a scripted host.
 - **Log and crash dumps.** Main keeps `<userData>/logs/studio.log`
   ([`src/main/logs.ts`](../../src/main/logs.ts)): rotated at 5 files of 5 MB, mode 0600, never
   throws, and every line passes `scrubForLog` (`redactSecrets`, email addresses as `[email]`, the
   home folder as `~` only as a whole path segment). It receives harness and core stderr, main errors
   (`appendErrorDurably`, startup failures, uncaught errors), renderer console errors,
   render-process-gone decisions and quit-step problems. `crashReporter` runs local-only
-  (`uploadToServer: false`) with dumps in `<userData>/Crashpad`. Persisted writes remain immediate;
-  renderer harness-log messages coalesce for 50 ms, bounded to 65,536 characters, and flush
-  before other UI events or shutdown. Diagnostics read only a bounded log suffix.
+  (`uploadToServer: false`) with dumps in `<userData>/Crashpad`. Persisted writes stay immediate;
+  renderer harness-log messages coalesce for 50 ms (at most 65,536 characters) and flush before
+  other UI events or shutdown. Diagnostics read only a bounded log suffix.
 - **Lifecycle rules.** [`src/main/app-lifecycle.ts`](../../src/main/app-lifecycle.ts) holds the
   Electron-free rules: process handlers log uncaught exceptions and rejections without exiting; the
   reload policy reloads a crashed renderer at most twice in 60 s and never after a `clean-exit`;
@@ -1104,8 +1103,8 @@ with a managed local runtime; core has no special Blender tool.
   and smoke sessions leave the page dead). The Dock, a second launch or Keep running revive a dead
   page; pushes skip it. `runShutdown` runs quit steps in order, each bounded (`shutdownSteps`), logs
   a failed or hung step and moves on.
-  `before-quit` calls `app.exit(0)` in a `finally`. `StudioCore.stop` logs a plugin lease release
-  that fails instead of skipping the connectors, previews and harness host after it.
+  `before-quit` calls `app.exit(0)` in a `finally`. `StudioCore.stop` stops the harness, then every
+  agent job, and logs a plugin lease release that fails instead of skipping what follows it.
 - **Diagnostics.** [`src/main/diagnostics.ts`](../../src/main/diagnostics.ts) builds the redacted
   Settings → Harness → Copy diagnostics text (versions, OS, data and log paths, provider and CLI
   status, the last 100 log lines) served on `studio:diagnostics` (fixture-safe). The renderer's

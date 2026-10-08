@@ -32,6 +32,11 @@ export const GENEX_CARDS = [
   "genex-monetization",
   "genex-tool-publish",
   "genex-updates",
+  "genex-tool-model",
+  "genex-tool-character",
+  "genex-tool-texture",
+  "genex-tool-audio",
+  "genex-tool-image",
 ] as const;
 /** The CLI's own license, copied beside the cards so every build of the payload carries it. */
 export const CARDS_LICENSE = "LICENSE-cards";

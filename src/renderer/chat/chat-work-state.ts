@@ -5,7 +5,7 @@
  */
 import { RunState, type RunExecution } from "../../shared/run-state.ts";
 import { CHAT_WORDS, runIdIn } from "../words.ts";
-import { failedToolItem, type ConversationEntry, WORK_KIND } from "./conversation-entries.ts";
+import { type ActivityItem, type ConversationEntry, WORK_KIND, workHasResults } from "./conversation-entries.ts";
 
 type WorkEntry = Extract<ConversationEntry, { kind: typeof WORK_KIND }>;
 
@@ -15,11 +15,13 @@ const LEARNING_STATUS = /^self-improving\b/i;
 /** Is Studio learning from a build (a quiet line, not work)? */
 export const isLearningStatus = (status: string): boolean => LEARNING_STATUS.test(status);
 
-/** The trailing work group, while none of its tools failed: it is the work in progress. */
+/**
+ * The trailing work group, while it holds nothing to keep in view (a failed step, pictures, a
+ * delivery): it is the work in progress.
+ */
 function openWork(entry: ConversationEntry | undefined): WorkEntry | null {
   if (entry?.kind !== WORK_KIND) return null;
-  const failed = entry.items.some(failedToolItem);
-  return failed ? null : entry;
+  return workHasResults(entry) ? null : entry;
 }
 
 export interface ChatWorkInput {
@@ -58,6 +60,11 @@ export interface ChatWorkState {
   stoppable: boolean;
   /** The trailing work group the busy line folds in as its details, or null. */
   currentDetails: WorkEntry | null;
+  /**
+   * The steps the busy line names its work from: the trailing group's while the chat works, folded
+   * in or kept in the transcript for its results.
+   */
+  workItems: ActivityItem[];
 }
 
 export function chatWorkState(input: ChatWorkInput): ChatWorkState {
@@ -76,13 +83,15 @@ export function chatWorkState(input: ChatWorkInput): ChatWorkState {
   const chatWorking = answering || waitingOnAnswer;
   // Work followed by a streaming reply is done: it stays in the transcript, above where the reply
   // lands, so nothing moves when the reply is saved.
-  const currentDetails = chatWorking && !input.streamingReply ? openWork(input.readingEntries.at(-1)) : null;
+  const trailing = chatWorking && !input.streamingReply ? input.readingEntries.at(-1) : undefined;
+  const currentDetails = openWork(trailing);
   return {
     learning,
     chatWorking,
     answering: answering || (waitingOnAnswer && !activeRunId),
     stoppable,
     currentDetails,
+    workItems: trailing?.kind === WORK_KIND ? trailing.items : [],
   };
 }
 

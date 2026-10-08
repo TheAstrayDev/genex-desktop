@@ -97,7 +97,8 @@ export type PluginCapability =
   | "jobs"
   | "network"
   | "export"
-  | "native-runtime";
+  | "native-runtime"
+  | "game-engine";
 
 export interface PluginTool {
   name: string;
@@ -117,16 +118,33 @@ export interface PluginTool {
  */
 export type PluginHostTool = "genex-cli" | "genex-cli-paid" | "genex-package";
 
+/**
+ * Who may call a tool (API 3): `agents`, the default, or `harness`: only Genex's own harness loop
+ * calls it by name, and no agent, chat or plan is handed it or told of it.
+ */
+export type PluginToolAudience = "agents" | "harness";
+
 /** A tool as your manifest declares it. Agents see it as a plain `PluginTool`. */
 export interface PluginManifestTool extends PluginTool {
   /** Reserved for the bundled Genex plugin. */
   host?: PluginHostTool;
+  /** API 3: who may call the tool; agents when absent. */
+  audience?: PluginToolAudience;
 }
+
+/**
+ * An engine a game builds in: `web` (three.js in the browser, every game unless Genex linked it to
+ * an engine project) or `unreal`. A skill that names engines (non-empty, each once) reaches only
+ * those games' briefs, so web-only advice never reaches an Unreal game.
+ */
+export type PluginGameEngine = "web" | "unreal";
 
 /** A skill whose text sits in the manifest (1–16 000 characters); agents get all of it in their brief. */
 export interface PluginInlineSkill {
   name: string;
   text: string;
+  /** API 3: the engines whose games' briefs carry this skill; every engine when absent. */
+  engines?: PluginGameEngine[];
 }
 
 /**
@@ -143,6 +161,8 @@ export interface PluginFileSkill {
   file: string;
   /** At most 16, each distinct from `file`. */
   references?: string[];
+  /** API 3: the engines whose games' briefs carry this skill; every engine when absent. */
+  engines?: PluginGameEngine[];
 }
 
 /** One of at most 32 skills a plugin gives agents; names are unique. */
@@ -235,7 +255,13 @@ export interface PluginManifest {
     type: "string" | "boolean" | "number";
     default: string | boolean | number;
   }>;
-  actions: Array<{ name: string; label: string; confirmation?: string }>;
+  actions: Array<{
+    name: string;
+    label: string;
+    confirmation?: string;
+    /** The action starts, quits or opens a desktop app or the browser, or writes outside your storage; a fixture profile refuses it. */
+    native?: true;
+  }>;
   /** API 2: hosts the backend talks to, disclosed at install and checked by the static scan. */
   network?: { hosts: string[] };
   /** API 2: up to four buttons contributed beside Live/Builds. */
@@ -269,6 +295,18 @@ export interface PluginEvent {
   tone?: PluginToolbarStatus["tone"];
   attention?: boolean;
   [key: string]: unknown;
+}
+
+/**
+ * A game's link to an engine project (`game-engine`): the project file's real path, its name, and
+ * when it was linked. The host keeps it in the plugin's storage as `links/<game>.json`, where the
+ * plugin's MCP servers may read it, and mirrors it into the game's `studio.json`.
+ */
+export interface PluginEngineLink {
+  kind: "unreal";
+  project: string;
+  name: string;
+  linkedAt: string;
 }
 
 /**
@@ -306,6 +344,41 @@ export interface PluginHostCall {
   (method: "credentials.read"): Promise<string | null>;
   (method: "credentials.write", args: { token: string }): Promise<void>;
   (method: "credentials.clear"): Promise<void>;
+  /**
+   * `game-engine`: links the bound game to an Unreal project file (`.uproject`, checked by real
+   * path). The chat it was called from shows one line with Undo; `auto` says the link was made by
+   * the game's first call rather than asked for. From outside any game, `game` names one this
+   * plugin made with `game.create`; any other game is refused.
+   */
+  (method: "game.engine.link", args: { project: string; auto?: boolean; game?: string }): Promise<PluginEngineLink>;
+  /** `game-engine`: the bound game's link, or null while it has none that still holds. */
+  (method: "game.engine.read"): Promise<PluginEngineLink | null>;
+  /** `game-engine`: shows the plugin's steps card (its `steps` action's answer) in the chat the call came from. */
+  (method: "game.engine.steps"): Promise<boolean>;
+  /**
+   * `game-engine`: a snapshot of the bound game, taken before the plugin changes files there, which
+   * Rewind lists under `reason` (one plain line, at most 200 characters). Refused without a bound game.
+   */
+  (method: "game.snapshot", args: { reason: string }): Promise<{ snapshotId: string }>;
+  /**
+   * `game-engine`: a new Genex game titled `title` (one plain line, at most 80 characters), for an
+   * engine project made with no game open: its name (`project`) and its folder, which the plugin
+   * may then link with `game.engine.link {game}`.
+   */
+  (method: "game.create", args: { title: string }): Promise<{ project: string; directory: string }>;
+  /**
+   * `game-engine`: the games whose run (a Loop) is going now and that this plugin linked to a
+   * project, each with that project file, so the plugin never quits an editor a run is using.
+   * Needs no bound game.
+   */
+  (method: "game.engine.runs"): Promise<PluginEngineRun[]>;
+}
+
+/** A game whose run is going, as `game.engine.runs` names it: its name, its title and its linked project file. */
+export interface PluginEngineRun {
+  game: string;
+  title: string;
+  project: string;
 }
 
 /**
@@ -334,7 +407,13 @@ export interface PluginContext {
 
 /** What an optional `review` returns before a confirmed action reaches the native dialog. */
 export interface PluginReview {
+  /**
+   * The dialog's short question (at most 2,000 characters), asked instead of the manifest's
+   * `confirmation`; its confirm button then reads the action's label.
+   */
   message?: string;
+  /** Plain text under the question (at most 4,000 characters), shown only with a `message`. */
+  detail?: string;
   images?: Array<{ label: string; dataUrl: string }>;
 }
 
@@ -354,7 +433,36 @@ export type Activate = (host: PluginHost) => PluginActivation | Promise<PluginAc
 export interface PluginPanelContext {
   project: string | null;
   apiVersion: PluginApiVersion;
-  theme: { background: string; foreground: string; accent: string };
+  theme: {
+    background: string;
+    foreground: string;
+    /** The theme's raw accent: rings, marks and focus outlines. */
+    accent: string;
+    /** A primary button's fill under `accentForeground` text, at least 5:1; absent from older hosts. */
+    accentFill?: string;
+    /** Text on `accentFill` and `accentHover`. */
+    accentForeground?: string;
+    /** A primary button's fill while hovered, still readable under `accentForeground`. */
+    accentHover?: string;
+  };
+}
+
+/**
+ * How `studioPlugin.call` rejects: an Error with the host's words, and `code: "cancelled"` when
+ * the person declined Studio's confirmation of the action. Any other failure has no code.
+ */
+export type PluginPanelError = Error & { code?: "cancelled" };
+
+/**
+ * What `studioPlugin.chooseFile` asks Studio's file picker for. Studio checks it in the panel host
+ * and again before the picker opens; any other field is refused. Mirrors
+ * `src/shared/plugin-file-request.ts`.
+ */
+export interface PluginFileRequest {
+  /** 1–80 characters on one line; Studio shows it after the plugin's name. */
+  title: string;
+  /** 1–4 different extensions without the dot: lowercase letters and digits, at most 10 each. */
+  extensions: string[];
 }
 
 /** The framework-free helpers `src/plugin-sdk/ui.js` installs on the bridge. */
@@ -380,6 +488,19 @@ export interface StudioPluginPanel {
     args?: Record<string, unknown>,
     options?: { timeoutMs: number },
   ): Promise<unknown>;
+  call(
+    method: "chooseFile",
+    name: undefined,
+    args: PluginFileRequest,
+    options?: { timeoutMs: number },
+  ): Promise<string | null>;
+  /**
+   * Studio's own native file picker, over its window: one existing file of the listed types. The
+   * answer is the file's real path, or null when the person cancels. Studio names the plugin in
+   * the picker, opens one at a time, and refuses an answer that is not a file of a listed type.
+   * The panel may wait as long as a panel request may (30 minutes). A fixture profile refuses it.
+   */
+  chooseFile(request: PluginFileRequest): Promise<string | null>;
   /** Present once `src/plugin-sdk/ui.js` is inlined after `panel.js`. */
   ui?: StudioPluginUi;
 }

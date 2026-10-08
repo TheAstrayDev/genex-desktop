@@ -3,7 +3,8 @@
  * reseeding from the app, crash repair, and the snapshots and health marks all of it relies on.
  * Composed by `StudioCore`; its state stays in the core.
  */
-import type { PluginConsentEvent } from "../../shared/plugins.ts";
+import { CallCutOff, type PluginConsentEvent } from "../../shared/plugins.ts";
+import { PluginCallCutOff } from "../../substrate/plugins/process.ts";
 import { ToolPermissionBy, type ToolPermissionEvent, ToolPermissionState } from "../../shared/permissions.ts";
 import type { OptimizationCheckpointV1, OptimizationResultV1 } from "../../shared/optimization.ts";
 import path from "node:path";
@@ -24,7 +25,7 @@ import {
 } from "../../substrate/seed-upgrade.ts";
 import { type TypeCheckResult, diagnosticsFor, typeCheckText, TypeCheckFailure } from "../../substrate/type-gate.ts";
 import type { ForkBoot } from "./self-edit-gate.ts";
-import { seedMoveMemory } from "../seed-upgrade-notice.ts";
+import { seedCallMemory, seedMoveMemory } from "../seed-upgrade-notice.ts";
 import { type SnapshotRecord, HARNESS_WORKSPACE } from "../../substrate/snapshots.ts";
 import type { ThreadFold } from "../../substrate/event-store.ts";
 import { interruptedTurnsIn } from "../../substrate/turns.ts";
@@ -337,7 +338,8 @@ export class RecoveryService {
    * Keep the agent's memory in step with the seed's moves (seed-upgrade.ts SEED_MOVES): a kept
    * file that still defines code other harness files now import from its new home gets a note,
    * and a note that no longer holds is taken back. Every boot, since the agent may carry its edit
-   * over at any time. Needs the event store; a failure is logged, never fatal to the boot.
+   * over at any time. A kept file that still calls the host the older way (SEED_CALL_CHANGES) gets
+   * its own note. Needs the event store; a failure is logged, never fatal to the boot.
    */
   async noteSeedMoves(): Promise<void> {
     const report = this.#x.seedReport;
@@ -345,7 +347,7 @@ export class RecoveryService {
     try {
       const memory = ((await this.#core.store.readArtifact<Record<string, unknown>>(this.#core.mainThread, "memory")) ??
         {}) as Record<string, unknown>;
-      const next = seedMoveMemory(memory, report.moved ?? []);
+      const next = seedCallMemory(seedMoveMemory(memory, report.moved ?? []), report.outdatedCalls ?? []);
       if (JSON.stringify(next) !== JSON.stringify(memory))
         await this.#core.store.writeArtifact(this.#core.mainThread, "memory", next);
     } catch (err) {
@@ -551,17 +553,22 @@ export class RecoveryService {
 
   /**
    * The loop died — it crashed, or the watchdog is about to rewind it. Everything it briefed is
-   * now unsupervised: a contractor keeps editing its worktree for another forty minutes with
-   * nobody left to judge, commit or land the round, and the run reads as running until the next
-   * app boot (the first night's crash cost exactly that). So every delegation is aborted — none
-   * of them can be judged or committed without the loop, whatever the cwd — and every run that
-   * was holding the Mac awake is settled here, which frees the power blocker, the quit gate and
-   * the idle watch. The *cards* are not written here: a run's ending belongs to the harness's
-   * own contract, so the ids are carried into the next boot notice instead and the reborn loop
-   * closes each one in its own thread.
+   * now unsupervised: a contractor keeps editing its worktree with nobody left to judge, commit or
+   * land the round, and the run reads as running until the next app boot. So every delegation is
+   * aborted — none of them can be judged or committed without the loop, whatever the cwd — and
+   * every run that was holding the Mac awake is settled here, which frees the power blocker, the
+   * quit gate and the idle watch. The *cards* are not written here: a run's ending belongs to the
+   * harness's own contract, so the ids are carried into the next boot notice instead and the
+   * reborn loop closes each one in its own thread.
+   *
+   * Plugins are not the loop's: their backends, accounts and connectors stay up for the reborn
+   * loop. Only the plugin and connector calls in flight end, first, so each is recorded as cut off
+   * by the harness's end (outcome unknown) before a delegation's own abort could end it as a stop.
    */
   async onHarnessDied(): Promise<{ openRuns: string[] }> {
-    this.#core.plugins?.cancel();
+    this.#core.plugins?.abortCalls(CallCutOff.HarnessEnded);
+    for (const controller of this.#x.activeConnectorCalls.keys())
+      controller.abort(new PluginCallCutOff(CallCutOff.HarnessEnded));
     this.#x.consent.cancel({}, "stop");
     this.#x.permissions.cancel({}, ToolPermissionBy.Stop);
     for (const release of this.#x.pluginTurnLeases.values()) await release();

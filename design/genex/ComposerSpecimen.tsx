@@ -27,6 +27,7 @@ const plugins:PluginInfo[]=['Genex fixture','Local Blender'].map((name,index)=>(
 }));
 plugins[0]!.manifest.account={connect:'connect',unlock:'connect',disconnect:'disconnect',status:'status'};
 let account:'locked'|'unlocked'='locked';
+const dontWait=new Set<string>();
 const connectors=[{connector:{id:'fixture-assets',name:'Genex fixture · Assets',enabled:false,source:{plugin:'fixture',server:'assets'},transport:'stdio',scope:'global',toolPolicy:{},createdAt:'2026-09-20'},health:'disabled',trusted:true,secrets:[],secretsAvailable:false,toolCount:0}] as McpConnectorView[];
 if(!window.studio)Object.defineProperty(window,'studio',{value:{
  blenderStatus:async()=>({enabled:false,code:'ready',detail:'Fixture Blender'}),settings:async()=>({blender:false}),
@@ -46,6 +47,9 @@ if(!window.studio)Object.defineProperty(window,'studio',{value:{
    {id:'codex:10080',label:'Weekly limit',percent:76,resetsAt:new Date(Date.now()+2*86_400_000).toISOString()}]}},
  ],
  openUrl:async(url:string)=>{document.body.dataset.openedUrl=url;},
+ // "Don't wait for me", as the host keeps it per chat: off until switched.
+ dontWaitState:async(threadId:string)=>({on:dontWait.has(threadId),scope:'next_run'}),
+ setDontWait:async(threadId:string,on:boolean)=>{if(on)dontWait.add(threadId);else dontWait.delete(threadId);return {on,scope:'next_run'};},
 } as unknown as StudioApi});
 /** The builds a gallery chat can hold: none, running (∞ or 30 m), paused (30 m) or finished. */
 const SPECIMEN_BUILDS:Record<string,ComposerBuild|null>={

@@ -6,6 +6,7 @@
 import type { JSX } from "react";
 import { SOUND_SHORTCUT } from "../../../shared/game-sound.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
+import type { FactRef } from "../../../shared/project-facts.ts";
 import { kindChip } from "../../../shared/shape-words.ts";
 import type { BesideTarget } from "../../open-beside.ts";
 import type { LiveBehind, StageView } from "../../stage.ts";
@@ -14,6 +15,7 @@ import { cn } from "../../ui/cn.ts";
 import { Icon } from "../../ui/icons.tsx";
 import { Shortcut } from "../../ui/Shortcut.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip.tsx";
+import { unrealProjectOf } from "../../unreal-game.ts";
 import { ViewSwitcher } from "../../ui/view-switcher.tsx";
 import { liveBehindLabel, liveBehindWords, STAGE_WORDS } from "../../words.ts";
 import { besideName } from "../FileViewer.tsx";
@@ -23,6 +25,8 @@ import { LiveRun } from "./live-run.ts";
 
 /** A tab name longer than this is shortened in the middle, keeping this much of its start and end. */
 const TAB_NAME_MAX = 26;
+/** The facts of a game whose descriptor isn't loaded yet: none, served as a web game. */
+const NO_FACTS: readonly FactRef[] = [];
 const TAB_NAME_HEAD = 14;
 const TAB_NAME_TAIL = 10;
 
@@ -193,7 +197,8 @@ function SoundButton({ on, onToggle }: { on: boolean; onToggle: () => void }): J
 /**
  * The strip over the stage: what the folder is, the view switcher, Play/Stop and Reload, then at
  * its end the game's sound, full screen and plugin buttons. An earlier build opens from its result
- * card in the chat, not from here.
+ * card in the chat, not from here. An Unreal game plays in Unreal, not in a web page here, so it
+ * has none of the web game's controls and no Publish: there is no web build to put online.
  */
 export function StageStrip({
   loaded,
@@ -235,6 +240,7 @@ export function StageStrip({
   onNotice: Notify;
   onToolbarOpen: (open: boolean) => void;
 }): JSX.Element {
+  const webGame = Boolean(project) && unrealProjectOf(loaded) === null;
   return (
     <div
       data-stage-strip=""
@@ -265,14 +271,16 @@ export function StageStrip({
         />
       ) : null}
       {/* Siblings, not a group: every gap between the strip's controls drags the window. */}
-      {project ? <RunButton run={run.state} onToggle={run.toggle} /> : null}
-      {project ? <ReloadButton behind={behind} onReload={onReload} /> : null}
+      {webGame ? <RunButton run={run.state} onToggle={run.toggle} /> : null}
+      {webGame ? <ReloadButton behind={behind} onReload={onReload} /> : null}
       <span className="min-w-0 flex-1 self-stretch" />
-      {project ? <SoundButton on={sound.on} onToggle={sound.toggle} /> : null}
-      {project ? <FullScreenButton offered={fullScreen.offered} onEnter={fullScreen.enter} /> : null}
+      {webGame ? <SoundButton on={sound.on} onToggle={sound.toggle} /> : null}
+      {webGame ? <FullScreenButton offered={fullScreen.offered} onEnter={fullScreen.enter} /> : null}
       <PluginToolbar
         plugins={plugins}
         project={project}
+        facts={loaded?.facts ?? NO_FACTS}
+        holds={loaded?.holds}
         emptyGame={emptyGame}
         onNotice={onNotice}
         onOpenChange={onToolbarOpen}

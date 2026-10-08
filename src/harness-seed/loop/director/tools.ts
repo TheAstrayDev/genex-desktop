@@ -3,7 +3,9 @@ import { retainSpan, timedOperation } from "./timing.ts";
 import { GoalBlocker, GoalStatus, goalDecision, recordGoalEvidence, replanGoal } from "./goals.ts";
 /**
  * The director's tools as its session calls them: the handler the studio forwards every call to,
- * and the tools that only look — `run_status`, `wait`, `judge`, `playtest`, `show`.
+ * and the tools that only look — `run_status`, `worker_wait`, `judge`, `playtest`, `show`. The
+ * worker tools follow Genex's one worker model (`loop/workers/`): `worker_mark` and a reader's calls
+ * are answered there.
  */
 
 import { renderScoreboard, runDeterministicChecks, summarizeScoreboard, toScoreboard, unmeasured } from "../checks.ts";
@@ -32,6 +34,16 @@ import { plainly } from "./rules.ts";
 import { DirectorTool, headSynced } from "./tool-specs.ts";
 import { passDeadline } from "./wake-schedule.ts";
 import { workingGoal } from "../goal-prompts.ts";
+import { WorkerTool } from "../workers/contract.ts";
+import {
+  briefOf,
+  markWorker,
+  pooledAnswer,
+  readerLines,
+  rejectedNews,
+  unrejected,
+  waitingBuilders,
+} from "../workers/director-pool.ts";
 import type { LastJudge, Night, Worker } from "./night.ts";
 import type { CheckResult } from "../checks.ts";
 import type { Evidence, Shot } from "../evidence.ts";
@@ -65,7 +77,7 @@ const PLAYTEST_MAX_MINUTES = 8;
 const PLAYTEST_DEFAULT_MINUTES = 5;
 /** The most actions a director's playtester takes. */
 const PLAYTEST_MAX_ACTIONS = 20;
-/** A `wait` that names no length waits a minute. */
+/** A `worker_wait` that names no length waits a minute. */
 const WAIT_DEFAULT_S = 60;
 /** How much of a worker's brief, iterations and attempts `worker_status` carries. */
 const STATUS_BRIEF_CHARS = 600;
@@ -864,14 +876,15 @@ export async function show(night: Night, args: AnyRecord) {
   }
 }
 
-/** Does this line of the night's log wake a `wait` that asked only about `only` (or about nobody)? */
+/** Does this line of the night's log wake a `worker_wait` that asked only about `only` (or about nobody)? */
 const wakes = (only: string | null, text: string): boolean =>
   !only || text.includes(`worker ${only}`) || text.startsWith("USER");
 
 export async function wait(night: Night, args: AnyRecord) {
   const { ctx, finalDeadline, inbox, ledgerLines, note, notesSince, routeUserSteers, softDeadline, state } = night;
   const seconds = Math.min(MAX_WAIT_S, Math.max(1, num(args.seconds, WAIT_DEFAULT_S)));
-  const only = args.worker ? slug(args.worker) : null;
+  const asked = args.worker ?? args.id;
+  const only = asked ? slug(asked) : null;
   const from = night.waitSeq;
   const until = Date.now() + seconds * SECOND_MS;
   const finishing0 = await inbox.finishing().catch(() => false);
@@ -884,11 +897,16 @@ export async function wait(night: Night, args: AnyRecord) {
     const finishing = await inbox.finishing().catch(() => false);
     if (finishing && !finishing0)
       note("USER ASKS TO FINISH: wrap up the current work, integrate what is ready, and call finish");
-    if (notesSince(from).some((entry: { text: string }) => wakes(only, entry.text))) break;
+    // A builder that newly waits on the person is told in the log, which wakes this wait.
+    await waitingBuilders(night).catch(() => null);
+    const news = notesSince(from).filter((entry: { text: string }) => !rejectedNews(night, entry.text));
+    if (news.some((entry: { text: string }) => wakes(only, entry.text))) break;
     await sleep(SECOND_MS);
   }
+  const asking = await waitingBuilders(night).catch(() => new Map<string, string>());
   const unread = notesSince(from);
-  const happened = unread.map((e: { text: string }) => e.text);
+  // A worker the lead rejected is not news any more (`worker_mark rejected`).
+  const happened = unread.map((e: { text: string }) => e.text).filter((text) => !rejectedNews(night, text));
   // Snapshot before the later status awaits: a note arriving during those awaits belongs
   // to the next response. Never consume a notification that has not been returned.
   const lastUnread = unread.at(-1);
@@ -908,7 +926,7 @@ export async function wait(night: Night, args: AnyRecord) {
         lastHealthPass: state.integrationHealthy,
         ...(state.ledger.length ? { defectsNobodyOwns: ledgerLines() } : {}),
       },
-      workers: [...state.workers.values()].map((w) => waitDigest(w, now)),
+      workers: unrejected(night, [...state.workers.values()]).map((w) => withQuestion(waitDigest(w, now), asking)),
       // What the user said is already in `happened`, as USER SAYS; this is the standing request.
       user: { finishRequested: await inbox.finishing().catch(() => false) },
     },
@@ -917,14 +935,24 @@ export async function wait(night: Night, args: AnyRecord) {
 
 // ── the tools that act on one worker, and the note ──
 
-/** Every worker: this session's, then those from before a pause (what the journal kept of them). */
-function everyWorkerStatus(night: Night): string {
+/** A builder's digest, with the question it waits on the person with, if any. */
+function withQuestion(digest: AnyRecord, asking: ReadonlyMap<string, string>): AnyRecord {
+  const question = asking.get(String(digest.id));
+  return question ? { ...digest, waitingForPerson: question } : digest;
+}
+
+/** Every worker: this session's, then those from before a pause (what the journal kept of them), then its readers. */
+async function everyWorkerStatus(night: Night): Promise<string> {
   const { state } = night;
-  return JSON.stringify([...[...state.workers.values()].map((w) => workerDigest(w)), ...priorWorkersStatus(night)]);
+  const asking = await waitingBuilders(night).catch(() => new Map<string, string>());
+  const current = [...state.workers.values()].map((w) => withQuestion(workerDigest(w), asking));
+  const builders = [...current, ...priorWorkersStatus(night)];
+  const readers = await readerLines(night);
+  return JSON.stringify(readers ? [...builders, { readers: readers.split("\n") }] : builders);
 }
 
 /** One worker in detail — one from before a pause as the journal kept it — or every worker when no id is given. */
-function workerStatus(night: Night, args: AnyRecord): string {
+async function workerStatus(night: Night, args: AnyRecord): Promise<string> {
   const { state } = night;
   if (!args.id) return everyWorkerStatus(night);
   const worker = state.workers.get(slug(args.id));
@@ -932,8 +960,9 @@ function workerStatus(night: Night, args: AnyRecord): string {
     const prior = priorWorkerStatus(night, slug(args.id));
     return prior ? JSON.stringify(prior) : `no worker "${args.id}"`;
   }
+  const asking = await waitingBuilders(night).catch(() => new Map<string, string>());
   return JSON.stringify({
-    ...workerDigest(worker),
+    ...withQuestion(workerDigest(worker), asking),
     brief: worker.brief.slice(0, STATUS_BRIEF_CHARS),
     iterationsDetail: worker.iterations.slice(-STATUS_ITERATIONS),
     attempts: (worker.result?.attempts ?? []).slice(-STATUS_ATTEMPTS),
@@ -1110,7 +1139,9 @@ function oneAtATime<T>(night: Night, change: () => T | Promise<T>): Promise<T> {
  */
 const HANDED_OFF = {
   [DirectorTool.Plan]: (night, args) => oneAtATime(night, () => night.setPlan(args)),
-  [DirectorTool.WorkerStart]: (night, args) => oneAtATime(night, () => night.startWorker(args)),
+  // `task` is the brief's name; a kept prompt's `brief` is still read (`briefOf`).
+  [DirectorTool.WorkerStart]: (night, args) =>
+    oneAtATime(night, () => night.startWorker({ ...args, brief: briefOf(args) })),
   [DirectorTool.Wait]: (night, args) => night.wait(args),
   [DirectorTool.Judge]: (night, args) => night.judge(args),
   [DirectorTool.Playtest]: (night, args) => night.playtest(args),
@@ -1133,8 +1164,20 @@ const ANSWERED_HERE = {
   [DirectorTool.GoalUpdate]: updateGoal,
 } satisfies Record<Exclude<DirectorTool, keyof typeof HANDED_OFF>, Tool>;
 
+/** The worker tools of Genex's one model the director answers beside its own (no `DirectorTool` key of theirs). */
+const WORKER_TOOLS_HERE = { [WorkerTool.Mark]: markWorker } satisfies Record<string, Tool>;
+
+/**
+ * The names a tool used to have: not offered, but a playbook or a journal an agent kept may still
+ * call it, so it is answered as the tool it became.
+ */
+const OLD_NAMES: Readonly<Record<string, DirectorTool>> = { wait: DirectorTool.Wait };
+
 /** A tool by the name the session called it, or null for a name the night does not answer. */
-function toolNamed(name: string): { tool: Tool; answeredHere: boolean } | null {
+function toolNamed(called: string): { tool: Tool; answeredHere: boolean } | null {
+  const name = Object.hasOwn(OLD_NAMES, called) ? (OLD_NAMES[called] as string) : called;
+  if (Object.hasOwn(WORKER_TOOLS_HERE, name))
+    return { tool: WORKER_TOOLS_HERE[name as keyof typeof WORKER_TOOLS_HERE], answeredHere: true };
   if (Object.hasOwn(ANSWERED_HERE, name))
     return { tool: ANSWERED_HERE[name as keyof typeof ANSWERED_HERE], answeredHere: true };
   if (Object.hasOwn(HANDED_OFF, name))
@@ -1172,6 +1215,9 @@ async function answer(night: Night, name: string, args: AnyRecord): Promise<unkn
     if (headSynced(name)) await syncHead();
     // Whatever the director last wrote into its memory file, kept where a resume can read it.
     await keepMemory();
+    // A reader of the run's shared pool, or a start the web method refuses (`pooledAnswer`).
+    const pooled = await pooledAnswer(night, name, args);
+    if (pooled !== null) return pooled;
     const named = toolNamed(name);
     if (!named) return `unknown director tool: ${name}`;
     if (named.answeredHere) return await named.tool(night, args);

@@ -18,7 +18,7 @@
  * repositories inside it in `nested-repos.ts` and the pre-judge check in `game-validation.ts`;
  * this module re-exports what its callers have always imported from here.
  */
-import { cp, mkdir, readdir, readFile, realpath, rmdir, stat, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile, realpath, rmdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { type CoverLook, firstCoverRecipe, rollCoverRecipe } from "../shared/cover-recipe.ts";
@@ -39,22 +39,57 @@ import type {
   ProjectRecent,
   ProjectShape,
 } from "../shared/game-project.ts";
+import type { EngineBinding } from "../shared/game-engine.ts";
+import {
+  CoreFact,
+  FactSource,
+  FolderHolds,
+  type GameKind,
+  hasFact,
+  isProjectStarter,
+  kindPending,
+  parsePortedFrom,
+  type ProjectFact,
+  type ProjectStarter,
+  type SourcedFactRule,
+  settleFacts,
+} from "../shared/project-facts.ts";
+import {
+  copySkipRulesFor,
+  ignoreLine,
+  ignoreRulesFor,
+  type PlacedRule,
+  type PluginWorkspace,
+} from "../shared/project-workspace.ts";
+import { readEngineBinding } from "./game-engine-binding.ts";
 import { exportPublicGame, type ExportOptions, type ExportResult } from "./game-export.ts";
 import { ownNotes, ownRules, REFERENCES_README } from "./game-workspace-prompts.ts";
 import { type GameValidation, validateGameDir } from "./game-validation.ts";
-import { atomicWriteJson, ensureDir, pathExists, readJsonForUpdate, readJsonIfExists } from "./fsx.ts";
-import { ensureIgnoreRules, missingIgnoreRules, nestedRepos } from "./nested-repos.ts";
-import { isBelow, isInside, samePath, throughClaudeFolder } from "./paths.ts";
+import {
+  atomicWriteJson,
+  ensureDir,
+  pathExists,
+  readJsonForUpdate,
+  readJsonIfExists,
+  writeFileNoFollow,
+} from "./fsx.ts";
+import { ensureFactIgnoreRules, ensureIgnoreRules, ignoreRulesToWrite, nestedRepos } from "./nested-repos.ts";
+import { isBelow, isInside, samePath, throughClaudeFolder, toPosixRelative } from "./paths.ts";
+import { detectFacts } from "./project-facts.ts";
 import {
   declaresDependencies,
   detectProjectShape,
   findGameRoot,
+  folderHolds,
+  holdsOwnFiles,
   isBuiltShape,
   readPackageManifest,
   readProjectShape,
   recordsShape,
+  webGameSignal,
 } from "./project-shape.ts";
 import { ensureRepo } from "./snapshots.ts";
+import { workspaceContentStamp } from "./workspace-content.ts";
 
 /** The public shape of a game folder is a contract the UI reads too; it lives in `shared/game-project.ts`. */
 export type {
@@ -151,8 +186,9 @@ export interface AdoptOptions {
   subdir?: string;
   /**
    * May the studio write its starter game (`index.html`, `src/main.js`) into this folder?
-   * Default: only into a folder that holds no game of its own. `false` is "I am bringing my own
-   * files" — the contract module and the notes are still added.
+   * Default: only into a web game. `false` is "I am bringing my own files" — into a web folder the
+   * contract module and the notes are still added. Any folder with no web page (an empty one
+   * included) gets only Genex's bookkeeping unless this is `true`.
    */
   template?: boolean;
   /**
@@ -211,7 +247,26 @@ const MESSAGE = {
   LocationGone: "That folder is no longer there. Choose another one.",
   LocationNotFolder: "Choose a folder, not a file.",
   LocationRefused: "Studio can't create games there. Choose another folder.",
+  AlreadyKind: (facts: readonly ProjectFact[]) =>
+    `This game already has a kind (${facts.map(factWords).join(", ")}), so Genex writes no starter into it.`,
+  UnknownStarter: "Genex has no starter of that kind.",
+  LinkInFolder: (rel: string) =>
+    `Genex writes no starter here: \`${rel}\` in this game's folder is a link, and Genex never writes through one.`,
+  OwnKind:
+    "This folder holds files of its own of a kind Genex doesn't know, so Genex writes no starter into it: work with the files that are there.",
 } as const;
+
+/** A fact as a refusal names it: its id, and its folder when that is not the game's root. */
+const factWords = (fact: ProjectFact) => (fact.path === "." ? fact.id : `${fact.id} in ${fact.path}`);
+
+/** A game's facts and, when it has none, what its folder holds (`GameProject.holds`). */
+type FolderKind = GameKind & { facts: ProjectFact[] };
+
+/** A listed game whose folder can't be read: no facts, and no kind Genex can name. */
+const unreadableKind = (): FolderKind => ({ facts: [], holds: FolderHolds.Unreadable });
+
+/** The contract version a starter Genex writes declares in its studio.json. */
+const STARTER_CONTRACT_VERSION = 1;
 
 /** The entry a game made with a waiting title starts with. */
 const provisional = (waiting: boolean | undefined): GameLibraryEntry => (waiting ? { provisional: true } : {});
@@ -291,6 +346,30 @@ export function isImageFile(file: string): boolean {
   return assetFormat(path.extname(file))?.raster === true;
 }
 
+/** What a game's records say about its facts: its engine link, what a port replaced, New game's stamp. */
+interface FactRecord {
+  engine: EngineBinding | undefined;
+  portedFrom: ProjectFact[];
+  scaffoldStamp: string | undefined;
+}
+
+/** A game's studio.json as an object, or null when it is missing or does not parse. */
+async function readStudioMeta(dir: string): Promise<Record<string, unknown> | null> {
+  return readJsonIfExists<Record<string, unknown>>(path.join(dir, "studio.json")).catch(() => null);
+}
+
+/**
+ * The engine link as a fact: `unreal-project` at the linked `.uproject`'s folder, relative to the
+ * game (`.` for its root), or absolute when the project lies outside it.
+ */
+async function linkFact(dir: string, engine: EngineBinding): Promise<ProjectFact> {
+  const root = await realpath(dir).catch(() => dir);
+  const folder = path.dirname(engine.project);
+  const inside = isInside(root, folder);
+  const at = inside ? toPosixRelative(path.relative(root, folder)) || "." : folder;
+  return { id: CoreFact.UnrealProject, path: at, source: FactSource.Link };
+}
+
 /** A cover the user (or a render they asked for) chose: a custom shader, or a recipe that is not a placeholder. */
 function isChosenCover(cover: GameLibraryEntry["cover"]): cover is NonNullable<GameLibraryEntry["cover"]> {
   if (!cover) return false;
@@ -326,6 +405,12 @@ export class GameWorkspaces {
   #loading: Promise<void> | undefined;
   #presentation = new Map<string, GameLibraryEntry>();
   #indexWrites: Promise<void> = Promise.resolve();
+  /** The enabled plugins' project-detection rules, read at each listing. */
+  readonly #factRules: () => readonly SourcedFactRule[];
+  /** The enabled plugins' `workspace` and `assets` sections, read at each write of the rules. */
+  readonly #workspaceSections: () => readonly PluginWorkspace[];
+  /** Real paths of games whose starter was found changed: never stamped again in this app run. */
+  readonly #touched = new Set<string>();
 
   constructor(options: {
     root: string;
@@ -334,6 +419,8 @@ export class GameWorkspaces {
     indexFile: string;
     userData: string;
     homeDir?: string;
+    factRules?: () => readonly SourcedFactRule[];
+    workspaceSections?: () => readonly PluginWorkspace[];
   }) {
     this.root = options.root;
     this.templateDir = options.templateDir;
@@ -341,6 +428,8 @@ export class GameWorkspaces {
     this.indexFile = options.indexFile;
     this.userData = options.userData;
     this.homeDir = options.homeDir ?? os.homedir();
+    this.#factRules = options.factRules ?? (() => []);
+    this.#workspaceSections = options.workspaceSections ?? (() => []);
   }
 
   dirFor(name: string): string {
@@ -505,8 +594,81 @@ export class GameWorkspaces {
   }
 
   /**
+   * A game with no kind yet under the default library: Genex's bookkeeping (its record, the ignore
+   * rules, a repository with its first commit) and nothing else; its first message picks what it
+   * becomes. Idempotent: a folder that already holds anything is returned untouched, as `scaffold`
+   * returns an existing game, so a name that collides with a game never writes into it.
+   */
+  async makeEmpty(name: string, options: Partial<ScaffoldOptions> = {}): Promise<GameProject> {
+    await this.loadIndex();
+    assertProjectName(name);
+    const dir = this.dirFor(name);
+    if ((await readdir(dir).catch(() => [])).length > 0) {
+      await this.touch(name);
+      return this.#describe(name, dir);
+    }
+    await ensureDir(dir);
+    await this.#writeBookkeeping(dir, { name, title: options.title ?? name });
+    await this.touch(name);
+    return this.#describe(name, dir);
+  }
+
+  /**
+   * Write a starter into a game that has no kind yet (its facts are pending), merged around what
+   * the folder holds, and forget New game's stamp so the starter counts as the game's own. A game
+   * with a kind is refused and nothing is written.
+   */
+  async start(name: string, starter: ProjectStarter): Promise<GameProject> {
+    await this.loadIndex();
+    if (!isProjectStarter(starter)) throw new Error(MESSAGE.UnknownStarter);
+    const dir = this.dirFor(name);
+    if (!(await pathExists(path.join(dir, "studio.json")))) throw new Error(MESSAGE.FolderGone);
+    const kind = await this.kindOf(name);
+    if (kind.facts.length > 0) throw new Error(MESSAGE.AlreadyKind(kind.facts));
+    if (!kindPending(kind)) throw new Error(MESSAGE.OwnKind);
+    // The folder is the agent's: a link it planted where the starter writes is refused before any write.
+    const linked = await linkOnTheWay(dir, [...(await this.#templateFiles()), ...STARTER_BOOKKEEPING]);
+    if (linked !== undefined) throw new Error(MESSAGE.LinkInFolder(linked));
+    const { title } = await this.#describe(name, dir);
+    await this.#writeTemplate(dir, { title, name, overwrite: false });
+    await this.#recordStarterContract(dir);
+    const key = await presentationPath(dir);
+    const entry: GameLibraryEntry = { ...this.#presentation.get(key) };
+    delete entry.scaffoldStamp;
+    this.#presentation.set(key, entry);
+    await this.#saveIndex();
+    return this.#describe(name, dir);
+  }
+
+  /**
+   * Record in the game's studio.json what a port replaced (`portedFrom`), beside what an earlier
+   * port recorded, each fact once; every other key stays. The replaced kinds stay in the folder as
+   * the reference and no longer count as the game's kind.
+   */
+  async recordPort(name: string, replaced: readonly ProjectFact[]): Promise<void> {
+    if (replaced.length === 0) return;
+    const file = path.join(this.dirFor(name), "studio.json");
+    const current = (await readJsonForUpdate<Record<string, unknown>>(file)) ?? {};
+    const kept = parsePortedFrom(current.portedFrom);
+    const added = replaced.filter((fact) => !hasFact(kept, fact.id, fact.path));
+    const portedFrom = [...kept, ...added].map(({ id, path: where, source }) => ({ id, path: where, source }));
+    // The folder is the agent's: a link planted at studio.json is never written through.
+    await writeFileNoFollow(file, `${JSON.stringify({ ...current, portedFrom }, null, 2)}\n`);
+  }
+
+  /** The starter's contract version, added to a record that has none (a game made empty has none). */
+  async #recordStarterContract(dir: string): Promise<void> {
+    const file = path.join(dir, "studio.json");
+    const current = (await readJsonForUpdate<Record<string, unknown>>(file)) ?? {};
+    if (typeof current.contractVersion === "number") return;
+    const record = `${JSON.stringify({ ...current, contractVersion: STARTER_CONTRACT_VERSION }, null, 2)}\n`;
+    await writeFileNoFollow(file, record);
+  }
+
+  /**
    * The explicit New game action always reserves a fresh folder, even for duplicate titles: in
-   * the games folder, or inside the folder the user chose (`parent`), which is never opened.
+   * the games folder, or inside the folder the user chose (`parent`), which is never opened. The
+   * game starts empty (`makeEmpty`): its first message picks its kind.
    */
   async create(requestedTitle: string, options: CreateOptions = {}): Promise<GameProject> {
     const title = validateGameTitle(requestedTitle);
@@ -522,7 +684,7 @@ export class GameWorkspaces {
       const name = base.slice(0, MAX_SLUG_LENGTH - tail.length) + tail;
       if (this.#aliases.has(name)) continue;
       if (!(await madeFolder(path.join(this.root, name)))) continue;
-      await this.scaffold(name, { title });
+      await this.makeEmpty(name, { title });
       await this.#rollCover(name, provisional(options.provisional));
       return this.#describe(name, this.dirFor(name));
     }
@@ -569,7 +731,7 @@ export class GameWorkspaces {
     const name = uniqueName(slugFromName(title), { has: (taken) => this.#aliases.has(taken) || inRoot.has(taken) });
     this.#aliases.set(name, dir);
     await this.#saveIndex();
-    await this.scaffold(name, { title });
+    await this.makeEmpty(name, { title });
     await this.#rollCover(name, provisional(waiting));
     return this.#describe(name, dir);
   }
@@ -646,6 +808,23 @@ export class GameWorkspaces {
     await this.#saveIndex();
   }
 
+  /**
+   * Remember the folder's content as New game just made it (`GameProject.scaffoldStamp`): a later
+   * turn reads "nothing built yet" from the folder still matching it. The stamp lists files through
+   * git, so the folder's repository must exist; a folder that cannot be stamped records nothing.
+   */
+  async rememberScaffold(name: string): Promise<GameProject> {
+    await this.loadIndex();
+    const dir = this.dirFor(name);
+    const stamp = await workspaceContentStamp(dir);
+    if (stamp) {
+      const key = await presentationPath(dir);
+      this.#presentation.set(key, { ...this.#presentation.get(key), scaffoldStamp: stamp });
+      await this.#saveIndex();
+    }
+    return this.#describe(name, dir);
+  }
+
   async update(name: string, patch: GameUpdate): Promise<GameProject> {
     await this.loadIndex();
     const dir = await realpath(this.dirFor(name));
@@ -698,7 +877,8 @@ export class GameWorkspaces {
   /**
    * Open or create a project at an arbitrary folder — or at the game one level inside it, when
    * the user chose that one in the Open Game sheet. Existing files (stills, notes) are kept;
-   * missing game files are filled in from the template, and never beside a real game.
+   * missing game files are filled in from the template, never beside a real game and never into
+   * a folder of somebody's own project that is no web page (`#writesStarter`).
    */
   async adopt(dir: string, options: AdoptOptions = {}): Promise<GameProject> {
     await this.loadIndex();
@@ -761,9 +941,14 @@ export class GameWorkspaces {
 
   async #describe(name: string, dir: string): Promise<GameProject> {
     const meta = await readFile(path.join(dir, "studio.json"), "utf8").catch(() => null);
-    const parsed = meta ? (JSON.parse(meta) as { title?: string; createdAt?: string }) : {};
+    const parsed = meta ? (JSON.parse(meta) as { title?: string; createdAt?: string; portedFrom?: unknown }) : {};
     const shape = await readProjectShape(dir);
     const presentation = this.#presentation.get(await realpath(dir));
+    const engine = await readEngineBinding(dir);
+    const portedFrom = parsePortedFrom(parsed.portedFrom);
+    const record = { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp };
+    // A folder that can't be read is still listed: it has no facts and is of no kind Genex can name.
+    const { facts, holds } = await this.#kind(dir, record).catch(unreadableKind);
     return {
       name,
       dir,
@@ -778,7 +963,135 @@ export class GameWorkspaces {
       library: isInside(this.root, dir),
       shape,
       built: isBuiltShape(shape),
+      ...(engine ? { engine } : {}),
+      facts,
+      ...(holds ? { holds } : {}),
+      ...(portedFrom.length > 0 ? { portedFrom } : {}),
+      web: hasFact(facts, CoreFact.WebGame, "."),
+      ...(presentation?.scaffoldStamp ? { scaffoldStamp: presentation.scaffoldStamp } : {}),
     };
+  }
+
+  /**
+   * What a game's folder holds, as listed (`GameProject.facts`): `rawFactsOf` minus what never counts.
+   * Throws when the folder is gone or can't be read.
+   */
+  async factsOf(name: string): Promise<ProjectFact[]> {
+    return (await this.kindOf(name)).facts;
+  }
+
+  /**
+   * A game's facts and, when it has none, what its folder holds (`GameProject.holds`): what tells a
+   * game with no kind yet (`kindPending`) from one of a kind Genex can't name. Throws when the folder
+   * is gone or can't be read.
+   */
+  async kindOf(name: string): Promise<FolderKind> {
+    await this.loadIndex();
+    const dir = this.dirFor(name);
+    const presentation = this.#presentation.get(await presentationPath(dir));
+    const engine = await readEngineBinding(dir);
+    const portedFrom = parsePortedFrom((await readStudioMeta(dir))?.portedFrom);
+    return this.#kind(dir, { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp });
+  }
+
+  /**
+   * Everything a game's folder holds before anything is left out: the facts its files give (the
+   * core table and the enabled plugins' `detect`) and its engine link. An untouched starter, an old
+   * engine record's web template and a port's reference all count here.
+   */
+  async rawFactsOf(name: string): Promise<ProjectFact[]> {
+    await this.loadIndex();
+    const dir = this.dirFor(name);
+    return this.#rawFacts(dir, await readEngineBinding(dir));
+  }
+
+  async #rawFacts(dir: string, engine: EngineBinding | undefined): Promise<ProjectFact[]> {
+    const detected = await detectFacts(dir, this.#factRules());
+    if (!engine) return detected;
+    // The link stands for the game's Unreal project: a project file it holds besides (one the game
+    // made before it was switched to another) is no second one, and its files are the link's own.
+    const others = detected.filter((fact) => fact.id !== CoreFact.UnrealProject);
+    return settleFacts([await linkFact(dir, engine), ...others]);
+  }
+
+  /**
+   * The ignore lines of the facts a folder holds (Genex's table and the enabled plugins'
+   * `workspace`), each at its fact's folder. Raw facts, not the listed ones: a port's reference and
+   * an untouched starter still hold files whose scratch must stay out of history.
+   */
+  async #ruleLines(dir: string): Promise<string[]> {
+    return (await this.#ignoreRules(dir)).map(ignoreLine);
+  }
+
+  /** The ignore rules of the facts a folder holds now, each placed at its fact's folder (one walk). */
+  async #ignoreRules(dir: string): Promise<PlacedRule[]> {
+    const facts = await this.#rawFacts(dir, await readEngineBinding(dir));
+    return ignoreRulesFor(facts, this.#workspaceSections());
+  }
+
+  /**
+   * What a worker's copy of a game leaves out, for the facts its folder holds now (one walk):
+   * `skip` is the copy-skip and ignore rules together, `ignored` the ignore rules alone (what a
+   * copy that versions the game's nested repositories still leaves out).
+   */
+  async copyRulesOf(name: string): Promise<{ skip: PlacedRule[]; ignored: PlacedRule[] }> {
+    await this.loadIndex();
+    const dir = this.dirFor(name);
+    const facts = await this.#rawFacts(dir, await readEngineBinding(dir));
+    const sections = this.#workspaceSections();
+    const ignored = ignoreRulesFor(facts, sections);
+    const skipOnly = copySkipRulesFor(facts, sections).filter(
+      (rule) => !ignored.some((kept) => kept.base === rule.base && kept.pattern === rule.pattern),
+    );
+    return { skip: [...ignored, ...skipOnly], ignored };
+  }
+
+  /**
+   * Called before every commit Genex makes in a game folder (save points, rescue snapshots, chat
+   * checkpoints): tops up its `.gitignore` with the lines of the facts it holds now, so a port never
+   * sweeps the new engine's scratch into history, and answers the placed rules. Only the facts'
+   * lines: the generic rules and the file itself were written when the folder was opened, and a
+   * person who changed them since keeps their change. A file already in history stays there; a
+   * linked or missing ignore file is left alone.
+   */
+  async ensureWorkspaceRules(dir: string): Promise<PlacedRule[]> {
+    const rules = await this.#ignoreRules(dir);
+    await ensureFactIgnoreRules(dir, rules.map(ignoreLine));
+    return rules;
+  }
+
+  /**
+   * The facts a game lists: its raw facts minus what a port replaced (`portedFrom`), minus the web
+   * template an engine link left beside its project (a link with no `portedFrom` is an older
+   * record), and none at all for a starter nothing has been built in yet (no kind picked). With no
+   * facts, what the folder holds besides (`folderHolds`).
+   */
+  async #kind(dir: string, record: FactRecord): Promise<FolderKind> {
+    const raw = await this.#rawFacts(dir, record.engine);
+    const linkedLegacy = record.engine !== undefined && record.portedFrom.length === 0;
+    const facts = raw.filter((fact) => {
+      if (hasFact(record.portedFrom, fact.id, fact.path)) return false;
+      return !(linkedLegacy && fact.id === CoreFact.WebGame && fact.path === ".");
+    });
+    // New game's untouched starter is the template as it was made: nothing of the person's yet.
+    if (await this.#untouchedStarter(dir, raw, record.scaffoldStamp)) return { facts: [], holds: FolderHolds.Nothing };
+    if (facts.length > 0) return { facts };
+    return { facts, holds: await folderHolds(dir) };
+  }
+
+  /**
+   * Whether the folder is still the web starter New game made: it holds nothing but a web game at
+   * its root (`raw`), and its content stamp still equals `scaffoldStamp`. A folder found changed is
+   * remembered, so it is stamped once per app run; an unknown stamp is no starter.
+   */
+  async #untouchedStarter(dir: string, raw: readonly ProjectFact[], scaffoldStamp?: string): Promise<boolean> {
+    if (!scaffoldStamp || raw.length !== 1 || !hasFact(raw, CoreFact.WebGame, ".")) return false;
+    const key = await realpath(dir).catch(() => dir);
+    if (this.#touched.has(key)) return false;
+    const stamp = await workspaceContentStamp(dir);
+    if (stamp === scaffoldStamp) return true;
+    if (stamp) this.#touched.add(key);
+    return false;
   }
 
   /** Write a detected shape into studio.json once, so the folder's way of running is explicit and editable. */
@@ -871,7 +1184,11 @@ export class GameWorkspaces {
           ...(candidates.length > 0 ? { template: false } : {}),
           ...(nested.length > 0 ? { versionNested: true } : {}),
         });
-    return { dir: resolved, pathLabel: this.pathLabel(resolved), candidates, suggested, starter, nested };
+    // Files of its own and no web page: a web game by its stamp gets the starter's missing files.
+    const webStarter = await this.#writesStarter(resolved, {});
+    const ownFiles = !webStarter && (await holdsOwnFiles(resolved));
+    const holds = { candidates, suggested, starter, nested, ownFiles, webStarter };
+    return { dir: resolved, pathLabel: this.pathLabel(resolved), ...holds };
   }
 
   async #preflight(candidate: GameCandidate): Promise<FolderPreflight> {
@@ -914,6 +1231,13 @@ export class GameWorkspaces {
   }
 
   async #ensurePlayable(dir: string, name: string, title: string, options: AdoptOptions = {}): Promise<void> {
+    if (!(await this.#writesStarter(dir, options))) {
+      // Adoption updates studio.json below; one it cannot parse stops it here, before any write.
+      if (options.versionNested) await readJsonForUpdate(path.join(dir, "studio.json"));
+      await this.#writeBookkeeping(dir, { name, title });
+      if (options.versionNested) await this.#recordConsent(dir);
+      return;
+    }
     // A folder that already has a game of its own shape keeps its entry: the template's
     // index.html and src/main.js would only sit beside the real ones as dead scaffold. The
     // studio's contract module and helpers are still added — the game imports what it needs —
@@ -967,19 +1291,47 @@ export class GameWorkspaces {
    */
   async plannedWrites(dir: string, options: AdoptOptions = {}): Promise<string[]> {
     const shape = await readProjectShape(dir);
-    const writes = await this.#missingTemplateFiles(dir, templateKeep(shape, options));
+    const starter = await this.#writesStarter(dir, options);
+    const writes = starter ? await this.#missingTemplateFiles(dir, templateKeep(shape, options)) : [];
     // A game of its own is held out of the template's pages above and given its own two.
-    if (isBuiltShape(shape)) {
+    const own = starter && isBuiltShape(shape);
+    if (own) {
       for (const file of OWN_PAGES) {
         if (!(await pathExists(path.join(dir, file)))) writes.push(file);
       }
     }
-    if (await this.#writesStudioJson(dir, shape, options)) writes.push("studio.json");
-    const ignored = await readFile(path.join(dir, ".gitignore"), "utf8").catch(() => null);
-    if (missingIgnoreRules(ignored).length > 0) writes.push(".gitignore");
+    if (await this.#writesStudioJson(dir, own, options)) writes.push("studio.json");
+    // A linked ignore file is left alone, so it is never promised.
+    if ((await ignoreRulesToWrite(dir, await this.#ruleLines(dir))).length > 0) writes.push(".gitignore");
     // Version history is what makes a night undoable; an existing repository is left alone.
     if (!(await pathExists(path.join(dir, ".git")))) writes.push(".git");
     return writes;
+  }
+
+  /**
+   * Whether opening a folder writes the web starter into it: when asked to, or when the folder is a
+   * web game. Otherwise it gets only Genex's bookkeeping (`#writeBookkeeping`): an empty folder or
+   * one of notes starts with no kind (its first message picks one), and a folder of somebody's own
+   * project that is no web page is never handed a web game's files. The one place adoption decides
+   * this.
+   */
+  async #writesStarter(dir: string, options: AdoptOptions): Promise<boolean> {
+    return options.template === true || (await webGameSignal(dir));
+  }
+
+  /** Every file of the template a merge writes from, as paths relative to the game (its sources left out). */
+  async #templateFiles(): Promise<string[]> {
+    const files: string[] = [];
+    const walk = async (from: string, rel: string): Promise<void> => {
+      for (const entry of await readdir(from, { withFileTypes: true })) {
+        const relative = rel ? `${rel}/${entry.name}` : entry.name;
+        if ((TEMPLATE_SOURCES as readonly string[]).includes(relative)) continue;
+        if (entry.isDirectory()) await walk(path.join(from, entry.name), relative);
+        else files.push(relative);
+      }
+    };
+    await walk(this.templateDir, "");
+    return files;
   }
 
   /** The template files `dir` lacks, in the template's sorted order, leaving out `keep`. */
@@ -1007,14 +1359,14 @@ export class GameWorkspaces {
    * the same file (`#recordConsent`). An edit to a file that is there is still a promise —
    * that is why `.gitignore` is on the list — and the consent must not be the one exception.
    */
-  async #writesStudioJson(dir: string, shape: ProjectShape, options: AdoptOptions): Promise<boolean> {
+  async #writesStudioJson(dir: string, own: boolean, options: AdoptOptions): Promise<boolean> {
     const meta = await readJsonIfExists<{ entry?: unknown; main?: unknown; build?: unknown }>(
       path.join(dir, "studio.json"),
     ).catch(() => null);
     const recorded = recordsShape(meta);
     const consenting = options.versionNested === true && !(await this.nestedConsent(dir));
     if (!(await pathExists(path.join(dir, "studio.json")))) return true;
-    return (isBuiltShape(shape) && !recorded) || consenting;
+    return (own && !recorded) || consenting;
   }
 
   async #writeTemplate(
@@ -1030,7 +1382,8 @@ export class GameWorkspaces {
         filter: (source) => !(TEMPLATE_SOURCES as readonly string[]).includes(path.relative(this.templateDir, source)),
       });
     } else {
-      await mergeCopy(this.templateDir, dir, new Set(options.keep ?? []));
+      // The same holds for a merge, whoever asks for it (`games.start` names no `keep`).
+      await mergeCopy(this.templateDir, dir, new Set([...TEMPLATE_SOURCES, ...(options.keep ?? [])]));
     }
     await fillTemplateTitle(dir, options.title);
 
@@ -1045,15 +1398,33 @@ export class GameWorkspaces {
 
     // Before the repository exists (`ensureRepo` below), so the first commit never sweeps in
     // what the rules exclude: the harness's own scratch, a fork's linked packages, build output,
-    // secrets (see IGNORE_RULES). An existing file is topped up, never rewritten: the rules the
-    // user has are theirs.
-    await ensureIgnoreRules(dir, GITIGNORE_HEADER);
+    // secrets (see IGNORE_RULES) and the generated folders of the facts the folder holds. An
+    // existing file is topped up, never rewritten: the rules the user has are theirs.
+    await ensureIgnoreRules(dir, GITIGNORE_HEADER, await this.#ruleLines(dir));
 
     const references = path.join(dir, "references");
     await ensureDir(references);
     const readme = path.join(references, "README.md");
     if (!(await pathExists(readme))) await writeFile(readme, REFERENCES_README);
 
+    await ensureRepo(dir);
+  }
+
+  /**
+   * Genex's own bookkeeping and nothing else, for a folder that is no web game: its record
+   * (studio.json without the starter's `contractVersion`), the ignore rules and version history.
+   */
+  async #writeBookkeeping(dir: string, options: { name: string; title: string }): Promise<void> {
+    const studioPath = path.join(dir, "studio.json");
+    if (!(await pathExists(studioPath))) {
+      const createdAt = new Date().toISOString();
+      await writeFile(
+        studioPath,
+        `${JSON.stringify({ name: options.name, title: options.title, createdAt }, null, 2)}\n`,
+      );
+    }
+    // Before the repository exists, as for the starter: the first commit follows the rules.
+    await ensureIgnoreRules(dir, GITIGNORE_HEADER, await this.#ruleLines(dir));
     await ensureRepo(dir);
   }
 
@@ -1104,6 +1475,30 @@ function isExportList(roots: unknown): roots is string[] {
   return roots.every((p) => typeof p === "string" && Boolean(p));
 }
 
+/** What `games.start` writes besides the template's files: the record, ignore rules, stills note and repository. */
+const STARTER_BOOKKEEPING = ["studio.json", ".gitignore", "references/README.md", ".git"] as const;
+
+/**
+ * The first of `rels` (paths relative to `dir`) that goes through a link on its way, folder by folder,
+ * named by the part that is the link; undefined when none does. A dangling link counts.
+ */
+async function linkOnTheWay(dir: string, rels: readonly string[]): Promise<string | undefined> {
+  const checked = new Set<string>();
+  for (const rel of rels) {
+    const parts = rel.split("/");
+    for (let depth = 1; depth <= parts.length; depth++) {
+      const at = parts.slice(0, depth).join("/");
+      if (checked.has(at)) continue;
+      checked.add(at);
+      const there = await lstat(path.join(dir, at)).catch(() => null);
+      if (there?.isSymbolicLink()) return at;
+      // Nothing is there yet, so nothing below it can be a link either.
+      if (!there) break;
+    }
+  }
+  return undefined;
+}
+
 /** Fill the title into the template files that carry its placeholder. */
 async function fillTemplateTitle(dir: string, title: string): Promise<void> {
   for (const file of TITLED_TEMPLATE_FILES) {
@@ -1124,7 +1519,10 @@ async function mergeCopy(from: string, to: string, keep: Set<string> = new Set()
     const relative = rel ? `${rel}/${entry.name}` : entry.name;
     // `keep`: template files a folder with its own game must never receive.
     if (keep.has(relative)) continue;
+    // Whatever is at the name already stays, a link included: never followed, never written through.
+    const there = await lstat(dest).catch(() => null);
+    if (there?.isSymbolicLink()) continue;
     if (entry.isDirectory()) await mergeCopy(src, dest, keep, relative);
-    else if (!(await pathExists(dest))) await cp(src, dest);
+    else if (!there) await cp(src, dest);
   }
 }

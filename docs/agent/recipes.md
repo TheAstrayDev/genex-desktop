@@ -150,6 +150,8 @@ No core change. See [the plugin guide](../PLUGIN_GUIDE.md) and [plugin contract]
    `npm run plugin:pack -- <prebuilt-dir> <artifact.json>`.
 4. For a first-party plugin under `src/plugins/`, extend `tests/conformance/plugins.test.ts`
    or `plugin-devkit.test.ts`. Manifest validation lives in `src/substrate/plugins/manifest.ts`.
+5. Any change to a bundled plugin (manifest, skills, backend, shipped files) bumps its `version`:
+   profiles run the installed package and are only offered a newer one.
 
 ## Panel or stage action
 
@@ -174,7 +176,8 @@ not.
 1. Format: one row in `ASSET_FORMATS` in `src/shared/game-assets.ts` — kind, preview mode,
    MIME, and whether it is a raster thumbnail or a model texture. The inventory, the preview's
    MIME map, main's contained readers (`isImageFile`) and the audio checks (`isAudioFile`) all
-   read that row.
+   read that row. Where a project keeps a format (an engine's asset folder) is the
+   `CORE_WORKSPACE` table in `src/shared/project-workspace.ts`.
 2. Preview: `assetPreviewMode` in `src/shared/asset-preview.ts` only if the mode needs new logic.
 3. 3D formats: a loader branch in `src/renderer/asset-model-viewer.js`; copy any decoder in
    `scripts/build.mjs`.

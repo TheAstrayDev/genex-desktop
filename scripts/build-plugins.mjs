@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { cp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
-import { inlinePanelSdk } from "../src/plugin-sdk/inline-panel-sdk.mjs";
+import { inlinePanelFonts, inlinePanelSdk } from "../src/plugin-sdk/inline-panel-sdk.mjs";
 const require = createRequire(import.meta.url);
 
 /** A Node backend bundle, as every bundled plugin ships one. */
@@ -118,12 +118,41 @@ async function buildBlender(root, resources, sdk) {
   });
 }
 
+async function buildUnreal(root, resources, sdk) {
+  const unreal = path.join(resources, "plugins/unreal");
+  await mkdir(unreal, { recursive: true });
+  await cp(path.join(root, "src/plugins/unreal/plugin.json"), path.join(unreal, "plugin.json"));
+  // Genex's own type goes in as data: a panel can load no font from anywhere else.
+  const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/unreal/panel.html"), "utf8"), sdk);
+  await writeFile(
+    path.join(unreal, "panel.html"),
+    await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")),
+  );
+  // The editor helper is Unreal's own plugin, copied whole into a game's Plugins folder at setup.
+  await cp(path.join(root, "src/plugins/unreal/GenexEditorHelper"), path.join(unreal, "GenexEditorHelper"), {
+    recursive: true,
+    filter: (source) => path.basename(source) !== "__pycache__",
+  });
+  await build({
+    ...NODE_BACKEND,
+    entryPoints: [path.join(root, "src/plugins/unreal/backend.ts")],
+    outfile: path.join(unreal, "backend.mjs"),
+  });
+  await build({
+    ...NODE_BACKEND,
+    entryPoints: [path.join(root, "src/plugins/unreal/editor-mcp-entry.ts")],
+    outfile: path.join(unreal, "editor-mcp.mjs"),
+    banner: { js: "import {createRequire} from 'node:module'; const require = createRequire(import.meta.url);" },
+  });
+}
+
 /** Copies the SDK and builds the bundled plugins (and the example) into the app's resources. */
 export async function buildPlugins(root, resources, { dependencies = true } = {}) {
   await cp(path.join(root, "src/plugin-sdk"), path.join(resources, "plugin-sdk"), { recursive: true });
   await buildGenex(root, resources, { dependencies });
   const sdk = path.join(root, "src/plugin-sdk");
   await buildBlender(root, resources, sdk);
+  await buildUnreal(root, resources, sdk);
   await mkdir(path.join(resources, "examples"), { recursive: true });
   await cp(path.join(root, "src/plugins/example"), path.join(resources, "examples/example"), { recursive: true });
   const examplePanel = path.join(resources, "examples/example/panel.html");

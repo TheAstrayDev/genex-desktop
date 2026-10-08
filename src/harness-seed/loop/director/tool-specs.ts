@@ -6,6 +6,7 @@
 import { FACET_POLICY } from "../facet-loop.ts";
 import { KIND_NAMES } from "../kinds.ts";
 import { CHECK_KINDS, MAX_DONE, MAX_MILESTONES, renderCheckGrammar } from "../spec.ts";
+import { WorkerIsolation, WorkerTool, WorkerVerdict } from "../workers/contract.ts";
 import { MAX_PLAN_WORKERS, MAX_WAIT_S } from "./budgets.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { LiveToolSpec } from "../../types/host-api.d.ts";
@@ -22,7 +23,8 @@ export const DirectorTool = {
   WorkerStatus: "worker_status",
   WorkerSteer: "worker_steer",
   WorkerStop: "worker_stop",
-  Wait: "wait",
+  /** Genex's one worker model names it (`WorkerTool.Wait`); the handler also answers its old name `wait`. */
+  Wait: WorkerTool.Wait,
   Judge: "judge",
   Playtest: "playtest",
   Integrate: "integrate",
@@ -108,7 +110,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
   {
     name: DirectorTool.WorkerStart,
     description:
-      "Start a background builder with its own git worktree and hidden preview. loop (default): build, gather evidence, check, compare blindly, accept or roll back; repeat until done passes or budget ends, committing accepted builds. Supply 2–4 measurable done outcomes. single: one session, committed without a judge; you assess it. Returns a worker id — use wait and worker_status. One area a player can name per worker, on files of its own; start every independent area, up to the workers run_status allows at once.",
+      "Start a background builder with its own git worktree and hidden preview. loop (default): build, gather evidence, check, compare blindly, accept or roll back; repeat until done passes or budget ends, committing accepted builds. Supply 2–4 measurable done outcomes. single: one session, committed without a judge; you assess it. Returns a worker id — use worker_wait and worker_status. One area a player can name per worker, on files of its own; start every independent area, up to the workers run_status allows at once. isolation read starts a reader: it writes nothing and reports what it found.",
     parameters: {
       type: "object",
       properties: {
@@ -122,10 +124,18 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
           description: "A slug (letters, digits, dashes) unique in this run, e.g. plaza-lighting.",
         },
         title: { type: "string", description: "A short title for the feed." },
-        brief: {
+        task: {
           type: "string",
           description:
             "The brief — what to build, where it is in the code, what done looks like, what not to touch. Everything the builder needs; it does not see your conversation.",
+        },
+        isolation: {
+          type: "string",
+          description: `${WorkerIsolation.Copy} (default: a builder in its own worktree, which you integrate) or ${WorkerIsolation.Read} (a reader in the game folder that writes nothing).`,
+        },
+        research: {
+          type: "string",
+          description: "yes: a reader may search the web.",
         },
         mode: {
           type: "string",
@@ -216,7 +226,7 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
           description: "Id of the worker you are restarting, so Builds groups its rounds into one part.",
         },
       },
-      required: ["id", "brief"],
+      required: ["id", "task"],
     },
   },
   {
@@ -272,8 +282,23 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
       type: "object",
       properties: {
         seconds: { type: "string", description: `1–${MAX_WAIT_S}` },
-        worker: { type: "string", description: "Only wake for this worker (still wakes for the user)." },
+        id: { type: "string", description: "Only wake for this worker (still wakes for the user)." },
+        worker: { type: "string", description: "The same as id." },
       },
+    },
+  },
+  {
+    name: WorkerTool.Mark,
+    description:
+      "Your word on a worker: used integrates its last accepted commit (as integrate does), rejected stops its news in every digest. A reader's mark only stops its news.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The worker id." },
+        verdict: { type: "string", description: `${WorkerVerdict.Used} or ${WorkerVerdict.Rejected}.` },
+        note: { type: "string", description: "Why, in one line." },
+      },
+      required: ["id", "verdict"],
     },
   },
   {

@@ -774,12 +774,13 @@ test("routine narration folds by what its record says, not by the words written 
     ["line:PART"],
     "a judge that could not be reached is trouble",
   );
+  // A connector call is a step of the work, failed or not, never a narration line.
   assert.deepEqual(
     lines([
       custom(7, "connector_tool", { connectorId: "figma", tool: "get", ok: false, error: "denied" }),
       custom(8, "connector_tool", { connectorId: "figma", tool: "get", ok: true }),
     ]),
-    ["line:TOOL", "activity:1"],
+    ["tools", "tools"],
   );
   assert.deepEqual(lines([custom(9, "blender_asset", { ...run, name: "boat", ok: false, error: "crash" })]), [
     "line:BLENDER",

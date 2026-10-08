@@ -41,11 +41,12 @@ import type {
   GameProject,
   ProjectRecent,
 } from "./game-project.ts";
+import type { JobView } from "./jobs.ts";
 import type { McpLiveTool } from "./mcp.ts";
 import type { SteerDelivery } from "./message-queue.ts";
 import type { ModelPreferences } from "./model-preferences.ts";
 import type { OptimizationCandidate, ProfileRequest, Revision } from "./optimization.ts";
-import type { PluginTool } from "./plugins.ts";
+import type { PluginKindOffer, PluginTool } from "./plugins.ts";
 import type {
   BuildObservation,
   CaptureSurface,
@@ -58,9 +59,12 @@ import type {
   PreviewPortStatus,
   ReadyResult,
 } from "./preview-contract.ts";
+import { ProjectStarter } from "./project-facts.ts";
+import type { PluginsFindAnswer, PluginsSuggestAnswer, StartHeldInPlan } from "./project-tools.ts";
 import type { ReferenceFrame } from "./protocol.ts";
 import type { HardwareReport, StudioSettingsView } from "./studio-api.ts";
 import type { StudioActivityItem } from "./studio-activity.ts";
+import type { WorkerGrant, WorkerType } from "./workers.ts";
 
 /** Budget class of a completion or delegation; anything but `improvement` is user work. */
 export const WorkClass = {
@@ -192,7 +196,37 @@ export interface HarnessDelegateParams {
   computer?: boolean;
   /** The director (director, 2026-09-07): the run's orchestrating session, with the harness's run tools forwarded. */
   director?: DelegateDirectorGrant & { tools?: LiveToolSpec[] };
+  /**
+   * A run's sub-agent: every plugin call this session makes carries the run and the agent's id (its
+   * part id, recorded as `facetId`), so what it makes is recorded under that run and lands on the
+   * agent's own node in the Builds graph.
+   */
+  attribution?: { runId: string; agentId: string };
+  /**
+   * Plugin tool and connector names (or name prefixes, such as `blender__`) this session may use:
+   * a tool whose agent name starts with none of them is not offered; a plugin with an offered tool
+   * also keeps its skill reader `<plugin>__skill` and its guidance. Absent, every tool is offered.
+   */
+  toolAllow?: string[];
+  /**
+   * The Genex credits the paid jobs of this session's run (its `attribution` or `director` run) may
+   * commit, counted across every session of the run: once they have, the run's next paid Genex job
+   * is refused before Genex is asked. Anything but a whole number allows none; absent, no cap.
+   */
+  creditCap?: number;
   candidateId?: string;
+  /**
+   * A worker of a chat's lead: honoured only by the host's own finding (a running run started in
+   * this game's open chat, or the chat turn its own session answers now), and then run in the
+   * chat's permission mode, asking in the chat. A grant the host cannot confirm runs unattended.
+   */
+  worker?: WorkerGrant;
+  /**
+   * The worker tools the chat's own session may call (`WorkerTool`), answered by the harness's pool
+   * for this turn (`worker_tool`). Honoured only for the chat's own session answering a chat turn,
+   * on a harness that claims `workers`, and never for a worker: depth is one.
+   */
+  workers?: { tools?: LiveToolSpec[] };
 }
 
 /**
@@ -290,11 +324,48 @@ export interface HarnessHostApi {
     params: { project: string; threadId?: string };
     result: { ready: boolean; reason: string; hostedVerified: false };
   };
-  "plugins.tools": { params: void; result: { tools: PluginTool[]; guidance: string; revision: number } };
+  /**
+   * The plugin tools and guidance for the game `project` names, by its facts (none named, or a
+   * game with no kind yet: a web game's), and the tools on offer that make a kind of project.
+   */
+  "plugins.tools": {
+    params: { project?: string | null };
+    result: { tools: PluginTool[]; guidance: string; revision: number; kinds: PluginKindOffer[] };
+  };
+  /**
+   * The kinds of worker the plugins on offer declare for the game `project` names, by its facts
+   * (`PluginManifest.workerTypes`), each with its tools as agent names: what a lead may start.
+   */
+  "plugins.workerTypes": { params: { project: string }; result: WorkerType[] };
+  /**
+   * The agent's search for a Genex plugin, by a fact or words: installed plugins (on, then off) and
+   * Genex's catalog, never another source; read-only.
+   */
+  "plugins.find": {
+    params: { project?: string | null; fact?: string | null; text?: string | null };
+    result: PluginsFindAnswer;
+  };
+  /**
+   * The turn-it-on card in `threadId`, a chat of `project`, for a plugin that is installed but off
+   * or in Genex's catalog; it turns nothing on. Refused (`shown: false`, nothing written) otherwise.
+   */
+  "plugins.suggest": {
+    params: { project: string; threadId: string; plugin: string; reason?: string };
+    result: PluginsSuggestAnswer;
+  };
   /** What this game's builders can use, for a conversation that cannot call it (the local coordinator). */
   "capabilities.describe": { params: { threadId: string; project?: string }; result: string };
   "plugins.invoke": {
-    params: { project: string; threadId?: string; name: string; args: Record<string, unknown> };
+    params: {
+      project: string;
+      threadId?: string;
+      name: string;
+      args: Record<string, unknown>;
+      /** The harness's own step: a tool the plugin keeps for the harness. An agent's call never sets it. */
+      step?: boolean;
+      /** The step writes (a chat's checkpoint, a run's save point or editor change), which Plan mode holds back. */
+      checkpoint?: boolean;
+    };
     result: unknown;
   };
   "mcp.tools": {
@@ -327,10 +398,19 @@ export interface HarnessHostApi {
   /** The Self-improvement switch, asked by the harness before each thing it would learn. */
   "learning.enabled": { params: void; result: boolean };
   "engine.complete": { params: HarnessCompleteParams; result: CompleteResponse };
-  /** Stop: aborts a thread's completions, a project's delegations, or the delegation in one worktree. */
-  "engine.abort": { params: { threadId?: string; cwd?: string; project?: string }; result: { aborted: number } };
-  /** Steering that cannot wait (M3.4): cuts one worktree's build turn short so its caller can resume it. */
-  "engine.interrupt": { params: { cwd: string }; result: { interrupted: boolean } };
+  /**
+   * Stop: aborts a thread's completions, a project's delegations, or the delegation in one worktree
+   * (with `worker`, the in-place worker of that id working in `cwd`).
+   */
+  "engine.abort": {
+    params: { threadId?: string; cwd?: string; project?: string; worker?: string };
+    result: { aborted: number };
+  };
+  /**
+   * Steering that cannot wait (M3.4): cuts one worktree's build turn short so its caller can resume
+   * it (with `worker`, the in-place worker of that id working in `cwd`).
+   */
+  "engine.interrupt": { params: { cwd: string; worker?: string }; result: { interrupted: boolean } };
   "engine.delegate": { params: HarnessDelegateParams; result: DelegateResult };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
@@ -363,7 +443,21 @@ export interface HarnessHostApi {
    */
   "game.contentStamp": { params: { project: string; split?: boolean }; result: string | ContentStamps | null };
   "game.recents": { params: void; result: ProjectRecent[] };
+  /**
+   * Make a game's folder: Genex's bookkeeping only, or with the starter `kind` names (`"web"`, or
+   * an older caller's `"studio-template"`); any other kind is refused.
+   */
   "game.scaffold": { params: { name: string; title?: string; threadId?: string; kind?: string }; result: GameProject };
+  /**
+   * Write a starter into a game that has no kind yet (no facts); a game with a kind is refused.
+   * `threadId`, the chat a local model's `start_web_game` answers: while that chat (this game's) is
+   * in Plan mode nothing is written and the Plan answer comes back instead. A call with no thread (a
+   * Loop's start, which runs only once its run is approved) is not checked.
+   */
+  "game.start": {
+    params: { project: string; starter: ProjectStarter; threadId?: string };
+    result: GameProject | StartHeldInPlan;
+  };
   "game.validate": {
     params: { project: string; candidateId?: string };
     result: { ok: boolean; problems: string[]; warnings: string[]; contract: ContractWord };
@@ -484,6 +578,18 @@ export interface HarnessHostApi {
     };
   };
 
+  // — jobs: the long processes the agents start, which the app owns —
+  /**
+   * A game's jobs, read-only: only those that ended after `endedAfter` (an end number) when it is
+   * given, only `runId`'s (its lead's and its workers') when that is, and the game's last end
+   * number, read together so a reader that goes on from `seq` misses none and hears none twice.
+   * The harness can neither start nor stop a job.
+   */
+  "jobs.list": {
+    params: { project: string; runId?: string | null; endedAfter?: number | null };
+    result: { jobs: JobView[]; seq: number };
+  };
+
   // — runs, guardian, ui —
   "run.artifact": { params: { runId: string; name: string; base64: string }; result: string };
   "guardian.rebuild_and_restart": { params: { reason: string }; result: { updateId: string; snapshotId: string } };
@@ -551,6 +657,9 @@ export const HostMethod = {
   SnapshotWorktree: "snapshot.worktree",
   SnapshotRemoveWorktree: "snapshot.removeWorktree",
   PluginsTools: "plugins.tools",
+  PluginsWorkerTypes: "plugins.workerTypes",
+  PluginsFind: "plugins.find",
+  PluginsSuggest: "plugins.suggest",
   PluginsPreflightMultiplayer: "plugins.preflightMultiplayer",
   CapabilitiesDescribe: "capabilities.describe",
   PluginsInvoke: "plugins.invoke",
@@ -575,6 +684,7 @@ export const HostMethod = {
   GameContentStamp: "game.contentStamp",
   GameRecents: "game.recents",
   GameScaffold: "game.scaffold",
+  GameStart: "game.start",
   GameValidate: "game.validate",
   GameAttached: "game.attached",
   GameUpgradeContract: "game.upgradeContract",
@@ -583,6 +693,7 @@ export const HostMethod = {
   GameTree: "game.tree",
   GameExport: "game.export",
   GameReferences: "game.references",
+  JobsList: "jobs.list",
   PreviewLoad: "preview.load",
   PreviewProfile: "preview.profile",
   PreviewReload: "preview.reload",
@@ -650,7 +761,12 @@ export const HARNESS_PARAM_SCHEMAS = {
   "snapshot.worktree": z.object({ project, commit: optionalText, name: text, runId: optionalText }),
   "snapshot.removeWorktree": z.object({ project, path: text }),
   "capabilities.describe": z.object({ project: optionalText }),
-  "plugins.invoke": z.object({ project }),
+  "plugins.tools": z.object({ project: optionalText }).nullish(),
+  "plugins.workerTypes": z.object({ project }),
+  "jobs.list": z.object({ project, runId: optionalText, endedAfter: z.number().nullish() }),
+  "plugins.find": z.object({ project: optionalText }).nullish(),
+  "plugins.suggest": z.object({ project, threadId: text }),
+  "plugins.invoke": z.object({ project, step: z.boolean().optional(), checkpoint: z.boolean().optional() }),
   "plugins.preflightMultiplayer": z.object({ project, threadId: optionalText }),
   "mcp.tools": z.object({ project: optionalText }).nullish(),
   "mcp.invoke": z.object({ project }),
@@ -662,11 +778,15 @@ export const HARNESS_PARAM_SCHEMAS = {
     selfCapture: z.object({ project, root: text, runId: optionalText, facetId: optionalText }).nullish(),
     playtest: z.object({ project, root: text, runId: optionalText, facetId: optionalText }).nullish(),
     director: z.object({ project, root: text, runId: text }).nullish(),
+    worker: z
+      .object({ id: text, title: text, runId: optionalText, turn: optionalText, research: z.boolean().nullish() })
+      .nullish(),
   }),
   "game.setCover": z.object({ project }),
   "game.setCoverShader": z.object({ project }),
   "game.contentStamp": z.object({ project }),
-  "game.scaffold": z.object({ name: text }),
+  "game.scaffold": z.object({ name: text, kind: optionalText }),
+  "game.start": z.object({ project, starter: z.enum([ProjectStarter.Web]), threadId: optionalText }),
   "game.validate": z.object({ project }),
   "game.attached": z.object({ project, root: optionalText, entry: optionalText }),
   "game.upgradeContract": z.object({ project }),

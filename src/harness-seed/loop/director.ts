@@ -364,7 +364,7 @@ function openingBrief(
   loop: DirectorLoop,
 ): string {
   const { capacity, finalDeadline, gameLessons, integrationWorktree, lead, nestedRepos, ownShape, run, shape } = night;
-  const { softDeadline, state } = night;
+  const { softDeadline, state, gameFacts, projectDir } = night;
   return directorBrief({
     run,
     shape,
@@ -383,6 +383,9 @@ function openingBrief(
     contract: start.contract,
     loop,
     lead: lead ? { gameFolder: lead.folder } : null,
+    // What the game's folder holds and where it is, as the night found it ready.
+    facts: gameFacts ?? null,
+    gameFolder: projectDir || null,
   });
 }
 

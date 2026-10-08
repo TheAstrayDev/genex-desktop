@@ -87,6 +87,29 @@ the failed step itself uses the error color. Expanded tools sit in a shared 10px
 Tool rows have 36px minimum height, 10px horizontal padding, 12px icons and 8px gaps.
 Their single-line labels truncate; the complete label is available in the title and the
 recorded input/output in expanded code blocks. Expanded details use 13px/20px mono, 10px outer insets, and 10px padding within code; output retains the same text inset. Tool data formats only on expansion. Explicit code languages use a limited highlight.js bundle and existing semantic colors; unknown logs and blocks over 32,000 characters remain plain.
+A plugin's or connector's call is one row the host's own records make
+(`connector_tool_started`/`connector_tool`, `plugin_tool_started`/`plugin_tool`); the agent's mirror
+of the same call is never a second row, and nothing becomes a narration line between steps. A
+connector row says the step in words, past tense once it ran ("Wrote Blueprint BP_Lamp",
+"Placed Barrel_3", "Took a screenshot", "Played the level", "Saved 2 assets"), from a table of
+Epic's common tools and the Genex editor helper's (`chat/connector-steps.ts`), else "Toolset ·
+tool" (`BlueprintTools · get_node_infos`). A failed step is one line in the error color: what it
+could not do and the error's first sentence ("Couldn't write BP_Lamp: AssertionError: …"), at
+most 120 characters, truncating with the row; the whole text opens line by line in the row's
+wrapped, scrolling mono box (13px, at most 320px tall), never flattened. While a step runs, the
+live status names it and where: "Writing BP_Lamp in Unreal". A group's heading names the plugins
+it worked in, once each, with the first one's 16px icon (4px radius, its initial on a quiet tile
+when it ships none): "Worked in Unreal · 7 steps", "Worked in Blender and Unreal · 5 steps", the
+failed count after it in the muted amber; a group with no plugin step stays "Worked on N steps".
+Screenshots a connector returns are kept in the game (`.studio/captures/`). The editor window's
+while a play session runs (and the helper's play shots) are play views: the group's latest three
+sit under its heading as 88×55 tiles (10px radius, 8px gaps) and open beside the chat; the editor
+at rest, the editor camera and an asset's picture stay in their row as a 38×24 tile (6px radius)
+after its label. What a group delivered (a plugin's models, sounds, images) sits under it, after
+its play views, and the group goes on after it. Work with failures, pictures or deliveries stays in
+the transcript while the chat works; the busy line still names the running step. Keyboard focus on
+a tool row lights the row, without the global focus edge. A long unbroken line wraps or scrolls in
+its own box; the conversation never scrolls sideways.
 Workers remain compact 32px rows with 6px insets/gaps, named tasks and disclosed details.
 Successful tools need no repeated status. Code uses mono; tool labels, filenames and prose
 use the body font. A shown path is not repeated in the result.
@@ -116,6 +139,17 @@ draft. Approve remains disabled while that revision is being drafted; sending it
 new plan and explicit approval. Failed plan generation uses a recovery card with Choose model, Model providers, Try again and Dismiss; approval controls appear only for a prepared plan. Raw error details expand on demand. Steering can prefill the composer. These reuse existing consent
 and plan APIs; they do not add the web app's question protocol. Permission cards/docks scroll when available height is short; option lists have no separate
 scroll box. The plan body scrolls independently so all three footer actions remain reachable.
+
+An engine link is one quiet line in ink-3, not a card: "Lantern Run now builds in Unreal ·
+Lantern" with a secondary **Undo** while it is the game's newest link, flowing after the line's last
+word like text (a space, not a margin, so a wrapped Undo starts flush); after Undo the line keeps
+its words and adds "Undone. Lantern Run is a web game again." (or "builds in <project> again").
+An engine plugin's steps card ("Unreal setup", `chat/EngineStepsCard.tsx`) is quiet too: the
+composer-colored question surface above the composer, only while nothing else waits there, with a
+15px medium title, a 14px ink-3 line, then one row per step: a 16px round mark (an accent-tint
+check when done, a hairline ring when open), the step at 15px (ink-3 once done), its detail at
+14px ink-3, a Terminal line in selectable mono when it has one, and its one secondary button on
+the right. **Not now**, a ghost button at the trailing edge, hides it for that game.
 
 Claude Code's own permission requests use that surface too (`chat/PermissionRequest.tsx`). The
 title is Claude Code's sentence ("Claude wants to edit main.js"); for Bash it reads "Claude wants
@@ -254,7 +288,9 @@ reason in 13px red inside the card). Genex's connected card shows the green dot,
 24px Credits stat with "One balance for all your games"; no per-game numbers (those are in the
 usage panel). Then Genex's Tools it routes (each tool's mark on a dark 34px tile, its name and a
 mono line, in a grid of 12px-radius cards) or another plugin's two-column grid of 40px glyph tiles
-(What it does) and Connections; then Skills as one line with Show all, and Information (Developer, Version, "Can" in
+(What it does) and Connections (an engine plugin's connection, once on, wears its toolbar word,
+such as Unreal's Not open or Ready, in place of the bridge's Ready and its green dot; Unreal's is named
+"Editor", "Your open Unreal Editor, where agents build Unreal games."); then Skills as one line with Show all, and Information (Developer, Version, "Can" in
 words, the trusted-code line). No plugin frames on Genex's or Blender's pages; Publish is a
 host-drawn lg dialog on the stage, "Publish to the web" with a globe after the title, for every open game: it first asks for
 what is missing, one line and one press (an accent-tinted line "Publishing goes through" the Genex
@@ -289,7 +325,20 @@ full screen a studio-drawn dark glass pill sits 14px from the top-right corner, 
 full screen” beside the exit glyph; after 2.6s the words fold into the icon, which rests at 45%
 until the pointer is on it. Plugin buttons wear the prompt bar's model-pill fill (`pill-quiet`);
 one whose status says its action is due (`attention`: Publish with something to publish) takes
-the accent. Publish shows no badge: two looks, nothing else. While Live or Builds loads, a 52×36
+the accent. Publish shows no badge: two looks, nothing else. A status badge (Unreal's Get, Add, Set
+up, Not open, Starting, Ready) is micro text after the label in its tone's colour, the quiet info
+word in ink-2 (4.5:1 on the pill in every theme), and a screen reader hears it after the button's
+name ("Unreal Editor, Ready"). An Unreal game's Live is one centred card (at most 560px) on the
+stage's hatch: the latest play shot when there is one, the project's name, one line of where it
+stands (a timer while it opens; "Ready in Unreal" once it answers) and at most one button, the same
+step the Unreal panel offers (Get Unreal Engine, Open the Unreal panel, Set up and open, Open in
+Unreal, Switch to <project>, Restart Unreal or Quit Unreal); with two editors open it offers no
+quit, only words. The Unreal panel, a plugin frame, wears Genex's type (both faces inlined as data,
+`inlinePanelFonts`) and controls: 32px borderless buttons in Geist Mono, a 20px view title, then in
+the project view its name with one state word in the toolbar's words and tone (Not set up, Not open,
+Starting, Ready, Unreal busy, Not answering, Not connected), Change and a ⋯ menu (Undo setup, Quit
+Unreal) at the head's end, one 15px line and one primary (held, not hidden, while Unreal is busy).
+Get Unreal's steps take the steps card's round marks; the engine and Xcode end it as one mono line. While Live or Builds loads, a 52×36
 halftone plasma in ink at 62% sits over a shimmering 13px line; it appears only after 0.4s, stays
 at least 0.6s and fades out (150ms) before the native view is uncovered.
 
@@ -380,6 +429,13 @@ The reviewers are an eye gate on the edge into what they looked at; one 52px sta
 40% and stays clickable, and one card (max 560px, centred, scrolling inside) carries the detail —
 never a side panel. Replies go through the chat composer, so the app keeps one input. Semantic zoom
 trades words for pictures below 60% and adds the asked sentence from 135%.
+An Unreal Loop draws in the same grammar: the lead's milestones are rows ("Lead · <milestone>") of
+the saves it kept itself, which carry no eye and read "Not reviewed — the lead saved it after
+looking at its own captures."; each sub-agent is a node ("Blender: <title>", "Meshy: …", "Sound: …")
+with its asset cards, and once its files are in the game it says Delivered (a green check; card pill
+"Delivered, not used yet") until a save uses it. The critic's advice is a "Critic's advice" row on
+the save it looked at (each defect with "Fix:" beneath in ink-3, one bold move as a quote, its art
+checks), never a verdict or an eye.
 
 Activity is ordered by what the user must do: a **suggestions** block (only while proposals wait),
 **Recent runs**, then **What Harness has learned**. Restores, restarts and app updates are Harness

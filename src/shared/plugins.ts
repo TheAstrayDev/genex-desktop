@@ -1,4 +1,7 @@
+import type { GameEngine } from "./game-engine.ts";
 import type { RuntimeInstallPhase } from "./model-install.ts";
+import { ENGINE_FACT, type FactRule, type GameKind, scopeReaches } from "./project-facts.ts";
+import type { WorkerIsolation } from "./workers.ts";
 
 /** Where a plugin's native runtime stands on this Mac (`PluginNativeStatus.state`). */
 export const NativeRuntimeState = {
@@ -98,12 +101,19 @@ export const PluginCapability = {
   Network: "network",
   Export: "export",
   NativeRuntime: "native-runtime",
+  GameEngine: "game-engine",
 } as const;
 export type PluginCapability = (typeof PluginCapability)[keyof typeof PluginCapability];
 
 /** Public Studio plugin API. Backend plugins are trusted executable code. API 2 is additive over API 1. */
 export const PLUGIN_API_VERSION = 3;
 export type PluginApiVersion = 1 | 2 | 3;
+/**
+ * A typed reason a panel request failed, carried beside its text so a panel never matches words:
+ * `cancelled` when the person declined Studio's confirmation. Wire values: never rename.
+ */
+export const PanelErrorCode = { Cancelled: "cancelled" } as const;
+export type PanelErrorCode = (typeof PanelErrorCode)[keyof typeof PanelErrorCode];
 export type PluginScalar = string | number | boolean;
 export interface PluginTool {
   name: string;
@@ -128,17 +138,62 @@ export const PluginHostTool = {
 } as const;
 export type PluginHostTool = (typeof PluginHostTool)[keyof typeof PluginHostTool];
 /**
- * A tool as the manifest declares it. `host` never reaches an agent: the tool list the registry
- * serves is plain `PluginTool`, which the harness seed is generated from.
+ * Who may call a manifest tool (`PluginManifestTool.audience`, API 3): agents (the default), or
+ * only Genex's harness through its own plugin calls, for a step a harness loop takes and no agent
+ * should, such as the Unreal Loop's editor queue. Published in manifests: never rename a value.
+ */
+export const PluginToolAudience = {
+  Agents: "agents",
+  Harness: "harness",
+} as const;
+export type PluginToolAudience = (typeof PluginToolAudience)[keyof typeof PluginToolAudience];
+/**
+ * Why a plugin call answered without running (its answer, never an error, carries it as
+ * `blocker`): the chat is in Plan mode. The seed's copy is `PluginCallBlocker` in
+ * `loop/unreal/lead-steps.ts` (seed-contracts.test.ts). Never rename a value.
+ */
+export const PluginCallBlocker = {
+  PlanMode: "plan_mode",
+} as const;
+export type PluginCallBlocker = (typeof PluginCallBlocker)[keyof typeof PluginCallBlocker];
+/**
+ * Why a plugin or connector call ended before its answer, so whether it took effect is unknown:
+ * the harness that made it ended, its plugin's backend ended, or the app it drives went away (an
+ * editor crash). Written in call records: never rename a value.
+ */
+export const CallCutOff = {
+  HarnessEnded: "harness-ended",
+  PluginEnded: "plugin-ended",
+  AppLost: "app-lost",
+} as const;
+export type CallCutOff = (typeof CallCutOff)[keyof typeof CallCutOff];
+/**
+ * A tool as the manifest declares it. `host`, `audience`, `facts` and `makes` never reach an agent:
+ * the tool list the registry serves is plain `PluginTool`, which the harness seed is generated from.
  */
 export interface PluginManifestTool extends PluginTool {
   /** Bundled Genex only: Studio runs this tool itself rather than the backend. */
   host?: PluginHostTool;
+  /** API 3: `harness` keeps the tool from every agent, chat and plan; absent, agents get it. */
+  audience?: PluginToolAudience;
+  /** API 3: the facts (`shared/project-facts.ts`) of the games whose sessions get it; every game when absent. */
+  facts?: string[];
+  /** API 3, agent tools only: the facts the tool makes in the game's folder (a new project of a kind, a port). */
+  makes?: string[];
 }
+/** Whether agents are handed a manifest tool: every one but those only the harness calls. */
+export const isAgentTool = (tool: Pick<PluginManifestTool, "audience">): boolean =>
+  tool.audience !== PluginToolAudience.Harness;
 /** A skill whose text sits in the manifest; agents get the whole text in their brief. */
 export interface PluginInlineSkill {
   name: string;
   text: string;
+  /** API 3, the older spelling of `facts`: the engines whose games' briefs carry this skill. */
+  engines?: GameEngine[];
+  /** API 3: the facts of the games whose briefs carry this skill; every game when absent (and no `engines`). */
+  facts?: string[];
+  /** API 3: the plugin's agent tools this skill explains; it reaches a brief only while one of them does. */
+  tools?: string[];
 }
 /**
  * API 3: a skill whose text is a Markdown file in the package. Agents get its summary in their
@@ -151,9 +206,62 @@ export interface PluginFileSkill {
   file: string;
   /** Further package-relative `.md` files the skill points its reader to. */
   references?: string[];
+  /** API 3, the older spelling of `facts`: the engines whose games' briefs carry this skill. */
+  engines?: GameEngine[];
+  /** API 3: the facts of the games whose briefs carry this skill; every game when absent (and no `engines`). */
+  facts?: string[];
+  /** API 3: the plugin's agent tools this skill explains; it reaches a brief only while one of them does. */
+  tools?: string[];
 }
 /** One skill a plugin gives agents. */
 export type PluginSkill = PluginInlineSkill | PluginFileSkill;
+/**
+ * The facts a skill is for: its `facts`, else its `engines` read as facts (`ENGINE_FACT`), else
+ * undefined, every game's. The web's three.js advice never reaches an Unreal game's brief.
+ */
+export function skillScope(skill: Pick<PluginSkill, "engines" | "facts">): string[] | undefined {
+  if (skill.facts) return skill.facts;
+  return skill.engines?.map((engine) => ENGINE_FACT[engine]);
+}
+/**
+ * A tool a plugin offers that makes a kind of project (its manifest's `makes`), as a session's
+ * snapshot lists it: the plugin's id and name, the tool's agent name `<plugin>__<tool>`, and the facts.
+ */
+export interface PluginKindOffer {
+  plugin: string;
+  name: string;
+  tool: string;
+  makes: string[];
+}
+/** What of one plugin reaches a game's session: its agent tools, its skills and whether its skill reader does. */
+export interface PluginReach {
+  tools: PluginManifestTool[];
+  skills: PluginSkill[];
+  skillTool: boolean;
+}
+/**
+ * What of one plugin reaches a session for a game (`{ facts: [] }`: no kind yet, served as a web
+ * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session was: the agent tools whose `facts` reach; the skills
+ * whose scope reaches and, when they name tools, one of those reaches too (a skill follows its
+ * tools); the skill reader while a file skill reaches. A narrowed session none of whose offered
+ * tools the plugin has gets nothing of it, not even its skills. The registry's snapshot and the
+ * capability facts both read this one rule.
+ */
+export function pluginReach(
+  manifest: Pick<PluginManifest, "id" | "tools" | "skills">,
+  game: GameKind,
+  offered?: (agentName: string) => boolean,
+): PluginReach {
+  const tools = manifest.tools.filter(
+    (t) => isAgentTool(t) && scopeReaches(t.facts, game) && (!offered || offered(`${manifest.id}__${t.name}`)),
+  );
+  if (offered && !tools.length) return { tools, skills: [], skillTool: false };
+  const reaching = new Set(tools.map((t) => t.name));
+  const skills = manifest.skills.filter(
+    (s) => scopeReaches(skillScope(s), game) && (!s.tools || s.tools.some((name) => reaching.has(name))),
+  );
+  return { tools, skills, skillTool: skills.some(isFileSkill) };
+}
 /** The tool name, after `<pluginId>__`, that reads a plugin's file skills; a manifest may not declare it beside them. */
 export const PLUGIN_SKILL_TOOL = "skill";
 /** What the synthetic skill tool tells an agent; the skill names follow. */
@@ -256,6 +364,27 @@ export interface PluginMcpServer {
   maxTools?: number;
   callTimeoutMs?: number;
   description: string;
+  /** API 3: the facts of the games whose sessions get this connector; every game when absent. Never started for another. */
+  facts?: string[];
+}
+/**
+ * API 3: a kind of worker a plugin declares (`shared/workers.ts`). `tools` names the plugin's own
+ * agent tools, or another plugin's by prefix (`blender__`) or agent name (`genex__asset`); a lead
+ * is offered the kind only while one of them reaches its game.
+ */
+export interface PluginWorkerType {
+  id: string;
+  description: string;
+  tools: string[];
+  isolation: WorkerIsolation;
+}
+/**
+ * API 3: a folder outside the game the plugin's engine programs write to (`~/` or an absolute
+ * path), and why. Turning the plugin on approves it as a write root for workers.
+ */
+export interface PluginFolder {
+  path: string;
+  why: string;
 }
 export interface PluginManifest {
   /** API 3: delivery limits enforced by the host per plugin and project. */
@@ -279,13 +408,35 @@ export interface PluginManifest {
     type: "string" | "boolean" | "number";
     default: string | boolean | number;
   }>;
-  actions: Array<{ name: string; label: string; confirmation?: string }>;
+  /** `native`: the action starts, quits or opens a desktop app or the browser, or writes outside the plugin's storage. */
+  actions: Array<{ name: string; label: string; confirmation?: string; native?: true }>;
   /** API 2: hosts the backend talks to (disclosure for the install-time scan). */
   network?: { hosts: string[] };
   /** API 2: buttons contributed beside Live/Builds. */
   toolbar?: PluginToolbarItem[];
   /** API 2: MCP servers the plugin ships, run by the host as connectors the plugin owns. */
   mcpServers?: PluginMcpServer[];
+  /**
+   * API 3: how the plugin knows its kinds of project by their files (`shared/project-facts.ts`).
+   * While the plugin is on, a game whose folder matches a rule holds that fact.
+   */
+  detect?: FactRule[];
+  /**
+   * API 3: what history (`ignore`) and writers' copies (`copySkip`) leave out of a folder holding
+   * the plugin's facts, as patterns placed at each fact's folder (`shared/project-workspace.ts`).
+   * `facts` names the facts it reaches; without it, those the plugin's `detect` declares.
+   */
+  workspace?: { facts?: string[]; ignore?: string[]; copySkip?: string[] };
+  /**
+   * API 3: where the assets of a folder holding the plugin's facts live (folders inside each fact's
+   * folder, `"."` for it) and, when `formats` is given, of which lowercase extensions. `facts` as
+   * for `workspace`.
+   */
+  assets?: { facts?: string[]; folders: string[]; formats?: string[] };
+  /** API 3: the kinds of worker the plugin declares; the first declaration of an id wins. */
+  workerTypes?: PluginWorkerType[];
+  /** API 3: folders outside the game its engine programs write to: workers' write roots. */
+  folders?: PluginFolder[];
   /** Host-managed account flow. Status may finish a pending browser authorization. */
   account?: { connect: string; unlock: string; disconnect: string; status: string; cancel?: string };
   /**
@@ -455,6 +606,10 @@ export interface PluginConsentEvent {
   project: string;
   threadId?: string;
   prompt: string;
+  /** A connector's card: the person may also allow this exact tool from now on. */
+  alwaysOffered?: boolean;
+  /** Approved with Always allow: the tool runs without asking from now on. */
+  always?: boolean;
   state: "pending" | "approved" | "declined";
   by?: PluginConsentBy;
   expiresAt?: number;
@@ -625,8 +780,20 @@ export const PluginService = {
   RuntimeInstall: "runtime.install",
   RuntimeInstallation: "runtime.installation",
   RuntimeCancelInstall: "runtime.cancelInstall",
+  GameEngineLink: "game.engine.link",
+  GameEngineRead: "game.engine.read",
+  GameEngineSteps: "game.engine.steps",
+  /** `game-engine`: a game snapshot of the bound game, taken before the plugin changes files there. */
+  GameSnapshot: "game.snapshot",
+  /** `game-engine`: a new Genex game for an engine project made with no game open, which the plugin may then link. */
+  GameCreate: "game.create",
+  /** `game-engine`: the games whose run is going now, each with the project this plugin linked it to. */
+  GameEngineRuns: "game.engine.runs",
 } as const;
 export type PluginService = (typeof PluginService)[keyof typeof PluginService];
+
+/** The folder in a `game-engine` plugin's storage where the host keeps each game's link, `<game>.json`. */
+export const ENGINE_LINKS_FOLDER = "links";
 
 /** Whether a plugin's own saved account is usable right now (`PluginRegistry.accountState`). */
 export const PluginAccountState = {

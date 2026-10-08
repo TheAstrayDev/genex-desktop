@@ -2427,6 +2427,10 @@ button.chat-header-title:hover {
   align-items: center;
   gap: 8px;
 }
+/* The editor's own state ("Not open", "Starting") is a state, not a control: plain text, not the controls' mono. */
+.extension-connection-state[data-engine-word] {
+  font-family: var(--font-family-sans);
+}
 .extension-dot {
   width: 6px;
   height: 6px;
@@ -3078,6 +3082,14 @@ button.chat-header-title:hover {
 .chat-tool-toggle:disabled {
   cursor: default;
 }
+/* A connector's picture: the work's play views under its heading, or small in its row (chat/ConnectorShots.tsx). */
+.chat-shot {
+  display: block;
+  flex: none;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+}
 /* The row's gap is wider than a word space; the path follows its "·" like the next word. The path
  * gives up its folders before the verb, and its name never paints past the row. */
 .chat-tool-toggle:has(+ .chat-tool-file) {
@@ -3519,6 +3531,12 @@ a:focus-visible {
    full-window layer (the welcome) would frame the whole window. */
 :root :is(h1, h2, h3, [role="dialog"])[tabindex="-1"]:focus-visible {
   outline: none;
+}
+/* A tool row's toggle stretches over its row, and keyboard focus lights the whole row
+   (`.chat-tool-head:has(…:focus-visible)`): no edge or fill around the label alone. */
+:root .chat-tool-head > .chat-tool-toggle:focus-visible {
+  outline: none;
+  background-color: transparent;
 }
 :root :is(.theme-primary, .theme-destructive, [role="tab"][aria-selected="true"]):focus-visible {
   outline-color: currentColor;
@@ -5014,11 +5032,15 @@ a:focus-visible {
   font-family: var(--font-family-content);
   font-size: 14px;
 }
-.picker-seg > button:hover {
+.picker-seg > button:enabled:hover {
   color: var(--control-text-hover, var(--ink-2));
 }
 .picker-seg > button[aria-checked="true"] {
   color: var(--control-text-hover, var(--ink));
+}
+/* A choice the control shows but can't take (Mode's Loop in an Unreal game); dims like the stepper's ends. */
+.picker-seg > button:disabled {
+  opacity: 0.4;
 }
 .picker-stepper {
   display: flex;

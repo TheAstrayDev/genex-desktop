@@ -28,6 +28,8 @@ import {
   type Rig,
 } from "../helpers/studio-rig.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+import { ctxRecorder } from "../helpers/ctx-recorder.ts";
+import { buildRunGraph } from "../../src/renderer/run-graph.ts";
 import {
   DIRECTOR_TOOLS,
   MAX_DIRECTOR_MEMORY,
@@ -81,6 +83,8 @@ import {
 import { summarizeScoreboard, toScoreboard } from "../../src/harness-seed/loop/checks.ts";
 import { CHECK_KINDS, renderCheckGrammar, renderChecks } from "../../src/harness-seed/loop/spec.ts";
 import { KIND_NAMES } from "../../src/harness-seed/loop/kinds.ts";
+import { CoreFact } from "../../src/harness-seed/loop/folder-facts.ts";
+import { appIdentity } from "../../src/harness-seed/loop/project-prompts.ts";
 
 const rigs: Rig[] = [];
 afterEach(async () => {
@@ -137,7 +141,8 @@ describe("the director's tools and brief", () => {
       "worker_status",
       "worker_steer",
       "worker_stop",
-      "wait",
+      "worker_wait",
+      "worker_mark",
       "judge",
       "playtest",
       "integrate",
@@ -1093,11 +1098,12 @@ describe("the night's plan, before anyone builds", () => {
       baseCommit: "abcdef1234567890",
     } as never);
     // Bounded on the brief MINUS the workspace's own playbook: skills/director.md is a file
-    // SkillOpt and the architect grow on purpose, and holding the sum would hold them back.
-    assert.ok(
-      brief.length - skill.length < 5_000,
-      `the brief's own words are ${brief.length - skill.length} characters`,
-    );
+    // SkillOpt and the architect grow on purpose, and holding the sum would hold them back. Genex's
+    // identity, which every brief opens with, is not the director's boilerplate either.
+    const identity = appIdentity({ folderLabel: "skate", facts: [{ id: CoreFact.WebGame, path: "." }] });
+    assert.ok(brief.includes(identity), "the brief opens with Genex's identity");
+    const own = brief.length - skill.length - identity.length;
+    assert.ok(own < 5_000, `the brief's own words are ${own} characters`);
     assert.ok(brief.includes(skill.trim()), "and the playbook itself is carried whole");
     assert.match(brief, new RegExp(`under ${MAX_DIRECTOR_MEMORY} characters`), "the memory clause names the clamp");
   });
@@ -1540,7 +1546,7 @@ describe("the loop the director can see, and the thresholds it may set", () => {
   it("syncs the head on every declared tool, and only spares the studio's own resolve_root", () => {
     for (const tool of DIRECTOR_TOOLS)
       assert.equal(headSynced(tool.name), true, `${tool.name} starts at the real head`);
-    assert.equal(DIRECTOR_TOOLS.length, 14, "fourteen tools, all of them synced");
+    assert.equal(DIRECTOR_TOOLS.length, 15, "fifteen tools, all of them synced");
     // `resolve_root` is the studio asking where a target lives, not a director's decision: it
     // must not touch git. plan, worker_status, worker_steer, worker_stop and note used to be
     // outside the set, and note/worker_status are exactly what a director calls right after
@@ -1922,6 +1928,186 @@ function fakeEngine(
   } as never);
 }
 
+/** The custom event types a run wrote, each once, in the order they first appear. */
+function runEventTypes(events: Awaited<ReturnType<typeof waitForLog>>, runId: string): string[] {
+  const types: string[] = [];
+  for (const event of events) {
+    if (event.data.type !== "custom") continue;
+    const payload = (event.data as { payload?: { runId?: unknown } }).payload;
+    if (payload?.runId !== runId || types.includes(event.data.event_type)) continue;
+    types.push(event.data.event_type);
+  }
+  return types;
+}
+
+/** A night as the director's tool handler reads it, with a builder `plaza` and a recording host. */
+function markingNight(state: string) {
+  const rec = ctxRecorder({
+    handlers: {
+      "artifact.read": () => null,
+      "artifact.write": () => 1,
+      "events.head": () => null,
+      "events.list": () => [],
+      "plugins.workerTypes": () => [],
+      "engine.delegate": () => ({ ok: true, engine: "claude-code", summary: "read it", usage: {}, turns: 1 }),
+    },
+  });
+  const integrated: unknown[] = [];
+  const cards: string[] = [];
+  const log: Array<{ seq: number; text: string }> = [];
+  const plaza = { id: "plaza", title: "Plaza", state, mode: "loop" };
+  const night = {
+    ctx: rec.ctx,
+    toolCalls: 0,
+    toolsInFlight: 0,
+    run: { runId: `run-mark-${state}`, project: "skate", engine: "claude-code" },
+    threadId: "t-mark",
+    projectDir: "/games/skate",
+    integrationWorktree: "/runs/skate/integration",
+    gameFacts: undefined,
+    state: { integrationHead: "aaa", finished: false, workers: new Map([["plaza", plaza]]), ledger: [] },
+    journal: null,
+    waitSeq: 0,
+    softDeadline: Date.now() + 60_000,
+    finalDeadline: Date.now() + 120_000,
+    saveJournal: async () => {},
+    keepMemory: async () => {},
+    syncHead: async () => {},
+    integrate: async (args: unknown) => {
+      integrated.push(args);
+      night.state.integrationHead = "bbb";
+      return "merged plaza";
+    },
+    decision: async (text: string) => {
+      cards.push(text);
+    },
+    note: (text: string) => log.push({ seq: log.length + 1, text }),
+    notesSince: (seq: number) => log.filter((entry) => entry.seq > seq),
+    ledgerLines: () => [],
+    routeUserSteers: async () => {},
+    inbox: { steering: async () => [], finishing: async () => false },
+  };
+  return { night, rec, integrated, cards, log };
+}
+
+describe("the director's worker_mark and readers, in Genex's one worker model", () => {
+  it("worker_mark used integrates the worker, and rejected stops its news", async () => {
+    const { handler, wait } = await import("../../src/harness-seed/loop/director/tools.ts");
+    const used = markingNight("running");
+    assert.equal(await handler(used.night as never, "worker_mark", { id: "plaza", verdict: "used" }), "merged plaza");
+    assert.deepEqual(used.integrated, [{ worker: "plaza" }], "used is integrate for that worker");
+
+    const rejected = markingNight("done");
+    rejected.night.note("worker plaza: iteration 2 accepted");
+    rejected.night.note("USER SAYS: keep the plaza red");
+    const answer = String(await handler(rejected.night as never, "worker_mark", { id: "plaza", verdict: "rejected" }));
+    assert.match(answer, /Rejected plaza/);
+    assert.deepEqual(rejected.integrated, [], "rejected integrates nothing");
+    assert.match(rejected.cards.join("\n"), /rejected worker plaza/, "the feed says so");
+    const waited = JSON.parse(String(await wait(rejected.night as never, { seconds: "1" })));
+    assert.deepEqual(waited.happened, ["USER SAYS: keep the plaza red"], "its news stops; the user's words do not");
+    assert.deepEqual(waited.status.workers, [], "the digest no longer names it");
+    assert.match(
+      String(
+        await handler(markingNight("running").night as never, "worker_mark", { id: "plaza", verdict: "rejected" }),
+      ),
+      /still running/,
+      "a running worker is stopped first",
+    );
+  });
+
+  it("a reader started with isolation read works in place and never integrates", async () => {
+    const { handler } = await import("../../src/harness-seed/loop/director/tools.ts");
+    const { closeReaders } = await import("../../src/harness-seed/loop/workers/director-pool.ts");
+    const { night, rec, integrated, log } = markingNight("done");
+    const started = String(
+      await handler(night as never, "worker_start", {
+        id: "look",
+        title: "Look",
+        task: "Read the HUD.",
+        isolation: "read",
+      }),
+    );
+    assert.match(started, /^Started w1 \(read\)/);
+    const status = String(await handler(night as never, "worker_wait", { id: "w1", seconds: "5" }));
+    assert.match(status, /w1 · Look · read · done/);
+    const [delegation] = rec.paramsOf("engine.delegate");
+    assert.equal(delegation?.readOnly, true, "it writes nothing");
+    assert.equal(delegation?.cwd, undefined, "it works in the game folder itself");
+    assert.deepEqual(delegation?.worker, { id: "w1", title: "Look", runId: night.run.runId, research: false });
+    assert.deepEqual(rec.paramsOf("snapshot.create"), [], "no copy is made for it");
+    assert.match(log.map((entry) => entry.text).join("\n"), /worker w1: Look done/, "its end is the lead's news");
+    assert.match(
+      String(await handler(night as never, "worker_mark", { id: "w1", verdict: "used" })),
+      /nothing to merge/,
+    );
+    assert.deepEqual(integrated, [], "a reader never integrates");
+    assert.match(
+      String(await handler(night as never, "worker_start", { id: "lock", task: "write here", isolation: "lock" })),
+      /never in the game folder itself/,
+      "the web method refuses a writer in place",
+    );
+    await closeReaders(night as never);
+  });
+
+  it("a builder waiting on the person is the lead's news: worker_wait wakes on it and its line says so", async () => {
+    const { handler, wait } = await import("../../src/harness-seed/loop/director/tools.ts");
+    const { night, rec, log } = markingNight("running");
+    const plaza = { iterations: [], deadline: Date.now() + 60_000, brief: "a red plaza", problems: [], steering: [] };
+    Object.assign(night.state.workers.get("plaza")!, plaza);
+    // The night binds every tool's function to itself; this one hands `worker_wait` to the real one.
+    Object.assign(night, { wait: (args: Record<string, unknown>) => wait(night as never, args) });
+    const question = {
+      id: "e1",
+      data: {
+        type: "custom",
+        event_type: "tool_permission",
+        payload: {
+          requestId: "perm-1",
+          state: "pending",
+          worker: { id: "plaza" },
+          title: "Plaza wants to run npm install",
+        },
+      },
+    };
+    rec.handle("events.list", (p) => (p.after ? [] : [question]));
+    const started = Date.now();
+    const waited = JSON.parse(String(await handler(night as never, "worker_wait", { id: "plaza", seconds: "30" })));
+    assert.ok(Date.now() - started < 10_000, "it woke at once");
+    assert.match(waited.happened.join("\n"), /worker plaza is waiting for the person: Plaza wants to run npm install/);
+    assert.equal(waited.status.workers[0]?.waitingForPerson, "Plaza wants to run npm install");
+    assert.equal(log.filter((entry) => /waiting for the person/.test(entry.text)).length, 1, "told once");
+    const status = JSON.parse(String(await handler(night as never, "worker_status", { id: "plaza" })));
+    assert.equal(status.waitingForPerson, "Plaza wants to run npm install");
+    assert.equal(log.filter((entry) => /waiting for the person/.test(entry.text)).length, 1, "and not again");
+  });
+
+  it("a reader may be a researcher", async () => {
+    const { handler } = await import("../../src/harness-seed/loop/director/tools.ts");
+    const { closeReaders } = await import("../../src/harness-seed/loop/workers/director-pool.ts");
+    const { night, rec } = markingNight("done");
+    await handler(night as never, "worker_start", {
+      title: "Look",
+      task: "How do others do it?",
+      isolation: "read",
+      research: "yes",
+    });
+    const [delegation] = rec.paramsOf("engine.delegate");
+    assert.equal((delegation?.worker as { research?: boolean } | undefined)?.research, true);
+    await closeReaders(night as never);
+  });
+
+  it("still answers the old name wait, which a kept playbook may call", async () => {
+    const { handler, wait } = await import("../../src/harness-seed/loop/director/tools.ts");
+    const { night } = markingNight("done");
+    night.state.workers.clear();
+    // The night binds every tool's function to itself; this one hands `wait` to the real one.
+    const bound = Object.assign(night, { wait: (args: Record<string, unknown>) => wait(bound as never, args) });
+    const waited = JSON.parse(String(await handler(bound as never, "wait", { seconds: "1" })));
+    assert.deepEqual(waited.happened, ["nothing yet"]);
+  });
+});
+
 describe("a director's night through the real core and harness", () => {
   it("starts a worker, waits, looks, integrates, judges, shows, finishes — and the integration branch lands", async () => {
     const rig = await startRig(
@@ -1931,6 +2117,10 @@ describe("a director's night through the real core and harness", () => {
     rigs.push(rig);
     assert.equal(rig.core.host.hasCapability("director"), true, "the seed claims the director");
     const project = await rig.core.games.scaffold("director-smoke", { title: "Director smoke" });
+    // Blender files beside the web game: the lead's identity must read the game's own facts, not
+    // the web game a director builds by default.
+    await mkdir(path.join(project.dir, "art"), { recursive: true });
+    await writeFile(path.join(project.dir, "art", "tree.blend"), "BLENDER");
     // The user has the game open in Live: the one load in this test that is theirs.
     await rig.core.loadPreview({ project: project.name });
     const liveLoadsBefore = rig.preview.loads.length;
@@ -1957,7 +2147,7 @@ describe("a director's night through the real core and harness", () => {
         );
         results.refused = text(await call("worker_start", { id: "plaza", brief: "again" }));
         for (let i = 0; i < 30; i++) {
-          results.waited = json(await call("wait", { seconds: "5", worker: "plaza" }));
+          results.waited = json(await call("worker_wait", { seconds: "5", worker: "plaza" }));
           if (results.waited.status.workers[0]?.state !== "running") break;
         }
         results.wstatus = json(await call("worker_status", { id: "plaza" }));
@@ -2080,6 +2270,10 @@ describe("a director's night through the real core and harness", () => {
       `one worker session — worker_start answered ${JSON.stringify(results.started)}; waited ${JSON.stringify(results.waited?.happened)}`,
     );
     const director = seen.director[0]!;
+    // Its identity reads the game as the night found it ready: its folder and what it holds.
+    const folderLabel = project.dir.split("/").slice(-2).join("/");
+    assert.ok(director.prompt.includes(`the folder \`${folderLabel}\``), "the game's folder");
+    assert.match(director.prompt, /it holds a web game at its root, Blender files in `art\/`/, "the game's facts");
     // Flipped (one session): the lead is its chat's own session — it sits in the game folder and
     // writes nothing; the integration worktree is the build it leads (its grant's root).
     const worktree = director.director!.root;
@@ -2098,10 +2292,12 @@ describe("a director's night through the real core and harness", () => {
       "finish",
     ])
       assert.ok(results.tools.includes(name), `${name} offered`);
-    // Flipped with the wake loop (director/wake.ts): a waking lead ends its turn instead of
-    // waiting inside it, so `wait` is not offered. Its handler still answers the call below, for a
-    // playbook the agent kept that names it.
-    assert.ok(!results.tools.includes("wait"), "wait is not offered to a waking lead");
+    // A waking lead ends its turn instead of waiting inside it (director/wake.ts), so
+    // `worker_wait` is not offered. Its handler still answers the call above, and the old name
+    // `wait` too, for a playbook the agent kept that names it.
+    assert.ok(!results.tools.includes("worker_wait"), "worker_wait is not offered to a waking lead");
+    assert.ok(!results.tools.includes("wait"), "nor the old name");
+    assert.ok(results.tools.includes("worker_mark"), "worker_mark is offered");
 
     // Tool answers, across the studio → harness dispatch.
     assert.ok(
@@ -2222,6 +2418,83 @@ describe("a director's night through the real core and harness", () => {
     assert.ok(
       screens.some((s) => s.role === "builder" && s.label === "Plaza"),
       `the worker's window carried its title: ${JSON.stringify(screens)}`,
+    );
+
+    // The whole run, pinned: the tools a web lead is offered, the run's event types in the order
+    // they first appear, and the Builds graph's node kinds. Later phases flip these by name.
+    assert.deepEqual(
+      [...results.tools].sort(),
+      [
+        // Flipped: a lead may look at an app window (look-only, in every mode).
+        "app_look",
+        "blender__model",
+        "blender__retrieve",
+        "blender__status",
+        "computer",
+        "finish",
+        "genex__asset",
+        "genex__cli",
+        "genex__cli-paid",
+        "genex__package",
+        "genex__publish",
+        "genex__publish-status",
+        "genex__skill",
+        "goal_update",
+        "integrate",
+        // Flipped: a lead may run long commands in the background, in its chat's mode.
+        "job_start",
+        "job_status",
+        "job_stop",
+        "job_tail",
+        "judge",
+        "look",
+        "note",
+        // Flipped: a lead may look for a Genex plugin and show the person its card (and the
+        // "Don't wait for me" card), each in the chat its run was started in.
+        "offer_dont_wait",
+        "plan",
+        "playtest",
+        "plugins_find",
+        "plugins_suggest",
+        "run_status",
+        "show",
+        "worker_mark",
+        "worker_start",
+        "worker_status",
+        "worker_steer",
+        "worker_stop",
+      ],
+      "the web lead's tools",
+    );
+    // `run_learning` is left out: the learning pass appends it after `run_finished`, so the snapshot
+    // taken when `run_finished` lands holds it only when the poll happens to be late.
+    assert.deepEqual(
+      runEventTypes(events, runId).filter((type) => type !== "run_learning"),
+      [
+        "run_registered",
+        "run_started",
+        "autopilot_started",
+        "session_activity",
+        "autopilot_plan_review",
+        "director_verdict",
+        "director_worker",
+        "autopilot_decision",
+        "integration_merge",
+        "integration_health",
+        "run_interaction_evidence",
+        "director_show",
+        "completion_call",
+        "optimization_updated",
+        "run_finished",
+      ],
+      "the run's event types, in first-appearance order",
+    );
+    assert.deepEqual(
+      buildRunGraph(events)
+        ?.nodes.map((node) => node.kind)
+        .sort(),
+      ["base", "facet", "final", "integration", "optimization", "run"],
+      "the Builds graph's node kinds",
     );
   });
 
@@ -2593,6 +2866,10 @@ describe("a director's night through the real core and harness", () => {
     };
     const results: Record<string, any> = {};
     fakeEngine(rig, async (request) => {
+      // Before the run's first session of any kind: the snapshots of this game taken so far.
+      results.snapshotsAtFirstSession ??= (await rig.core.listAllEvents()).filter(
+        (event) => event.data.type === "snapshot_created" && /director starting point/.test(String(event.data.reason)),
+      ).length;
       if (request.director) {
         seen.director.push(request);
         const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
@@ -2686,11 +2963,14 @@ describe("a director's night through the real core and harness", () => {
       "director run_finished on a fresh scaffold",
     );
 
+    // A web Loop snapshots the game before its first session, whatever that session is.
+    assert.equal(results.snapshotsAtFirstSession, 1, "the director's starting snapshot came first");
     // The starting point: one base session, in the run's integration worktree, on the base brief.
     assert.equal(seen.base.length, 1, `one base session, got ${seen.base.length}`);
     assert.match(seen.base[0]!.prompt, /You are building the starting scene/);
     assert.match(seen.base[0]!.prompt, /Do not spend this stage designing a large framework/);
     assert.match(seen.base[0]!.prompt, /PREPARATION BUDGET: 3 minutes/);
+    assert.match(seen.base[0]!.prompt, /^You are working inside Genex/, "the base builder is told first who runs it");
     assert.ok(seen.base[0]!.timeoutMs! <= 200_000, "preparation leaves most working time to the lead");
     assert.doesNotMatch(seen.base[0]!.prompt, /0 facets/, "a director's night has no facet roll call");
     assert.ok(
@@ -2725,6 +3005,13 @@ describe("a director's night through the real core and harness", () => {
       seen.workers.filter((request) => request.selfCapture?.facetId === "plaza").length,
       1,
       "the worker session ran",
+    );
+    const plaza = seen.workers.find((request) => request.selfCapture?.facetId === "plaza");
+    assert.match(String(plaza?.prompt), /^You are working inside Genex/, "and so is the worker");
+    assert.deepEqual(
+      [plaza?.worker?.id, plaza?.worker?.title],
+      ["plaza", "Plaza"],
+      "a single session's builder carries the run's worker grant, which the host honoured",
     );
 
     // Every other fork is gated as well, and the worker's own build is not a starting point.
@@ -3307,6 +3594,7 @@ describe("a director's night through the real core and harness", () => {
     const project = await rig.core.games.scaffold("director-stop", { title: "Director stop" });
     const results: Record<string, any> = {};
     const building: Record<string, boolean> = {};
+    const grants: Record<string, DelegateRequest["worker"]> = {};
     fakeEngine(rig, async (request) => {
       if (request.director) {
         const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
@@ -3373,6 +3661,7 @@ describe("a director's night through the real core and harness", () => {
       // The worker's build turn: half an edit, then the abort the director sends.
       assert.ok(request.signal, "a delegated build carries the abort signal the director stops it with");
       const who = path.basename(request.cwd);
+      grants[who] = request.worker;
       await mkdir(path.join(request.cwd, "src"), { recursive: true });
       await writeFile(path.join(request.cwd, "src", `${who}.js`), `export const ${who} = 'half-painted';\n`);
       building[who] = true;
@@ -3423,6 +3712,12 @@ describe("a director's night through the real core and harness", () => {
 
     assert.equal(results.started.started, "plaza", JSON.stringify(results.started));
     assert.equal(results.building, true, "the builder was mid-edit when the director stopped it");
+    // A loop builder's build turn is a worker of the run, seated by the host in the chat's mode.
+    assert.deepEqual(
+      [grants.plaza?.id, grants.plaza?.title],
+      ["plaza", "Plaza"],
+      "the facet loop's builder carries the run's worker grant",
+    );
 
     // The round: recorded as stopped, with no winner, no board and no shots — nobody looked.
     const rounds = customEvents(events, "facet_iteration").filter((e) => e.runId === runId);

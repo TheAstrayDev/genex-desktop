@@ -1,0 +1,198 @@
+{
+  "apiVersion": 3,
+  "id": "toy-engine",
+  "version": "1.0.0",
+  "name": "Toy Engine",
+  "publisher": "Genex tests",
+  "description": "A made-up engine for tests: it carries every section a plugin can declare, so tests see which ones Genex keeps.",
+  "backend": "backend.mjs",
+  "capabilities": [],
+  "detect": [
+    {
+      "fact": "toy-project",
+      "files": [
+        "**/*.toyproj"
+      ],
+      "notUnder": [
+        "**/vendor/"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "build",
+      "description": "Build the toy project and answer what went wrong.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "scene": {
+            "type": "string",
+            "description": "The scene to build first."
+          }
+        }
+      },
+      "facts": [
+        "toy-project"
+      ],
+      "needs": [
+        "toy-editor"
+      ]
+    },
+    {
+      "name": "editor-state",
+      "audience": "harness",
+      "description": "Whether the toy editor is open and whether the person is using it.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "save-scenes",
+      "audience": "harness",
+      "description": "Save every open scene in the toy editor.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "capture",
+      "audience": "harness",
+      "description": "Capture the toy editor's viewport.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "reload-scenes",
+      "audience": "harness",
+      "description": "Reload every scene from disk after files changed under the editor.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "reopen-editor",
+      "audience": "harness",
+      "description": "Open the toy editor again after it stopped.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "end-editor",
+      "audience": "harness",
+      "description": "Close the toy editor at the end of a run.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "skills": [
+    {
+      "name": "toy-engine",
+      "summary": "How to build and check a toy project.",
+      "file": "skills/toy-engine.md",
+      "facts": [
+        "toy-project"
+      ],
+      "tools": [
+        "build"
+      ]
+    }
+  ],
+  "panels": [],
+  "settings": [],
+  "actions": [],
+  "locks": [
+    {
+      "id": "toy-editor",
+      "label": "Toy editor",
+      "per": "project",
+      "personFirst": "editor-state"
+    }
+  ],
+  "folders": [
+    {
+      "path": "~/Library/Application Support/ToyEngine",
+      "why": "The toy engine's settings"
+    }
+  ],
+  "hooks": [
+    {
+      "on": "run.prepare",
+      "tool": "editor-state"
+    },
+    {
+      "on": "checkpoint.before",
+      "tool": "save-scenes"
+    },
+    {
+      "on": "checkpoint.after",
+      "tool": "capture"
+    },
+    {
+      "on": "restore.after",
+      "tool": "reload-scenes"
+    },
+    {
+      "on": "health",
+      "tool": "editor-state"
+    },
+    {
+      "on": "crash",
+      "tool": "reopen-editor"
+    },
+    {
+      "on": "run.end",
+      "tool": "end-editor"
+    }
+  ],
+  "observers": [
+    {
+      "id": "viewport",
+      "facts": [
+        "toy-project"
+      ],
+      "tool": "capture"
+    }
+  ],
+  "workspace": {
+    "ignore": [
+      "Cache/"
+    ],
+    "copySkip": [
+      "Cache/",
+      "Exports/"
+    ]
+  },
+  "assets": {
+    "folders": [
+      "scenes"
+    ],
+    "formats": [
+      "toyscene"
+    ]
+  },
+  "workerTypes": [
+    {
+      "id": "scene",
+      "description": "Edits one scene",
+      "tools": [
+        "build"
+      ],
+      "isolation": "copy"
+    }
+  ],
+  "scaffolds": [
+    {
+      "id": "game",
+      "label": "Toy game"
+    }
+  ]
+}

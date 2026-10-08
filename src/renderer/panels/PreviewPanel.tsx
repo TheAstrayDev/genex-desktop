@@ -28,12 +28,13 @@ import type { BesideTarget } from "../open-beside.ts";
 import { OPEN_BUILD_EVENT } from "../open-build.ts";
 import { replyAbout } from "../reply-about.ts";
 import type { RunGraph as RunGraphModel } from "../run-graph.ts";
-import { StageView, watchingLive } from "../stage.ts";
+import { kindPendingGame, StageView, watchingLive } from "../stage.ts";
 import { threadLog } from "../state/event-log.ts";
 import { useEventLog, useLaunch, useShallow, useThreads } from "../state/hooks.ts";
 import { isWorkingStatus } from "../state/threads.ts";
 import { studio } from "../state/studio.ts";
 import type { EngineDescriptor, GameProject } from "../types.ts";
+import { unrealProjectOf } from "../unreal-game.ts";
 import { isPlanning, runIdIn } from "../words.ts";
 import { AssetsCanvas } from "./AssetsCanvas.tsx";
 import { FileViewer } from "./FileViewer.tsx";
@@ -42,11 +43,13 @@ import { RunGraph } from "./RunGraph.tsx";
 import type { Reply } from "./RunInspector.tsx";
 import { useLiveBehind } from "./stage/live-behind.ts";
 import { BuildTrouble, useBuildProblem } from "./stage/build-problem.tsx";
-import { useLiveLoad, useLiveProbe } from "./stage/live-load.ts";
+import { useLiveLoad, useLiveProbe, useLoadOnceStarted } from "./stage/live-load.ts";
 import { useStageControls } from "./stage/live-run.ts";
 import { useNativeViewBounds } from "./stage/native-bounds.ts";
+import { stageFlags } from "./stage/stage-flags.ts";
 import { EmptyGame, LiveLoading, NoGame, PlanningBuild, StoppedGame } from "./stage/StageBody.tsx";
 import { StageStrip } from "./stage/StageStrip.tsx";
+import { UnrealStage } from "./stage/UnrealStage.tsx";
 
 const EMPTY_WORKER_EVENTS: EventEnvelope[] = [];
 
@@ -71,62 +74,6 @@ interface Props {
   /** A file or image opened from the chat: a fourth tab until it is closed. */
   beside?: BesideTarget | null;
   onCloseBeside?: () => void;
-}
-
-/**
- * The view the stage shows. The user's stored choice is honoured, but Builds can only be shown
- * once there is a build to draw: a remembered "builds" on a game that has never run used to leave
- * the stage on the empty black scene with no copy on it and no Live/Builds control to escape with.
- */
-function resolveStageView(view: StageView, has: { beside: boolean; builds: boolean; project: boolean }): StageView {
-  if (view === StageView.File && has.beside) return StageView.File;
-  if (view === StageView.Builds && has.builds) return StageView.Builds;
-  if (view === StageView.Assets && has.project) return StageView.Assets;
-  return StageView.Live;
-}
-
-/** Which surface the stage shows, and why the running game is or is not on it. */
-function stageFlags({
-  view,
-  beside,
-  graph,
-  planning,
-  project,
-  live,
-}: {
-  view: StageView;
-  beside: BesideTarget | null;
-  graph: RunGraphModel | null;
-  planning: boolean;
-  project: string | null;
-  live: ReturnType<typeof useLiveLoad>;
-}) {
-  const stageView = resolveStageView(view, {
-    beside: Boolean(beside),
-    builds: graph !== null || planning,
-    project: Boolean(project),
-  });
-  const emptyScene = live.state?.phase === "empty" && live.state?.drawCalls === 0;
-  const showEmpty = Boolean(project && stageView === StageView.Live && emptyScene);
-  const liveLoading = Boolean(
-    project && live.liveLoad?.project === project && stageView === StageView.Live && !showEmpty,
-  );
-  const onLive = Boolean(project && stageView === StageView.Live);
-  return {
-    stageView,
-    /** The game has nothing in it yet, whichever view is open. */
-    emptyScene: Boolean(project && emptyScene),
-    showEmpty,
-    liveLoading,
-    /** The person stopped the game: its view holds no page until Play. */
-    stopped: live.stopped,
-    /** …and Live says so, with no load of it under way. */
-    gameStopped: onLive && live.stopped && !liveLoading && !showEmpty,
-    buildsOpen: stageView === StageView.Builds,
-    /** Assets is a full-stage surface like Builds: the native game view has to give the rectangle back. */
-    assetsOpen: stageView === StageView.Assets,
-    fileOpen: stageView === StageView.File,
-  };
 }
 
 /** The earlier build the user opened for this conversation, if any; the latest shows otherwise. */
@@ -456,8 +403,10 @@ export function PreviewPanel({
 }: Props): JSX.Element {
   /** The game on the stage, as the studio describes it — its title, its folder, its shape. */
   const loaded = useMemo(() => games.find((game) => game.name === project) ?? null, [games, project]);
+  const unreal = unrealProjectOf(loaded) !== null;
   const slot = useRef<HTMLDivElement>(null);
   const live = useLiveLoad(project);
+  const pending = useLoadOnceStarted({ project, pending: kindPendingGame(loaded), unreal }, live.loadLive);
   const run = useStageRun({
     project,
     threadId,
@@ -468,19 +417,21 @@ export function PreviewPanel({
   });
   const { selectedRun, history, graph, planning } = run;
   const showSetup = !project && !engines.some(canBuildWith);
-  const flags = stageFlags({ view, beside, graph, planning, project, live });
-  const { stageView, showEmpty, liveLoading, gameStopped } = flags;
+  const flags = stageFlags({ view, beside, graph, planning, project, unreal, pending, live });
+  const { stageView, showEmpty, liveLoading, gameStopped, engineCard } = flags;
   const [focusedAsset, setFocusedAsset] = useState<string | null>(null);
   /** A plugin's toolbar button has its panel up over the stage. */
   const [toolbarOpen, setToolbarOpen] = useState(false);
-  const watching = watchingLive({ view: stageView, visible, showEmpty });
-  const onStage = stageView === StageView.Live;
-  const shown = { onLive: onStage && visible, loading: liveLoading, empty: showEmpty };
+  // The Unreal card is no game to watch: what waits for Live goes in without asking.
+  const watching = !engineCard && watchingLive({ view: stageView, visible, showEmpty });
+  const webOnStage = stageView === StageView.Live && !unreal;
+  const shown = { onLive: webOnStage && visible, loading: liveLoading, empty: showEmpty };
   const controls = useStageControls(project, live, shown, onNotice);
   const cover = { ...flags, liveLoading: controls.loader.covering, project, visible, sidebarOverlay, toolbarOpen };
   useNativeViewBounds(slot, { ...cover, watching });
   const trouble = useBuildProblem(project, live.loadLive, onNotice);
-  useLiveProbe({ project, stageView, live, buildProblemRef: trouble.buildProblemRef });
+  // An Unreal game has no web page to probe.
+  useLiveProbe({ project: unreal ? null : project, stageView, live, buildProblemRef: trouble.buildProblemRef });
   const chooseView = useCallback((next: StageView) => onView(next), [onView]);
   const { shownBuild, behind, showBuild, reload } = useLiveBehind({
     project,
@@ -523,7 +474,7 @@ export function PreviewPanel({
         onToolbarOpen={setToolbarOpen}
       />
 
-      {onStage ? <StageBanners trouble={trouble} /> : null}
+      {webOnStage ? <StageBanners trouble={trouble} /> : null}
       <div className="relative min-h-0 flex-1 overflow-hidden bg-base">
         <div ref={slot} data-preview-slot className="absolute inset-0" />
         <StageContents
@@ -542,6 +493,7 @@ export function PreviewPanel({
           onResume={controls.run.toggle}
           onCloseBeside={onCloseBeside}
         />
+        {engineCard && loaded ? <UnrealStage game={loaded} plugins={plugins} onNotice={onNotice} /> : null}
       </div>
     </div>
   );

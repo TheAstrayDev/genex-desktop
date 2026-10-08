@@ -19,12 +19,16 @@ import { ChatConversation } from "../chat/ChatConversation.tsx";
 import { ChatPanelHeader } from "../chat/ChatPanelHeader.tsx";
 import { answerConsent, answerPermission, planPrompt } from "../chat/composer-cards.ts";
 import { ComposerDock } from "../chat/ComposerDock.tsx";
+import { stepsOffer } from "../chat/engine-steps.ts";
+import { EngineStepsCard } from "../chat/EngineStepsCard.tsx";
 import { RewindDialog } from "../chat/RewindDialog.tsx";
 import { type ChatParts, useChatPanel } from "../chat/use-chat-panel.ts";
 import { chatPlaceholder } from "../composer-placeholder.ts";
+import { loopAvailableFor } from "../loop-setting.ts";
 import { Pending } from "../ui/Pending.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { PromptBar, type PromptBarHandle } from "../ui/PromptBar.tsx";
+import { unrealLoopGate, unrealRewindNote } from "../unreal-game.ts";
 
 export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const { loading } = props;
@@ -61,6 +65,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             <RewindDialog
               key={rewind.target.eventId}
               {...rewind.target}
+              engineNote={unrealRewindNote(chat.folder)}
               returnFocus={rewind.returnFocus}
               onRewound={(result) => rewind.target && rewind.rewound(rewind.target, result)}
               onDismiss={rewind.dismiss}
@@ -98,10 +103,17 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
       permissions={transcript.pendingPermissions.filter((entry) => entry.kind === EntryKind.Action)}
       onPermission={answerPermission}
       planModes={composer.permissions.planModes}
+      steps={
+        chat.isStudioThread ? null : (
+          <EngineStepsCard offer={stepsOffer(chat.threadEvents)} onNotice={parts.props.onNotice} />
+        )
+      }
     >
       <PromptBar
         ref={composerRef}
         project={chat.meta.project}
+        loopAvailable={loopAvailableFor(chat.folder)}
+        loopGate={unrealLoopGate(chat.folder)}
         conversationKey={threadId}
         build={composer.build}
         about={

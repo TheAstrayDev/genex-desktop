@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { after, it } from "node:test";
-import { access, readdir, readFile, writeFile } from "node:fs/promises";
+import { access, readdir, readFile, truncate, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { startRig, waitForLog, customEvents, type Rig } from "../helpers/studio-rig.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import { messageQueueState } from "../../src/shared/message-queue.ts";
-import { CheckpointPhase, chatCheckpointRef } from "../../src/main/chat-checkpoints.ts";
+import { CHECKPOINT_FILE_MAX_BYTES, CheckpointPhase, chatCheckpointRef } from "../../src/main/chat-checkpoints.ts";
+import { SkippedBy } from "../../src/shared/chat-rewind.ts";
+import { CustomEvent } from "../../src/shared/custom-events.ts";
 import { latestRun } from "../../src/shared/coordinator.ts";
 import { git } from "../../src/substrate/snapshots.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
@@ -735,4 +737,128 @@ it("without a saved copy from before the message, a rewind asked to restore the 
     false,
     "the message left the chat",
   );
+});
+
+it("tells the chat once when a checkpoint leaves a file out for its size", async () => {
+  const rig = await startRig();
+  rigs.push(rig);
+  const project = "rewind-big-files";
+  await rig.core.games.scaffold(project);
+  const thread = await rig.core.createGameThread(project);
+  const dir = rig.core.games.dirFor(project);
+  const tooLarge = CHECKPOINT_FILE_MAX_BYTES + 1;
+  const grow = (file: string) => truncate(path.join(dir, file), tooLarge);
+  await writeFile(path.join(dir, "theme.wav"), "small\n");
+  await writeFile(path.join(dir, "intro.mp4"), "");
+  await grow("intro.mp4");
+  const prompts: string[] = [];
+  rig.core.engines.register({
+    id: "claude-code",
+    label: "Claude",
+    kind: "delegated",
+    status: async () => ({ code: "ready", detail: "" }),
+    models: async () => [],
+    delegate: async (request) => {
+      prompts.push(request.prompt);
+      const step = prompts.length;
+      await writeFile(path.join(request.cwd ?? dir, `step-${step}.js`), `step ${step}\n`);
+      // The third answer grows a saved file past the limit.
+      if (step === 3) await grow("theme.wav");
+      return {
+        ok: true,
+        summary: `Answered step ${step}.`,
+        sessionId: `session-${step}`,
+        turns: 1,
+        usage: {},
+        durationMs: 1,
+        engine: "claude-code",
+      };
+    },
+  });
+  const send = (text: string) => rig.core.sendUserMessage(text, { thread, engine: "claude-code" });
+  const skips = (events: EventEnvelope[]) =>
+    customEvents(
+      events.filter((e) => e.thread_id === thread),
+      CustomEvent.CheckpointSkipped,
+    );
+
+  await send("Make a racer");
+  await waitForLog(rig.core, handled(thread, 1), 20000, "first answer");
+  await send("Add a track");
+  await waitForLog(rig.core, handled(thread, 2), 20000, "second answer");
+  await send("Add music");
+  await waitForLog(rig.core, (events) => skips(events).length >= 2, 20000, "a second set of files left out");
+  const events = await rig.core.store.listEvents(thread);
+  const [first, second, ...more] = skips(events);
+  assert.deepEqual(more, [], "the same set is told once");
+  assert.equal(first?.by, SkippedBy.Checkpoint);
+  assert.deepEqual(first?.files, [{ file: "intro.mp4", bytes: tooLarge }]);
+  assert.equal(first?.fileLimitBytes, CHECKPOINT_FILE_MAX_BYTES);
+  assert.deepEqual(second?.files, [
+    { file: "intro.mp4", bytes: tooLarge },
+    { file: "theme.wav", bytes: tooLarge },
+  ]);
+  assert.match(prompts[0] ?? "", /^Studio notice: Rewind cannot bring back these files.*intro\.mp4 \(50 MB\)/);
+  assert.doesNotMatch(prompts[1] ?? "", /Rewind cannot bring back/, "told once, then used up");
+
+  // A rewind that leaves a file as it is says so too.
+  const music = bubble(events, "Add music");
+  await refExists(dir, chatCheckpointRef(thread, music.messageId, CheckpointPhase.After));
+  const preview = await rig.core.rewindPreview(thread, music.eventId, music.messageId);
+  assert.deepEqual(preview.files.state === "restore" && preview.files.tooLargeFiles, ["theme.wav"]);
+  await rig.core.rewindChat(thread, music.eventId, music.messageId, { files: true });
+  const rewound = skips(await rig.core.store.listEvents(thread)).filter((p) => p.by === SkippedBy.Rewind);
+  assert.deepEqual(
+    rewound.map((p) => p.files),
+    [[{ file: "theme.wav", bytes: tooLarge }]],
+  );
+});
+
+it("when every changed file is too large to save, only the chat rewinds and the files are named", async () => {
+  const rig = await startRig();
+  rigs.push(rig);
+  const project = "rewind-only-big-files";
+  await rig.core.games.scaffold(project);
+  const thread = await rig.core.createGameThread(project);
+  const dir = rig.core.games.dirFor(project);
+  const tooLarge = CHECKPOINT_FILE_MAX_BYTES + 1;
+  await writeFile(path.join(dir, "theme.wav"), "small\n");
+  rig.core.engines.register({
+    id: "claude-code",
+    label: "Claude",
+    kind: "delegated",
+    status: async () => ({ code: "ready", detail: "" }),
+    models: async () => [],
+    delegate: async () => {
+      // The answer only grows a saved file past the limit.
+      await truncate(path.join(dir, "theme.wav"), tooLarge);
+      return {
+        ok: true,
+        summary: "Answered.",
+        sessionId: "session-1",
+        turns: 1,
+        usage: {},
+        durationMs: 1,
+        engine: "claude-code",
+      };
+    },
+  });
+  await rig.core.sendUserMessage("Add music", { thread, engine: "claude-code" });
+  await waitForLog(rig.core, handled(thread, 1), 20000, "the answer");
+  const music = bubble(await rig.core.store.listEvents(thread), "Add music");
+  await refExists(dir, chatCheckpointRef(thread, music.messageId, CheckpointPhase.After));
+
+  const preview = await rig.core.rewindPreview(thread, music.eventId, music.messageId);
+  assert.deepEqual(preview.files, { state: "unavailable", reason: "too-large", tooLargeFiles: ["theme.wav"] });
+  await rig.core.rewindChat(thread, music.eventId, music.messageId);
+  const records = customEvents(
+    (await rig.core.store.listEvents(thread)).filter((e) => e.thread_id === thread),
+    CustomEvent.CheckpointSkipped,
+  ).filter((p) => p.by === SkippedBy.Rewind);
+  assert.deepEqual(
+    records.map((p) => p.files),
+    [[{ file: "theme.wav", bytes: tooLarge }]],
+    "the rewind that left them says so",
+  );
+  assert.equal((await readFile(path.join(dir, "theme.wav"))).length, tooLarge, "the file stays as it is");
 });

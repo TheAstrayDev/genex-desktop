@@ -168,6 +168,11 @@ export type DispatchAction =
    * Unlike every other dispatch this one answers with a value — the tool's result.
    */
   | { type: "director_tool"; runId: string; name: string; args: Record<string, unknown> }
+  /**
+   * A worker tool (`WorkerTool`) the chat's own session called during the chat turn `turn` (its
+   * message id), forwarded to the harness's worker pool for that turn. Answers with the tool's result.
+   */
+  | { type: "worker_tool"; threadId: string; turn: string; name: string; args: Record<string, unknown> }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };
 
@@ -185,6 +190,7 @@ export const DispatchActionType = {
   RunStop: "run_stop",
   AutopilotResume: "autopilot_resume",
   DirectorTool: "director_tool",
+  WorkerTool: "worker_tool",
   SkilloptStart: "skillopt_start",
   BootNotice: "boot_notice",
 } as const satisfies Record<string, DispatchAction["type"]>;
@@ -214,6 +220,8 @@ export const HarnessCapability = {
   Rewind: "rewind",
   /** A message sent while the chat's own turn works joins that turn (`engine.steer`). */
   Steer: "steer",
+  /** The chat's own session may run workers: the harness answers `worker_tool` for its turn. */
+  Workers: "workers",
 } as const;
 export type HarnessCapability = (typeof HarnessCapability)[keyof typeof HarnessCapability];
 

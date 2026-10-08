@@ -247,7 +247,9 @@ function ChatScroll({ follow, children }: { follow: FollowScroll; children: Reac
       data-chat-scroll
       aria-label="Conversation"
       tabIndex={0}
-      className="h-full overflow-y-auto px-5 py-5"
+      // Nothing in the conversation is wider than its column: a long unbroken line wraps or scrolls
+      // in its own box, never the whole conversation sideways.
+      className="h-full overflow-x-clip overflow-y-auto px-5 py-5"
     >
       <div className="chat-conversation-stack flex min-w-0 flex-col gap-4">{children}</div>
     </div>

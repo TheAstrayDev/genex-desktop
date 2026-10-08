@@ -32,6 +32,8 @@ import { MESSAGE as REOPEN_MESSAGE } from "./reopen-run-prompts.ts";
 import { conversationThrough, latestRun } from "./run-inbox.ts";
 import { eventsToMessages } from "./prompt.ts";
 import { EngineId, hasSessionRoles, supportsSessions } from "./model-roles.ts";
+import { engineOfGame, GameEngine } from "./game-engine.ts";
+import { ProjectStarter, startWebIfPending } from "./folder-facts.ts";
 import { withSteers } from "./chat-steer-prompts.ts";
 import { HostMethod } from "./host-methods.ts";
 import { StudioContract } from "./page-contract.ts";
@@ -256,7 +258,8 @@ function ownsMessage(active: ActiveRun, action: QueueAction): boolean {
  * The run a message is for: the one under way on its thread or game, else the thread's last one.
  * A run that has closed is the log's (finished or paused) even while its learning pass runs. Whether
  * the message keeps its commission is decided once the night it answers after is known
- * (`keepsCommission`).
+ * (`keepsCommission`). A Loop message after an Unreal game's finished run is for no run: it may
+ * start the next one (`startsNextUnrealLoop`).
  */
 async function routeMessage(studio: Studio, action: QueueAction): Promise<RunRecord | null> {
   // A message never clears an active run's stop flag. Cancellation is an explicit action; a run
@@ -266,7 +269,26 @@ async function routeMessage(studio: Studio, action: QueueAction): Promise<RunRec
   const stoppedFirst = studio.stoppedMessages?.has(String(action.messageId)) === true;
   if (!active && !stoppedFirst) studio.cancels.delete(action.threadId);
   const previousRun = latestRun(await studio.host.call(HostMethod.EventsList, { threadId: action.threadId }));
-  return existingRun(action, active, previousRun);
+  const existing = existingRun(action, active, previousRun);
+  if (!active && (await startsNextUnrealLoop(studio.host, action, existing))) return null;
+  return existing;
+}
+
+/**
+ * Does the person's Loop message start the next Unreal Loop of a game built in Unreal (game-engine.ts
+ * `engineOfGame`) whose last run has finished? Its journal is the Unreal lead's own (`kind:
+ * "unreal-lead"`), not a director's, so a finished one is never reopened (`reopen-run.ts`
+ * `finishedNight` reads only a director's lead); the next Loop builds on what the game holds, so a
+ * new run continues the game. The message is then the chat's own, as before the first Loop: its
+ * session may launch the build.
+ */
+async function startsNextUnrealLoop(host: Host, action: QueueAction, run: RunRecord | null): Promise<boolean> {
+  if (run?.state !== RunState.Finished || chatWrote(action)) return false;
+  if (!(action.autopilot ?? action.loop)) return false;
+  const listed = await host.call(HostMethod.GameList, {}).catch(() => null);
+  const games = Array.isArray(listed) ? listed : [];
+  const project = run.project ?? action.project;
+  return engineOfGame(games.find((game) => game.name === project)) === GameEngine.Unreal;
 }
 
 /**
@@ -708,13 +730,16 @@ export async function launchFromIntake(
   requireGoal(spec);
   const games = await host.call(HostMethod.GameList, {});
   const project = intakeProject(action, spec, games);
+  // A Loop with no game yet makes a web game; one on a game with no kind starts it as one.
   if (!games.some((g) => g.name === project)) {
     await ctx.call(HostMethod.GameScaffold, {
       name: project,
       title: spec.goal?.slice(0, CLIP_GAME_TITLE) || project,
       threadId: action.threadId,
+      kind: ProjectStarter.Web,
     });
   }
+  await startWebIfPending(host, project, games);
   // What the folder itself refuses (nightRefusal): a page that cannot load, a game that is
   // already compiled. Said in chat now, instead of found out at 3am.
   const readiness = await host.call(HostMethod.GameValidate, { project }).catch(() => null);

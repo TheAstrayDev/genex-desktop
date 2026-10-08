@@ -13,6 +13,7 @@ import { REFERENCE_MIN_STILLS, ReferenceKind, RunMode } from "../loop/run-events
 import { MINUTE_MS } from "../loop/time.ts";
 import { TurnStop } from "../loop/turn-record.ts";
 import { isRecord } from "../loop/json.ts";
+import { ProjectStarter, ProjectTool } from "../loop/folder-facts.ts";
 
 /** How long `run_command` lets a command run when the call names no timeout. */
 const COMMAND_TIMEOUT_MS = 2 * MINUTE_MS;
@@ -83,19 +84,50 @@ export const tools: HarnessTool[] = [
   {
     name: "new_game",
     description:
-      "Create a new game project from the three.js template. The template already satisfies the studio contract (window.__studio), so the first screenshot works immediately.",
+      "Create a new game project. With kind 'web' Genex writes its three.js starter, which already satisfies the studio contract (window.__studio), so the first screenshot works immediately. Leave kind out for an empty folder you fill yourself.",
     parameters: {
       type: "object",
-      properties: { name: str("lowercase project id, e.g. 'pong'"), title: str("human title") },
+      properties: {
+        name: str("lowercase project id, e.g. 'pong'"),
+        title: str("human title"),
+        kind: { type: "string", enum: [ProjectStarter.Web], description: "'web' for the three.js starter" },
+      },
       required: ["name"],
     },
     async execute(args, ctx) {
       if (ctx.project) {
         return `This chat is already working in "${ctx.project}". Do not create another folder. Write files here with write_file.`;
       }
-      const project = await ctx.call(HostMethod.GameScaffold, { name: args.name, title: args.title ?? args.name });
+      const web = args.kind === ProjectStarter.Web;
+      const project = await ctx.call(HostMethod.GameScaffold, {
+        name: args.name,
+        title: args.title ?? args.name,
+        ...(web ? { kind: ProjectStarter.Web } : {}),
+      });
+      if (!web) return `Created ${project.name} at ${project.dir}: an empty folder, yours to fill.`;
       await ctx.call(HostMethod.PreviewLoad, { project: args.name });
       return `Created ${project.name} at ${project.dir} and loaded it in the preview.`;
+    },
+  },
+
+  {
+    name: ProjectTool.StartWebGame,
+    description:
+      "Make this game a web game: Genex writes its three.js starter here, which Live shows beside the chat. Only while the folder has no kind yet.",
+    parameters: { type: "object", properties: { project: str("project id; defaults to this chat's folder") } },
+    async execute(args, ctx) {
+      const pin = pinProject(args, ctx);
+      if (pin.error) return { ok: false, content: pin.error };
+      const project = pin.project as string;
+      // The chat this turn answers: while it is in Plan the host writes nothing and says why.
+      const started = await ctx.call(HostMethod.GameStart, {
+        project,
+        starter: ProjectStarter.Web,
+        threadId: ctx.threadId,
+      });
+      if ("blocker" in started) return started.message;
+      await ctx.call(HostMethod.PreviewLoad, { project });
+      return "The web starter is in the folder; build on it.";
     },
   },
 

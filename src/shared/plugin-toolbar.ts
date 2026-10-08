@@ -1,4 +1,5 @@
 import type { PluginInfo, PluginToolbarItem, PluginToolbarStatus } from "./plugins.ts";
+import { UiEvent } from "./ui-events.ts";
 
 /** One button contributed to the stage strip; `key` is the value of `data-plugin-toolbar`. */
 export interface PluginToolbarEntry {
@@ -45,4 +46,60 @@ export function toolbarStatusFrom(value: unknown): PluginToolbarStatus | null {
   if (raw.attention !== undefined) status.attention = Boolean(raw.attention);
   if (typeof raw.tone === "string" && TONES.has(raw.tone)) status.tone = raw.tone as PluginToolbarStatus["tone"];
   return status;
+}
+
+/** The words a button says while its plugin is behind the version Studio bundles: a badge and its tooltip. */
+export interface ToolbarUpdateWords {
+  badge: string;
+  title: (plugin: string, version: string) => string;
+}
+
+/**
+ * What a plugin's buttons say while Studio bundles a newer version of it than the one installed:
+ * an Update badge naming that version, which the toolbar shows over the plugin's own status. Null
+ * once the update is applied or waits for the plugin's sessions to end.
+ */
+export function toolbarUpdateStatus(plugin: PluginInfo, words: ToolbarUpdateWords): PluginToolbarStatus | null {
+  const version = plugin.availableVersion;
+  if (!version || plugin.pendingVersion) return null;
+  return { badge: words.badge, title: words.title(plugin.manifest.name, version) };
+}
+
+/**
+ * Whether a `game.changed` payload says the open game's own record changed (its engine link, its
+ * title), which a button's status may follow. A build's file writes each carry `file` and are not
+ * asked about.
+ */
+function gameRecordChanged(payload: { project?: string; file?: string } | undefined, project: string | null): boolean {
+  if (!payload || !project || payload.file) return false;
+  return payload.project === undefined || payload.project === project;
+}
+
+/**
+ * What a plugin's `toolbar` event changes: one button's status in place, or — when it names no
+ * button of this toolbar or carries no status — a refresh of them all. Null for anything else.
+ */
+function toolbarChange(
+  payload: { id: string; event: unknown } | undefined,
+  entries: readonly PluginToolbarEntry[],
+): { key: string; update: PluginToolbarStatus } | "refresh" | null {
+  const raw = payload?.event;
+  if (!payload || typeof payload.id !== "string") return null;
+  if (!isToolbarEvent(raw)) return null;
+  const mine = entries.filter((e) => e.plugin.manifest.id === payload.id);
+  if (mine.length === 0) return null;
+  const target = typeof raw.item === "string" ? mine.find((e) => e.item.id === raw.item) : undefined;
+  const update = toolbarStatusFrom(raw);
+  return target && update ? { key: target.key, update } : "refresh";
+}
+
+/** What a UI event asks of the toolbar: a re-ask of every status, one button's new status, or nothing. */
+export function toolbarReaction(
+  event: UiEvent,
+  entries: readonly PluginToolbarEntry[],
+  project: string | null,
+): { key: string; update: PluginToolbarStatus } | "refresh" | null {
+  if (event.type === UiEvent.PluginsChanged) return "refresh";
+  if (event.type === UiEvent.GameChanged) return gameRecordChanged(event.payload, project) ? "refresh" : null;
+  return event.type === UiEvent.PluginEvent ? toolbarChange(event.payload, entries) : null;
 }

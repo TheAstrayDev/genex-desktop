@@ -31,11 +31,11 @@ export function planPrompt(
 }
 
 /**
- * The consent card's two buttons. A question that already settled (answered elsewhere, timed
+ * The consent card's answer. A question that already settled (answered elsewhere, timed
  * out, or withdrawn by Stop) says so instead of pretending the click counted.
  */
-export async function answerConsent(consentId: string, approved: boolean): Promise<void> {
-  const { resolved } = await window.studio.pluginConsent(consentId, approved);
+export async function answerConsent(consentId: string, approved: boolean, always = false): Promise<void> {
+  const { resolved } = await window.studio.pluginConsent(consentId, approved, always);
   if (!resolved) throw new Error(CHAT_WORDS.consentSettled);
 }
 

@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toolbarItems, toolbarStatusFrom } from "../../src/shared/plugin-toolbar.ts";
+import {
+  toolbarItems,
+  toolbarReaction,
+  toolbarStatusFrom,
+  toolbarUpdateStatus,
+} from "../../src/shared/plugin-toolbar.ts";
+import { PLUGIN_TOOLBAR_WORDS } from "../../src/renderer/words.ts";
+import { UiEvent } from "../../src/shared/ui-events.ts";
 import type { PluginInfo, PluginToolbarItem } from "../../src/shared/plugins.ts";
 
 const item = (over: Partial<PluginToolbarItem> = {}): PluginToolbarItem => ({
@@ -91,6 +98,52 @@ test("toolbarStatusFrom sanitizes badge, title, disabled and tone and rejects no
     badge: "Live",
     tone: "ok",
   });
+});
+
+test("a change to the open game's own record re-asks the buttons; file writes and other games do not", () => {
+  const changed = (payload: { project?: string; file?: string }, open: string | null) =>
+    toolbarReaction({ type: UiEvent.GameChanged, payload } as UiEvent, [], open);
+  assert.equal(changed({ project: "valley" }, "valley"), "refresh", "its engine link or title changed");
+  assert.equal(changed({}, "valley"), "refresh", "every game changed, as when the games folder moves");
+  assert.equal(changed({ project: "valley", file: "src/main.ts" }, "valley"), null, "a build writing files");
+  assert.equal(changed({ project: "valley", file: "references" }, "valley"), null);
+  assert.equal(changed({ project: "lantern" }, "valley"), null, "another game");
+  assert.equal(changed({ project: "valley" }, null), null, "no game open");
+});
+
+test("a plugin change re-asks every button; a plugin's toolbar event updates its own button", () => {
+  const [entry] = toolbarItems([plugin("a", [item()])], "game");
+  const event = (payload: unknown) => ({ type: UiEvent.PluginEvent, payload }) as UiEvent;
+  assert.equal(toolbarReaction({ type: UiEvent.PluginsChanged, payload: {} } as UiEvent, [], null), "refresh");
+  assert.deepEqual(
+    toolbarReaction(
+      event({ id: "a", event: { kind: "toolbar", item: "demo", badge: "Live", tone: "ok" } }),
+      [entry],
+      "game",
+    ),
+    { key: "a:demo", update: { badge: "Live", tone: "ok" } },
+  );
+  assert.equal(toolbarReaction(event({ id: "a", event: { kind: "toolbar" } }), [entry], "game"), "refresh");
+  assert.equal(
+    toolbarReaction(event({ id: "b", event: { kind: "toolbar" } }), [entry], "game"),
+    null,
+    "not its plugin",
+  );
+  assert.equal(toolbarReaction(event({ id: "a", event: { kind: "progress" } }), [entry], "game"), null);
+  assert.equal(toolbarReaction({ type: UiEvent.GameArchived, payload: {} } as UiEvent, [entry], "game"), null);
+});
+
+test("a plugin behind the version Studio bundles says Update on its buttons, until that update waits or is done", () => {
+  const behind = plugin("unreal", [item()], { availableVersion: "0.3.0" });
+  assert.deepEqual(toolbarUpdateStatus(behind, PLUGIN_TOOLBAR_WORDS.update), {
+    badge: "Update",
+    title: PLUGIN_TOOLBAR_WORDS.update.title("unreal", "0.3.0"),
+  });
+  const waiting = plugin("unreal", [item()], { availableVersion: "0.3.0", pendingVersion: "0.3.0" });
+  assert.equal(toolbarUpdateStatus(waiting, PLUGIN_TOOLBAR_WORDS.update), null, "the update waits for its sessions");
+  assert.equal(toolbarUpdateStatus(plugin("unreal", [item()]), PLUGIN_TOOLBAR_WORDS.update), null, "up to date");
+  const status = toolbarStatusFrom(toolbarUpdateStatus(behind, PLUGIN_TOOLBAR_WORDS.update));
+  assert.equal(status?.badge, "Update", "the badge survives the toolbar's own sanitizing");
 });
 test("toolbarStatusFrom keeps attention as a boolean", () => {
   assert.deepEqual(toolbarStatusFrom({ attention: true }), { attention: true });

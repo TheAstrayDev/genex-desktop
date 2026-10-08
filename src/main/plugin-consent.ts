@@ -37,6 +37,8 @@ export interface PluginConsentPending {
 export interface PluginConsentResult {
   approved: boolean;
   by: PluginConsentBy;
+  /** The person chose Always allow (a connector's card only offers it). */
+  always?: boolean;
 }
 
 export interface PluginConsentOptions {
@@ -88,10 +90,10 @@ export class PluginConsent {
   }
 
   /** The user's answer. False when the id is unknown or already settled — a second click changes nothing. */
-  resolve(consentId: string, approved: boolean): boolean {
+  resolve(consentId: string, approved: boolean, always = false): boolean {
     const waiting = this.#waiting.get(consentId);
     if (!waiting) return false;
-    waiting.settle({ approved, by: "user" });
+    waiting.settle({ approved, by: "user", ...(approved && always ? { always: true } : {}) });
     return true;
   }
 

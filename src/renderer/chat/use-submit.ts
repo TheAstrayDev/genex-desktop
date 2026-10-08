@@ -1,6 +1,6 @@
 import type { MessageOrigin } from "../../shared/protocol.ts";
 import { RunState } from "../../shared/run-state.ts";
-import { chatLoopExtras, loopCommissions, reportCommissions } from "../loop-setting.ts";
+import { chatLoopExtras, loopAvailableFor, loopCommissions, reportCommissions } from "../loop-setting.ts";
 import { browserStorage } from "../storage.ts";
 import type { ComposerExtras } from "../ui/PromptBar.tsx";
 import type { ChatPanelProps } from "./chat-panel-props.ts";
@@ -102,6 +102,7 @@ export function useReport(props: ChatPanelProps, chat: ChatThread, composer: Cha
       build: composer.build,
       coordinating: run?.state === RunState.Running,
       gameMode: !chat.isStudioThread,
+      loopAvailable: loopAvailableFor(chat.folder),
     });
     const options = { autopilot: reportCommissions(run), extras };
     await props.onSend(text, { ...composerSendOptions(model, key, options), origin });

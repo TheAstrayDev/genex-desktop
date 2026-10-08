@@ -11,6 +11,7 @@ import { EventKind, SnapshotScope } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { seedLargeBuildGraph } from "./fixture-large-graph.ts";
+import { seedLeadGraph } from "./fixture-lead-graph.ts";
 import { seedBuildGraph } from "./fixture-build-graph.ts";
 import { activateLiveChat, activatePlanReviews, seedChatFeedback, seedChatHistory } from "./fixture-chat.ts";
 import { hasLandedNight, seedFirstNight, seedLandedNight } from "./fixture-history.ts";
@@ -24,6 +25,8 @@ import {
   isFixtureName,
 } from "./fixture-kit.ts";
 import { NOTIFICATIONS_START_MS, notificationArrivals, seedNotificationGames } from "./fixture-notifications.ts";
+import { seedUnrealGame } from "./fixture-unreal.ts";
+import { seedUnrealChat } from "./fixture-unreal-chat.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 import { StopReason } from "../../shared/engine-requests.ts";
 
@@ -127,6 +130,7 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   const { core, id, existing, threadId } = game;
   if (id === FixtureName.BuildGraph) return seedGraphOnce(game);
   if (id === FixtureName.LargeBuildGraph) return seedLargeBuildGraph(core, game.project.name, threadId);
+  if (id === FixtureName.LeadGraph) return seedLeadGraph(core, game.project.name, threadId);
   if (id === FixtureName.Sidebar) return seedSidebar(core, game.project.name);
   // The rest seed a fresh profile only; a reused one keeps what it has.
   if (existing) return;
@@ -134,6 +138,8 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   if (id === FixtureName.Notifications) return seedNotificationGames(core);
   if (isChatFixture(id)) return seedChatHistory(core, game.project, threadId);
   if (id === FixtureName.ChatFeedback) return seedChatFeedback(core, game.project.name, threadId);
+  if (id === FixtureName.UnrealGame) return seedUnrealGame(core, game.project, threadId);
+  if (id === FixtureName.UnrealChat) return seedUnrealChat(core, game.project, threadId);
 }
 
 async function seedGraphOnce(game: FixtureGame): Promise<void> {

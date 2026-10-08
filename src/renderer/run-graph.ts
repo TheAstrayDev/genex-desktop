@@ -49,6 +49,7 @@ import {
   parseMerge,
   parseMove,
   parseScoreboard,
+  parseAdvice,
   parseShots,
   parseVerdict,
   record,
@@ -233,6 +234,19 @@ export interface Shot {
   path: string;
 }
 
+/**
+ * A critic's fresh look at a round the lead saved (`director_verdict` with `advice: true`): what it
+ * saw wrong with the fix for each, one bold move, and its answers to the lead's gates. It is
+ * advice: it decided nothing, so it is never a verdict.
+ */
+export interface AdviceInfo {
+  at: string;
+  defects: Array<{ defect: string; fix: string }>;
+  boldMove: string;
+  gates: string[];
+  shots: string[];
+}
+
 export interface DiffInfo {
   camera: string;
   diffFraction: number | null;
@@ -331,6 +345,10 @@ export interface FacetNode {
   checksAdded: number;
   replans: number;
   outages: number;
+  /** A sub-agent's files are in the game folder, waiting for the lead to use them (`director_worker.delivered`). */
+  delivered: boolean;
+  /** A single-session worker's session ended in failure, so it delivered nothing (`director_worker.state` failed). */
+  failed: boolean;
 }
 
 export interface IterationNode {
@@ -372,6 +390,8 @@ export interface IterationNode {
   notes: NoteInfo[];
   /** The round's own verdict record — null on a night from before the round wrote one. */
   verdict: VerdictRecord | null;
+  /** The critic's advice on this round, when the lead asked for it: never a verdict. */
+  advice: AdviceInfo | null;
 }
 
 export interface IntegrationNode {
@@ -632,7 +652,7 @@ interface RunEntry {
 }
 
 /** What a lead's worker reports about itself (`director_worker.state`, a summary task's `state`). */
-export const WorkerState = { Running: "running", Done: "done" } as const;
+export const WorkerState = { Running: "running", Done: "done", Failed: "failed" } as const;
 
 /** The records that name the run the Builds page shows. */
 const RUN_ID_EVENTS = new Set<string>([CustomEvent.RunStarted, CustomEvent.RunRegistered, CustomEvent.FacetIteration]);
@@ -781,6 +801,8 @@ function facet(graph: GraphDraft, facetId: string, title?: string): FacetDraft {
       checksAdded: 0,
       replans: 0,
       outages: 0,
+      delivered: false,
+      failed: false,
     },
     iterations: new Map(),
     completed: 0,
@@ -827,6 +849,7 @@ function iteration(graph: GraphDraft, facetId: string, n: number, title?: string
     judgedSeq: null,
     notes: [],
     verdict: null,
+    advice: null,
   };
   owner.iterations.set(n, node);
   return node;
@@ -943,7 +966,7 @@ function applyRunEvent(graph: GraphDraft, custom: { event_type: string }, entry:
       onMerge(graph, entry);
       break;
     case CustomEvent.DirectorVerdict:
-      onDirectorVerdict(graph, payload);
+      onDirectorVerdict(graph, entry);
       break;
     case CustomEvent.IntegrationHealth:
       onHealth(graph, payload);
@@ -1095,6 +1118,8 @@ function onDirectorWorker(graph: GraphDraft, payload: Payload): void {
   // A single-session builder that ran to the end did the work it was given: the card must
   // say "done", not "stopped", which is what the lead ending one early means.
   if (state === WorkerState.Done) draft.node.satisfied = true;
+  draft.node.delivered = state === WorkerState.Done && payload.delivered === true;
+  draft.node.failed = state === WorkerState.Failed;
 }
 
 /**
@@ -1258,11 +1283,26 @@ function onMerge(graph: GraphDraft, entry: RunEntry): void {
 
 /**
  * The lead's own passes — the fork gate, its judge, a health pass, the close. Each one is a
- * build somebody looked at, with the sentence that look produced.
+ * build somebody looked at, with the sentence that look produced. A critic's advice comes the
+ * same way and is no verdict: it goes on the round it looked at, and nothing else reads it.
  */
-function onDirectorVerdict(graph: GraphDraft, payload: Payload): void {
-  const verdict = parseVerdict(payload);
+function onDirectorVerdict(graph: GraphDraft, entry: RunEntry): void {
+  if (entry.payload.advice === true) {
+    onAdvice(graph, entry);
+    return;
+  }
+  const verdict = parseVerdict(entry.payload);
   if (verdict) graph.verdicts.push(verdict);
+}
+
+/** A critic's advice, on the round it names, else its part's latest round; dropped when its part has none. */
+function onAdvice(graph: GraphDraft, entry: RunEntry): void {
+  const advice = parseAdvice(entry.payload, entry.event.created_at);
+  const draft = entry.facetId ? graph.facets.get(entry.facetId) : undefined;
+  if (!advice || !draft) return;
+  const latest = Math.max(0, ...draft.iterations.keys());
+  const round = draft.iterations.get(entry.round ?? latest) ?? draft.iterations.get(latest);
+  if (round) round.advice = advice;
 }
 
 /** Did the merged build run? Only a head that did is worth offering the user mid-night. */

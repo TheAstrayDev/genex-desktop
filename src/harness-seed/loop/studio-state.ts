@@ -22,6 +22,8 @@ export const RunnerKind = {
   Director: "director",
   Autopilot: "autopilot",
   Gauntlet: "gauntlet",
+  /** A game built live in the user's Unreal editor by one lead (`loop/unreal/lead.ts`). */
+  Unreal: "unreal",
 } as const;
 export type RunnerKind = (typeof RunnerKind)[keyof typeof RunnerKind];
 

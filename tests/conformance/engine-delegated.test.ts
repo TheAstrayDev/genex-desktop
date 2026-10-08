@@ -804,7 +804,8 @@ describe("claude code delegated engine", () => {
     // Flipped (step 1): research is part of building — web search and page reading, with the
     // shell still sandboxed.
     assert.deepEqual(call.allowedTools, ["mcp__studio__checkpoint", "Bash", "WebSearch", "WebFetch"]);
-    assert.deepEqual(call.disallowedTools, ["SendMessage", "ListAgents"]);
+    // Flipped: no session gets Claude Code's own sub-agents; Genex runs the workers.
+    assert.deepEqual(call.disallowedTools, ["SendMessage", "ListAgents", "Agent", "Task"]);
     // Thinking arrives as a summary instead of an empty block, for the chat's Thinking details.
     assert.equal((call.settings as Record<string, unknown>).showThinkingSummaries, true);
     // The delegate default is ABSENT, not empty: a build session is exactly where a project

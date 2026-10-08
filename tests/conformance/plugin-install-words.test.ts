@@ -9,7 +9,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { type PluginManifest, type PluginScan, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
-import { actionApprovalDetail, installDetail } from "../../src/main/plugin-install-words.ts";
+import { actionApprovalDetail, actionApprovalDialog, installDetail } from "../../src/main/plugin-install-words.ts";
 
 const bundled = async (id: string): Promise<PluginManifest> =>
   validateManifest(JSON.parse(await readFile(path.resolve("src/plugins", id, "plugin.json"), "utf8")));
@@ -27,7 +27,7 @@ const SCANNED: PluginScan = {
 test("characterization: a first install of bundled Genex names every capability, server and skill", () => {
   assert.equal(
     installDetail({ manifest: genex }),
-    "Genex Tools 1.5.0 from bundled runs as trusted native code in a crash-isolated child process — not an OS sandbox. Publisher: Genex. Capabilities: credentials, observe, jobs, network, external-auth, project.write, export (new: credentials, observe, jobs, network, external-auth, project.write, export). Starts 2 MCP servers on your Mac, as trusted native code with the environment it declares: creator (creator-mcp.mjs, GENEX_ENV_FILE); blender (Studio's own Genex CLI, GENEX_API_URL, GENEX_BLENDER_URL, GENEX_ENV_FILE). Studio runs 3 tools for it: cli (runs Studio's Genex CLI); cli-paid (runs Studio's Genex CLI, with your consent each time); package (installs Genex packages in the game, with your consent each time). Gives agents 11 skills: creator-mcp, asset-preference, publishing, genex (read on demand), genex-threejs-multiplayer (read on demand), genex-threejs-embed-auth (read on demand), genex-llm-in-games (read on demand), genex-tool-llm (read on demand), genex-monetization (read on demand), genex-tool-publish (read on demand), genex-updates (read on demand). Scan: bundled — not scanned.",
+    "Genex Tools 1.7.0 from bundled runs as trusted native code in a crash-isolated child process — not an OS sandbox. Publisher: Genex. Capabilities: credentials, observe, jobs, network, external-auth, project.write, export (new: credentials, observe, jobs, network, external-auth, project.write, export). Starts 2 MCP servers on your Mac, as trusted native code with the environment it declares: creator (creator-mcp.mjs, GENEX_ENV_FILE); blender (Studio's own Genex CLI, GENEX_API_URL, GENEX_BLENDER_URL, GENEX_ENV_FILE). Studio runs 3 tools for it: cli (runs Studio's Genex CLI); cli-paid (runs Studio's Genex CLI, with your consent each time); package (installs Genex packages in the game, with your consent each time). Gives agents 16 skills: creator-mcp, asset-preference, publishing, genex (read on demand), genex-threejs-multiplayer (read on demand), genex-threejs-embed-auth (read on demand), genex-llm-in-games (read on demand), genex-tool-llm (read on demand), genex-monetization (read on demand), genex-tool-publish (read on demand), genex-tool-model (read on demand), genex-tool-character (read on demand), genex-tool-texture (read on demand), genex-tool-audio (read on demand), genex-tool-image (read on demand), genex-updates (read on demand). Scan: bundled — not scanned.",
   );
 });
 
@@ -35,7 +35,7 @@ test("characterization: an update marks new capabilities and servers", () => {
   const before = { ...genex, capabilities: genex.capabilities.slice(0, 3), mcpServers: genex.mcpServers?.slice(0, 1) };
   assert.equal(
     installDetail({ manifest: genex, before }),
-    "Genex Tools 1.5.0 from bundled runs as trusted native code in a crash-isolated child process — not an OS sandbox. Publisher: Genex. Capabilities: credentials, observe, jobs, network, external-auth, project.write, export (new: network, external-auth, project.write, export). Starts 2 MCP servers on your Mac, as trusted native code with the environment it declares: creator (creator-mcp.mjs, GENEX_ENV_FILE); blender (new) (Studio's own Genex CLI, GENEX_API_URL, GENEX_BLENDER_URL, GENEX_ENV_FILE). Studio runs 3 tools for it: cli (runs Studio's Genex CLI); cli-paid (runs Studio's Genex CLI, with your consent each time); package (installs Genex packages in the game, with your consent each time). Gives agents 11 skills: creator-mcp, asset-preference, publishing, genex (read on demand), genex-threejs-multiplayer (read on demand), genex-threejs-embed-auth (read on demand), genex-llm-in-games (read on demand), genex-tool-llm (read on demand), genex-monetization (read on demand), genex-tool-publish (read on demand), genex-updates (read on demand). Scan: bundled — not scanned.",
+    "Genex Tools 1.7.0 from bundled runs as trusted native code in a crash-isolated child process — not an OS sandbox. Publisher: Genex. Capabilities: credentials, observe, jobs, network, external-auth, project.write, export (new: network, external-auth, project.write, export). Starts 2 MCP servers on your Mac, as trusted native code with the environment it declares: creator (creator-mcp.mjs, GENEX_ENV_FILE); blender (new) (Studio's own Genex CLI, GENEX_API_URL, GENEX_BLENDER_URL, GENEX_ENV_FILE). Studio runs 3 tools for it: cli (runs Studio's Genex CLI); cli-paid (runs Studio's Genex CLI, with your consent each time); package (installs Genex packages in the game, with your consent each time). Gives agents 16 skills: creator-mcp, asset-preference, publishing, genex (read on demand), genex-threejs-multiplayer (read on demand), genex-threejs-embed-auth (read on demand), genex-llm-in-games (read on demand), genex-tool-llm (read on demand), genex-monetization (read on demand), genex-tool-publish (read on demand), genex-tool-model (read on demand), genex-tool-character (read on demand), genex-tool-texture (read on demand), genex-tool-audio (read on demand), genex-tool-image (read on demand), genex-updates (read on demand). Scan: bundled — not scanned.",
   );
 });
 
@@ -134,4 +134,33 @@ test("an action's approval shows the arguments it was given, and nothing when th
   for (const none of [undefined, null, {}]) assert.equal(actionApprovalDetail(none), undefined, JSON.stringify(none));
   assert.equal(actionApprovalDetail({ jobId: "job-1" }), '{\n  "jobId": "job-1"\n}');
   assert.equal(actionApprovalDetail(["a"]), '[\n  "a"\n]');
+});
+
+test("a reviewed action asks the plugin's own question, in its own words, under the action's own name", () => {
+  const action = { label: "Set up", confirmation: "Set up this Unreal project for Genex?" };
+  const args = { project: "/Users/me/Lyra/Lyra.uproject" };
+  const reviewed = actionApprovalDialog({
+    plugin: "Unreal",
+    action,
+    review: {
+      message: "Set up Lyra for Genex?",
+      detail: "• Turns on Epic's MCP plugins\n• Adds the Genex editor helper",
+    },
+    args,
+  });
+  assert.deepEqual(reviewed, {
+    title: "Unreal: Set up",
+    message: "Set up Lyra for Genex?",
+    detail: "• Turns on Epic's MCP plugins\n• Adds the Genex editor helper",
+    buttons: ["Cancel", "Set up"],
+  });
+  const questionOnly = actionApprovalDialog({ plugin: "Unreal", action, review: { message: "Set up Lyra?" }, args });
+  assert.equal(questionOnly.detail, undefined, "a reviewed action never falls back to its arguments as JSON");
+  assert.deepEqual(questionOnly.buttons, ["Cancel", "Set up"]);
+  for (const review of [{}, { detail: "• words without a question" }, { message: "" }]) {
+    const unreviewed = actionApprovalDialog({ plugin: "Unreal", action, review, args });
+    assert.equal(unreviewed.message, action.confirmation, JSON.stringify(review));
+    assert.equal(unreviewed.detail, actionApprovalDetail(args), JSON.stringify(review));
+    assert.deepEqual(unreviewed.buttons, ["Cancel", "Approve"], JSON.stringify(review));
+  }
 });

@@ -5,7 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import type { Writable } from "node:stream";
 import type { McpChange, McpConnector } from "../../src/shared/mcp.ts";
-import { McpConnection, resolveExecutable } from "../../src/substrate/mcp/client.ts";
+import {
+  ConnectorCallError,
+  McpConnection,
+  resolveExecutable,
+  toLiveToolResult,
+} from "../../src/substrate/mcp/client.ts";
 import { McpRegistry } from "../../src/substrate/mcp/registry.ts";
 import { launchDigest, memorySecretPort } from "../../src/substrate/mcp/store.ts";
 import { MCP_QUALIFIED_TOOL } from "../../src/shared/mcp.ts";
@@ -119,6 +124,42 @@ test("a real server over stdio answers text, an image and an error, and stops wh
   } finally {
     await connection.close();
   }
+});
+
+test("an error answer that says its outcome is unknown is told apart from any other", () => {
+  const answer = (meta?: unknown) => ({
+    isError: true,
+    content: [{ type: "text", text: "x" }],
+    ...(meta === undefined ? {} : { _meta: meta }),
+  });
+  assert.throws(
+    () => toLiveToolResult(answer({ "genex/outcome": "unknown" })),
+    (error: unknown) => error instanceof ConnectorCallError && error.outcomeUnknown === true && error.message === "x",
+  );
+  const hostile: Array<[string, unknown]> = [
+    ["no _meta", undefined],
+    ["another case", { "genex/outcome": "Unknown" }],
+    ["not a string", { "genex/outcome": true }],
+    ["a trailing space", { "genex/outcome": "unknown " }],
+    ["an empty object", {}],
+    ["another key", { outcome: "unknown" }],
+    ["_meta not an object", "genex/outcome"],
+    ["_meta an array", [["genex/outcome", "unknown"]]],
+  ];
+  for (const [label, meta] of hostile)
+    assert.throws(
+      () => toLiveToolResult(answer(meta)),
+      (error: unknown) =>
+        error instanceof Error &&
+        (error as { outcomeUnknown?: unknown }).outcomeUnknown !== true &&
+        error.message === "x",
+      label,
+    );
+  assert.equal(
+    toLiveToolResult({ content: [{ type: "text", text: "fine" }], _meta: { "genex/outcome": "unknown" } }),
+    "fine",
+    "an answer that is not an error is an answer, whatever it carries",
+  );
 });
 
 test("a server that never answers initialize fails at the configured limit instead of hanging a delegation", async () => {
@@ -382,6 +423,38 @@ test("a plugin-declared server is owned by its plugin: memory only, credential o
     assert.deepEqual(await f.registry.list(), []);
     assert.deepEqual(await f.registry.toolsFor("alpha"), []);
     await assert.rejects(f.registry.tool("genex-blender__fd3", {}, { project: "alpha" }), /Unknown connector tool/);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a plugin's connectors are told apart from the ones the user connected", async () => {
+  const f = await fixture();
+  const userBlock = "Tools from connected services the user set up.";
+  try {
+    await f.registry.save(draft(), {}, { trust: true });
+    await f.registry.registerPluginServer(
+      "genex",
+      { id: "blender", name: "Genex Blender", command: "ignored", args: [] },
+      { execPath: process.execPath, extraArgs: [SERVER] },
+    );
+    const tools = await f.registry.toolsFor("alpha");
+    const guidance = f.registry.guidance(tools);
+    const [user = "", plugin = ""] = guidance.split("[PLUGIN CONNECTORS]");
+    assert.match(user, /^\[CONNECTORS\]\n/, "the user's connectors keep their block");
+    assert.ok(user.includes(userBlock), "with today's sentence");
+    assert.match(user, /- Echo: 5 tools, named echo__\*/);
+    assert.doesNotMatch(user, /Genex Blender/, "a plugin's connector is not one the user set up");
+    assert.match(plugin, /plugins the user turned on/);
+    assert.match(plugin, /- Genex Blender: \d+ tools, named genex-blender__\*/);
+    assert.doesNotMatch(plugin, /Echo:/);
+
+    const onlyPlugin = f.registry.guidance(tools.filter((t) => t.name.startsWith("genex-blender__")));
+    assert.match(onlyPlugin, /^\[PLUGIN CONNECTORS\]\n/, "an empty user block is left out");
+    assert.ok(!onlyPlugin.includes(userBlock));
+    const onlyUser = f.registry.guidance(tools.filter((t) => t.name.startsWith("echo__")));
+    assert.doesNotMatch(onlyUser, /PLUGIN CONNECTORS/, "an empty plugin block is left out");
+    assert.equal(f.registry.guidance([]), "");
   } finally {
     await f.close();
   }

@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import {
   alwaysWords,
   bypassPermissionsWords,
+  permissionCommandWords,
   permissionLineWords,
   permissionOutcomeWords,
   permissionRuleWords,
@@ -71,6 +72,63 @@ describe("permissionTitleWords", () => {
       "Claude wants to use Network access",
     );
     assert.equal(permissionTitleWords(ask({ tool: "Write" })), "Claude wants to edit a file");
+  });
+
+  it("a worker's card names the worker", () => {
+    const worker = { id: "w1", title: "Scene builder" };
+    // Claude Code's own sentence names Claude: a worker's card says who asks instead.
+    assert.equal(
+      permissionTitleWords(ask({ tool: "Bash", title: "Claude wants to run npm install", worker })),
+      "Scene builder wants to run a command",
+    );
+    assert.equal(
+      permissionTitleWords(ask({ tool: "Edit", input: { file_path: "/Users/me/game/src/main.ts" }, worker })),
+      "Scene builder wants to edit main.ts",
+    );
+    assert.equal(
+      permissionTitleWords(ask({ tool: "Read", subject: "/Users/me/refs/art.png", worker })),
+      "Scene builder wants to read /Users/me/refs/art.png",
+    );
+    assert.equal(
+      permissionTitleWords(ask({ tool: "mcp__sprites__make_sprite", worker })),
+      "Scene builder wants to use make sprite",
+    );
+    assert.equal(permissionCommandWords(ask({ tool: "Bash", worker })), "Scene builder wants to run a command");
+    assert.equal(permissionCommandWords(ask({ tool: "Bash" })), "Claude wants to run a command");
+    assert.equal(
+      permissionTitleWords(ask({ tool: "Bash", worker: { id: "w2", title: " " } })),
+      "A worker wants to run a command",
+      "a worker with no title is still not Claude",
+    );
+  });
+
+  it("a job's card asks in plain words, naming the worker that wants it", () => {
+    const job = { title: "Unreal build", command: "make -j8 editor", folder: "." };
+    const worker = { id: "w1", title: "Scene builder" };
+    assert.equal(
+      permissionTitleWords(ask({ tool: "Job", input: job, worker, title: "Claude wants to run Unreal build" })),
+      "Scene builder wants to run Unreal build in the background",
+    );
+    assert.equal(
+      permissionTitleWords(
+        ask({ tool: "Job", input: job, title: "The lead wants to run Unreal build in the background" }),
+      ),
+      "The lead wants to run Unreal build in the background",
+      "a lead's card keeps its own words",
+    );
+    assert.equal(
+      permissionTitleWords(ask({ tool: "Job", input: job })),
+      "Claude wants to run Unreal build in the background",
+    );
+    assert.equal(
+      permissionTitleWords(ask({ tool: "Job", input: {}, worker })),
+      "Scene builder wants to run something in the background",
+    );
+    for (const words of [
+      permissionTitleWords(ask({ tool: "Job", input: job, worker })),
+      permissionTitleWords(ask({ tool: "Job", input: job })),
+    ])
+      assert.ok(!words.includes(job.command), `no command in the question: ${words}`);
   });
 
   it("asks to approve a plan, whatever Claude Code titled it", () => {
@@ -212,6 +270,10 @@ describe("permissionOutcomeWords", () => {
     assert.equal(
       permissionOutcomeWords(ask({ tool: "Bash", state: "denied", by: "timeout" })),
       "Withdrawn: nobody answered",
+    );
+    assert.equal(
+      permissionOutcomeWords(ask({ tool: "Bash", state: "denied", by: "not_waited" })),
+      "Not asked: you said not to wait",
     );
   });
 });

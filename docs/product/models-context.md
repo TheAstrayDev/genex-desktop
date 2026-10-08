@@ -3,7 +3,7 @@
 ## Selecting a model
 
 The model button opens Main agent, Workers and Reviewers, grouped by provider. Add more models
-opens setup. Blocked plans retain the request and offer model settings or retry. Fast mode is hidden.
+opens setup. Blocked plans keep the request, offering model settings or retry.
 
 Claude Code and Codex discover models without generating. The list names each family's newest
 model of the newest generation; older ones are switched on in Settings, and a model
@@ -11,7 +11,7 @@ in use stays listed. An unset pick shows and runs the provider's named default, 
 Aliases follow the CLI; explicit versions stay pinned.
 
 Settings shows CLI versions; connected rows list picker models; Account rechecks
-(refreshing models) or updates the CLI after provider work. Failed refreshes offer Try again,
+(refreshing models) or updates the CLI. Failed refreshes offer Try again,
 keeping names stale. Unavailable picks block sends; without models, Connect AI model replaces the
 model pill. New models may need a CLI update; listing does not prove access.
 
@@ -26,7 +26,7 @@ Settings keeps coding providers apart from Local Models (Bonsai/Ollama).
 The context ring shows reported orchestrator usage and capacity; unknown stays unknown. Its panel
 offers Compact now, also typed as `/compact` (Claude Code and Codex use
 [their own](../connections-and-context.md#compact-now); others hand over); every provider, workers
-included, also compacts automatically at its own point. Then plan limits ([details](../connections-and-context.md#plan-limits)).
+included, also compacts automatically. Then plan limits ([details](../connections-and-context.md#plan-limits)).
 
 Ollama uses a loaded model's reported runtime context, not its theoretical maximum. An unloaded
 model's planning budget is an estimate marked unknown. Tools and images require reported
@@ -41,15 +41,16 @@ effort and Send/Stop only.
 
 ## Permissions
 
-Every chat's pill after Mode picks **Auto** (Recommended; stops only dangerous actions),
-**Manual**, **Accept edits**, **Plan** or **Bypass permissions** (confirmed first; Rewind restores
-only the game folder); modes the engine cannot honour are greyed with why (Codex: Auto, Plan,
-Bypass; Bonsai: no Bypass; Ollama: Auto). A chat keeps its mode; new chats take the last Auto,
-Manual or Accept edits. Claude's chat and build lead work anywhere on your Mac with your access;
-unattended builds keep their sandbox ([details](../tool-permissions.md)).
+Every chat's pill after Mode picks **Auto** (Recommended; stops dangerous actions),
+**Manual**, **Accept edits**, **Plan** or **Bypass permissions** (confirmed; Rewind restores
+only the game); modes the engine cannot honour are greyed with why (Codex: Auto, Plan,
+Bypass; Bonsai: no Bypass; Ollama: Auto). Chats keep their mode; new ones inherit the last Auto,
+Manual or Accept edits. Claude's chat and build lead work anywhere on your Mac with your access,
+workers in your mode but never in sign-ins, Genex's data or other games; their questions wait unless
+**Don't wait for me** (Mode) is on ([details](../tool-permissions.md)).
 
-Adopted folders do not supply Claude settings/hooks until explicitly trusted in Open Game.
-Read deny rules also cover sensitive system/account locations. Codex read restrictions are
+Adopted folders' Claude settings/hooks load only once trusted in Open Game.
+Read denials also cover sensitive system/account locations. Codex read restrictions are
 advisory, not whole-disk isolation.
 
 ## Where to work
@@ -58,5 +59,4 @@ Start at [ModelsSection](../../src/renderer/panels/ModelsSection.tsx) and
 [PromptBar](../../src/renderer/ui/PromptBar.tsx). See [Local models](../local-models.md),
 [Connections and context](../connections-and-context.md), [continuation](../conversation-coordinator.md)
 and [composer design](../agent/design.md#prompt-composer).
-The [judge evaluation procedure](../judge-evaluation.md) separates protocol checks from human
-quality acceptance.
+[Judge evaluation](../judge-evaluation.md): protocol checks apart from human quality acceptance.

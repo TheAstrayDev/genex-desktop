@@ -124,10 +124,12 @@ export function snapshotRpc(core: StudioCore, x: CoreInternals) {
       await core.assertProjectAllowed(gameDir);
       core.snapshots.register({ name: p.project, dir: gameDir });
       const commit = await worktreeCommit(core, p.project, p.commit);
+      // Before anything is made or removed: a copy too large to make is refused with nothing changed.
+      const copy = await x.previews.prepareWriterCopy(p.project, commit);
       await clearWorktree(core, x, p.project, scratch, dir);
       await ensureDir(path.dirname(dir));
       await x.assertNoLinkBelow(scratch, dir);
-      await core.snapshots.worktreeAt(p.project, commit, dir, await x.previews.nestedPolicy(gameDir));
+      await core.snapshots.worktreeAt(p.project, commit, dir, copy);
       return { path: dir, commit };
     },
     [HostMethod.SnapshotRemoveWorktree]: async (p) => {

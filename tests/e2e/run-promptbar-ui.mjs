@@ -240,13 +240,17 @@ app.whenReady().then(async()=>{
  await element('[data-promptbar] textarea','(e.focus(),true)');await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'a',code:'KeyA',modifiers:4,commands:['selectAll']});await key('Backspace');
  await click('[data-specimen-build="running-inf"]');const runningInf=await mode();
  await click('[data-specimen-chat="b"]');await click('[data-specimen-build="running-30"]');const running30=await mode();
- check('a running build names its own limit',runningInf.text==="∞ Loop"&&runningInf.disabled&&running30.text==="30m Loop"&&running30.disabled&&await ownLoop('a',true,0.5)&&await ownLoop('b',true,null),{runningInf,running30});
- check('a running build\'s Mode is dimmed like the composer\'s disabled icons',runningInf.opacity==="0.45"&&running30.opacity==="0.45",{runningInf,running30});
- await capture('mode-running-build');
+ // Intentionally flipped: Mode opens during a Loop build, read-only, for the chat's "Don't wait for me" switch.
+ const READ_ONLY_MODE='Boolean(document.querySelector("[aria-label=\\"Mode options\\"][data-open]"))&&!document.querySelector("[aria-label=\\"Mode options\\"][data-open] [aria-label=\\"Loop time limit\\"]")&&Boolean(document.querySelector("[aria-label=\\"Mode options\\"][data-open] [data-dont-wait-row]"))';
+ check('a running build names its own limit, and its Mode opens',runningInf.text==="∞ Loop"&&!runningInf.disabled&&running30.text==="30m Loop"&&!running30.disabled&&await ownLoop('a',true,0.5)&&await ownLoop('b',true,null),{runningInf,running30});
+ await click('[aria-label="Mode"]');
+ check('a running build\'s Mode is read-only: no Loop control, and the Don\'t wait for me switch',await js(READ_ONLY_MODE),await element('[aria-label="Mode options"]','e.textContent'));
+ await capture('mode-running-build');await close();
  await click('[data-specimen-build="paused-30"]');const paused=await mode();
- check('a paused build\'s Mode is read-only with its limit',paused.text==="30m Loop"&&paused.disabled,paused);
- check('a paused build\'s Mode is dimmed too',paused.opacity==="0.45",paused);
- await capture('mode-paused-build');
+ check('a paused build\'s Mode names its limit and opens',paused.text==="30m Loop"&&!paused.disabled,paused);
+ await click('[aria-label="Mode"]');
+ check('a paused build\'s Mode is read-only too, with the switch',await js(READ_ONLY_MODE),await element('[aria-label="Mode options"]','e.textContent'));
+ await capture('mode-paused-build');await close();
  await click('[data-specimen-build="finished"]');const finished=await mode();await click('[aria-label="Mode"]');
  check('a finished build\'s Mode is the chat\'s own Loop again, with no new-build choice',finished.text==="∞ Loop"&&!finished.disabled&&finished.opacity==="1"&&await element('[aria-label="Loop time limit"] [aria-checked="true"]','e.dataset.value==="inf"')&&await element('[aria-label="Mode options"]','!/new build/i.test(e.textContent)'),{finished,options:await element('[aria-label="Mode options"]','e.textContent')});
  await capture('mode-finished-build');

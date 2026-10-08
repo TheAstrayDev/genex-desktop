@@ -13,7 +13,9 @@ import { formatTokens } from "../chat-labels.ts";
 import { TOGGLE_TERMINAL_EVENT } from "./terminal-events.ts";
 import type { ContextUsage } from "../../shared/context.ts";
 import { hostPlatform } from "../platform.ts";
-import { fileManagerWords } from "../words.ts";
+import { fileManagerWords, HISTORY_WORDS, historyMenuSize, historySpaceWords } from "../words.ts";
+import { ConfirmSheet } from "../ui/Confirm.tsx";
+import type { GameHistoryMenu } from "../chat/use-game-history.ts";
 import { HarnessGuideButton } from "../chat/HarnessGuide.tsx";
 
 interface Props {
@@ -29,6 +31,8 @@ interface Props {
   onReveal?: () => void;
   onExport?: () => void;
   exporting?: boolean;
+  /** A game chat's history space and its clearing (the ⋯ menu's history item). */
+  history?: GameHistoryMenu;
   sidebarHidden: boolean;
   onToggleSidebar: () => void;
 }
@@ -183,25 +187,108 @@ function ChatTitle({
   );
 }
 
-/** The ⋯ menu: export the game, rename the chat. Closing it returns focus to the rename field. */
+/** The confirmation before clearing a game's Rewind history: Keep first, Clear as the danger. */
+function ClearHistorySheet({ history, onDone }: { history: GameHistoryMenu; onDone: () => void }): JSX.Element | null {
+  if (!history.space) return null;
+  return (
+    <ConfirmSheet
+      title={HISTORY_WORDS.title}
+      body={historySpaceWords(history.space)}
+      testId="clear-history"
+      onDismiss={onDone}
+      choices={[
+        { label: HISTORY_WORDS.keep, onChoose: onDone },
+        {
+          label: HISTORY_WORDS.clear,
+          danger: true,
+          onChoose: () => {
+            history.clear();
+            onDone();
+          },
+        },
+      ]}
+    />
+  );
+}
+
+/** The ⋯ menu's history item: its label, and what clearing frees once that is known. */
+function ClearHistoryItem({ history, onChoose }: { history: GameHistoryMenu; onChoose: () => void }): JSX.Element {
+  const size = historyMenuSize(history.space);
+  return (
+    <DropdownMenuItem data-chat-action="clear-history" disabled={history.clearing || !size} onSelect={onChoose}>
+      <Icon name="rewind" />
+      <span className="flex-1">{HISTORY_WORDS.menu}</span>
+      {size && <span className="text-ink-3">{size}</span>}
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * The ⋯ menu: export the game, clear its Rewind history, rename the chat. Closing it returns focus
+ * to the rename field.
+ */
 function ChatActions({
   input,
   exporting,
   onExport,
   onRename,
+  history,
 }: {
   input: RefObject<HTMLInputElement | null>;
   exporting?: boolean;
   onExport?: () => void;
   onRename: () => void;
+  history?: GameHistoryMenu;
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const openMenu = (open: boolean): void => {
+    if (open) history?.refresh();
+    setMenuOpen(open);
+  };
   return (
-    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+    <>
+      {confirming && history && <ClearHistorySheet history={history} onDone={() => setConfirming(false)} />}
+      <ChatActionsMenu
+        input={input}
+        open={menuOpen}
+        onOpenChange={openMenu}
+        exporting={exporting}
+        onExport={onExport}
+        onRename={onRename}
+        history={history}
+        onClearHistory={() => setConfirming(true)}
+      />
+    </>
+  );
+}
+
+/** The ⋯ menu itself, opened and closed by its owner. */
+function ChatActionsMenu({
+  input,
+  open,
+  onOpenChange,
+  exporting,
+  onExport,
+  onRename,
+  history,
+  onClearHistory,
+}: {
+  input: RefObject<HTMLInputElement | null>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  exporting?: boolean;
+  onExport?: () => void;
+  onRename: () => void;
+  history?: GameHistoryMenu;
+  onClearHistory: () => void;
+}): JSX.Element {
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
-            <button type="button" aria-expanded={menuOpen} aria-label="Chat actions" className="no-drag header-control">
+            <button type="button" aria-expanded={open} aria-label="Chat actions" className="no-drag header-control">
               <Icon name="more" />
             </button>
           </DropdownMenuTrigger>
@@ -222,6 +309,7 @@ function ChatActions({
           <Icon name="export" />
           {exporting ? "Exporting…" : "Export game…"}
         </DropdownMenuItem>
+        {history && <ClearHistoryItem history={history} onChoose={onClearHistory} />}
         <DropdownMenuItem data-chat-action="rename" onSelect={onRename}>
           <Icon name="rename" />
           Rename
@@ -244,6 +332,7 @@ export function ChatHeader({
   onReveal,
   onExport,
   exporting,
+  history,
   sidebarHidden,
   onToggleSidebar,
 }: Props): JSX.Element {
@@ -322,7 +411,13 @@ export function ChatHeader({
         onClick={() => window.dispatchEvent(new Event(TOGGLE_TERMINAL_EVENT))}
       />
       {!isStudio && (
-        <ChatActions input={inputRef} exporting={exporting} onExport={onExport} onRename={() => setEditing(true)} />
+        <ChatActions
+          input={inputRef}
+          exporting={exporting}
+          onExport={onExport}
+          onRename={() => setEditing(true)}
+          history={project ? history : undefined}
+        />
       )}
     </div>
   );

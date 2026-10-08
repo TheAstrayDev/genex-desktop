@@ -72,10 +72,14 @@ test("a live profile runs native channels", async () => {
   handle("studio:open-url", () => true);
   assert.deepEqual(await listeners.get("studio:open-url")!(studio, {}), { ok: true, value: true });
 });
-test("plugin, connector and terminal channels answer only Studio's main frame", async () => {
+test("plugin, connector, terminal and don't-wait channels answer only Studio's main frame", async () => {
   const { ipc, listeners } = recorder();
   const handle = createIpcHandle(ipc, { fixture: false, isStudioUi });
   let ran = 0;
+  handle("studio:loop.dontWait", () => {
+    ran++;
+    return { on: true, scope: "run" as const };
+  });
   handle("studio:plugins.list", () => {
     ran++;
     return [];
@@ -94,7 +98,7 @@ test("plugin, connector and terminal channels answer only Studio's main frame", 
   });
   const subframe = { sender: studio.sender, senderFrame: "plugin-panel-frame" },
     other = { sender: "game-webcontents", senderFrame: "game-frame" };
-  for (const channel of ["studio:plugins.list", "studio:mcp.list", "studio:terminal.list"]) {
+  for (const channel of ["studio:plugins.list", "studio:mcp.list", "studio:terminal.list", "studio:loop.dontWait"]) {
     for (const event of [subframe, other])
       assert.deepEqual(
         await listeners.get(channel)!(event, {}),
@@ -104,7 +108,7 @@ test("plugin, connector and terminal channels answer only Studio's main frame", 
     assert.equal((await listeners.get(channel)!(studio, {})).ok, true, channel);
   }
   assert.deepEqual(await listeners.get("studio:games")!(other, {}), { ok: true, value: [] });
-  assert.equal(ran, 4);
+  assert.equal(ran, 5);
 });
 test("a channel is never both fixture-safe and native", () => {
   assert.deepEqual(
@@ -120,7 +124,11 @@ test("native accounts, terminals, plugin installs, external opens and Genex are 
     "studio:plugins.lookup-github",
     "studio:plugins.github-versions",
     "studio:plugins.update",
+    // A panel's Choose file opens Studio's native file picker.
+    "studio:plugins.choose-file",
     "studio:plugins.approval",
+    // A plugin action that starts, quits or opens an app or the browser, or writes outside its storage.
+    "studio:plugins.native-action",
     "studio:plugins.host-cli",
     "studio:plugins.host-package",
     "studio:open-url",
@@ -170,6 +178,9 @@ test("fixture-safe channels run in fixtures and an unclassified one is refused t
     "studio:message-images",
     "studio:provider-usage",
     "studio:badge",
+    // The person's "Don't wait for me" and its state: the profile's own file and the chat's log.
+    "studio:loop.dontWait",
+    "studio:loop.dontWaitState",
   ]) {
     assert.equal(classifyChannel(channel), "fixture-safe", channel);
     assert.doesNotThrow(() => assertNativeActionAllowed(true, channel), channel);

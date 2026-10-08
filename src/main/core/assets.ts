@@ -4,7 +4,7 @@
  * Composed by `StudioCore`; its state stays in the core.
  */
 import { assetWorkspaces } from "../asset-workspaces.ts";
-import { readAssetPreview } from "../asset-preview.ts";
+import { assertAssetPath, readAssetPreview } from "../asset-preview.ts";
 import { readModelRig } from "../model-rigs.ts";
 import type { ModelRig } from "../../shared/model-rig.ts";
 import { assertRelativePath, isBelow } from "../../substrate/paths.ts";
@@ -16,6 +16,7 @@ import {
   walkGameAssets,
 } from "../game-assets.ts";
 import type { ProjectAssets } from "../../shared/game-assets.ts";
+import { type AssetFolder, assetFoldersFor, DEFAULT_ASSET_FOLDERS } from "../../shared/project-workspace.ts";
 import path from "node:path";
 import { rewindsOf, withoutRewound } from "../../shared/chat-rewind.ts";
 import { latestRun } from "../../shared/coordinator.ts";
@@ -31,6 +32,7 @@ import type { StudioCore } from "../studio-core.ts";
 import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
 import { EventKind } from "../../shared/event-log.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
+import { SECOND_MS } from "../../shared/duration.ts";
 
 /** Errors the user (or the renderer on their behalf) reads when an asset request is refused. */
 const MESSAGE = {
@@ -53,6 +55,8 @@ const REFERENCE_SLUG_MAX_CHARS = 40;
 const MAX_PRESENCE_FILES = 200;
 /** The longest label a run's feedback keeps. */
 const FEEDBACK_LABEL_CHARS = 120;
+/** How long a game's asset folders are reused by its previews and thumbnails: the Assets stage's poll. */
+const ASSET_FOLDERS_FRESH_MS = 10 * SECOND_MS;
 
 /** A reference still written into the game; `created` when this call added the file. */
 export interface SavedReference {
@@ -88,10 +92,15 @@ function feedbackTarget(p: { facetId?: string; camera?: string; iteration?: numb
 export class AssetService {
   readonly #core: StudioCore;
   readonly #git: typeof git;
+  /** Each game's asset folders as last read, and when, shared by the reads that follow. */
+  readonly #folders = new Map<string, { at: number; folders: Promise<AssetFolder[]> }>();
+  /** The clock the folders' reuse window is read on. */
+  readonly #now: () => number;
 
-  constructor(core: StudioCore, runGit: typeof git = git) {
+  constructor(core: StudioCore, runGit: typeof git = git, now: () => number = Date.now) {
     this.#core = core;
     this.#git = runGit;
+    this.#now = now;
   }
 
   /**
@@ -227,8 +236,9 @@ export class AssetService {
     const dir = this.#core.games.dirFor(project);
     const autopilot = path.join(this.#core.layout.scratch, "autopilot");
     // Independent reads, side by side: the Assets stage polls this every ten seconds.
+    const folders = await this.#readFolders(project);
     const [walk, jobs, scratchRoot, listing, checkpoints] = await Promise.all([
-      walkGameAssets(dir),
+      walkGameAssets(dir, { folders }),
       readGenexJobs(this.#core.layout.engineHomes, project).catch(() => []),
       realpath(autopilot).catch(() => autopilot),
       this.#git(dir, ["worktree", "list", "--porcelain", "-z"]).catch(() => ""),
@@ -250,6 +260,27 @@ export class AssetService {
       workspaces,
       checkpoints,
     );
+  }
+
+  /**
+   * Where a game keeps its assets, by the facts its folder holds and the enabled plugins' `assets`.
+   * A listing reads them afresh; a preview or thumbnail reuses a read made in the last
+   * `ASSET_FOLDERS_FRESH_MS`, so opening the Assets stage is one facts walk, not one per picture.
+   */
+  assetFolders(project: string): Promise<AssetFolder[]> {
+    const kept = this.#folders.get(project);
+    if (kept && this.#now() - kept.at < ASSET_FOLDERS_FRESH_MS) return kept.folders;
+    return this.#readFolders(project);
+  }
+
+  /** One facts read of a game's asset folders, kept for the reads that follow. A folder that cannot be read answers today's folders. */
+  #readFolders(project: string): Promise<AssetFolder[]> {
+    const folders = this.#core.games.factsOf(project).then(
+      (facts) => assetFoldersFor(facts, this.#core.plugins?.workspaceSections() ?? []),
+      () => [...DEFAULT_ASSET_FOLDERS],
+    );
+    this.#folders.set(project, { at: this.#now(), folders });
+    return folders;
   }
 
   /**
@@ -285,7 +316,9 @@ export class AssetService {
       if (!(await this.#ownsGenexJob(p.project, ref.jobId))) throw new Error(MESSAGE.recordedAssetUnavailable);
       return readAssetPreview(path.join(dir, "output"), ref.path.join("/"), [], p.maxBytes);
     }
-    return readAssetPreview(this.#core.games.dirFor(p.project), p.file, undefined, p.maxBytes);
+    assertAssetPath(p.file, await this.assetFolders(p.project));
+    // The folders were checked above; the reader keeps its own hidden-part, link and file checks.
+    return readAssetPreview(this.#core.games.dirFor(p.project), p.file, [], p.maxBytes);
   }
 
   /** Whether this game's own Genex records hold the job. */

@@ -12,6 +12,7 @@ import {
   originalAsk,
   resolveChatProject,
 } from "../../src/harness-seed/loop/chat-session.ts";
+import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { launchRules } from "../../src/harness-seed/loop/launch-prompts.ts";
 import { fencedCommand } from "../../src/shared/terminal.ts";
@@ -185,5 +186,97 @@ describe("a chat's first message in a game", () => {
       await briefFor({ commits: "1", prior: [{ role: "user", content: "Make a fishing game" }] }),
       /nothing has been built/i,
     );
+  });
+});
+
+describe("the brief of a game that builds in Unreal", () => {
+  const PROJECT = "/Users/me/Unreal Projects/Valley/Valley.uproject";
+  const SHAPE = { entry: "index.html", main: "src/main.ts", build: "npm run build" };
+  /** The web page's contract, its engine and its randomness rule: none of it is an Unreal game's. */
+  const WEB_PAGE = /window\.__studio|three\.?js|installStudio|Math\.random|deterministic/i;
+
+  it("builds in the open Unreal Editor through the Unreal tools, into the linked project", () => {
+    const brief = buildContractorBrief({
+      ask: "Add a lighthouse",
+      folderLabel: "AI Games/fog-valley",
+      engine: "claude-code",
+      gameEngine: GameEngine.Unreal,
+      engineProject: PROJECT,
+    });
+    for (const tool of ["list_toolsets", "describe_toolset", "call_tool"])
+      assert.ok(
+        brief.includes(`mcp__studio__unreal-editor__${tool}`),
+        `names unreal-editor__${tool} as this session calls it`,
+      );
+    assert.ok(brief.includes(PROJECT), "says the work lands in the linked project");
+    assert.match(brief, /NOTES\.md/);
+    assert.match(brief, /Blueprint/);
+    assert.match(brief, /file watchers/);
+    assert.doesNotMatch(brief, WEB_PAGE);
+  });
+
+  it("a folder the user brought is still an Unreal game, never a page to install the contract in", () => {
+    const brief = buildContractorBrief({
+      ask: "Add a lighthouse",
+      shape: SHAPE,
+      ownShape: true,
+      contractMissing: true,
+      engine: "codex",
+      gameEngine: GameEngine.Unreal,
+      engineProject: PROJECT,
+    });
+    assert.match(brief, /unreal-editor__call_tool/);
+    assert.doesNotMatch(brief, WEB_PAGE);
+    assert.doesNotMatch(brief, /npm run build|src\/main\.ts/, "the web shape's entry and build are not its");
+  });
+
+  it("a resumed Unreal session is reminded where its work lands", () => {
+    const brief = buildContractorBrief({
+      ask: "Keep going",
+      resume: true,
+      folderLabel: "AI Games/fog-valley",
+      gameEngine: GameEngine.Unreal,
+      engineProject: PROJECT,
+    });
+    assert.ok(brief.includes(PROJECT));
+    assert.doesNotMatch(brief, WEB_PAGE);
+  });
+
+  it("a Loop chat in an Unreal game is told a build is the Unreal Loop, one lead building in the open editor", () => {
+    const launch = { toolName: "start_autopilot", hours: 1, project: "fog-valley" };
+    const unreal = buildContractorBrief({
+      ask: "make me a survival game in a misty valley",
+      folderLabel: "AI Games/fog-valley",
+      engine: "claude-code",
+      gameEngine: GameEngine.Unreal,
+      engineProject: PROJECT,
+      launch,
+    });
+    assert.match(unreal, /mcp__studio__start_autopilot/);
+    assert.match(unreal, /one lead builds the whole game itself in the open Unreal editor/);
+    assert.match(unreal, /small helpers/);
+    const web = buildContractorBrief({
+      ask: "a pong game",
+      folderLabel: "AI Games/pong",
+      engine: "claude-code",
+      launch,
+    });
+    assert.doesNotMatch(web, /Unreal|one lead/);
+  });
+
+  it("a web game's brief is the web brief, word for word", () => {
+    const briefs = [
+      { ask: "a pong game", scaffolded: true, folderLabel: "AI Games/pong", engine: "claude-code" },
+      { ask: "add fog", shape: SHAPE, ownShape: true, contractMissing: true, engine: "codex" },
+      { ask: "Keep going", resume: true, folderLabel: "AI Games/pong" },
+    ];
+    for (const options of briefs) {
+      const web = buildContractorBrief(options);
+      assert.equal(buildContractorBrief({ ...options, gameEngine: GameEngine.Web }), web);
+      assert.doesNotMatch(web, /Unreal/);
+    }
+    const template = buildContractorBrief(briefs[0]!);
+    assert.match(template, /keep window\.__studio \(seed\/start\/pause\/step\/state\/debugCamera\) working/);
+    assert.match(template, /The game's work happens in this workspace/);
   });
 });

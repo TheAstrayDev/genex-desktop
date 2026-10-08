@@ -11,16 +11,21 @@
  * `customEvent` / `customPayload`, never `payload as`.
  */
 import type { ChatActivityPhase } from "./chat-activity.ts";
-import type { ChatRewind } from "./chat-rewind.ts";
+import type { ChatRewind, CheckpointSkippedPayload } from "./chat-rewind.ts";
 import type { PlanReviewRecord } from "./composer.ts";
 import type { ContextMeasurement } from "./context.ts";
 import type { AssetDeliveredPayload, PluginToolFinishedPayload, PluginToolStartedPayload } from "./game-assets.ts";
 import type { PluginConsentEvent } from "./plugins.ts";
+import type { ConnectorToolEvent, ConnectorToolStartedEvent } from "./mcp.ts";
 import type { ToolPermissionEvent } from "./permissions.ts";
 import type { SteerDelivery } from "./message-queue.ts";
 import type { Usage } from "./event-log.ts";
 import type { BuildObservation, ReadyResult, ReadyVia } from "./preview-contract.ts";
+import type { EngineLinkedPayload, EngineLinkUndonePayload, EngineStepsPayload } from "./game-engine.ts";
 import type { RunSpec } from "./protocol.ts";
+import type { PluginSuggestedPayload } from "./project-tools.ts";
+import type { DontWaitOfferPayload, DontWaitSetPayload } from "./dont-wait.ts";
+import type { AppLookAccessPayload, JobEndedPayload, JobStartedPayload } from "./jobs.ts";
 
 /**
  * Every custom event name in the studio's own code. A few are only read: names older versions
@@ -33,11 +38,31 @@ export const CustomEvent = {
   AssetDelivered: "asset_delivered",
   BlenderAsset: "blender_asset",
   ConnectorTool: "connector_tool",
+  /** A connector call on its way out, paired with its `connector_tool` by `callId`; written by the host only. */
+  ConnectorToolStarted: "connector_tool_started",
+  /** A game linked to an engine project; written by the host only. */
+  EngineLinked: "engine_linked",
+  /** Undo took an engine link back; written by the host only. */
+  EngineLinkUndone: "engine_link_undone",
+  /** An engine plugin offers its steps card in this chat; written by the host only. */
+  EngineSteps: "engine_steps",
   PluginConsent: "plugin_consent",
+  /** A session showed the person a card to turn a Genex plugin on or install it; written by the host only. */
+  PluginSuggested: "plugin_suggested",
   PluginTool: "plugin_tool",
   PluginToolStarted: "plugin_tool_started",
   /** Claude asking the person before it uses a tool (shared/permissions.ts); written by the host only. */
   ToolPermission: "tool_permission",
+  /** An agent's card offering "Don't wait for me" (shared/dont-wait.ts); written by the host only. */
+  DontWaitOffer: "dont_wait_offer",
+  /** The person switched "Don't wait for me" for a run; written by the host only. */
+  DontWaitSet: "dont_wait_set",
+  /** An agent's job started in the background (shared/jobs.ts); written by the host only. */
+  JobStarted: "job_started",
+  /** An agent's job ended, however it ended (shared/jobs.ts); written by the host only. */
+  JobEnded: "job_ended",
+  /** Genex cannot see app windows yet: the macOS access the person must allow (shared/jobs.ts); written by the host only. */
+  AppLookAccess: "app_look_access",
   // the unattended run and its lead
   AutopilotBase: "autopilot_base",
   AutopilotBaseStarted: "autopilot_base_started",
@@ -103,6 +128,8 @@ export const CustomEvent = {
   FacetWindDown: "facet_wind_down",
   RecipeOutcome: "recipe_outcome",
   // the conversation, its queue and its sessions
+  /** Files too large to save that a chat checkpoint left out, or a rewind left as they were; written by the host only. */
+  CheckpointSkipped: "checkpoint_skipped",
   Compacted: "compacted",
   CompactionFailed: "compaction_failed",
   /** One direct model call (`engine.complete`) and what served it; written by the host only. */
@@ -508,8 +535,12 @@ export interface CustomEventMap {
    */
   compacted: Partial<ContextMeasurement> & { messages?: number; trigger?: string; summary?: string; native?: boolean };
   completion_call: CompletionCallPayload;
-  connector_tool: RunScope & { connectorId?: string; tool?: string; ok?: boolean; error?: string | null };
+  connector_tool: RunScope & Omit<ConnectorToolEvent, "error"> & { error?: string | null };
+  connector_tool_started: RunScope & ConnectorToolStartedEvent;
   context_usage: ContextMeasurement;
+  engine_link_undone: EngineLinkUndonePayload;
+  engine_linked: EngineLinkedPayload;
+  engine_steps: EngineStepsPayload;
   contractor_session: ContractorSessionPayload;
   coordinator_message_delivered: SteerPayload;
   coordinator_message_handled: CoordinatorPayload;
@@ -522,6 +553,7 @@ export interface CustomEventMap {
   delegation_incomplete: DelegationIncompletePayload;
   /** A chat rewound to before a message (`shared/chat-rewind.ts`); `files`: game files put back, null when none were asked for. */
   conversation_rewound: Partial<ChatRewind> & { files?: number | null };
+  checkpoint_skipped: CheckpointSkippedPayload;
   director_show: RunScope & { target?: string; root?: string };
   director_verdict: RunScope & { pass?: string; because?: string; decision?: { kept?: boolean | null } };
   director_worker: RunScope & {
@@ -567,9 +599,15 @@ export interface CustomEventMap {
   plan_review: PlanReviewRecord;
   preview_ready: PreviewReadyPayload;
   plugin_consent: PluginConsentEvent;
+  plugin_suggested: Partial<PluginSuggestedPayload>;
   plugin_tool: PluginToolFinishedPayload & { facetTitle?: string };
   plugin_tool_started: PluginToolStartedPayload & { facetTitle?: string };
   tool_permission: ToolPermissionEvent;
+  dont_wait_offer: Partial<DontWaitOfferPayload>;
+  dont_wait_set: Partial<DontWaitSetPayload>;
+  job_started: Partial<JobStartedPayload>;
+  job_ended: Partial<JobEndedPayload>;
+  app_look_access: Partial<AppLookAccessPayload>;
   rebuild_and_restart_studio: { ok?: boolean; reason?: string };
   run_control: RunScope & { action?: string };
   run_finished: RunFinishedPayload;

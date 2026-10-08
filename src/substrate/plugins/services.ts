@@ -6,11 +6,16 @@ import type { ExportResult } from "../game-export.ts";
 import { SecretStore } from "../secrets.ts";
 import { atomicWriteJson } from "../fsx.ts";
 import { createHash } from "node:crypto";
+import type { EngineLinkHost } from "./engine-links.ts";
 import { assertRelativePath, containedReal, isBelow, isInside, toPosixRelative } from "../paths.ts";
 
 const MAX_CREDENTIAL_CHARS = 65536;
 const MAX_PROJECT_WRITE_CHARS = 2_000_000;
 const MAX_OBSERVED_FILES = 1000;
+/** The longest reason a plugin may give a snapshot: Rewind lists it as one line. */
+const MAX_SNAPSHOT_REASON_CHARS = 200;
+/** A game a plugin makes is titled in one plain line of at most this many characters. */
+const MAX_GAME_TITLE_CHARS = 80;
 /** A project name: it becomes a folder under the plugin's storage, so it can never be a path. */
 const PROJECT_NAME = /^[a-zA-Z0-9_-]+$/;
 const JOB_REFERENCE = /^[a-zA-Z0-9_-]{1,100}$/;
@@ -38,6 +43,13 @@ const MESSAGE = {
   PathEscapes: "Path escapes project",
   SymlinkOutput: "Symlink output refused",
   InvalidJobReference: "Invalid job reference",
+  EngineLinksUnavailable: "Engine links unavailable",
+  InvalidSnapshotReason: `Invalid snapshot reason: one plain line of at most ${MAX_SNAPSHOT_REASON_CHARS} characters`,
+  SnapshotsUnavailable: "Snapshots unavailable",
+  InvalidGameTitle: `Invalid game title: one plain line of at most ${MAX_GAME_TITLE_CHARS} characters`,
+  GamesUnavailable: "Games unavailable",
+  RunsUnavailable: "Runs unavailable",
+  NotMadeHere: "A link may name only a game this plugin made, and only from outside another game",
   Unknown: "Unknown plugin service",
 } as const;
 
@@ -59,6 +71,28 @@ const isMissing = (error: NodeJS.ErrnoException) => error.code === "ENOENT";
 function requireBinding(binding: PluginBinding | undefined): PluginBinding {
   if (!binding) throw new Error(MESSAGE.ProjectRequired);
   return binding;
+}
+
+/** A character Rewind could not show on one line: a control character, a line break included. */
+const isControl = (char: string) => {
+  const code = char.charCodeAt(0);
+  return code < 0x20 || code === 0x7f;
+};
+
+/** A snapshot reason as Rewind lists it: one plain line of text, trimmed; anything else is refused. */
+function snapshotReason(value: unknown): string {
+  const reason = typeof value === "string" ? value.trim() : "";
+  const plain = reason.length > 0 && reason.length <= MAX_SNAPSHOT_REASON_CHARS && ![...reason].some(isControl);
+  if (!plain) throw new Error(MESSAGE.InvalidSnapshotReason);
+  return reason;
+}
+
+/** A game title a plugin asked for: one plain line, trimmed, of at most {@link MAX_GAME_TITLE_CHARS} characters. */
+function gameTitle(value: unknown): string {
+  const title = typeof value === "string" ? value.trim() : "";
+  const plain = title.length > 0 && title.length <= MAX_GAME_TITLE_CHARS && ![...title].some(isControl);
+  if (!plain) throw new Error(MESSAGE.InvalidGameTitle);
+  return title;
 }
 
 /** Bytes of regular files under `dir` (none when it is missing); any link or special file is refused. */
@@ -150,6 +184,16 @@ export class PluginServices {
   exportStage: ((binding: PluginBinding, target: string, pluginId: string) => Promise<ExportResult>) | undefined;
   assetRoot: ((binding: PluginBinding) => Promise<string>) | undefined;
   assetLimits: ((id: string) => AssetLimits | undefined) | undefined;
+  /** Host engine links (`game.engine.*`). Unset → those services report 'Engine links unavailable'. */
+  engineLinks: EngineLinkHost | undefined;
+  /** Host snapshots (`game.snapshot`): a game snapshot of the bound game. Unset → 'Snapshots unavailable'. */
+  gameSnapshot: ((binding: PluginBinding, reason: string) => Promise<{ snapshotId: string }>) | undefined;
+  /** Host games (`game.create`): makes a Genex game with this title; its name and folder. Unset → 'Games unavailable'. */
+  gameCreate: ((title: string) => Promise<{ project: string; directory: string }>) | undefined;
+  /** Host runs (`game.engine.runs`): the games whose run is going now. Unset → 'Runs unavailable'. */
+  runningGames: (() => Promise<Array<{ project: string; directory: string; title: string }>>) | undefined;
+  /** The games each plugin made through `game.create` while this host runs, by name, with their folders. */
+  #madeGames = new Map<string, Map<string, string>>();
   #deliveries = new Map<string, Promise<unknown>>();
   root(id: string) {
     return this.adoptedRoots[id] ?? path.join(this.dataRoot, id);
@@ -174,6 +218,13 @@ export class PluginServices {
     [PluginService.Observe]: (call) => this.#observeFiles(call),
     [PluginService.ProjectRead]: readProjectFile,
     [PluginService.ProjectWrite]: writeProjectFile,
+    [PluginService.GameEngineLink]: ({ id, args, binding }) =>
+      this.#engine().link(id, this.#linkBinding(id, args, binding), args),
+    [PluginService.GameCreate]: ({ id, args }) => this.#createGame(id, args?.title),
+    [PluginService.GameEngineRead]: ({ id, binding }) => this.#engine().read(id, requireBinding(binding)),
+    [PluginService.GameEngineSteps]: ({ id, binding }) => this.#engine().steps(id, requireBinding(binding)),
+    [PluginService.GameSnapshot]: ({ args, binding }) => this.#gameSnapshot(requireBinding(binding), args?.reason),
+    [PluginService.GameEngineRuns]: ({ id }) => this.#engineRuns(id),
     [PluginService.JobsRead]: async (call) =>
       JSON.parse(await readFile(await jobReferenceFile(call), "utf8").catch(() => "null")),
     [PluginService.JobsWrite]: async (call) => {
@@ -181,6 +232,52 @@ export class PluginServices {
       return true;
     },
   };
+  /** A game snapshot of the bound game under the plugin's reason, checked before anything is taken. */
+  async #gameSnapshot(binding: PluginBinding, reason: unknown): Promise<{ snapshotId: string }> {
+    const checked = snapshotReason(reason);
+    if (!this.gameSnapshot) throw new Error(MESSAGE.SnapshotsUnavailable);
+    return this.gameSnapshot(binding, checked);
+  }
+  /** The games whose run is going now that this plugin linked to a project, with that project. */
+  async #engineRuns(id: string): Promise<Array<{ game: string; title: string; project: string }>> {
+    if (!this.runningGames) throw new Error(MESSAGE.RunsUnavailable);
+    const runs: Array<{ game: string; title: string; project: string }> = [];
+    for (const game of await this.runningGames()) {
+      const binding = { project: game.project, directory: game.directory };
+      const link = await this.#engine()
+        .read(id, binding)
+        .catch(() => null);
+      if (link) runs.push({ game: game.project, title: game.title, project: link.project });
+    }
+    return runs;
+  }
+  /** A game the plugin asked for, made by the host and remembered as the plugin's to link. */
+  async #createGame(id: string, title: unknown): Promise<{ project: string; directory: string }> {
+    const checked = gameTitle(title);
+    if (!this.gameCreate) throw new Error(MESSAGE.GamesUnavailable);
+    const made = await this.gameCreate(checked);
+    const games = this.#madeGames.get(id) ?? new Map<string, string>();
+    games.set(made.project, made.directory);
+    this.#madeGames.set(id, games);
+    return made;
+  }
+
+  /**
+   * The game a link is for: the bound game, or (`game` named, from outside any game) one this very
+   * plugin made through `game.create`; anything else is refused before the link is made.
+   */
+  #linkBinding(id: string, args: unknown, binding: PluginBinding | undefined): PluginBinding {
+    const game = args && typeof args === "object" ? (args as { game?: unknown }).game : undefined;
+    if (game === undefined) return requireBinding(binding);
+    const directory = typeof game === "string" ? this.#madeGames.get(id)?.get(game) : undefined;
+    if (directory === undefined || binding?.project) throw new Error(MESSAGE.NotMadeHere);
+    return { ...binding, project: game as string, directory };
+  }
+
+  #engine(): EngineLinkHost {
+    if (!this.engineLinks) throw new Error(MESSAGE.EngineLinksUnavailable);
+    return this.engineLinks;
+  }
   async call(id: string, method: string, args: any, binding?: PluginBinding): Promise<unknown> {
     const root = this.root(id);
     await mkdir(root, { recursive: true, mode: 0o700 });

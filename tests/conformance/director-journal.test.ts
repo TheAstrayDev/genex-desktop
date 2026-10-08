@@ -833,6 +833,72 @@ describe("a new worker and the workers from before the pause (workers.ts)", () =
     assert.equal(saved?.workers.sky?.brief, "Build a dusk sky over the plaza", JSON.stringify(saved));
     assert.ok(saved?.clock?.softDeadline, "the night's clock is on it");
   });
+
+  it("answers a refused copy of the game as a start the lead reads, and starts nothing", async () => {
+    const host = fakeHost();
+    const night = workerNight(host, { director: { workers: {} } }, Date.now());
+    const refused =
+      "This game is too large to copy, so nothing that needs its own copy of it can start; work in the game folder itself. A copy would take 6.1 GB, more than the 2 GB allowed (most of it in Content 5.2 GB).";
+    // The host refuses the copy (`snapshot.worktree`); every other call is answered as before.
+    const answered = night.ctx.call;
+    night.ctx.call = (method: string, params: Record<string, unknown>) =>
+      method === HostMethod.SnapshotWorktree ? Promise.reject(new Error(refused)) : answered(method, params);
+    const answer = await workerStart(night)({ id: "sky" });
+    assert.equal(answer, `could not start "sky": ${refused}`);
+    assert.equal(night.state.workers.has("sky"), false);
+    const asked = host.calls.map((call) => call.method);
+    assert.ok(!asked.includes(HostMethod.ThreadCreate), "no thread for a worker with no copy");
+    assert.ok(!asked.includes(HostMethod.EngineDelegate), "and no turn");
+  });
+});
+
+/** A night whose host refuses the first `refusals` builder turns for room, as a full chat's ceiling does. */
+function roomNight(refusals: number) {
+  const host = fakeHost();
+  const night = workerNight(host, { director: { workers: {} } }, Date.now());
+  let refused = refusals;
+  const answered = night.ctx.call;
+  night.ctx.call = (method: string, params: Record<string, unknown>) => {
+    if (method !== HostMethod.EngineDelegate || refused-- <= 0) return answered(method, params);
+    host.calls.push({ method, params });
+    return Promise.reject(Object.assign(new Error("this chat already runs 8 workers"), { code: "too_many_workers" }));
+  };
+  const delegations = () => host.calls.filter((call) => call.method === HostMethod.EngineDelegate).length;
+  return { night, delegations };
+}
+
+/** Let the night's own work run until `done` holds, moving the mocked timers on while it waits. */
+async function runUntil(t: { mock: { timers: { tick(ms: number): void } } }, done: () => boolean): Promise<void> {
+  for (let turn = 0; turn < 5_000 && !done(); turn++) {
+    await nextTurn();
+    if (turn % 20 === 19) t.mock.timers.tick(10_000);
+  }
+  assert.ok(done(), "the night got there");
+}
+
+describe("a director's single worker under the chat's Settings ceiling", () => {
+  it("waits for room when the host has none, then takes its turn and ends done", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { night, delegations } = roomNight(1);
+    const started = await workerStart(night)({ id: "sky" });
+    assert.equal(started.started, "sky", JSON.stringify(started));
+    const worker = night.state.workers.get("sky");
+    await runUntil(t, () => worker.state !== "running");
+    assert.equal(worker.state, "done", worker.error ?? "");
+    assert.equal(delegations(), 2, "asked again once there was room");
+  });
+
+  it("a stop while it waits for room ends it as stopped, and it never takes its turn", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { night, delegations } = roomNight(1_000);
+    await workerStart(night)({ id: "sky" });
+    const worker = night.state.workers.get("sky");
+    await runUntil(t, () => delegations() >= 1);
+    await workerFunctions.stopWorker(night, worker, "not needed");
+    await runUntil(t, () => worker.state !== "running");
+    assert.equal(worker.state, "stopped", worker.error ?? "");
+    assert.equal(delegations(), 1, "no turn after the stop");
+  });
 });
 
 describe("the workers' engine limit, once it lifts", () => {
@@ -1316,5 +1382,59 @@ describe("a finished build reopened (director/reopen.ts)", () => {
     await Promise.all(
       [...night.state.workers.values()].map((worker: { promise?: Promise<unknown> }) => worker.promise),
     );
+  });
+});
+
+describe("a night reads its run's job ends on from its journal's cursor (journal.ts, wake.ts)", () => {
+  const BUILD_ID = "0b5e3c1a-3f7e-4f3d-9f0e-6f1c2d3e4a5b";
+  /** The run's fourth job end: a worker's build that failed. */
+  const fourthEnd = {
+    id: BUILD_ID,
+    title: "Unreal build",
+    role: "worker",
+    worker: "Scene builder",
+    command: "make build",
+    state: "failed",
+    exitCode: 2,
+    endedAt: iso(T0),
+    endSeq: 4,
+    durationMs: 4 * MINUTE_MS,
+    stoppedBy: null,
+  };
+  /** A host whose registry holds that end after end number 3. */
+  const jobsAnswer = (params: Record<string, any>) =>
+    params.endedAfter < 4 ? { jobs: [fourthEnd], seq: 4 } : { jobs: [], seq: 4 };
+
+  /** A resumed night on `priorJournal` whose lead rests once, then finishes: its turns and the host's calls. */
+  async function resumedNight(priorJournal: Record<string, any>) {
+    const host = fakeHost();
+    const night = fakeNight(host, { resume: true, priorJournal }, { [HostMethod.JobsList]: jobsAnswer });
+    restoreNight(night, T0);
+    const { talk, turns } = lead((turn) => {
+      if (turn > 1) night.state.finished = true;
+      return { ok: true, sessionId: "lead-1" };
+    });
+    await runWakeLoop(night, talk, BRIEF, fakeClock(T0));
+    const reads = host.calls.filter((call) => call.method === HostMethod.JobsList).map((call) => call.params);
+    return { host, turns, reads };
+  }
+
+  it("after a restart the run reads on from its journal's cursor, and the next save keeps where it got to", async () => {
+    const { host, turns, reads } = await resumedNight({ director: { workers: {}, ledger: [], jobsCursor: 3 } });
+    assert.deepEqual(reads[0], { project: "plaza", runId: "run_j", endedAfter: 3 });
+    assert.match(
+      turns[1]?.prompt ?? "",
+      /Unreal build \(`make build`, started by worker Scene builder\) failed \(exit 2\) after 4 min/,
+    );
+    assert.equal(host.journals.at(-1)?.director.jobsCursor, 4, "the journal keeps the cursor past the end it told");
+    assert.ok(
+      reads.slice(1).every((params) => params.endedAfter === 4),
+      "an end is told once",
+    );
+  });
+
+  it("a journal from before it kept a cursor reads the run's job ends from the start", async () => {
+    const { reads } = await resumedNight({ director: { workers: {}, ledger: [] } });
+    assert.equal(reads[0]?.endedAfter, 0);
   });
 });

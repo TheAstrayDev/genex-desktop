@@ -85,7 +85,15 @@ The system prompt holds only what stays the same across a session's requests; ea
 and time budget rides its own message (`localBudgetNote`), so a resumed session keeps the runtime's
 cached prefix instead of re-reading its whole history. The harness's own tool loop reads its system
 prompt's identity, rules, skills, memory, notes and file list once per turn (`readStanding`), and a
-tool's description travels once, with its schema.
+tool's description travels once, with its schema. The identity names no engine; it says the
+model runs inside Genex, which folder the game is and what it holds (`appIdentity`,
+`loop/project-prompts.ts`); a game with no kind yet adds that `start_web_game` comes first (or
+the kind tool of an engine plugin on offer, from `plugins.tools`' `kinds`, or `plugins_find` for an
+engine), and a folder of its own files of a kind no rule knows that it is
+looked through first. A web game's (`holdsWebGame`: `web-game` at its root, a game with no
+kind yet not included) adds `prompts/identity-web.md` (three.js, the preview window), and its rules
+add `prompts/operating-rules-web.md` (the preview's controls, `window.__studio`, determinism) to
+`prompts/operating-rules.md`, which every turn reads.
 Interrupted tool calls receive an explicit unknown-result marker and are never replayed
 blindly. History is checkpointed atomically between tool actions. Before inference the pinned
 runtime applies its own chat template (including system instructions and tool schemas) and

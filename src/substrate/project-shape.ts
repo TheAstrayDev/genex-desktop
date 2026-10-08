@@ -5,8 +5,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { GameCandidate, ProjectKind, ProjectShape } from "../shared/game-project.ts";
+import { CoreFact, FolderHolds, hasFact } from "../shared/project-facts.ts";
 import { pathExists, readJsonIfExists } from "./fsx.ts";
 import { isRemoteSrc, pageScripts, projectRelative } from "./game-page.ts";
+import { detectFacts } from "./project-facts.ts";
 import { declaredBootMs } from "./preview-ready.ts";
 import { isInstallCommand, packageCommands } from "./toolchain.ts";
 
@@ -19,6 +21,25 @@ const PROJECT_KINDS: readonly ProjectKind[] = [
   "engine-export",
   "own-script",
 ];
+
+/**
+ * What in a folder's top level is not the folder's own work: Genex's own bookkeeping, and the notes
+ * a person gathers before any game exists. Neither says what kind of project the folder is, so a
+ * folder holding only these (or nothing) is still an empty one.
+ */
+const NOT_OWN_FILES = {
+  /** Genex's record of the game and the stills folder the starter makes. */
+  Bookkeeping: ["studio.json", "references"],
+  /**
+   * The folder Genex's asset tools deliver into (`main/game-assets.ts`): what they write into a game
+   * with no kind yet never makes it a project of its own. `public/` counts only while it holds
+   * nothing but this folder (the bundled shape's `public/assets/`).
+   */
+  AssetFolder: "assets",
+  BundledParent: "public",
+  /** A loose note at the root, by its lower-cased extension. */
+  NoteExtensions: [".md", ".txt"],
+} as const;
 
 function isProjectKind(value: unknown): value is ProjectKind {
   return typeof value === "string" && (PROJECT_KINDS as readonly string[]).includes(value);
@@ -272,6 +293,79 @@ export async function readProjectShape(dir: string): Promise<ProjectShape> {
     return bootMs === null ? detected : { ...detected, ...declaredBoot };
   }
   return { ...(await recordedShape(dir, meta)), ...declaredBoot };
+}
+
+/**
+ * Whether a folder holds a web game at its root, by its facts (`detectFacts`): an `index.html` at
+ * its root, or the web starter's stamp (`contractVersion`) in its `studio.json`. A folder that can't
+ * be read holds none.
+ */
+export async function webGameSignal(dir: string): Promise<boolean> {
+  const facts = await detectFacts(dir, []).catch(() => []);
+  return hasFact(facts, CoreFact.WebGame, ".");
+}
+
+/** A top-level entry as these reads take it. */
+type TopEntry = { name: string; isFile(): boolean; isDirectory(): boolean };
+
+/** Whether a top-level entry is the folder's own work, not bookkeeping, a hidden file or a loose note. */
+function isOwnEntry(entry: TopEntry): boolean {
+  if (entry.name.startsWith(".")) return false;
+  if ((NOT_OWN_FILES.Bookkeeping as readonly string[]).includes(entry.name)) return false;
+  if (entry.isDirectory() && entry.name === NOT_OWN_FILES.AssetFolder) return false;
+  const extension = path.extname(entry.name).toLowerCase();
+  return !(entry.isFile() && (NOT_OWN_FILES.NoteExtensions as readonly string[]).includes(extension));
+}
+
+/**
+ * Whether a top-level entry is the folder's own work (`isOwnEntry`), reading into `public/`: one that
+ * holds nothing but Genex's asset folder (and hidden files) is Genex's output, not the folder's own.
+ */
+async function ownEntry(dir: string, entry: TopEntry): Promise<boolean> {
+  if (!isOwnEntry(entry)) return false;
+  if (!entry.isDirectory() || entry.name !== NOT_OWN_FILES.BundledParent) return true;
+  const inside = await readdir(path.join(dir, entry.name), { withFileTypes: true }).catch(() => null);
+  if (!inside) return true;
+  return inside.some(
+    (child) => !child.name.startsWith(".") && !(child.isDirectory() && child.name === NOT_OWN_FILES.AssetFolder),
+  );
+}
+
+/** Whether any top-level entry is the folder's own work (`ownEntry`). */
+async function anyOwnEntry(dir: string, entries: readonly TopEntry[]): Promise<boolean> {
+  for (const entry of entries) if (await ownEntry(dir, entry)) return true;
+  return false;
+}
+
+/** Whether a top-level entry is a loose note: a visible `*.md` or `*.txt` file. */
+function isNote(entry: TopEntry): boolean {
+  const extension = path.extname(entry.name).toLowerCase();
+  return (
+    entry.isFile() &&
+    !entry.name.startsWith(".") &&
+    (NOT_OWN_FILES.NoteExtensions as readonly string[]).includes(extension)
+  );
+}
+
+/**
+ * Whether a folder holds files of its own: any top-level entry but a hidden one, Genex's own
+ * bookkeeping (`studio.json`, `references/`), the folder its asset tools deliver into (`assets/`, or a
+ * `public/` holding only that) and loose notes at the root (`*.md`, `*.txt`).
+ */
+export async function holdsOwnFiles(dir: string): Promise<boolean> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  return anyOwnEntry(dir, entries);
+}
+
+/**
+ * What a folder holds at its top level, besides hidden files, Genex's bookkeeping and its asset
+ * deliveries: files of its own (`holdsOwnFiles`), loose notes only, or nothing. Throws when the folder
+ * can't be read.
+ */
+export async function folderHolds(dir: string): Promise<FolderHolds> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  if (await anyOwnEntry(dir, entries)) return FolderHolds.OwnFiles;
+  return entries.some(isNote) ? FolderHolds.Notes : FolderHolds.Nothing;
 }
 
 /** Folders that are output, dependencies or notes — a game is never *these*, so the scan skips them. */

@@ -29,6 +29,8 @@ import { EngineFailure } from "./outage.ts";
 import { VerdictSource } from "./verdict.ts";
 import { WorkerState } from "./outcomes.ts";
 import { clip, CLIP_DETAIL, CLIP_REASON } from "./text.ts";
+import { engineOfGame, GameEngine } from "./game-engine.ts";
+import type { GameProject } from "../types/host-api.d.ts";
 
 /** A replayable sub-task mined from the log: what was asked, whether it went well, and what showed it. */
 export interface ValidationTask {
@@ -201,7 +203,9 @@ async function openPass(ctx: HarnessCtx, options: SkillOptOptions): Promise<Pass
   const lastRun = latestRunEngine(events);
   const engine = options.engine ?? lastRun?.engine ?? EngineId.Ollama;
   const model = options.engine ? options.model : (options.model ?? lastRun?.model);
-  const tasks = mineValidationTasks(events, options.maxTasks ?? DEFAULT_MAX_TASKS);
+  // The games as they are now: what the web preview saw of one that now builds in Unreal is no evidence.
+  const games = await ctx.call(HostMethod.GameList, {}).catch(() => null);
+  const tasks = mineValidationTasks(events, options.maxTasks ?? DEFAULT_MAX_TASKS, Array.isArray(games) ? games : []);
   // Only skills that declare `trainable: true` are optimised — the planner's, in the v2 seed.
   // Builder skills are retired from SkillOpt (HARNESS-REWORK.md §4.6): the Claude Code
   // contractor never read them, and the technique library with its outcome gate replaces
@@ -483,17 +487,37 @@ async function finishPass(
 /**
  * Cheap, replayable sub-tasks mined from what actually happened, rather than a synthetic
  * benchmark: iteration verdicts carry the gap that was being closed and whether it won.
+ * `games` are the studio's games as they are now: a web build observation of one that now builds
+ * in Unreal is set aside.
  */
-export function mineValidationTasks(events: readonly HarnessEvent[], limit: number): ValidationTask[] {
+export function mineValidationTasks(
+  events: readonly HarnessEvent[],
+  limit: number,
+  games: readonly Pick<GameProject, "name" | "engine">[] = [],
+): ValidationTask[] {
   const tasks: ValidationTask[] = [];
+  const unrealGames = new Set(games.filter((game) => engineOfGame(game) === GameEngine.Unreal).map((g) => g.name));
   for (const event of events) {
     if (event.data?.type !== EventKind.Custom) continue;
     const type = event.data.event_type;
+    if (isUnrealBuildObservation(type, event.data.payload, unrealGames)) continue;
     const mine = Object.hasOwn(TASK_MINERS, type) ? TASK_MINERS[type] : undefined;
     const task = mine?.(event.data.payload ?? {}, tasks.length);
     if (task) tasks.push(task);
   }
   return tasks.filter((task) => task.prompt).slice(-limit);
+}
+
+/**
+ * A chat build's preview observation of a game that now builds in Unreal: the web preview of its
+ * notes folder shows a black canvas, which says nothing about the game, so it teaches nothing.
+ */
+function isUnrealBuildObservation(
+  type: unknown,
+  payload: AnyRecord | undefined,
+  unrealGames: ReadonlySet<string>,
+): boolean {
+  return type === RunEvent.BuildObservation && unrealGames.has(String(payload?.project ?? ""));
 }
 
 /** One custom event's payload → the task it teaches, or null. `mined` counts the tasks so far. */

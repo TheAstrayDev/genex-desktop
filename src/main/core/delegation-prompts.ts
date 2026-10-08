@@ -1,5 +1,19 @@
 /** What a builder session is told about the host's side of its tools (`delegation.ts`). Model-facing. */
-import type { PluginAppliedSet } from "../../shared/plugins.ts";
+import { sizeWords } from "../../shared/byte-size.ts";
+import { CallCutOff, type PluginAppliedSet } from "../../shared/plugins.ts";
+import type { CutOffCall } from "./cut-off-calls.ts";
+import type { UnsavedFile } from "./unsaved-files.ts";
+import { MINUTE_MS } from "../../shared/duration.ts";
+import { type JobRecord, JobState } from "../../shared/jobs.ts";
+
+/** Why a call was cut off, as the cut-off notice says it. */
+const MESSAGE = {
+  cutOffWhy: {
+    [CallCutOff.HarnessEnded]: "the studio's loop ended while it ran",
+    [CallCutOff.PluginEnded]: "its plugin stopped while it ran",
+    [CallCutOff.AppLost]: "the app it drives went away while it ran",
+  } satisfies Record<CallCutOff, string>,
+} as const;
 
 /** Which plugins and skills a resumed session was handed before and is not handed now. */
 export function withdrawnSince(before: PluginAppliedSet | undefined, now: PluginAppliedSet): PluginAppliedSet {
@@ -23,6 +37,57 @@ export function withdrawnNotice(withdrawn: PluginAppliedSet): string {
     withdrawn.skills.length ? `skills: ${withdrawn.skills.join(", ")}` : "",
   ].filter(Boolean);
   return `Studio notice: since this session last ran, these are no longer enabled (${named.join("; ")}). Ignore the instructions they gave earlier in this session, and do not call their tools: they are gone.`;
+}
+
+/**
+ * The first paragraph of a thread's next delegated session after plugin or connector calls of its
+ * thread were cut off before they answered: Genex never sends them again, and only this says to
+ * look before repeating one. Empty when nothing was cut off.
+ */
+export function cutOffNotice(calls: readonly CutOffCall[]): string {
+  if (!calls.length) return "";
+  const named = calls.map((c) => `${c.tool}${c.args ? ` ${c.args}` : ""} (${MESSAGE.cutOffWhy[c.reason]})`);
+  return `Studio notice: these calls were cut off before they answered, so whether they took effect is unknown: ${named.join("; ")}. Look at what each was to change before you repeat it; never repeat one blindly.`;
+}
+
+/**
+ * Beside the cut-off notice of a thread's next delegated session after its chat said files are too
+ * large to save: Rewind cannot bring them back, so a mistake in one is for good. Empty for none.
+ */
+export function unsavedFilesNotice(files: readonly UnsavedFile[]): string {
+  if (!files.length) return "";
+  const named = files.map((file) => `${file.file} (${sizeWords(file.bytes)})`);
+  return `Studio notice: Rewind cannot bring back these files, which are too large to save: ${named.join(", ")}. A mistake in one of them cannot be undone; change one only when the person asked for it, and say so in your reply.`;
+}
+
+/** How an ended job reads in the jobs notice, by how it ended. */
+const JOB_ENDED_WORDS = {
+  [JobState.Succeeded]: "finished",
+  [JobState.Failed]: "failed",
+  [JobState.Stopped]: "was stopped",
+  [JobState.TimedOut]: "was stopped at its time limit",
+  [JobState.Interrupted]: "was stopped when Genex closed",
+} as const satisfies Record<Exclude<JobState, typeof JobState.Running>, string>;
+
+/** One ended job in the jobs notice: its title, command, how it ended and after how long. */
+function endedJobWords(job: JobRecord): string {
+  const state = job.state === JobState.Running ? JobState.Interrupted : job.state;
+  const exit = typeof job.exitCode === "number" ? ` (exit ${job.exitCode})` : "";
+  const ms = Date.parse(job.endedAt ?? "") - Date.parse(job.startedAt);
+  const after = Number.isFinite(ms) ? ` after ${Math.max(0, Math.round(ms / MINUTE_MS))} min` : "";
+  const read = job.state === JobState.Succeeded ? "" : `: read it with job_tail ${job.id}`;
+  return `${job.title} (\`${job.command}\`) ${JOB_ENDED_WORDS[state]}${exit}${after}${read}`;
+}
+
+/**
+ * The chat's own session's notice of its jobs: those that ended since it was last told, and those
+ * still running. Empty when there is neither.
+ */
+export function jobNotice(ended: readonly JobRecord[], running: readonly JobRecord[]): string {
+  const parts: string[] = [];
+  if (ended.length) parts.push(`Jobs since your last turn: ${ended.map(endedJobWords).join("; ")}.`);
+  if (running.length) parts.push(`Still running: ${running.map((job) => `${job.title} (${job.id})`).join("; ")}.`);
+  return parts.length ? `Studio notice: ${parts.join(" ")}` : "";
 }
 
 /**

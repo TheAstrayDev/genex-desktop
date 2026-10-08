@@ -1,4 +1,5 @@
 /** The stage: the live preview's bounds and state, a run's builds, and the game's own build. */
+import { kindPending } from "../../shared/project-facts.ts";
 import type { GamePreview } from "../preview.ts";
 import type { StudioCore } from "../studio-core.ts";
 import type { IpcHandle } from "./registrar.ts";
@@ -9,6 +10,12 @@ const MESSAGE = {
   noGameView: "the studio window has no game view",
   noProject: "a game name is required",
 } as const;
+
+/** Whether a game has no kind yet (`kindPending`); a game whose folder can't be read is loaded as before, to say why. */
+async function kindPendingGame(core: StudioCore, project: string): Promise<boolean> {
+  const kind = await core.games.kindOf(project).catch(() => null);
+  return kind !== null && kindPending(kind);
+}
 
 export interface PreviewBoundsRecord {
   last: { x: number; y: number; width: number; height: number } | null;
@@ -34,6 +41,8 @@ export function registerPreviewIpc(
   };
   handle("studio:preview.load", async (payload) => {
     await core.games.touch(payload.project).catch(() => {});
+    // A game with no kind yet has no page: Live shows its first-idea state and loads nothing.
+    if (await kindPendingGame(core, payload.project)) return "";
     // Through the core, not the port: a game with its own build is built and served from its output.
     return core.loadPreview({ project: payload.project });
   });

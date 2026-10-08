@@ -2,6 +2,9 @@
  * Starting a run: the refusals a night meets before it is registered, the loop that conducts it,
  * the self-improvement pass that follows it, and the record a run that died still owes its chat.
  */
+import { engineOfGame, GameEngine } from "./game-engine.ts";
+import { startWebIfPending } from "./folder-facts.ts";
+import { runUnrealLead } from "./unreal/lead.ts";
 import { EngineId, modelOn, supportsSessions, withRoles } from "./model-roles.ts";
 import { runGauntlet } from "./gauntlet.ts";
 import { runAutopilot } from "./autopilot.ts";
@@ -54,14 +57,22 @@ const RUNNERS: Record<RunnerKind, Runner> = {
   [RunnerKind.Autopilot]: (ctx, options) => runAutopilot(ctx, options),
   // The gauntlet has no journal to resume from.
   [RunnerKind.Gauntlet]: (ctx, { threadId, run }) => runGauntlet(ctx, { threadId, run }),
+  // The Unreal Loop's lead resumes from its journal (`kind: "unreal-lead"`, lead-journal.ts).
+  [RunnerKind.Unreal]: (ctx, options) => runUnrealLead(ctx, options),
 };
 
 /**
- * Which loop conducts `run`. Session-capable engines (including Bonsai) conduct a director night.
- * Completion-only engines keep the classic loop, as does an explicit run.classic.
+ * Which loop conducts `run`. A game built in Unreal runs the Unreal Loop. Session-capable engines
+ * (including Bonsai) conduct a director night. Completion-only engines keep the classic loop, as
+ * does an explicit run.classic.
  */
-export function chooseRunner(run: Run, described: readonly EngineDescriptor[]): RunnerKind {
+export function chooseRunner(
+  run: Run,
+  described: readonly EngineDescriptor[],
+  gameEngine: GameEngine = GameEngine.Web,
+): RunnerKind {
   if (run.mode !== RunMode.Autopilot) return RunnerKind.Gauntlet;
+  if (gameEngine === GameEngine.Unreal) return RunnerKind.Unreal;
   const delegated = supportsSessions(described.find((e) => e.id === (run.engine ?? EngineId.Ollama)));
   return delegated && run.classic !== true ? RunnerKind.Director : RunnerKind.Autopilot;
 }
@@ -297,7 +308,11 @@ async function conductRun(
   ctx.runInbox = inbox;
   const described =
     run.mode === RunMode.Autopilot ? await host.call(HostMethod.EngineDescribe, {}).catch(() => []) : [];
-  const report = await RUNNERS[chooseRunner(run, described)](ctx, { threadId, run, resume });
+  const games = await host.call(HostMethod.GameList, undefined).catch(() => []);
+  // A game with no kind yet runs the web Loop, so it takes the web starter before the runner is chosen.
+  await startWebIfPending(host, run.project, games);
+  const gameEngine = engineOfGame(games.find((game) => game.name === run.project));
+  const report = await RUNNERS[chooseRunner(run, described, gameEngine)](ctx, { threadId, run, resume });
   closed();
   host.notify("run.finished", report);
   // A finished run is the richest evidence there is — mine it while it is fresh. A stop

@@ -1,5 +1,9 @@
 import { providerInfo } from "../shared/providers.ts";
 import type { ExportReview } from "../shared/plugins.ts";
+import type { PluginSuggestedPayload } from "../shared/project-tools.ts";
+import { parseSuggestion } from "./chat/plugin-suggestion.ts";
+import type { DontWaitOfferPayload } from "../shared/dont-wait.ts";
+import { dontWaitSetLine, parseDontWaitOffer } from "./chat/dont-wait-offer.ts";
 /**
  * The chat transcript as entries: the thread's event log read once, oldest first, into the
  * bubbles, tool-chip groups, narration lines and cards the chat draws. Pure — `chat/transcript.ts`
@@ -33,14 +37,21 @@ import { plainDefect, reportSummary } from "./run-graph.ts";
 import type { EventEnvelope } from "./types.ts";
 import type { ToolChipRow } from "./ui/ToolChips.tsx";
 import { OutputTone, ToolState } from "./ui/tool-state.ts";
+import { GameEngine, isGameEngine } from "../shared/game-engine.ts";
+import { type ConnectorStep, connectorStep, endsPlay, showsPlayView, startsPlay } from "./chat/connector-steps.ts";
 import {
   A_PLUGIN,
+  GAME_ENGINE_WORDS,
   autopilotStartWords,
   checkReplanWords,
+  checkpointSkippedWords,
   circuitBreakWords,
-  connectorWords,
+  chatSourceName,
+  connectorStepWords,
   consentAskWords,
+  consentActionWords,
   consentOutcomeWords,
+  consentToolWords,
   decisionWords,
   fixWords,
   flagWords,
@@ -88,6 +99,10 @@ export const EntryKind = {
   Action: "action",
   Morning: "morning",
   Compaction: "compaction",
+  /** A session's card to turn a Genex plugin on or install it (`plugin_suggested`). */
+  PluginSuggestion: "plugin-suggestion",
+  /** An agent's card offering "Don't wait for me" (`dont_wait_offer`). */
+  DontWaitOffer: "dont-wait-offer",
 } as const;
 export type EntryKind = (typeof EntryKind)[keyof typeof EntryKind];
 
@@ -100,6 +115,8 @@ export const EntryAction = {
   Consent: "consent",
   /** Claude's own Allow / Deny question, or a plan to approve (`tool_permission`). */
   Permission: "permission",
+  /** A game now builds in an engine project: one line, with Undo while it is the newest link. */
+  EngineLink: "engine-link",
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
@@ -125,6 +142,10 @@ export type Entry =
   | { kind: typeof EntryKind.Activity; id: string; rows: Array<{ text: string; tag?: string }> }
   /** The conversation was compacted: its own row, opening to the summary that replaced the messages. */
   | { kind: typeof EntryKind.Compaction; id: string; messages: number | null; summary: string | null }
+  /** The turn-it-on card a session showed: its button is read from the live plugin list. */
+  | { kind: typeof EntryKind.PluginSuggestion; id: string; suggestion: PluginSuggestedPayload }
+  /** An agent's "Don't wait for me" card: `on` once the person's click on it switched it on. */
+  | { kind: typeof EntryKind.DontWaitOffer; id: string; offer: DontWaitOfferPayload; on: boolean }
   /** One plain line about what Harness learned; `link` opens Activity. */
   | { kind: typeof EntryKind.Learning; id: string; text: string; link: string }
   | {
@@ -149,6 +170,10 @@ export type Entry =
       consentSource?: string;
       consentPrompt?: string;
       consentExport?: ExportReview;
+      /** A connector's card: what the call does in a few words, its tool's words, and that Always allow is offered. */
+      consentAction?: string;
+      consentTool?: string;
+      consentAlwaysOffered?: boolean;
       /** action "permission": Claude's own Allow / Deny question (or a plan to approve), as first asked, and how it ended. */
       permission?: ToolPermissionEvent;
       pending?: boolean;
@@ -161,6 +186,8 @@ export type Entry =
        */
       steers?: Array<{ label: string; prefill: string }>;
       snapshotId?: string;
+      /** action "engine-link": what Undo takes back; absent once taken back or replaced by a newer link. */
+      engineLink?: { project: string; pluginId: string; linkedAt: string };
     }
   /**
    * The morning: what the night amounts to, in one card. It replaces the line that read
@@ -222,7 +249,6 @@ export const SystemTag = {
   Part: "PART",
   Move: "MOVE",
   Blender: "BLENDER",
-  Tool: "TOOL",
   Fix: "FIX",
   Alive: "ALIVE",
   Waiting: "WAITING",
@@ -235,6 +261,7 @@ export const SystemTag = {
   Checked: "CHECKED",
   Show: "SHOW",
   Checkpoint: "CHECKPOINT",
+  Engine: "ENGINE",
 } as const;
 export type SystemTag = (typeof SystemTag)[keyof typeof SystemTag];
 
@@ -245,7 +272,6 @@ const ROUTINE_TAGS = new Set<string>([
   SystemTag.TheBuild,
   SystemTag.Part,
   SystemTag.Move,
-  SystemTag.Tool,
   SystemTag.Blender,
   SystemTag.Fix,
   SystemTag.Reviewer,
@@ -291,6 +317,7 @@ const NOTICE_EVENTS = [
   CustomEvent.AutopilotPlanReview,
 ] as const;
 const PLUGIN_CALL_EVENTS = [CustomEvent.PluginToolStarted, CustomEvent.PluginTool] as const;
+const CONNECTOR_CALL_EVENTS = [CustomEvent.ConnectorToolStarted, CustomEvent.ConnectorTool] as const;
 
 /** The arguments a tool chip names, in order of preference. */
 const CHIP_ARGUMENT_KEYS = [
@@ -355,6 +382,19 @@ const pluginToolKey = (name: string): string =>
     .replace(/^mcp__[^_]+__/i, "")
     .toLowerCase();
 
+/**
+ * The tool a host record names, keyed as the session's own record of the same call is: a
+ * plugin's (`plugin_tool_started`) and a connector's (`connector_tool_started`, `connector_tool`).
+ */
+function hostedToolKey(event: EventEnvelope): string[] {
+  const plugin = customEvent(event, CustomEvent.PluginToolStarted);
+  if (plugin) return [pluginToolKey(String(plugin.toolName ?? ""))];
+  const connector = customEvent(event, CONNECTOR_CALL_EVENTS);
+  return connector?.connectorId && connector.exposedName
+    ? [pluginToolKey(`${connector.connectorId}__${connector.exposedName}`)]
+    : [];
+}
+
 /** How an engine mirrors a call to one of the studio's own tools (Claude's MCP, Codex's bridge). */
 const STUDIO_TOOL_PREFIX = /^mcp__studio__/i;
 
@@ -381,6 +421,10 @@ interface ChatDraft {
    * host's own `plugin_tool` record is what marks it, best effort, within the same turn.
    */
   hostedTools: Set<string>;
+  /** A session's own requests for a hosted tool (`hostedTools`): the host's record is their row. */
+  hostedCalls: Set<string>;
+  /** An Unreal play session runs: the editor window's pictures are play views until it stops. */
+  playing: boolean;
   turnModels: Map<string, { engine?: string; model?: string }>;
   activeTurns: Map<string, string>;
   /**
@@ -393,6 +437,8 @@ interface ChatDraft {
   waiting: Set<string>;
   /** The chip group new tool rows join, until a line of narration closes it. */
   group: ToolsEntry | null;
+  /** Each game's engine-link lines by the link's time, with the game's title, so Undo lands on its line. */
+  engineLinks: Map<string, { entry: ActionEntry; title?: string; game: string }>;
 }
 
 export function toEntries(events: EventEnvelope[]): Entry[] {
@@ -419,18 +465,16 @@ function newChatDraft(events: EventEnvelope[]): ChatDraft {
       }),
     ),
     entries: [],
+    engineLinks: new Map(),
     rounds: { kept: 0, undone: 0, firstShot: null, lastShot: null },
     rowByCall: new Map(),
     directTurns: new Map(),
     runByCall: new Map(),
     workerCalls: new Set(),
     pluginCalls: new Map(),
-    hostedTools: new Set(
-      events.flatMap((e) => {
-        const started = customEvent(e, CustomEvent.PluginToolStarted);
-        return started ? [pluginToolKey(String(started.toolName ?? ""))] : [];
-      }),
-    ),
+    hostedTools: new Set(events.flatMap(hostedToolKey)),
+    hostedCalls: new Set(),
+    playing: false,
     turnModels: new Map(),
     activeTurns: new Map(),
     runAssets: new Map(),
@@ -661,6 +705,11 @@ function requestTool(
   event: EventEnvelope,
   data: Extract<EventData, { type: "tool_requested" }>,
 ): void {
+  // A plugin's or connector's call the host records itself: that record is its row.
+  if (chat.hostedTools.has(pluginToolKey(data.request.name))) {
+    chat.hostedCalls.add(data.tool_call_id);
+    return;
+  }
   const group = toolGroup(chat, event.id);
   const style = toolWords(data.request.name);
   const chip = chipFor(data.request.arguments);
@@ -679,6 +728,7 @@ function requestTool(
 }
 
 function settleTool(chat: ChatDraft, eventId: string, data: Extract<EventData, { type: "tool_result" }>): void {
+  if (chat.hostedCalls.has(data.tool_call_id)) return;
   const row = chat.rowByCall.get(data.tool_call_id) ?? orphanResultRow(chat, eventId, data.tool_call_id);
   const { ok, content } = data.result;
   const lines = content.slice(0, TOOL_RESULT_MAX_CHARS).split("\n");
@@ -808,7 +858,7 @@ function readDelegatedTurn(chat: ChatDraft, eventId: string, scope: string, payl
 
 /**
  * A call the host records itself, so its mirror would be a second row: a plugin's (`plugin_tool`),
- * and a run control of the coordinator's or of the chat's own session after a night — the host
+ * a connector's (`connector_tool`), and a run control of the coordinator's or of the chat's own session after a night — the host
  * records its request and result when it runs it (conversation.ts `coordinatorTool`). A resume the
  * session only recorded runs once its reply ends, and shows then.
  */
@@ -950,6 +1000,13 @@ function narrateRebuild(chat: ChatDraft, event: EventEnvelope): void {
   say(chat, event.id, tag, `${restart.reason ?? TRANSCRIPT_WORDS.rebuiltItself}`);
 }
 
+/** Files too large to save, which Rewind cannot bring back: never folded away with routine lines. */
+function narrateCheckpointSkipped(chat: ChatDraft, event: EventEnvelope): void {
+  const skipped = customPayload(event.data, CustomEvent.CheckpointSkipped);
+  const words = skipped ? checkpointSkippedWords(skipped) : null;
+  if (words) say(chat, event.id, SystemTag.Checkpoint, words, true);
+}
+
 function narrateSeed(chat: ChatDraft, event: EventEnvelope): void {
   const seed = customPayload(event.data, CustomEvent.SeedUpgraded);
   if (seed) say(chat, event.id, SystemTag.Seed, seedUpgradeWords(seed));
@@ -966,6 +1023,68 @@ function narrateCompaction(chat: ChatDraft, event: EventEnvelope): void {
     messages: typeof compaction.messages === "number" ? compaction.messages : null,
     summary: summary || null,
   });
+}
+
+/** "Fog Valley now builds in Unreal · Valley": the newest link of a game keeps its Undo. */
+function narrateEngineLink(chat: ChatDraft, event: EventEnvelope): void {
+  const link = customPayload(event.data, CustomEvent.EngineLinked);
+  if (!link) return;
+  const game = `${link.pluginId ?? ""}\n${link.project ?? ""}`;
+  for (const earlier of chat.engineLinks.values()) if (earlier.game === game) delete earlier.entry.engineLink;
+  // A link is always to an engine project; a record that names none is from the Unreal plugin.
+  const engine = GAME_ENGINE_WORDS[isGameEngine(link.engine) ? link.engine : GameEngine.Unreal];
+  const { pluginId, project, linkedAt } = link;
+  const entry: ActionEntry = {
+    id: event.id,
+    kind: EntryKind.Action,
+    tag: SystemTag.Engine,
+    action: EntryAction.EngineLink,
+    text: TRANSCRIPT_WORDS.engineLinked(link.title, engine, link.name ?? ""),
+    ...(pluginId && project && linkedAt ? { engineLink: { project, pluginId, linkedAt } } : {}),
+  };
+  closeGroup(chat);
+  chat.entries.push(entry);
+  if (link.linkedAt) chat.engineLinks.set(link.linkedAt, { entry, game, ...(link.title ? { title: link.title } : {}) });
+}
+
+/** A session's turn-it-on card for a Genex plugin; an old or partial record draws nothing. */
+function narratePluginSuggested(chat: ChatDraft, event: EventEnvelope): void {
+  const suggested = customPayload(event.data, CustomEvent.PluginSuggested);
+  const suggestion = suggested ? parseSuggestion(suggested) : null;
+  if (!suggestion) return;
+  closeGroup(chat);
+  chat.entries.push({ kind: EntryKind.PluginSuggestion, id: event.id, suggestion });
+}
+
+/** An agent's "Don't wait for me" card; an old or partial record draws nothing. */
+function narrateDontWaitOffer(chat: ChatDraft, event: EventEnvelope): void {
+  const offered = customPayload(event.data, CustomEvent.DontWaitOffer);
+  const offer = offered ? parseDontWaitOffer(offered) : null;
+  if (!offer) return;
+  closeGroup(chat);
+  chat.entries.push({ kind: EntryKind.DontWaitOffer, id: event.id, offer, on: false });
+}
+
+/** The person's switch: a line in the chat, and the card their click came from says so. */
+function narrateDontWaitSet(chat: ChatDraft, event: EventEnvelope): void {
+  const set = customPayload(event.data, CustomEvent.DontWaitSet);
+  const line = set ? dontWaitSetLine(set) : null;
+  if (!set || !line) return;
+  const card = chat.entries.find(
+    (entry) => entry.kind === EntryKind.DontWaitOffer && entry.offer.offerId === set.offerId,
+  );
+  if (card?.kind === EntryKind.DontWaitOffer) card.on = set.on === true;
+  closeGroup(chat);
+  say(chat, event.id, SystemTag.Ask, line);
+}
+
+/** Undo took a link back: its line says what the game builds in now, and offers Undo no more. */
+function narrateEngineUndone(chat: ChatDraft, event: EventEnvelope): void {
+  const undone = customPayload(event.data, CustomEvent.EngineLinkUndone);
+  const line = undone?.linkedAt ? chat.engineLinks.get(undone.linkedAt) : undefined;
+  if (!line) return;
+  delete line.entry.engineLink;
+  line.entry.outcome = TRANSCRIPT_WORDS.engineUndone(line.title, undone?.restored);
 }
 
 function narrateImprovement(chat: ChatDraft, event: EventEnvelope): void {
@@ -1088,6 +1207,11 @@ function narratePluginCall(chat: ChatDraft, event: EventEnvelope): void {
   const row =
     (payload.callId ? chat.pluginCalls.get(payload.callId) : undefined) ?? openPluginRow(chat, event, payload);
   row.chip = payload.tool ?? payload.toolName;
+  if (payload.pluginId)
+    row.source = {
+      id: payload.pluginId,
+      name: chatSourceName({ pluginId: payload.pluginId, name: payload.pluginName }),
+    };
   row.state = pluginCallState(closing, payload.ok);
   row.failed = row.state === ToolState.Failed;
   row.detail = [{ text }, ...(raw.result ? [{ text: String(raw.result) }] : [])];
@@ -1125,12 +1249,60 @@ function narrateDelivery(chat: ChatDraft, event: EventEnvelope): void {
 }
 
 /**
- * A connector tool call. One record, written whichever way it ended — a connector has no
- * started/finished pair, because the host writes it around a single await.
+ * A connector tool call, from the host's own records of it: `connector_tool_started` opens the row
+ * as the call goes out, `connector_tool` completes it, paired by `callId` (an older log has only
+ * the closing record, which then makes the row). The row says the step in words, and its pictures
+ * are play views while an Unreal play session runs.
  */
 function narrateConnector(chat: ChatDraft, event: EventEnvelope): void {
-  const connector = customPayload(event.data, CustomEvent.ConnectorTool);
-  if (connector) say(chat, event.id, SystemTag.Tool, connectorWords(connector), connector.ok === false);
+  const { data } = event;
+  const call = customPayload(data, CONNECTOR_CALL_EVENTS);
+  if (!call || data.type !== EventKind.Custom) return;
+  const closing = data.event_type === CustomEvent.ConnectorTool;
+  const step = connectorStep(call);
+  const where = chatSourceName({ pluginId: call.pluginId, name: call.connectorName, id: call.connectorId });
+  const words = connectorStepWords(step, where, closing ? { ok: call.ok, error: call.error } : {});
+  const row =
+    (call.callId ? chat.pluginCalls.get(call.callId) : undefined) ?? openConnectorRow(chat, event, call.callId);
+  row.icon = words.icon;
+  row.label = words.label;
+  row.activeLabel = words.active;
+  if (call.args) row.input = call.args;
+  if (call.pluginId || call.connectorName) row.source = { id: call.pluginId ?? call.connectorId ?? "", name: where };
+  row.state = pluginCallState(closing, call.ok !== false);
+  row.failed = row.state === ToolState.Failed;
+  if (closing) settleConnectorRow(chat, row, call, step);
+}
+
+/** A connector call that came back: its answer or error, its pictures, and whether play now runs. */
+function settleConnectorRow(
+  chat: ChatDraft,
+  row: ToolChipRow,
+  call: CustomPayload<typeof CustomEvent.ConnectorTool>,
+  step: ConnectorStep,
+): void {
+  row.detail = connectorDetail(call.ok === false ? call.error : call.result, row.failed === true);
+  const play = showsPlayView(step, chat.playing);
+  if (call.captures?.length) row.shots = call.captures.map((path) => ({ path, play }));
+  if (call.ok !== false && startsPlay(step)) chat.playing = true;
+  if (endsPlay(step)) chat.playing = false;
+}
+
+function openConnectorRow(chat: ChatDraft, event: EventEnvelope, callId: string | undefined): ToolChipRow {
+  const row: ToolChipRow = { key: callId ?? event.id, icon: "run", label: "" };
+  toolGroup(chat, event.id).rows.push(row);
+  chat.pluginCalls.set(row.key, row);
+  return row;
+}
+
+/** A connector's answer or error, line by line, as it came: the detail never flattens it. */
+function connectorDetail(text: string | null | undefined, failed: boolean): ToolChipRow["detail"] {
+  const lines = String(text ?? "")
+    .slice(0, TOOL_RESULT_MAX_CHARS)
+    .split("\n");
+  return lines.join("").trim()
+    ? lines.map((line) => ({ text: line, ...(failed ? { tone: OutputTone.Err } : {}) }))
+    : [];
 }
 
 function narrateFix(chat: ChatDraft, event: EventEnvelope): void {
@@ -1220,7 +1392,7 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
   const consentId = consent.consentId ?? event.id;
   const existing = chat.entries.find((e): e is ActionEntry => isConsentCard(e) && e.consentId === consentId);
   const pending = consent.state === "pending";
-  const outcome = () => consentOutcomeWords({ state: consent.state, by: consent.by });
+  const outcome = () => consentOutcomeWords({ state: consent.state, by: consent.by, always: consent.always });
   if (existing) {
     existing.pending = pending;
     if (!pending) existing.outcome = outcome();
@@ -1236,6 +1408,13 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
     consentSource: consent.pluginName || A_PLUGIN,
     consentPrompt: consent.prompt || undefined,
     consentExport: consent.exportReview,
+    ...(consent.alwaysOffered
+      ? {
+          consentAlwaysOffered: true,
+          consentAction: consentActionWords(consent.tool, consent.args),
+          consentTool: consentToolWords(consent.tool),
+        }
+      : {}),
     text: consentAskWords({
       pluginName: consent.pluginName,
       tool: consent.tool,
@@ -1430,7 +1609,13 @@ const NARRATORS: readonly Narrator[] = [
   narrateRestore,
   narrateRebuild,
   narrateSeed,
+  narrateCheckpointSkipped,
   narrateCompaction,
+  narrateEngineLink,
+  narrateEngineUndone,
+  narratePluginSuggested,
+  narrateDontWaitOffer,
+  narrateDontWaitSet,
   narrateImprovement,
   narrateSkillAccepted,
   narrateRunStart,

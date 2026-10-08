@@ -11,6 +11,8 @@
  * `file` is always posix-relative to the game root: the renderer never receives absolute game paths.
  */
 
+import type { CallCutOff } from "./plugins.ts";
+
 export type AssetKind = "image" | "model" | "audio" | "video" | "other";
 /** `genex` and `blender` are the two the studio ships; any other value is a plugin id. */
 export type AssetSource = "genex" | "blender" | "imported" | (string & {});
@@ -164,6 +166,8 @@ export interface PluginToolFinishedPayload extends PluginToolStartedPayload {
   durationMs: number;
   /** The installed plugin's version, kept from the API 1 shape of this event. */
   version?: string;
+  /** Set when the call was cut off: its outcome is unknown. */
+  cutOff?: CallCutOff;
 }
 
 /** How the app shows a file: the viewer it opens in, or none (unknown files stay metadata). */
@@ -220,6 +224,8 @@ export const ASSET_FORMATS: Readonly<Record<string, AssetFormat>> = Object.freez
   fbx: as("model", "model", "application/octet-stream"),
   stl: as("model", "model", "application/octet-stream"),
   ply: as("model", "model", "application/octet-stream"),
+  // An authoring app's own files: listed by name, opened in that app.
+  blend: as("model", "unsupported", "application/octet-stream"),
   mp3: as("audio", "audio", "audio/mpeg"),
   wav: as("audio", "audio", "audio/wav"),
   ogg: as("audio", "audio", "audio/ogg"),
@@ -239,7 +245,27 @@ export const ASSET_FORMATS: Readonly<Record<string, AssetFormat>> = Object.freez
   csv: as("other", "text", "text/plain"),
   atlas: as("other", "text", "text/plain"),
   bin: as("other", "unsupported", "application/octet-stream"),
+  // Unreal's packages and levels: only the editor reads them.
+  uasset: as("other", "unsupported", "application/octet-stream"),
+  umap: as("other", "unsupported", "application/octet-stream"),
 });
+
+/** The kinds of asset that are media: what an engine's asset folder shows besides its own formats. */
+const MEDIA_KINDS: readonly AssetKind[] = ["image", "model", "audio", "video"];
+
+/** The extensions of every media format the studio knows (images, models, audio, video), in table order. */
+export const MEDIA_FORMATS: readonly string[] = Object.freeze(
+  Object.entries(ASSET_FORMATS)
+    .filter(([, format]) => MEDIA_KINDS.includes(format.kind))
+    .map(([ext]) => ext),
+);
+
+/** What a model loads beside itself (a glTF's buffers, an OBJ's materials): read wherever models are. */
+export const MODEL_COMPANION_FORMATS: readonly string[] = Object.freeze(["bin", "mtl"]);
+
+/** Whether a list of formats names a model, so the model's companions are read beside it. */
+export const listsModels = (formats: readonly string[]): boolean =>
+  formats.some((format) => Object.hasOwn(ASSET_FORMATS, format) && ASSET_FORMATS[format]?.kind === "model");
 
 /** A file's lowercase extension: the text after its last dot. */
 export function assetExtension(file: string): string {

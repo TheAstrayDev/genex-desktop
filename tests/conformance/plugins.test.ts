@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { mkdtemp, cp, mkdir, readFile, writeFile, rename, rm, stat, symlink, utimes } from "node:fs/promises";
+import { mkdtemp, cp, mkdir, readFile, writeFile, rename, rm, stat, symlink } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 import os from "node:os";
 import net from "node:net";
 import { execFileSync } from "node:child_process";
@@ -15,6 +17,8 @@ import {
   validateManifest,
 } from "../../src/substrate/plugins/manifest.ts";
 import type { PluginChange, PluginInfo, PluginManifest, PluginSource } from "../../src/shared/plugins.ts";
+import { CallCutOff } from "../../src/shared/plugins.ts";
+import { PluginCallCutOff } from "../../src/substrate/plugins/process.ts";
 const source = EXAMPLE_PLUGIN;
 test("bundled plugin uses a real child, tools and settings share one contract; disabled fails closed", async () => {
   const f = await fixture();
@@ -159,7 +163,11 @@ test("permission expansion requires approval, process crashes do not replay", as
       "export async function activate(){return {tool(){process.exit(9)}}}",
     );
     await f.registry.installLocal(dir, "local", m.capabilities);
-    await assert.rejects(f.registry.tool("example__greet", { name: "Ada" }, f.binding), /exited/);
+    await assert.rejects(
+      f.registry.tool("example__greet", { name: "Ada" }, f.binding),
+      (error: unknown) =>
+        error instanceof PluginCallCutOff && error.reason === CallCutOff.PluginEnded && /exited/.test(error.message),
+    );
     assert.equal(f.registry.list()[0]!.health, "failed");
   } finally {
     await f.close();
@@ -527,10 +535,14 @@ test("confirmed tools fail closed without a consent hook, honour a decline and r
       (e: unknown) => e instanceof PluginConsentDeclined && e.by === "user" && /declined/.test(e.message),
     );
     f.registry.consent = async () => ({ approved: false, by: "timeout" });
-    await assert.rejects(
-      f.registry.tool("example__shout", { text: "hi" }, f.binding),
-      (e: unknown) => e instanceof PluginConsentDeclined && e.by === "timeout" && /declined/.test(e.message),
-    );
+    // Flipped: a card nobody answered is not a no, so its error no longer says "declined".
+    await assert.rejects(f.registry.tool("example__shout", { text: "hi" }, f.binding), (e: unknown) => {
+      assert.ok(e instanceof PluginConsentDeclined);
+      assert.equal(e.by, "timeout");
+      assert.match(e.message, /^Nobody answered example__shout\..*not a no/);
+      assert.doesNotMatch(e.message, /declined/);
+      return true;
+    });
     const seen: unknown[] = [];
     f.registry.consent = async (id, tool, args, binding) => {
       seen.push({ id, tool: tool.name, confirmation: tool.confirmation, args, binding });
@@ -978,24 +990,59 @@ test("assets.deliver reports the delivered files to the host ledger and a failin
   }
 });
 
-/** Poll a best-effort condition; fs.watch coalesces events, so hot reload is asserted with a deadline, never a sleep. */
-const until = async (probe: () => Promise<boolean>, ms = 5000, nudge?: () => Promise<void>) => {
+/** Poll a condition the registry reaches on its own; asserted with a deadline, never a sleep. */
+const until = async (probe: () => Promise<boolean>, ms = 5000) => {
   const deadline = Date.now() + ms;
-  let nudged = Date.now();
   for (;;) {
     if (await probe().catch(() => false)) return true;
     if (Date.now() >= deadline) return false;
-    if (nudge && Date.now() - nudged > 1500) {
-      nudged = Date.now();
-      await nudge().catch(() => {});
-    }
-    await new Promise((r) => setTimeout(r, 150));
+    await delay(150);
   }
 };
-const touch = (file: string) => async () => {
-  const now = new Date();
-  await utimes(file, now, now);
-};
+/**
+ * Hands the registry's folder watcher to the test: when the OS reports an edit is its own business
+ * (fs.watch coalesces, and runs late under load), so each edit is announced right after it is written.
+ */
+function watchByHand(registry: PluginRegistry) {
+  const open = new Set<() => void>();
+  const folders: string[] = [];
+  registry.watchFolder = (directory, onChange) => {
+    folders.push(directory);
+    open.add(onChange);
+    return {
+      close() {
+        open.delete(onChange);
+      },
+    };
+  };
+  return {
+    /** Every folder the registry asked to watch, in order. */
+    folders,
+    /** Report an edit to every watcher still open, as the file system would. */
+    edited() {
+      for (const onChange of open) onChange();
+    },
+  };
+}
+test("by default a watched folder listens with the file system's own watcher, whose change event is the edit", async () => {
+  const f = await fixture();
+  try {
+    let heard = 0;
+    const watcher = f.registry.watchFolder(f.root, () => {
+      heard += 1;
+    });
+    try {
+      assert.ok(watcher instanceof EventEmitter, "the default is a real fs.watch handle");
+      // Emitted by hand, synchronously: nothing awaits the OS, so no real event can land in between.
+      watcher.emit("change", "change", "backend.mjs");
+      assert.equal(heard, 1);
+    } finally {
+      watcher.close();
+    }
+  } finally {
+    await f.close();
+  }
+});
 test("watch reloads a local plugin from the folder it was loaded from, defers under a lease and refuses other origins", async () => {
   const f = await fixture();
   try {
@@ -1004,6 +1051,7 @@ test("watch reloads a local plugin from the folder it was loaded from, defers un
       m.name = "Watched";
     });
     await f.registry.installLocal(dir);
+    const watcher = watchByHand(f.registry);
     const find = () => f.registry.list().find((p) => p.manifest.id === "watched")!;
     assert.equal(find().watching, false);
     await assert.rejects(f.registry.watch("example", true), /loaded from a local folder/);
@@ -1012,30 +1060,27 @@ test("watch reloads a local plugin from the folder it was loaded from, defers un
     f.registry.onChange = (c) => changes.push(c);
     await f.registry.watch("watched", true);
     assert.equal(find().watching, true);
+    assert.deepEqual(watcher.folders, [dir]);
     await writeFile(
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:`Reloaded ${a.name}`,project:c.project};}}}",
     );
+    watcher.edited();
     assert.ok(
-      await until(
-        async () =>
-          ((await f.registry.tool("watched__greet", { name: "Ada" }, f.binding)) as { text: string }).text ===
-          "Reloaded Ada",
-        5000,
-        touch(path.join(dir, "backend.mjs")),
-      ),
-      "the edit did not reload within 5 s",
+      await until(async () => changes.some((c) => c.id === "watched" && c.reason === "reloaded")),
+      `the edit did not reload within 5 s: ${JSON.stringify(changes)}`,
     );
-    assert.ok(
-      changes.some((c) => c.id === "watched" && c.reason === "reloaded"),
-      JSON.stringify(changes),
+    assert.equal(
+      ((await f.registry.tool("watched__greet", { name: "Ada" }, f.binding)) as { text: string }).text,
+      "Reloaded Ada",
     );
     const release = f.registry.lease();
     const m = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
     m.version = "1.2.0";
     await writeFile(path.join(dir, "plugin.json"), JSON.stringify(m));
+    watcher.edited();
     assert.ok(
-      await until(async () => find().pendingVersion === "1.2.0", 5000, touch(path.join(dir, "plugin.json"))),
+      await until(async () => find().pendingVersion === "1.2.0"),
       "the leased edit never became pending within 5 s",
     );
     assert.equal(find().manifest.version, "1.0.0");
@@ -1081,13 +1126,15 @@ test("code that is read again is scanned again: a reload and a restore never kee
     const find = () => f.registry.list().find((p) => p.manifest.id === "rescanned")!;
     assert.equal(find().scan!.verdict, "safe");
     assert.equal(scanned.length, 1);
+    const watcher = watchByHand(f.registry);
     await f.registry.watch("rescanned", true);
     await writeFile(
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:'ok',project:c.project};}}}\n// now shells out: execSync\n",
     );
+    watcher.edited();
     assert.ok(
-      await until(async () => find().scan!.verdict === "dangerous", 5000, touch(path.join(dir, "backend.mjs"))),
+      await until(async () => find().scan?.verdict === "dangerous"),
       "the reload kept the verdict of code that is no longer there",
     );
     assert.ok(scanned.length > 1, "the reloaded copy was scanned, not the one already on the card");
@@ -1109,7 +1156,7 @@ test("code that is read again is scanned again: a reload and a restore never kee
 /**
  * The race the serialized queue exists for: a remove already waiting in line when a watched edit
  * fires. The reload is queued behind it, so by the time it runs the plugin is gone — and it must
- * stay gone. The first, ordinary reload proves the watcher is delivering events at all here.
+ * stay gone. The first, ordinary reload proves an announced edit reloads at all here.
  */
 test("a watched edit never brings back a plugin removed while the reload was queued", async () => {
   const f = await fixture();
@@ -1120,23 +1167,24 @@ test("a watched edit never brings back a plugin removed while the reload was que
     });
     await f.registry.installLocal(dir);
     const find = () => f.registry.list().find((p) => p.manifest.id === "racing")!;
+    const watcher = watchByHand(f.registry);
+    const changes: PluginChange[] = [];
+    f.registry.onChange = (c) => changes.push(c);
     await f.registry.watch("racing", true);
     await writeFile(
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:`Reloaded ${a.name}`,project:c.project};}}}",
     );
+    watcher.edited();
     assert.ok(
-      await until(
-        async () =>
-          ((await f.registry.tool("racing__greet", { name: "Ada" }, f.binding)) as { text: string }).text ===
-          "Reloaded Ada",
-        5000,
-        touch(path.join(dir, "backend.mjs")),
-      ),
-      "the edit did not reload within 5 s",
+      await until(async () => changes.some((c) => c.id === "racing" && c.reason === "reloaded")),
+      `the edit did not reload within 5 s: ${JSON.stringify(changes)}`,
     );
-    const changes: PluginChange[] = [];
-    f.registry.onChange = (c) => changes.push(c);
+    assert.equal(
+      ((await f.registry.tool("racing__greet", { name: "Ada" }, f.binding)) as { text: string }).text,
+      "Reloaded Ada",
+    );
+    changes.length = 0;
     // One slow install holds the queue, so the remove behind it has not run when the watcher fires.
     const slowDir = await copyOf(f.root, "slow", (m) => {
       m.id = "slow";
@@ -1152,6 +1200,7 @@ test("a watched edit never brings back a plugin removed while the reload was que
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:`Resurrected ${a.name}`,project:c.project};}}}",
     );
+    watcher.edited();
     await Promise.all([blocked, removal]);
     assert.equal(find().removed, true);
     assert.equal(
@@ -1161,15 +1210,10 @@ test("a watched edit never brings back a plugin removed while the reload was que
     );
     assert.equal(f.registry.enabled("racing"), false);
     assert.equal(find().watching, false);
-    // Only what follows the remove can be a resurrection. On a loaded machine the first reload
-    // outlasts `until`'s nudge, and that nudge's debounced reload may land before the remove: a
-    // legitimate "reloaded" of a plugin that was still installed then.
-    const removedAt = changes.findIndex((c) => c.id === "racing" && c.reason === "removed");
-    assert.notEqual(removedAt, -1, JSON.stringify(changes));
-    assert.equal(
-      changes.slice(removedAt + 1).some((c) => c.id === "racing" && c.reason !== "removed"),
-      false,
-      JSON.stringify(changes),
+    assert.deepEqual(
+      changes.filter((c) => c.id === "racing"),
+      [{ id: "racing", reason: "removed" }],
+      "the remove is the last word on the plugin",
     );
     await assert.rejects(f.registry.tool("racing__greet", { name: "Ada" }, f.binding), /unavailable/);
   } finally {

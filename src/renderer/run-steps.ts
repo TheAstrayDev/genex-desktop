@@ -35,23 +35,27 @@ import {
   type VerdictRecord,
   WorkerState,
 } from "./run-graph.ts";
-import { stoppedWords, verdictSentence } from "./words.ts";
+import { savedByLead, stoppedWords, verdictSentence } from "./words.ts";
 
 // ── the model ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * `in-build`: merged into the build. `kept`: the judges kept it and the lead has not merged it
- * (yet). `undone`: the judges threw every try away. `building`/`judging`: in hand now.
+ * (yet). `delivered`: a sub-agent's files are in the game folder and wait for the lead to use
+ * them. `undone`: the judges threw every try away. `building`/`judging`: in hand now.
  * `not-in-build`: it ended unjudged and unmerged — stopped, or the run ended first. `waiting`:
  * a part that has not started.
  */
 export const StepState = {
   InBuild: "in-build",
   Kept: "kept",
+  Delivered: "delivered",
   Undone: "undone",
   Building: "building",
   Judging: "judging",
   NotInBuild: "not-in-build",
+  /** A single session that failed: it delivered nothing to leave out. */
+  NotDelivered: "not-delivered",
   Waiting: "waiting",
 } as const;
 export type StepState = (typeof StepState)[keyof typeof StepState];
@@ -97,8 +101,9 @@ export interface PartRow {
 }
 
 const JUDGED = new Set<IterationNode["status"]>([IterationStatus.Accepted, IterationStatus.Rolled]);
-/** Whether the judges ruled on a try: kept it, or undid it. */
-export const isJudgedTry = (node: IterationNode): boolean => JUDGED.has(node.status);
+/** Whether the judges ruled on a try: kept it, or undid it. A save the lead kept itself had no judge. */
+export const isJudgedTry = (node: IterationNode): boolean =>
+  JUDGED.has(node.status) && !savedByLead(node.verdictSource);
 const isKept = (node: IterationNode): boolean => node.status === IterationStatus.Accepted;
 const capitalise = (text: string): string => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
@@ -175,10 +180,14 @@ function roundsMergedBy(rounds: IterationNode[], merge: MergeInfo): IterationNod
   return rounds.filter((round) => !JUDGED.has(round.status) && round.startedSeq < merge.seq);
 }
 
+/** Who kept a try: the judges, or the lead when it saved the try itself after looking at it. */
+const keptBy = (node: IterationNode): CheckedBy =>
+  savedByLead(node.verdictSource) ? CheckedBy.Lead : CheckedBy.Judges;
+
 /** Where a folded step stands, and who let it in: the build first, the judges second. */
 function stepStanding(tries: IterationNode[], merged: Set<IterationNode>): Pick<Step, "state" | "checkedBy"> {
   const kept = tries.find(isKept);
-  if (kept) return { state: merged.has(kept) ? StepState.InBuild : StepState.Kept, checkedBy: CheckedBy.Judges };
+  if (kept) return { state: merged.has(kept) ? StepState.InBuild : StepState.Kept, checkedBy: keptBy(kept) };
   const latest = tries.at(-1);
   if (latest?.status === IterationStatus.Building)
     return { state: latest.liveness ? StepState.Judging : StepState.Building, checkedBy: null };
@@ -293,6 +302,8 @@ function sessionState(
 ): StepState {
   if (part.integrated) return StepState.InBuild;
   if (part.working) return StepState.Building;
+  if (facet.delivered) return StepState.Delivered;
+  if (facet.failed) return StepState.NotDelivered;
   const started =
     Boolean(task?.attempts.length) ||
     facet.building ||
@@ -347,10 +358,12 @@ export type Tone = (typeof Tone)[keyof typeof Tone];
 export const STATE_TONE: Record<StepState, Tone> = {
   [StepState.InBuild]: Tone.Green,
   [StepState.Kept]: Tone.Green,
+  [StepState.Delivered]: Tone.Green,
   [StepState.Undone]: Tone.Red,
   [StepState.Building]: Tone.Accent,
   [StepState.Judging]: Tone.Accent,
   [StepState.NotInBuild]: Tone.Muted,
+  [StepState.NotDelivered]: Tone.Muted,
   [StepState.Waiting]: Tone.Muted,
 };
 
@@ -365,11 +378,13 @@ export function triesWord(step: Step): string | null {
  */
 const STEP_WORD: Record<Exclude<StepState, typeof StepState.Kept>, string> = {
   [StepState.InBuild]: "Added",
+  [StepState.Delivered]: "Delivered",
   [StepState.Undone]: "Undone",
   [StepState.Building]: "Working",
   [StepState.Judging]: "Being checked",
   [StepState.Waiting]: "Waiting to start",
   [StepState.NotInBuild]: "Left out",
+  [StepState.NotDelivered]: "Didn't deliver",
 };
 
 /** The one status line on a node; the tries it folds are counted on its picture. */
@@ -381,11 +396,13 @@ export function stepWord(step: Step, active: boolean): string {
 /** The status of each state at the top of a step's card; `kept` depends on whether the run goes on. */
 const STEP_PILL: Record<Exclude<StepState, typeof StepState.Kept>, string> = {
   [StepState.InBuild]: "Added to your build",
+  [StepState.Delivered]: "Delivered, not used yet",
   [StepState.Building]: "Working",
   [StepState.Judging]: "Being checked",
   [StepState.Waiting]: "Waiting to start",
   [StepState.Undone]: "Rejected by reviewers",
   [StepState.NotInBuild]: "Left out of your build",
+  [StepState.NotDelivered]: "Didn't deliver",
 };
 
 /** The status at the top of a step's card: who decided it, or where it stands against the build you play. */
@@ -404,8 +421,13 @@ function sessionSentence(state: StepState): string {
   if (state === StepState.InBuild) return "Built in one session and merged into your build.";
   if (state === StepState.Building) return "A worker is building it in one session.";
   if (state === StepState.Waiting) return "It hasn't started yet.";
+  if (state === StepState.Delivered) return "Its files are in your game folder, waiting for the lead to use them.";
+  if (state === StepState.NotDelivered) return "Its session failed before it delivered anything.";
   return "Built in one session. Its work wasn't merged into your build.";
 }
+
+/** What a step the lead saved itself says instead of the judges' words: nobody judged it. */
+const LEAD_SAVED = "The lead saved it after looking at its own captures; no reviewer judged it.";
 
 /** What the judges did with a step's tries: kept one (after undoing some), or undid them. */
 function judgesSentence(tries: number, undone: number, keptAt: number): string {
@@ -434,7 +456,7 @@ function standingSentence(step: Step, active: boolean, anyStopped: boolean): str
   const tries = step.tries.length;
   switch (step.state) {
     case StepState.InBuild:
-      return step.checkedBy === CheckedBy.Lead
+      return step.checkedBy === CheckedBy.Lead && !step.tries.some(isKept)
         ? "No reviewer saw it; the lead merged the part's work into your build."
         : "";
     case StepState.Kept:
@@ -462,8 +484,9 @@ export function stepSentence(step: Step, active: boolean): string {
   const undone = all.filter((node) => node.status === IterationStatus.Rolled).length;
   const stopped = all.filter((node) => node.status === IterationStatus.Stopped);
   const keptAt = all.findIndex(isKept) + 1;
+  const savedAt = all.find(isKept);
   const parts = [
-    judgesSentence(all.length, undone, keptAt),
+    savedAt && savedByLead(savedAt.verdictSource) ? LEAD_SAVED : judgesSentence(all.length, undone, keptAt),
     keptAt ? "" : leadStopSentence(all, stopped),
     standingSentence(step, active, stopped.length > 0),
   ].filter(Boolean);
@@ -781,10 +804,31 @@ function failedChecks(summary: RunSummary | null): number {
   return current.filter((row) => row.status === "failed" && row.category !== "comparison").length;
 }
 
-/** Which of the night's steps reached the build, named when only one or two did not. */
+/** A save point the lead made itself: a step it kept with no judge. */
+const isSavePoint = (step: Step): boolean => step.tries.some((node) => savedByLead(node.verdictSource));
+
+/**
+ * A lead's run in its own terms: how many save points it made, then each worker that didn't
+ * deliver, by its title as written (counted past two). A delivery the lead didn't use is on its
+ * node, not here.
+ */
+function leadLandedWords(rows: PartRow[]): string {
+  const steps = rows.flatMap((row) => row.steps);
+  const saves = plural(steps.filter(isSavePoint).length, "save point");
+  const failed = rows.filter((row) => row.steps.some((step) => step.state === StepState.NotDelivered));
+  if (!failed.length) return saves;
+  const named = failed.length <= MAX_NAMED_MISSING;
+  const lost = named
+    ? failed.map((row) => `${row.facet.title} didn't deliver`)
+    : [`${plural(failed.length, "worker")} didn't deliver`];
+  return [saves, ...lost].join(" · ");
+}
+
+/** Which of the night's steps reached the build, named when only one or two did not; a lead's run in its own terms. */
 function landedWords(rows: PartRow[]): string {
   const steps = rows.flatMap((row) => row.steps).filter((step) => step.state !== StepState.Waiting);
   if (!steps.length) return "";
+  if (steps.some(isSavePoint)) return leadLandedWords(rows);
   const missing = steps.filter((step) => step.state !== StepState.InBuild).map((step) => lowerFirst(step.name));
   if (!missing.length) return steps.length === 1 ? "it landed" : "every step landed";
   if (missing.length <= MAX_NAMED_MISSING) return `all but ${listWords(missing)} landed`;

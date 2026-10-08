@@ -221,6 +221,8 @@ export function recordNight(night: Night, now = Date.now()): void {
     // A resumed or reopened night numbers its judge and playtest folders on from here (`restoreNight`).
     judges: state.judges,
     plays: state.plays,
+    // Where the run's job ends were read to: a restart reads on from here (wake.ts `watchJobs`).
+    jobsCursor: state.jobsCursor ?? 0,
   });
   director.completionPolicy = durationCommission(night.run) ? CompletionPolicy.Duration : CompletionPolicy.Goal;
   director.workers ??= {};
@@ -401,6 +403,7 @@ export function restoreNight(night: Night, now = Date.now()): void {
   // Its judge_N and play_N folders go on from the earlier sessions', never over them.
   state.judges = passesSoFar(saved.judges);
   state.plays = passesSoFar(saved.plays);
+  state.jobsCursor = countOf(saved.jobsCursor);
   night.priorWorkers = priorWorkersOf(saved.workers, night.run.runId);
   carryForward(night);
 }

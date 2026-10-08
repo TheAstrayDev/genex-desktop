@@ -57,7 +57,8 @@ What every lane shares:
 - Codex host-skill suppression: every `~/.agents/skills/*/SKILL.md` is disabled by path (a linked
   skill also by its real path, the app's `hostSkillFiles`) and `computer_use`, `in_app_browser`,
   `browser_use` and `browser_use_external` are turned off, on lanes C and D and on the Codex
-  grader (`hostSkillSuppressionArgs`).
+  grader (`hostSkillSuppressionArgs`). Lane D and the grader run the app's engine, which turns
+  these and Codex's own sub-agents off in every session.
 - The containment the app gives that engine's main agent. Every argv builder refuses
   `bypassPermissions`, `--dangerously-*` and `danger-full-access`. Each registry row's
   `flagsDigest` pins its argv shape, suffix, answer sentence, deliverable and stripped
@@ -248,7 +249,12 @@ The Genex lanes read these from the eval profile's event log (`genex-events.ts`,
   `output_tokens` includes reasoning and `reasoning_tokens` is its thinking share; `by_model`
   (Claude) covers every model the session called (field rows count the main model's share beyond
   the main loop as `subagents` and every other model as `auxiliary`); `compactions`,
-  `duration_api_ms` and `ttft_ms`.
+  `duration_api_ms` and `ttft_ms`. A delegated Claude call's `cost_usd` and `by_model` are its own
+  share of its session's running totals: Claude Code reports both as totals a resumed session
+  carries on, so the engine subtracts what the same session reported last (remembered across
+  restarts; a counter that went down counts from zero, `substrate/engines/session-cost.ts`). The
+  calls of one session add up to what it spent, and one turn's passes are joined by adding them
+  (`plan-approval.ts` `joinedResult`).
   Context readings keep their source ([native context telemetry](connections-and-context.md#native-context-telemetry)).
 - `completion_call` records every `engine.complete`: requested and served model, usage, latency,
   failure kind and the caller's provenance (judge, playtester or SkillOpt gate).

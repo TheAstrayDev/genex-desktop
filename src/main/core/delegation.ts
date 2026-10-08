@@ -6,6 +6,7 @@
 import { uuidv7 } from "../../substrate/ids.ts";
 import { replaceableCover } from "../../shared/game-library.ts";
 import { COVER_TOOL } from "../../shared/cover-recipe.ts";
+import { callProjectTool, ProjectToolSeat, projectTools } from "./project-tools.ts";
 import { ChatActivityPhase, SessionActivityRole, delegationActivityScope } from "../../shared/chat-activity.ts";
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
@@ -15,10 +16,11 @@ import {
   StopReason,
   type DelegateOwnership,
 } from "../../shared/engine-requests.ts";
-import type { ConversationRecord, EventEnvelope } from "../../shared/event-log.ts";
-import { RUN_START_EVENTS } from "../../shared/run-state.ts";
+import { type ConversationRecord, type EventEnvelope, SnapshotScope, ThreadKind } from "../../shared/event-log.ts";
+import { ExecutionStatus, RUN_START_EVENTS } from "../../shared/run-state.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import type { McpLiveTool } from "../../substrate/mcp/registry.ts";
+import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { coordinatorTools, isRunControl, runControlTools } from "../../shared/coordinator.ts";
@@ -35,7 +37,20 @@ import {
   type DelegateRequest,
   type DelegateResult,
   type LiveToolResult,
+  type LiveToolSpec,
+  type WorkerSeat,
 } from "../../substrate/engines/types.ts";
+import { credentialHomes } from "../../substrate/credential-homes.ts";
+import { baseDenyRead } from "../../substrate/spawn.ts";
+import { WorkerTool, type WorkerType, workerLockKey } from "../../shared/workers.ts";
+import { neverTouchList } from "./never-touch-list.ts";
+import { EngineKind } from "../../shared/engine-descriptor.ts";
+import { writableRoots } from "../../substrate/engines/never-touch.ts";
+import { forwardWorkerTool, heldInPlan, offeredWorkerTools } from "./worker-tools.ts";
+import { callJobTool, type JobCaller, type JobNews, jobNews, jobToolsFor } from "./job-tools.ts";
+import { appLookFor, type LookCaller, runAppLook } from "./app-look-tool.ts";
+import { type JobOwner, JobRole, type JobScope, JobScopeKind, JobStopper } from "../../shared/jobs.ts";
+import { WORKER_TOOL_ANSWER } from "./worker-tools-prompts.ts";
 import { DispatchActionType, HarnessCapability, type ReferenceFrame } from "../../shared/protocol.ts";
 import { COMPUTER_TOOL_NAME } from "../../substrate/computer-tool.ts";
 import { WorkClass, workClassOf } from "../../substrate/budget.ts";
@@ -44,9 +59,14 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { chatTurnOf, openDoor, recordSteerDelivered, settleDoor, type SteerDoor } from "./chat-steer.ts";
 import type { LeadAnswers, LeadSession, PersonSession } from "./chat-permissions.ts";
 import type { ActiveDelegation } from "./internals.ts";
-import type { PluginAppliedSet, PluginTool } from "../../shared/plugins.ts";
+import { PluginCapability, type PluginAppliedSet, type PluginTool, PluginToolAudience } from "../../shared/plugins.ts";
+import type { PluginSnapshot } from "../../substrate/plugins/registry.ts";
+import { type CutOffCall, clearCutOffs, peekCutOffs } from "./cut-off-calls.ts";
+import { clearUnsaved, peekUnsaved, type UnsavedFile } from "./unsaved-files.ts";
 import {
   anyWithdrawn,
+  cutOffNotice,
+  unsavedFilesNotice,
   leadToolsNote,
   mainAgentReachNote,
   withdrawnNotice,
@@ -62,7 +82,14 @@ import { ShotKind, iterationDir, runDir, runShotsDir, safePathSegment } from "./
 import type { SessionPort } from "./session-port.ts";
 import { isBelow, isInside, toPosixRelative } from "../../substrate/paths.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { engineOf, GameEngine } from "../../shared/game-engine.ts";
+import { readEngineBinding } from "../../substrate/game-engine-binding.ts";
+import { FolderHolds, kindPending, type ProjectFact } from "../../shared/project-facts.ts";
 import { CapabilityAudience } from "../planning-capabilities.ts";
+import type { ConnectorCallOptions } from "./plugin-tools.ts";
+import { type ToolOffered, toolAllowRule } from "../../substrate/plugins/tool-allow.ts";
+import { type RunCreditCap, runCreditCap } from "./run-credits.ts";
+import { type UnrealCheckpointHost, unrealCheckpoint } from "./unreal-checkpoint.ts";
 
 /**
  * Ceiling for a delegation that arrives without its own time budget. Generous — a chat build
@@ -100,6 +127,8 @@ const MESSAGE = {
   candidateFrozen: "candidate is frozen",
   folderBusy: (where: string, minutes: number) =>
     `a contractor is already building in ${where} (started ${minutes} min ago) — wait for it to finish before sending another brief`,
+  tooManyWorkers: (max: number) =>
+    `this chat already runs ${max} workers, the most the person's Settings allow: wait for one to finish (${WorkerTool.Wait}) before starting another`,
   toolCollision: (name: string) => `Plugin tool collision: ${name}`,
   unknownTool: (name: string) => `Unknown tool: ${name}`,
   turnEndUnrecorded: (err: unknown) => `[core] could not record the end of the lead's turn: ${errorMessage(err)}`,
@@ -123,6 +152,28 @@ type OnLiveTool = NonNullable<DelegateRequest["onLiveTool"]>;
 type SelfCaptureGrant = NonNullable<DelegateParams["selfCapture"]>;
 type PlaytestGrant = NonNullable<DelegateParams["playtest"]>;
 type DirectorGrant = NonNullable<DelegateParams["director"]>;
+/** A run's sub-agent, as its plugin calls are recorded: its run, and its agent id as the part they land on. */
+type Attribution = NonNullable<DelegateParams["attribution"]>;
+/** What the harness asks for a worker; honoured only by the host's own finding (`#workerSeat`). */
+type WorkerAsked = NonNullable<DelegateParams["worker"]>;
+/** The most characters of a worker's title its cards and records keep. */
+const WORKER_TITLE_MAX = 80;
+
+/**
+ * A worker of a chat's lead, as the host found it: the chat it answers to (its mode, its grants and
+ * its cards), the run whose lead started it (null for one the chat's own turn started), and whether
+ * it works in the game's own folder, under its own lock beside the chat's own session.
+ */
+interface WorkerFinding {
+  id: string;
+  title: string;
+  research: boolean;
+  chatThreadId: string;
+  runId: string | null;
+  /** The chat turn whose own session started it, for a worker that is no run's; null otherwise. */
+  turn: string | null;
+  inPlace: boolean;
+}
 
 const DIRECTOR_LOOK: LiveTool = {
   name: DirectorTool.Look,
@@ -144,7 +195,8 @@ interface PlaytestTools {
 interface DirectorTools {
   liveTools: NonNullable<DelegateRequest["liveTools"]>;
   onLiveTool: OnLiveTool;
-  onCapture: NonNullable<DelegateRequest["onCapture"]>;
+  /** Capture of what its window shows; none without a window (an Unreal game's director). */
+  onCapture?: NonNullable<DelegateRequest["onCapture"]>;
 }
 
 /** Where a delegation runs, with what, and under which budget class. */
@@ -184,6 +236,8 @@ interface DelegationGrants {
 interface SessionReach {
   person: PersonSession | null;
   lead: LeadSession | null;
+  /** A worker's seat in its lead's chat's mode (`#workerReach`); null for every other session. */
+  worker: WorkerSeat | null;
   extraReads: string[];
   denyReads: string[];
   /**
@@ -199,6 +253,12 @@ interface DelegationSession {
   threadId: string;
   /** Host tools at all: plugins, connectors, the cover. See {@link hostToolsEligible}. */
   hostTools: boolean;
+  /** The host tools a run's sub-agent may be offered (`toolAllow`); null offers every one. */
+  offered: ToolOffered | null;
+  /** A run's sub-agent: the run and agent its plugin calls are recorded under. */
+  attribution: Attribution | null;
+  /** The run's Genex credit cap its paid plugin calls count against (`creditCap`); null without one. */
+  credits: RunCreditCap | null;
   conversational: boolean;
   activityScope: ActivityScope;
   /** A director's turn ends without a `turn_ended`, so the host records how it ended. */
@@ -226,6 +286,17 @@ interface DelegationSession {
   door?: SteerDoor;
   /** The run's controls it keeps: the chat's own session after a night it led (`honouredRunControls`). */
   runControls?: RunControlGrant;
+  /**
+   * The run whose own consent covers its game's engine connector, asked at each call
+   * (`#runConsents`): the Unreal Loop's lead's (`liveRunOf`). Null for every other session.
+   */
+  liveRun: string | null;
+  /** What its game's folder holds (`seat.facts`): its plugin tools, skills and connectors are those that reach it. */
+  facts: ProjectFact[];
+  /** With no facts, what the folder holds (`seat.holds`): whether its kind is still to pick. */
+  holds?: FolderHolds;
+  /** A worker of a chat's lead, as the host honoured its grant (`#workerSeat`); null otherwise. */
+  worker: WorkerFinding | null;
 }
 
 /** The run and message a chat's own session keeps the run's controls for. */
@@ -240,6 +311,20 @@ interface SessionWindows {
 /** The tools prepared for a session under its lock; each one is released by the delegation's finally. */
 interface SessionTools {
   cover: (typeof COVER_TOOL)[];
+  /** Genex's own project tools (`projectTools`), the chat's own session's: the web starter, the plugin search and card. */
+  project: LiveToolSpec[];
+  /** The worker tools, the chat's own session's while it answers a turn: answered by the harness's pool for it. */
+  workers: LiveToolSpec[];
+  /** The job tools (`job-tools.ts`): the chat's own session's, a lead's and a writing worker's. */
+  jobs: LiveToolSpec[];
+  /** Where its jobs run, what they reach and whose they are; null for a session with no job tools. */
+  jobReach: JobCaller | null;
+  /** The chat's own session's news of its jobs, and the ended ones it tells (marked told once it starts). */
+  jobNews: JobNews;
+  /** `app_look` (`app-look-tool.ts`): the chat's own session's, a lead's and every seated worker's, readers included. */
+  look: LiveToolSpec[];
+  /** Whom its looks answer to; null for a session without `app_look`. */
+  lookCaller: LookCaller | null;
   mcp: McpLiveTool[];
   /** The plugin tools, their guidance and the set behind them: one registry snapshot, taken as the session began. */
   plugins: PluginTool[];
@@ -247,6 +332,10 @@ interface SessionTools {
   applied: PluginAppliedSet;
   /** A resumed session's plugins and skills that were handed to it before and are gone now. */
   withdrawn: PluginAppliedSet | null;
+  /** The thread's cut-off calls its brief names; forgotten once the session answers (`#settled`). */
+  cutOffs: CutOffCall[];
+  /** The thread's files too large to save that its brief names; forgotten the same way. */
+  unsaved: UnsavedFile[];
   capabilityFacts: string;
   builder: ComputerTools | null;
   playtest: PlaytestTools | null;
@@ -292,9 +381,38 @@ function thrownPhase(err: unknown): ChatActivityPhase {
  * caller asked for, so a grant dropped for pointing at another folder still marks a run's session.
  */
 function isChatsOwnSession(p: DelegateParams): boolean {
-  const asked = delegationActivityScope(p);
-  const runScoped = Boolean(asked.runId || p.coordinator || p.director || p.cwd);
+  const asked = askedScope(p);
+  const runScoped = Boolean(asked.runId || p.coordinator || p.director || p.cwd || p.worker);
   return asked.role === SessionActivityRole.Planner && !runScoped;
+}
+
+/**
+ * A run's sub-agent's attribution, honoured when it names both a run and an agent; null for every
+ * other session. It only says whose calls these are: it grants nothing.
+ */
+function attributionOf(p: DelegateParams): Attribution | null {
+  const asked = p.attribution;
+  const named = (value: unknown) => typeof value === "string" && value.length > 0;
+  return asked && named(asked.runId) && named(asked.agentId) ? { runId: asked.runId, agentId: asked.agentId } : null;
+}
+
+/** The grants a scope is read with: as asked, or as honoured for the folder (null when dropped). */
+interface AskedGrants {
+  director?: DirectorGrant | null;
+  selfCapture?: SelfCaptureGrant | null;
+  playtest?: PlaytestGrant | null;
+}
+
+/**
+ * The scope the caller asked for (`delegationActivityScope`): a run's sub-agent reads as the
+ * builder of its own part, so its records land on its node and its words never stream as the
+ * chat's reply.
+ */
+function askedScope(p: DelegateParams, grants: AskedGrants = p) {
+  const attribution = attributionOf(p);
+  const selfCapture =
+    grants.selfCapture ?? (attribution ? { runId: attribution.runId, facetId: attribution.agentId } : null);
+  return delegationActivityScope({ ...p, ...grants, selfCapture });
 }
 
 /**
@@ -312,6 +430,8 @@ function unattendedBrief(p: DelegateParams): boolean {
     p.selfCapture?.runId,
     p.coordinator,
     p.director,
+    p.attribution,
+    p.worker,
   ];
   if (narrower.some(Boolean) || p.cwd) return true;
   return p.timeoutMs !== undefined || workClassOf(p.class) === WorkClass.Improvement;
@@ -336,6 +456,21 @@ interface DelegationSeat {
    * path that was checked (`#leadRoot`) — its grant's root, its reads and its lock. Null otherwise.
    */
   leads: string | null;
+  /** It sits in its game's own folder: no build worktree, no coordinator home, no candidate. */
+  gameFolder: boolean;
+  /**
+   * The engine its game builds in: whether a director works through a window (a web game) or in
+   * the engine's own editor (`directorWindowed`).
+   */
+  engine: GameEngine;
+  /**
+   * What its game's folder holds (`games.kindOf`): which plugin tools, skills and connectors the
+   * session is handed. A game whose facts can't be read has none and is unreadable (`holds`),
+   * served as no kind at all.
+   */
+  facts: ProjectFact[];
+  /** With no facts, what the folder holds (`GameProject.holds`); one that can't be read is unreadable. */
+  holds?: FolderHolds;
 }
 
 /**
@@ -348,6 +483,20 @@ function honouredDirector(p: DelegateParams, cwd: string, seat: DelegationSeat):
   if (!director) return null;
   if (seat.leads) return { ...director, root: seat.leads };
   return path.resolve(director.root) === cwd ? director : null;
+}
+
+/** A director works through a browser window on a web game; on an Unreal game, in the Unreal editor. */
+const directorWindowed = (engine: GameEngine): boolean => engine === GameEngine.Web;
+
+/**
+ * The run whose own consent may cover this session's calls to its game's engine connector: an
+ * honoured director grant for this very game, seated in the game's own folder — the Unreal Loop's
+ * lead. Never a night's lead (it acts on the worktree it leads), a worker, a playtester, the
+ * coordinator or the chat's own session. Whether the run still covers a call is asked at the call.
+ */
+function liveRunOf(p: DelegateParams, director: DirectorGrant | null, seat: DelegationSeat): string | null {
+  if (!director || seat.leads || !seat.gameFolder) return null;
+  return director.project === p.project ? director.runId : null;
 }
 
 /** The game a thread is bound to (`metadata.project`), if any. */
@@ -375,6 +524,28 @@ async function sameRepository(a: string, b: string): Promise<boolean> {
     realpath((await git(dir, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim());
   const [ours, theirs] = await Promise.all([commonDir(a), commonDir(b)]).catch(() => [null, null]);
   return Boolean(ours) && ours === theirs;
+}
+
+/**
+ * An honoured worker's brief, depth one: it never leads a run, keeps a run's controls, interviews,
+ * coordinates, answers the chat's turn or runs workers of its own, so no grant that would let it
+ * start workers survives.
+ */
+function workerBrief(p: DelegateParams): DelegateParams {
+  const { director: _director, runControls: _controls, interviewTools: _interview, ...rest } = p;
+  const { coordinator: _coordinator, chatTurn: _turn, workers: _workers, ...brief } = rest;
+  return brief;
+}
+
+/** A worker's title as its cards show it: its own words, bounded, or its id. */
+function workerTitle(asked: WorkerAsked): string {
+  const title = typeof asked.title === "string" ? asked.title.trim().slice(0, WORKER_TITLE_MAX) : "";
+  return title || asked.id;
+}
+
+/** Who a worker's plugin calls are recorded under: its run and its own id, when a run's lead started it. */
+function workerAttribution(worker: WorkerFinding | null): Attribution | null {
+  return worker?.runId ? { runId: worker.runId, agentId: worker.id } : null;
 }
 
 /** A refusal the harness reads by its typed `code` (`DelegationRefusal`), not by its words. */
@@ -459,14 +630,18 @@ export class DelegationService {
    * run tools — plan, worker_start, wait, judge, playtest, integrate, show, note, finish — which
    * live in the harness process (it owns the loops and the merge) and are reached through a
    * dispatch that answers. Tool names come from the harness so the studio stays generic. `root` is
-   * the build its window opens on: its integration worktree, wherever its session sits.
+   * the build its window opens on: its integration worktree, wherever its session sits. A director
+   * with no window (`session` null: an Unreal game's) gets the run tools alone (`runToolsOnly`).
    */
   async _directorToolsFor(
     d: NonNullable<DelegateRequest["director"]> & { tools?: DelegateRequest["liveTools"] },
     root: string,
     outDir: string,
-    session: SessionPort,
+    session: SessionPort | null,
   ): Promise<DirectorTools> {
+    const forwarded = (d.tools ?? []).filter((t) => !DIRECTOR_RESERVED_TOOLS.has(t.name));
+    const forward = (name: string, args: Record<string, unknown>) => this.#forwardDirectorTool(d, name, args);
+    if (!session) return runToolsOnly(forwarded, forward);
     const grant = {
       project: d.project,
       root,
@@ -478,8 +653,6 @@ export class DelegationService {
     };
     const computer = await this.#core._computerToolsFor({ ...grant, role: "director" }, root, outDir, session);
     const onCapture = this.#x.previews.captureFor(grant, root, outDir, session, () => computer.root(), "director");
-    const forwarded = (d.tools ?? []).filter((t) => !DIRECTOR_RESERVED_TOOLS.has(t.name));
-    const forward = (name: string, args: Record<string, unknown>) => this.#forwardDirectorTool(d.runId, name, args);
     const onLiveTool: OnLiveTool = async (name, args) => {
       if (name === COMPUTER_TOOL_NAME) return computer.onLiveTool(name, args);
       if (name === DirectorTool.Look) return this.#directorLook(d, computer, forward, args);
@@ -488,10 +661,157 @@ export class DelegationService {
     return { liveTools: [...computer.liveTools, DIRECTOR_LOOK, ...forwarded], onLiveTool, onCapture };
   }
 
-  /** A run tool, answered by the harness process that owns the loops and the merge. */
-  async #forwardDirectorTool(runId: string, name: string, args: Record<string, unknown>): Promise<LiveToolResult> {
+  /**
+   * The worker tools of the chat's own session while it answers a chat turn, on a harness that serves
+   * workers: never a worker's (depth one), a lead's or a run's. A plugin tool of the same name would
+   * be called in their place: refused, as a cover's name is.
+   */
+  #offerWorkerTools(p: DelegateParams, engineId: string, session: DelegationSession, tools: SessionTools): void {
+    const ownTurn = Boolean(session.chatTurn) && !session.worker && chatsOwnSession(p, session);
+    // A worker's seat runs only on an engine that carries one: its workers would run unseated.
+    const honoured = ownTurn && this.#seatsWorkers(engineId);
+    const serves = this.#core.host.hasCapability(HarnessCapability.Workers);
+    tools.workers = offeredWorkerTools(p.workers, honoured, serves);
+    const taken = tools.plugins.find((plugin) => tools.workers.some((tool) => tool.name === plugin.name));
+    if (taken) throw new Error(MESSAGE.toolCollision(taken.name));
+  }
+
+  /**
+   * The job tools, for the chat's own session, a lead and a worker the host seated on an engine that
+   * carries a seat, with the chat its jobs report to (`#jobCaller`); a session with no such chat gets
+   * none. The chat's own session is also told of its jobs. A plugin tool of the same name would be
+   * called in their place: refused, as a cover's name is.
+   */
+  async #offerJobTools(
+    p: DelegateParams,
+    target: DelegationTarget,
+    grants: DelegationGrants,
+    session: DelegationSession,
+    reach: SessionReach,
+    tools: SessionTools,
+  ): Promise<void> {
+    if (!session.hostTools || !this.#seatsWorkers(target.engineId)) return;
+    const seat = projectToolSeat(p, session);
+    const offered = jobToolsFor(seat).filter((tool) => offers(session, tool.name));
+    if (!offered.length) return;
+    const caller = await this.#jobCaller(p, target, grants, session, reach, seat);
+    if (!caller) return;
+    const taken = tools.plugins.find((plugin) => offered.some((tool) => tool.name === plugin.name));
+    if (taken) throw new Error(MESSAGE.toolCollision(taken.name));
+    tools.jobs = offered;
+    tools.jobReach = caller;
+    if (seat === ProjectToolSeat.Chat && !p.compact) tools.jobNews = await jobNews(this.#core, caller.owner);
+  }
+
+  /**
+   * Where a session's jobs run and whose they are: a worker's in its own folder with its seat's
+   * write roots and never-touch list, in its chat, for its run or turn; a lead's where its plugin
+   * calls act (the build it leads, else its own folder), in its run's chat, for its run; the chat's
+   * own session's in its game's folder, for the chat. Null when there is no chat to report to.
+   */
+  async #jobCaller(
+    p: DelegateParams,
+    target: DelegationTarget,
+    grants: DelegationGrants,
+    session: DelegationSession,
+    reach: SessionReach,
+    seat: ProjectToolSeat,
+  ): Promise<JobCaller | null> {
+    const game = await realpath(this.#core.games.dirFor(p.project)).catch(() => null);
+    if (!game) return null;
+    const home = os.homedir();
+    const found = session.worker;
+    if (seat === ProjectToolSeat.Worker && found && reach.worker) {
+      const { writeRoots, neverTouch } = reach.worker;
+      const owner = workerJobOwner(p.project, found);
+      if (!owner) return null;
+      const runStartedAt = found.runId ? await this.#runStartedAt(found.runId) : null;
+      const jobReach = { writeRoots, neverTouch, home, gameFolder: game };
+      return { folder: target.workCwd, reach: jobReach, owner, runStartedAt };
+    }
+    const chatThreadId = await this.#projectToolChat(p, grants, session);
+    if (!chatThreadId) return null;
+    const lead = seat === ProjectToolSeat.Lead ? grants.director : null;
+    const own = seat === ProjectToolSeat.Chat && (await this.#openGameChat(p.project, chatThreadId));
+    if (!own && !lead) return null;
+    const folder = session.leads ?? target.workCwd;
+    const neverTouch = await this.#neverTouch(p.project, [folder, game]);
+    const writeRoots = writableRoots(await this.#writeRoots(folder, chatThreadId), neverTouch);
+    const scope: JobScope = lead ? { kind: JobScopeKind.Run, runId: lead.runId } : { kind: JobScopeKind.Chat };
+    const owner: JobOwner = { project: p.project, chatThreadId, role: lead ? JobRole.Lead : JobRole.Chat, scope };
+    return { folder, reach: { writeRoots, neverTouch, home, gameFolder: game }, owner };
+  }
+
+  /**
+   * `app_look`, look-only and so in every mode: for the chat's own session, a lead and every worker
+   * the host seated (a reader too, which has no other host tool; never a playtester), on an engine
+   * that carries a seat.
+   * Its access line goes to the session's chat. A plugin tool of the same name is refused.
+   */
+  async #offerLook(
+    p: DelegateParams,
+    target: DelegationTarget,
+    grants: DelegationGrants,
+    session: DelegationSession,
+    tools: SessionTools,
+  ): Promise<void> {
+    // A playtester plays with its own hands only.
+    if (p.playtest || !this.#seatsWorkers(target.engineId)) return;
+    const seat = projectToolSeat(p, session);
+    const seated = session.hostTools || seat === ProjectToolSeat.Worker;
+    const offered = seated ? appLookFor(seat).filter((tool) => offers(session, tool.name)) : [];
+    if (!offered.length) return;
+    const taken = tools.plugins.find((plugin) => offered.some((tool) => tool.name === plugin.name));
+    if (session.hostTools && taken) throw new Error(MESSAGE.toolCollision(taken.name));
+    const chatThreadId = session.worker?.chatThreadId ?? (await this.#projectToolChat(p, grants, session));
+    tools.look = offered;
+    tools.lookCaller = { project: p.project, chatThreadId: chatThreadId ?? null };
+  }
+
+  /** The chat's own session answered its turn: the jobs its turn's workers started end with it. */
+  async #stopTurnJobs(p: DelegateParams, session: DelegationSession): Promise<void> {
+    const turn = session.chatTurn;
+    if (!turn || session.worker || !chatsOwnSession(p, session)) return;
+    await this.#core.jobs
+      ?.stopScope(p.project, { kind: JobScopeKind.Turn, turn }, JobStopper.ScopeEnded)
+      .catch((error) => this.#logCleanupFailure("turn jobs", error));
+  }
+
+  /** A worker tool call of the chat's own session, answered by the harness's pool for the turn it answers. */
+  #forwardWorkerTool(session: DelegationSession, name: string, args: Record<string, unknown>): Promise<LiveToolResult> {
+    const turn = session.chatTurn;
+    if (!turn) throw new Error(MESSAGE.unknownTool(name));
+    const host = {
+      hasCapability: (capability: HarnessCapability) => this.#core.host.hasCapability(capability),
+      dispatch: (action: Parameters<StudioCore["host"]["dispatch"]>[0], timeoutMs: number) =>
+        this.#core.host.dispatch(action, timeoutMs),
+      planning: (threadId: string) => this.#x.planning(threadId),
+      workerTypes: () =>
+        this.#core.plugins.workerTypes({ facts: session.facts, ...(session.holds ? { holds: session.holds } : {}) }),
+    };
+    return forwardWorkerTool(host, { threadId: session.threadId, turn, name, args }, DIRECTOR_TOOL_TIMEOUT_MS);
+  }
+
+  /**
+   * A run tool, answered by the harness process that owns the loops and the merge. While the chat
+   * the run was started in plans, a writer's start and a merge wait for the plan's approval, as
+   * the chat's own session's do (`heldInPlan`): no snapshot, copy or merge is dispatched.
+   */
+  async #forwardDirectorTool(
+    d: Pick<DirectorGrant, "runId" | "threadId" | "project">,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<LiveToolResult> {
+    const { runId } = d;
     if (!this.#core.host.hasCapability(HarnessCapability.Director))
       return `the studio's loop code predates the director — ${name} is unavailable until the harness is upgraded`;
+    const types = name === WorkerTool.Start ? await this.#gameWorkerTypes(d.project) : [];
+    const held = heldInPlan(name, args, () => types);
+    if (held) {
+      const planning = await this.#runPlanning(d);
+      if (planning === null) return WORKER_TOOL_ANSWER.runChatUnknown;
+      if (planning) return held;
+    }
     try {
       const value = await this.#core.host.dispatch(
         { type: DispatchActionType.DirectorTool, runId, name, args },
@@ -502,6 +822,30 @@ export class DelegationService {
     } catch (err) {
       return { text: `${name} failed: ${String(errorMessage(err))}`, isError: true };
     }
+  }
+
+  /** The worker types the plugins on offer to a game: what a run lead's typed start stands as. */
+  async #gameWorkerTypes(project: string): Promise<WorkerType[]> {
+    const { facts, holds } = await this.#core.games
+      .kindOf(project)
+      .catch(() => ({ facts: [], holds: FolderHolds.Unreadable }));
+    return this.#core.plugins.workerTypes({ facts, ...(holds ? { holds } : {}) });
+  }
+
+  /**
+   * Whether the chat a run was started in is in Plan mode, or null when the host cannot find that
+   * chat (the caller then holds what waits for a plan). The chats are the host's own records of the
+   * run's starts in this game's chats, and the chat the grant names when it is this game's: any of
+   * them planning holds it, so naming another chat never lifts a hold.
+   */
+  async #runPlanning(d: Pick<DirectorGrant, "runId" | "threadId" | "project">): Promise<boolean | null> {
+    const starts = await this.#runStarts(d.runId);
+    const recorded = (await this.#startedInGame(d.project, starts)) ? starts.map((event) => event.thread_id) : [];
+    const named = typeof d.threadId === "string" && (await this.#openGameChat(d.project, d.threadId));
+    const chats = new Set([...recorded, ...(named ? [d.threadId as string] : [])]);
+    if (!chats.size) return null;
+    for (const chat of chats) if (await this.#x.planning(chat)) return true;
+    return false;
   }
 
   /** `look`: point the director's window at a build of this run — never anywhere else — and screenshot it. */
@@ -737,50 +1081,38 @@ export class DelegationService {
     return out.sort();
   }
 
-  async delegate(p: DelegateParams): Promise<HarnessResult<typeof HostMethod.EngineDelegate>> {
-    const target = await this.#resolveTarget(p);
+  async delegate(asked: DelegateParams): Promise<HarnessResult<typeof HostMethod.EngineDelegate>> {
+    const target = await this.#resolveTarget(asked);
     const { engineId, workClass, cwd } = target;
     // Read before the lock is taken: nothing may await between the free check and the lock.
+    const worker = await this.#workerSeat(asked, target);
+    const p = worker ? workerBrief(asked) : asked;
     const seat = await this.#seatOf(p, target);
     // A lead holds the build it leads, never its game's folder: the chat's other turns there, and
     // Make it live, go on while it thinks (one session). Its prompt leaves the game's changes to
-    // its builders; the chat's mode alone decides what it may do.
-    const lock = seat.leads ?? cwd;
+    // its builders; the chat's mode alone decides what it may do. An in-place worker holds its own.
+    const lock = worker?.inPlace ? workerLockKey(cwd, worker.id) : (seat.leads ?? cwd);
+    this.#assertWorkerRoom(worker);
     this.#assertFolderFree(lock, p);
     const grants = this.#grants(p, cwd, seat);
     const releasePlugins = this.#core.plugins.lease();
     // In the same tick as the lease: the tools and the brief's guidance come from one view of the
     // plugins, however long the rest of the preparation waits.
-    const plugins = this.#core.plugins.snapshot();
+    const plugins = this.#core.plugins.snapshot(
+      { facts: seat.facts, holds: seat.holds },
+      toolAllowRule(p.toolAllow) ?? undefined,
+    );
     const releaseMcp = this.#core.mcp.lease(p.project);
-    const session = this.#session(p, target, grants, seat);
-    const tools: SessionTools = {
-      cover: [],
-      mcp: [],
-      plugins: plugins.tools,
-      pluginGuidance: plugins.guidance,
-      applied: plugins.applied,
-      withdrawn: null,
-      capabilityFacts: "",
-      builder: null,
-      playtest: null,
-      director: null,
-    };
+    const session = this.#session(p, target, grants, seat, worker);
+    const tools = sessionTools(plugins);
     // Take the lock before any await — an async deny-list walk used to leave a gap
     // where a second brief into the same folder could also pass the running check.
-    const delegation: ActiveDelegation = {
-      project: p.project,
-      threadId: session.threadId,
-      engine: engineId,
-      startedAt: Date.now(),
-      abort: session.abort,
-      ...(session.chatTurn ? { chatTurn: session.chatTurn } : {}),
-      ...(session.door ? { steer: session.door } : {}),
-    };
+    const delegation = activeDelegation(p.project, engineId, session, asked.worker?.id);
     this.#x.activeDelegations.set(lock, delegation);
     this.#core.budget.beginWork(workClass);
     this.#core.emit(UiEvent.DelegationStarted, this.#activeIn(p.project, engineId));
-    const windows = this.#sessionWindows(grants);
+    const windows = this.#sessionWindows(grants, seat.engine);
+    const announced = this.#x.gameChanges.get(p.project) ?? 0;
     /** The session that asks, whose end the picker must hear of: the chat's own, or a lead's. */
     let asking: PersonSession | LeadSession | null = null;
     try {
@@ -788,13 +1120,19 @@ export class DelegationService {
       await this.#prepareTools(p, target, grants, session, windows, tools);
       const reach = await this.#reach(p, target, grants, session, seat);
       asking = reach.person ?? reach.lead;
+      await this.#offerJobTools(p, target, grants, session, reach, tools);
+      await this.#offerLook(p, target, grants, session, tools);
       // Stop can arrive while tools are being prepared under the workspace lock.
       if (session.abort.signal.aborted)
         throw new EngineError(EngineFailureKind.Aborted, engineId, "stopped before the contractor started");
       const registered = this.#x.activeDelegations.get(lock);
       if (registered && registered.abort === session.abort) registered.started = true;
       await this.#appendActivity(session, ChatActivityPhase.Thinking, engineId, { sessionId: p.resume ?? null });
-      const request = await this.#request(p, target, grants, session, windows, tools, reach);
+      const request = {
+        ...(await this.#request(p, target, grants, session, windows, tools, reach)),
+        ...this.#checkpointField(p, target, session, seat),
+      };
+      await this.#core.jobs.markTold(p.project, tools.jobNews.told);
       const result = await withPlanApproval({
         engine: engineId,
         request,
@@ -818,13 +1156,29 @@ export class DelegationService {
       if (tools.playtest) await tools.playtest.release().catch(() => {});
       if (windows.self) await windows.self.release().catch(() => {});
       if (windows.director) await windows.director.release().catch(() => {});
+      await this.#stopTurnJobs(p, session);
       this.#core.budget.endWork(workClass);
       // Nothing more is handed in; a steer still waiting to hear from the engine hears no.
       delegation.ended = true;
       settleDoor(delegation.steer, null);
       this.#x.activeDelegations.delete(lock);
+      await this.#announceKindTaken(p.project, seat, announced).catch((error) =>
+        this.#logCleanupFailure("kind announcement", error),
+      );
       this.#core.emit(UiEvent.DelegationFinished, this.#activeIn(p.project, engineId));
     }
+  }
+
+  /**
+   * A game with no kind when the session started that has one now, from files the session wrote
+   * itself (no `start_web_game`, no port, which announce it): the app's game list hears it, so Live
+   * stops showing the first-idea state over a page that is there. Anything announced since the
+   * start (`announced`, the game's `GameChanged` count then) already told it.
+   */
+  async #announceKindTaken(project: string, seat: DelegationSeat, announced: number): Promise<void> {
+    if (!kindPending(seat) || (this.#x.gameChanges.get(project) ?? 0) !== announced) return;
+    const now = await this.#core.games.kindOf(project).catch(() => null);
+    if (now && !kindPending(now)) this.#core.emit(UiEvent.GameChanged, { project });
   }
 
   /** A cleanup step that failed after a delegation: logged, never allowed to stop the rest. */
@@ -851,28 +1205,135 @@ export class DelegationService {
     session: DelegationSession,
     seat: DelegationSeat,
   ): Promise<SessionReach> {
+    const worker = session.worker ? await this.#workerReach(p, target, grants, session, session.worker) : null;
+    if (worker) return worker;
     const person = await this.#personSession(p, target, session);
     const asksAll = this.#core.engines.get(target.engineId).permissionPrompts === true;
     if (person && asksAll) {
       const hostDirs = [grants.selfShotsDir, grants.playShotsDir];
       const extraReads = await this.#x.permissions.chatReads(session.threadId, grants.extraReads, hostDirs);
-      return { person, lead: null, extraReads, denyReads: [], reachesMac: true };
+      return { person, lead: null, worker: null, extraReads, denyReads: [], reachesMac: true };
     }
     const lead = person ? null : await this.#leadSession(p, target, grants, session, seat);
     if (lead) {
       // A folder it reads is one Accept edits (and Auto, inside its working folders) writes without
       // asking: the host's own folders and those the chat recorded, never a folder the brief names.
       const recorded = await this.#x.permissions.chatReads(session.threadId, p.extraReads ?? [], []);
-      return { person: null, lead, extraReads: [...grants.hostReads, ...recorded], denyReads: [], reachesMac: true };
+      const extraReads = [...grants.hostReads, ...recorded];
+      return { person: null, lead, worker: null, extraReads, denyReads: [], reachesMac: true };
     }
     const allowed = [...grants.extraReads, this.#core.games.dirFor(p.project)];
     return {
       person,
       lead: null,
+      worker: null,
       extraReads: grants.extraReads,
       denyReads: await this.workspaceDenyReads(target.cwd, allowed),
       reachesMac: false,
     };
+  }
+
+  /**
+   * A worker's reach: its seat in its lead's chat's mode, writing its own folder, the chat's
+   * granted folders and its plugins' folders, never what the never-touch list names; it reads the
+   * host's own folders and those the chat recorded. Null when the chat is no longer this game's
+   * open chat: it then runs unattended, as any delegation the host cannot place.
+   */
+  async #workerReach(
+    p: DelegateParams,
+    target: DelegationTarget,
+    grants: DelegationGrants,
+    session: DelegationSession,
+    found: WorkerFinding,
+  ): Promise<SessionReach | null> {
+    const chat = await this.#x.permissions.forWorker({
+      project: p.project,
+      threadId: found.chatThreadId,
+      worker: { id: found.id, title: found.title },
+      runId: found.runId,
+      runStartedAt: found.runId ? await this.#runStartedAt(found.runId) : null,
+      engine: target.engineId,
+      model: p.model ?? "",
+      asks: this.#core.engines.get(target.engineId).permissionPrompts === true,
+      cwd: target.workCwd,
+      signal: session.abort.signal,
+    });
+    if (!chat) return null;
+    const recorded = await this.#x.permissions.chatReads(found.chatThreadId, p.extraReads ?? [], []);
+    const runReads = found.runId ? await this.#runReads(found.runId, p.extraReads ?? []) : [];
+    const open = [...this.#workerOpen(p.project, target, grants), ...runReads];
+    const neverTouch = await this.#neverTouch(p.project, open);
+    const worker: WorkerSeat = {
+      id: found.id,
+      title: found.title,
+      mode: chat.mode,
+      writeRoots: writableRoots(await this.#writeRoots(target.workCwd, found.chatThreadId), neverTouch),
+      neverTouch,
+      research: found.research,
+      ...(chat.asks ? { asks: chat.asks } : {}),
+    };
+    const extraReads = [...new Set([...grants.hostReads, ...recorded, ...runReads])];
+    return { person: null, lead: null, worker, extraReads, denyReads: [], reachesMac: false };
+  }
+
+  /**
+   * The folders a run's harness hands its worker to read that are that run's own (its spike and
+   * base worktrees under its scratch folder, its captures), by real path: they stay open in the
+   * never-touch list though Genex's data holds them. Any other folder the harness names is read
+   * only when the chat recorded it.
+   */
+  async #runReads(runId: string, asked: readonly string[]): Promise<string[]> {
+    const folders = [
+      await this.#runFolder(runId),
+      await realpath(runDir(this.#core.layout.runs, runId)).catch(() => null),
+    ].filter((dir): dir is string => dir !== null);
+    if (!folders.length) return [];
+    const real = await Promise.all(asked.map((dir) => realpath(path.resolve(dir)).catch(() => null)));
+    const own = real.filter((dir): dir is string => dir !== null && folders.some((folder) => isBelow(folder, dir)));
+    return [...new Set(own)];
+  }
+
+  /**
+   * What a worker's box may let it write: its own folder, the folders the person granted the chat
+   * and the enabled plugins' folders for their engine programs, by their real paths. A folder that
+   * does not exist yet is left out until it does; the seat then drops any that is, holds or sits in
+   * a never-touch root (`writableRoots`), whatever granted it.
+   */
+  async #writeRoots(cwd: string, chatThreadId: string): Promise<string[]> {
+    const asked = [cwd, ...this.#x.permissions.chatDirs(chatThreadId), ...this.#core.plugins.workerFolders()];
+    const real = await Promise.all(asked.map((dir) => realpath(dir).catch(() => null)));
+    return [...new Set(real.filter((dir): dir is string => dir !== null))];
+  }
+
+  /** The folders a worker keeps inside the never-touch list's roots: its own, its run's captures, its game's. */
+  #workerOpen(project: string, target: DelegationTarget, grants: DelegationGrants): string[] {
+    const captures = grants.hostReads.filter((dir) => isInside(this.#core.layout.runs, path.resolve(dir)));
+    return [target.workCwd, ...captures, path.resolve(this.#core.games.dirFor(project))];
+  }
+
+  /**
+   * What no worker of this game reaches, in any mode: the sign-ins (the coding CLIs' homes, the
+   * sign-in stores every agent's box denies, Genex's login, secrets and engine homes), Genex's own
+   * data (this profile's and any other the app named, `StudioCoreOptions.neverTouch`), and every
+   * other game (this profile's, and the other profiles' folders the app named,
+   * `StudioCoreOptions.neverTouchGames`).
+   */
+  async #neverTouch(project: string, open: string[]) {
+    const { layout } = this.#core;
+    const own = path.resolve(this.#core.games.dirFor(project));
+    const games = await this.#core.games.list();
+    const sources = {
+      home: os.homedir(),
+      credentialHomes: credentialHomes(),
+      signInStores: baseDenyRead(),
+      genexLogins: [layout.secrets, layout.engineHomes],
+      genexData: [path.dirname(layout.exoharness), ...(this.#core.options.neverTouch ?? [])],
+      otherGames: [
+        ...games.map((game) => path.resolve(game.dir)).filter((dir) => dir !== own),
+        ...(this.#core.options.neverTouchGames ?? []),
+      ],
+    };
+    return neverTouchList(sources, open);
   }
 
   /**
@@ -1006,6 +1467,11 @@ export class DelegationService {
     };
   }
 
+  /** The engine the delegation's game builds in; a game whose record can't be read is a web game. */
+  async #gameEngine(project: string): Promise<GameEngine> {
+    return engineOf(await readEngineBinding(this.#core.games.dirFor(project)).catch(() => undefined));
+  }
+
   /**
    * Whether this delegation sits in its game's own folder, and whether its director grant is a
    * lead's there (one session): the lead of a waking night is its chat's own session, so it sits
@@ -1015,7 +1481,11 @@ export class DelegationService {
     const live = path.resolve(this.#core.games.dirFor(p.project));
     // The game's own folder: no build worktree, no coordinator home, no candidate.
     const gameFolder = !p.coordinator && !target.candidate && target.cwd === live;
-    return { leads: gameFolder ? await this.#leadRoot(p, live) : null };
+    const leads = gameFolder ? await this.#leadRoot(p, live) : null;
+    const { facts, holds } = await this.#core.games
+      .kindOf(p.project)
+      .catch(() => ({ facts: [], holds: FolderHolds.Unreadable }));
+    return { leads, gameFolder, engine: await this.#gameEngine(p.project), facts, ...(holds ? { holds } : {}) };
   }
 
   /**
@@ -1064,6 +1534,28 @@ export class DelegationService {
     return this.#startedInGame(project, starts);
   }
 
+  /**
+   * The run started in this chat that is going now (`#runChat`, `#runRunning`), and when it first
+   * started; null when none is. What the person's "Don't wait for me" reaches while a run goes.
+   */
+  async runOfChatNow(threadId: string): Promise<{ runId: string; startedAt: number } | null> {
+    const meta = (await this.#core.store.getRecord(threadId).catch(() => null))?.metadata;
+    const project = meta?.kind === ThreadKind.Game && typeof meta.project === "string" ? meta.project : null;
+    if (!project) return null;
+    for (const item of await this.#core.activityItems()) {
+      const going = item.project === project && item.runOutcome?.state === ExecutionStatus.Running;
+      if (!going || !item.runId || (await this.#runChat(project, item.runId)) !== threadId) continue;
+      return { runId: item.runId, startedAt: await this.#runStartedAt(item.runId) };
+    }
+    return null;
+  }
+
+  /** When a run first started, by the host's own records (ms since the epoch; 0 when it has none). */
+  async #runStartedAt(runId: string): Promise<number> {
+    const times = (await this.#runStarts(runId)).map((event) => Date.parse(event.created_at)).filter(Number.isFinite);
+    return times.length ? Math.min(...times) : 0;
+  }
+
   /** The records that started (or restarted) this run, in any chat. */
   async #runStarts(runId: string): Promise<EventEnvelope[]> {
     return (await this.#core.activityEvents()).filter((event) => startsRun(event, runId));
@@ -1074,6 +1566,104 @@ export class DelegationService {
     if (!starts.length) return false;
     const games = new Map((await this.#core.store.listThreads()).map((thread) => [thread.id, threadGame(thread)]));
     return starts.every((event) => games.get(event.thread_id) === project && startNames(event, project));
+  }
+
+  /**
+   * Whether the harness's worker grant is honoured, on the host's own finding, or null (the session
+   * then runs unattended, as before): a worker of a run that is running and was started in exactly
+   * one open chat of this game, in the game's folder or a copy of the game in that run's own folder;
+   * or a worker of the chat turn the chat's own session answers now, on that chat, in the game's
+   * folder or a copy of the game under scratch. Never for a coordinator or a candidate.
+   */
+  async #workerSeat(p: DelegateParams, target: DelegationTarget): Promise<WorkerFinding | null> {
+    const asked = p.worker;
+    if (typeof asked?.id !== "string" || !asked.id || p.coordinator || target.candidate) return null;
+    if (!this.#seatsWorkers(target.engineId)) return null;
+    const inPlace = target.workCwd === path.resolve(this.#core.games.dirFor(p.project));
+    const runId = typeof asked.runId === "string" && asked.runId ? asked.runId : null;
+    const chatThreadId = runId
+      ? await this.#runWorkerChat(p, runId, target.workCwd, inPlace)
+      : await this.#turnWorkerChat(p, asked.turn, target.workCwd, inPlace);
+    if (!chatThreadId) return null;
+    const title = workerTitle(asked);
+    const turn = !runId && typeof asked.turn === "string" ? asked.turn : null;
+    return { id: asked.id, title, research: asked.research === true, chatThreadId, runId, turn, inPlace };
+  }
+
+  /**
+   * Whether an engine carries a worker's seat: a delegated engine (Claude Code, Codex) runs it in
+   * the seat's mode, box and never-touch list. A local session's tool loop ignores a seat, so its
+   * work stays unattended, with the sibling deny list.
+   */
+  #seatsWorkers(engineId: string): boolean {
+    return this.#core.engines.get(engineId).kind === EngineKind.Delegated;
+  }
+
+  /** The chat a run worker answers to: its run's one chat, running, and its folder that run's. */
+  async #runWorkerChat(p: DelegateParams, runId: string, cwd: string, inPlace: boolean): Promise<string | null> {
+    const chat = await this.#runChat(p.project, runId);
+    if (!chat || !(await this.#runRunning(runId))) return null;
+    // The delegation names that chat, or a thread that is no game chat at all (the run's own).
+    const elsewhere = typeof p.threadId === "string" && p.threadId !== chat;
+    if (elsewhere && (await this.#isGameChat(p.threadId as string))) return null;
+    if (inPlace) return chat;
+    const runFolder = await this.#runFolder(runId);
+    if (!runFolder || !isBelow(runFolder, cwd)) return null;
+    return (await sameRepository(this.#core.games.dirFor(p.project), cwd)) ? chat : null;
+  }
+
+  /** The chat a turn worker answers to: the open chat whose own session answers `turn` now. */
+  async #turnWorkerChat(p: DelegateParams, turn: unknown, cwd: string, inPlace: boolean): Promise<string | null> {
+    const threadId = p.threadId;
+    if (typeof turn !== "string" || !turn || typeof threadId !== "string") return null;
+    if (!(await this.#openGameChat(p.project, threadId))) return null;
+    const live = path.resolve(this.#core.games.dirFor(p.project));
+    const answering = this.#x.activeDelegations.get(live);
+    const answers = answering?.threadId === threadId && answering.chatTurn === turn && !answering.ended;
+    if (!answers || answering.worker) return null;
+    if (inPlace) return threadId;
+    const scratch = await realpath(this.#core.layout.scratch).catch(() => null);
+    if (!scratch || !isBelow(scratch, cwd)) return null;
+    return (await sameRepository(live, cwd)) ? threadId : null;
+  }
+
+  /** The one chat a run was started in, when it is this game's open chat and the run names no other game. */
+  async #runChat(project: string, runId: string): Promise<string | null> {
+    const starts = await this.#runStarts(runId);
+    const chats = new Set(starts.map((event) => event.thread_id));
+    const [chat] = chats;
+    if (chats.size !== 1 || !chat || !(await this.#startedInGame(project, starts))) return null;
+    return (await this.#openGameChat(project, chat)) ? chat : null;
+  }
+
+  /** Whether the host's own records say the run is going. */
+  async #runRunning(runId: string): Promise<boolean> {
+    const runs = await this.#core.activityItems();
+    return runs.some((item) => item.runId === runId && item.runOutcome?.state === ExecutionStatus.Running);
+  }
+
+  /** Whether a thread is this game's own chat, open: never a thread the harness made, another game's or an archived one. */
+  async #openGameChat(project: string, threadId: string): Promise<boolean> {
+    const meta = (await this.#core.store.getRecord(threadId).catch(() => null))?.metadata;
+    return meta?.kind === ThreadKind.Game && meta.project === project && meta.archived !== true;
+  }
+
+  /** Whether a thread is any game's chat. */
+  async #isGameChat(threadId: string): Promise<boolean> {
+    return (await this.#core.store.getRecord(threadId).catch(() => null))?.metadata?.kind === ThreadKind.Game;
+  }
+
+  /**
+   * The Settings ceiling: a chat runs at most as many workers at once as the person allows, readers
+   * and writers alike. Checked before the lock is taken, so a refusal leaves nothing behind.
+   */
+  #assertWorkerRoom(worker: WorkerFinding | null): void {
+    if (!worker) return;
+    const max = this.#core.settings.buildersMax;
+    const running = [...this.#x.activeDelegations.values()].filter(
+      (delegation) => delegation.worker?.chatThreadId === worker.chatThreadId,
+    ).length;
+    if (running >= max) throw new DelegationRefusedError(DelegationRefusal.TooManyWorkers, MESSAGE.tooManyWorkers(max));
   }
 
   #assertFolderFree(lock: string, p: DelegateParams): void {
@@ -1126,21 +1716,30 @@ export class DelegationService {
     target: DelegationTarget,
     grants: DelegationGrants,
     seat: DelegationSeat,
+    worker: WorkerFinding | null,
   ): DelegationSession {
     const threadId = threadOr(this.#core, p.threadId);
     const { selfCapture, playtest, director } = grants;
     const activityScope = {
       delegationId: uuidv7(),
-      ...delegationActivityScope({ ...p, director, selfCapture, playtest }),
+      ...askedScope(p, { director, selfCapture, playtest }),
     };
     const chatTurn = chatTurnOf(p, { director, playtest, candidate: target.candidate });
     const runControls = honouredRunControls(p);
+    // A run's worker's plugin calls are its run's: recorded on its own node, answering to its chat.
+    // A builder with a round of its own (its capture grant) keeps it: its calls stay on that round.
+    const attribution = attributionOf(p) ?? (selfCapture ? null : workerAttribution(worker));
     return {
       ...(chatTurn ? { chatTurn } : {}),
       ...(runControls ? { runControls } : {}),
+      liveRun: liveRunOf(p, director, seat),
       ...(chatTurn && target.steersMidTurn ? { door: openDoor() } : {}),
       threadId,
       hostTools: hostToolsEligible(p, target.candidate, seat),
+      offered: toolAllowRule(p.toolAllow),
+      attribution,
+      credits: runCreditCap(p.creditCap, attribution?.runId ?? worker?.runId ?? director?.runId),
+      worker,
       // The chat's coordinator speaks for this game in its chat without the builders' tools: it
       // reads what the builders have, never instructions for tools it cannot call (which read
       // as "Genex is unavailable" to the user).
@@ -1149,6 +1748,8 @@ export class DelegationService {
       leadTurn: Boolean(director),
       chatLead: Boolean(director?.chatSession === true && seat.leads),
       leads: seat.leads,
+      facts: seat.facts,
+      ...(seat.holds ? { holds: seat.holds } : {}),
       abort: new AbortController(),
       ended: new AbortController(),
       mirror: delegationMirror({
@@ -1164,8 +1765,10 @@ export class DelegationService {
     };
   }
 
-  #sessionWindows(grants: DelegationGrants): SessionWindows {
-    const { selfCapture, director } = grants;
+  #sessionWindows(grants: DelegationGrants, engine: GameEngine): SessionWindows {
+    const { selfCapture } = grants;
+    // An Unreal game's director has no window: it works in the Unreal editor.
+    const director = directorWindowed(engine) ? grants.director : null;
     return {
       // The builder's window for the whole session: capture reloads it, the computer tool
       // keeps playing in it, the agent-screen card in the UI watches it.
@@ -1222,7 +1825,10 @@ export class DelegationService {
   ): Promise<void> {
     const { engineId, cwd } = target;
     // Covers belong to the desktop host (which also bakes legacy GLSL covers); test rigs opt in.
-    if (session.hostTools && this.#core.options.renderGameCover) await this.#offerCover(p.project, tools);
+    if (session.hostTools && this.#core.options.renderGameCover && offers(session, COVER_TOOL.name))
+      await this.#offerCover(p.project, tools);
+    if (session.hostTools) offerProjectTools(p, session, tools);
+    if (session.hostTools) this.#offerWorkerTools(p, engineId, session, tools);
     if (session.runControls) assertRunControlsFree(tools);
     // A director's turn is the build's line between its parts (planning), never "Connecting tools" on each wake.
     if (session.hostTools && !session.leadTurn)
@@ -1236,11 +1842,26 @@ export class DelegationService {
     }
     // Awaits live under the lock — an await before it once let two briefs into one folder.
     if (grants.selfShotsDir) await ensureDir(grants.selfShotsDir);
-    // Every in-scope connector is asked for its tools in parallel, each with its own
-    // timeout; one that will not answer contributes nothing and this delegation goes on.
-    if (session.hostTools) tools.mcp = await this.#core.mcp.toolsFor(p.project, { signal: session.abort.signal });
+    if (session.hostTools) await this.#offerConnectors(p, session, tools);
     if (session.hostTools) await this.#applyPlugins(p, session, engineId, tools);
     await this.#prepareWindowTools(p, cwd, grants, windows, tools);
+  }
+
+  /**
+   * The connectors' tools the session is handed: every in-scope connector is asked in parallel, each
+   * with its own timeout, and one that will not answer contributes nothing. A worker, seated or not,
+   * is never handed the server its game's kind brings (an engine's live editor): the run's lead
+   * drives that editor alone, and a copy worker's edits there would land in the game.
+   */
+  async #offerConnectors(p: DelegateParams, session: DelegationSession, tools: SessionTools): Promise<void> {
+    const asWorker = Boolean(session.worker) || typeof p.worker?.id === "string";
+    const connectors = await this.#core.mcp.toolsFor(p.project, {
+      signal: session.abort.signal,
+      facts: session.facts,
+      ...(session.holds ? { holds: session.holds } : {}),
+      ...(asWorker ? { kindServers: false } : {}),
+    });
+    tools.mcp = connectors.filter((tool) => offers(session, tool.name));
   }
 
   /**
@@ -1288,9 +1909,8 @@ export class DelegationService {
       await ensureDir(playShotsDir);
       tools.playtest = await this.#core._playtestToolsFor(playtest, cwd, playShotsDir);
     }
-    const directorLooks = director && directorShotsDir && directorWindow;
-    if (directorLooks) {
-      await ensureDir(directorShotsDir);
+    if (director && directorShotsDir) {
+      if (directorWindow) await ensureDir(directorShotsDir);
       // Its window, its capture and its computer are on the build it leads, wherever it sits — a
       // lead's by the real path its seat checked (`honouredDirector`), never the name it was sent.
       const root = path.resolve(director.root);
@@ -1343,6 +1963,29 @@ export class DelegationService {
   }
 
   /**
+   * The studio's checkpoint made real for the chat's own session on an Unreal game, in the game's
+   * folder: the editor's work saved and the folder snapshotted (`unreal-checkpoint.ts`). A web game,
+   * a run's session and a worktree keep the note alone.
+   */
+  #checkpointField(
+    p: DelegateParams,
+    target: DelegationTarget,
+    session: DelegationSession,
+    seat: DelegationSeat,
+  ): Pick<DelegateRequest, "onCheckpoint"> {
+    const inGame = target.workCwd === path.resolve(this.#core.games.dirFor(p.project));
+    const unrealChat = seat.engine === GameEngine.Unreal && isChatsOwnSession(p);
+    if (!(inGame && unrealChat)) return {};
+    const binding = { project: p.project, directory: target.workCwd, threadId: session.threadId };
+    const host: UnrealCheckpointHost = {
+      tool: (name) => this.#core.plugins.tool(name, {}, binding, session.abort.signal, PluginToolAudience.Harness),
+      snapshot: (reason) => this.#core.snapshot(SnapshotScope.Game, reason, p.project),
+      planning: () => this.#x.planning(session.threadId),
+    };
+    return { onCheckpoint: (note) => unrealCheckpoint(host, note) };
+  }
+
+  /**
    * Every event the session reports, mirrored into the log — except a steered message it read
    * (`steer_delivered`), which is recorded where it was read in the chat, never mirrored. A lead's
    * is recorded nowhere: the queue recorded its messages delivered when it handed them over, and
@@ -1362,10 +2005,19 @@ export class DelegationService {
    * The brief, with guidance only where there is something to say: an unattended session with no
    * plugins and no connectors reads exactly the prompt it was given. A session the person answers
    * on an engine that asks about every call (`reach.reachesMac`) is told it reaches their whole Mac,
-   * whatever the brief says.
+   * whatever the brief says. Calls of its thread cut off before they answered are named first, to a
+   * session that could repeat them (host tools, and a turn, not a compaction, which reads no brief),
+   * until one answers; then, to the same sessions, files Rewind cannot bring back; then, to the chat's
+   * own session, its jobs that ended since it was last told and those still running.
    */
   #prompt(p: DelegateParams, session: DelegationSession, tools: SessionTools, reach: SessionReach): string {
+    const told = session.hostTools && !p.compact;
+    tools.cutOffs = told ? peekCutOffs(this.#x.cutOffCalls, p.threadId) : [];
+    tools.unsaved = told ? peekUnsaved(this.#x.unsavedFiles, p.threadId) : [];
     return [
+      cutOffNotice(tools.cutOffs),
+      unsavedFilesNotice(tools.unsaved),
+      tools.jobNews.notice,
       tools.withdrawn ? withdrawnNotice(tools.withdrawn) : "",
       p.prompt,
       reach.reachesMac ? mainAgentReachNote() : "",
@@ -1419,17 +2071,17 @@ export class DelegationService {
             director,
             liveTools: directorTools.liveTools,
             onLiveTool: directorTools.onLiveTool,
-            onCapture: directorTools.onCapture,
+            ...(directorTools.onCapture ? { onCapture: directorTools.onCapture } : {}),
           }
         : {}),
       ...playtestFields(p, grants, tools),
-      ...(session.hostTools ? this.#hostToolFields(p, target, grants, session, tools) : {}),
+      ...(session.hostTools ? this.#hostToolFields(p, target, grants, session, tools) : this.#lookFields(tools)),
     };
   }
 
   /**
-   * Host tools: the window's own tools first, then the cover, the run's controls (the chat's own
-   * session after a night it led), the plugins and the connectors.
+   * Host tools: the window's own tools first, then the cover, Genex's project tools, the run's
+   * controls (the chat's own session after a night it led), the plugins and the connectors.
    */
   #hostToolFields(
     p: DelegateParams,
@@ -1441,9 +2093,37 @@ export class DelegationService {
     const windowTools = tools.director ?? tools.builder;
     const controls = session.runControls ? runControlTools : [];
     return {
-      liveTools: [...(windowTools?.liveTools ?? []), ...tools.cover, ...controls, ...tools.plugins, ...tools.mcp],
+      liveTools: [
+        ...(windowTools?.liveTools ?? []),
+        ...tools.cover,
+        ...tools.project,
+        ...tools.workers,
+        ...tools.jobs,
+        ...tools.look,
+        ...controls,
+        ...tools.plugins,
+        ...tools.mcp,
+      ],
       onLiveTool: (name: string, args: Record<string, unknown>) =>
         this.#hostTool(name, args, p, target, grants, session, tools),
+    };
+  }
+
+  /**
+   * A session without host tools that may still look (a reader worker): its window's tools, if
+   * any, and `app_look`, each answered by its own handler; nothing for any other session.
+   */
+  #lookFields(tools: SessionTools): Partial<DelegateRequest> {
+    const caller = tools.lookCaller;
+    if (!caller || !tools.look.length) return {};
+    const windowTools = tools.director ?? tools.builder;
+    return {
+      liveTools: [...(windowTools?.liveTools ?? []), ...tools.look],
+      onLiveTool: async (name: string, args: Record<string, unknown>) => {
+        if (tools.look.some((tool) => tool.name === name)) return runAppLook(this.#core, args, caller);
+        if (!windowTools) throw new Error(MESSAGE.unknownTool(name));
+        return windowTools.onLiveTool(name, args);
+      },
     };
   }
 
@@ -1457,6 +2137,13 @@ export class DelegationService {
     tools: SessionTools,
   ): Promise<LiveToolResult> {
     const signal = session.abort.signal;
+    const sessionTool = this.#sessionTool(name, args, session, tools);
+    if (sessionTool) return sessionTool;
+    if (tools.project.some((tool) => tool.name === name))
+      return callProjectTool(this.#core, this.#x, name, args, {
+        project: p.project,
+        threadId: await this.#projectToolChat(p, grants, session),
+      });
     if (tools.cover.some((tool) => tool.name === name))
       return this.#x.setGameCover(p.project, args, p.threadId, signal);
     if (session.runControls && isRunControl(name))
@@ -1468,9 +2155,17 @@ export class DelegationService {
     const lead = session.leads !== null;
     const callSignal = lead ? AbortSignal.any([signal, session.ended.signal]) : signal;
     // Connector first: its names are `<connector>__<tool>`, and the registry is the
-    // only thing that can say whether one of them is really on this list.
-    if (this.#core.mcp.owns(name))
-      return this.#x.pluginTools.invokeConnectorTool(name, args, binding, callSignal, { outlivesTurn: lead });
+    // only thing that can say whether one of them is really on this list. A call to one the
+    // session was not handed (another game's kind, a narrowed session's) is refused before
+    // anything is asked or run.
+    if (this.#core.mcp.owns(name)) {
+      if (!handed(session, tools, name)) throw new Error(MESSAGE.unknownTool(name));
+      return this.#x.pluginTools.invokeConnectorTool(name, args, binding, callSignal, {
+        outlivesTurn: lead,
+        ...this.#runConsentFor(name, p, session),
+        ...callRunField(session),
+      });
+    }
     if (!tools.plugins.some((tool) => tool.name === name)) {
       const handler = tools.director?.onLiveTool ?? tools.builder?.onLiveTool;
       if (!handler) throw new Error(MESSAGE.unknownTool(name));
@@ -1480,9 +2175,87 @@ export class DelegationService {
       engine: target.engineId,
       selfCapture: grants.selfCapture,
       director: grants.director,
+      attribution: session.attribution,
+      credits: session.credits,
       lead,
     });
     return pluginAnswer(result);
+  }
+
+  /** A worker tool's, a job tool's or `app_look`'s answer, when `name` is one this session was handed; null otherwise. */
+  #sessionTool(
+    name: string,
+    args: Record<string, unknown>,
+    session: DelegationSession,
+    tools: SessionTools,
+  ): Promise<LiveToolResult> | null {
+    if (tools.workers.some((tool) => tool.name === name)) return this.#forwardWorkerTool(session, name, args);
+    const looker = tools.lookCaller;
+    if (looker && tools.look.some((tool) => tool.name === name)) return runAppLook(this.#core, args, looker);
+    const caller = tools.jobReach;
+    if (!caller || !tools.jobs.some((tool) => tool.name === name)) return null;
+    return callJobTool(this.#core, this.#x, name, args, caller, session.abort.signal);
+  }
+
+  /**
+   * The chat a project tool's card shows in: a lead's, the one chat its run was started in, as the
+   * host's records say (`#runChat`), never a thread the harness names; the chat's own session's,
+   * its own. None for anyone else, so a card they could name has nowhere to show.
+   */
+  async #projectToolChat(
+    p: DelegateParams,
+    grants: DelegationGrants,
+    session: DelegationSession,
+  ): Promise<string | undefined> {
+    const seat = projectToolSeat(p, session);
+    if (seat === ProjectToolSeat.Chat) return p.threadId;
+    if (seat !== ProjectToolSeat.Lead || !grants.director) return undefined;
+    return (await this.#runChat(p.project, grants.director.runId)) ?? undefined;
+  }
+
+  /**
+   * The Unreal lead's connector call carries its run's consent, asked only once nothing else settled
+   * the call, and only when the delegation names the chat the run was started in: that chat's Plan
+   * mode is what refuses the call first.
+   */
+  #runConsentFor(
+    name: string,
+    p: DelegateParams,
+    session: DelegationSession,
+  ): Pick<ConnectorCallOptions, "runConsent"> {
+    const runId = session.liveRun;
+    const threadId = p.threadId;
+    return runId && threadId ? { runConsent: () => this.#runConsents(name, p.project, threadId, runId) } : {};
+  }
+
+  /**
+   * The run-consent rule: the Unreal lead's call needs no card while its run is going (held awake
+   * by the harness, and running by its records), the run is this game's and was started in the chat
+   * the delegation names (`#runOfChat`), and the connector is the game's engine plugin's. That
+   * chat's Plan mode refuses before this.
+   */
+  async #runConsents(name: string, project: string, threadId: string, runId: string): Promise<boolean> {
+    if (!this.#x.activeRunIds.has(runId)) return false;
+    if (!(await this.#enginePluginConnector(name, project))) return false;
+    if (!(await this.#runOfChat(project, threadId, runId))) return false;
+    const runs = await this.#core.activityItems();
+    return runs.some((item) => item.runId === runId && item.runOutcome?.state === ExecutionStatus.Running);
+  }
+
+  /**
+   * Whether a connector is the game's engine plugin's: a plugin that links games to an engine
+   * (`game-engine`) and holds the game's current link, the one its studio.json mirrors. A web game
+   * has none; a user's connector, another plugin's and another engine plugin's are never it.
+   */
+  async #enginePluginConnector(name: string, project: string): Promise<boolean> {
+    const owner = this.#core.mcp.ownerOf(name.slice(0, Math.max(0, name.indexOf("__"))));
+    const manifest = this.#core.plugins.list().find((p) => p.manifest.id === owner)?.manifest;
+    if (!owner || !manifest?.capabilities.includes(PluginCapability.GameEngine)) return false;
+    const directory = this.#core.games.dirFor(project);
+    const bound = await readEngineBinding(directory).catch(() => undefined);
+    if (!bound) return false;
+    const link = await this.#core.engineLinks.read(owner, { project, directory }).catch(() => null);
+    return link?.project === bound.project;
   }
 
   /**
@@ -1504,6 +2277,11 @@ export class DelegationService {
     const { sessionId } = result;
     if (session.hostTools && sessionId)
       await this.#x.recordDeliveredTools(session.threadId, engineId, sessionId, tools.applied);
+    // A session that failed may never have read its brief: its cut-off calls are named again.
+    if (result.ok) {
+      clearCutOffs(this.#x.cutOffCalls, p.threadId, tools.cutOffs);
+      clearUnsaved(this.#x.unsavedFiles, p.threadId, tools.unsaved);
+    }
     const resumable = threadId && sessionId && (isChatsOwnSession(p) || session.chatLead);
     if (resumable) {
       await this.rememberContractor(threadId, {
@@ -1541,14 +2319,143 @@ interface CheckedGameFile {
   outside: () => Error;
 }
 
+/** A session's tools before they are prepared: the plugins of the snapshot it began with, and nothing else yet. */
+function sessionTools(plugins: Pick<PluginSnapshot, "tools" | "guidance" | "applied">): SessionTools {
+  return {
+    cover: [],
+    project: [],
+    workers: [],
+    jobs: [],
+    jobReach: null,
+    jobNews: { notice: "", told: [] },
+    look: [],
+    lookCaller: null,
+    mcp: [],
+    plugins: plugins.tools,
+    pluginGuidance: plugins.guidance,
+    applied: plugins.applied,
+    withdrawn: null,
+    cutOffs: [],
+    unsaved: [],
+    capabilityFacts: "",
+    builder: null,
+    playtest: null,
+    director: null,
+  };
+}
+
+/**
+ * The lock's entry for a session: what Stop, a steer and the worker ceiling find it by, and the
+ * worker id its grant named (`askedWorker`), honoured or not.
+ */
+function activeDelegation(
+  project: string,
+  engine: string,
+  session: DelegationSession,
+  askedWorker: unknown,
+): ActiveDelegation {
+  const { worker } = session;
+  return {
+    project,
+    threadId: session.threadId,
+    engine,
+    startedAt: Date.now(),
+    abort: session.abort,
+    ...(session.chatTurn ? { chatTurn: session.chatTurn } : {}),
+    ...(session.door ? { steer: session.door } : {}),
+    ...(worker ? { worker: { id: worker.id, chatThreadId: worker.chatThreadId } } : {}),
+    ...(typeof askedWorker === "string" && askedWorker ? { askedWorker } : {}),
+  };
+}
+
+/** Whether a session may be offered the host tool `name`: every one, unless a sub-agent's allowlist narrows it. */
+/** Whether a connector tool is one the session was handed when its tools were prepared. */
+function handed(session: Pick<DelegationSession, "offered">, tools: Pick<SessionTools, "mcp">, name: string): boolean {
+  return offers(session, name) && tools.mcp.some((tool) => tool.name === name);
+}
+
+function offers(session: Pick<DelegationSession, "offered">, name: string): boolean {
+  return session.offered === null || session.offered(name);
+}
+
+/**
+ * Genex's project tools for this session (`projectTools`), by its seat (`projectToolSeat`). A plugin
+ * tool of the same name would be called in their place: refused, as a cover's name is.
+ */
+function offerProjectTools(p: DelegateParams, session: DelegationSession, tools: SessionTools): void {
+  const seat = projectToolSeat(p, session);
+  // A worker's seat decides its project tools (it may look for a plugin), whatever plugin tools its
+  // type narrows it to (`toolAllow`); every other seat is narrowed as its plugin tools are.
+  const offered = projectTools(session, seat);
+  tools.project = seat === ProjectToolSeat.Worker ? offered : offered.filter((tool) => offers(session, tool.name));
+  const taken = tools.plugins.find((plugin) => tools.project.some((tool) => tool.name === plugin.name));
+  if (taken) throw new Error(MESSAGE.toolCollision(taken.name));
+}
+
+/**
+ * Where a session sits for Genex's project tools: a worker the host seated (`#workerSeat`), a run's
+ * lead (an honoured director grant: the director, the Unreal Loop's lead, a lead that is its chat's
+ * own session), the chat's own session, or none of them.
+ */
+function projectToolSeat(p: DelegateParams, session: Pick<DelegationSession, "leadTurn" | "worker">): ProjectToolSeat {
+  if (session.worker) return ProjectToolSeat.Worker;
+  if (session.leadTurn) return ProjectToolSeat.Lead;
+  return chatsOwnSession(p, session) ? ProjectToolSeat.Chat : ProjectToolSeat.None;
+}
+
+/** Whose a worker's jobs are: its chat's, for its run, or for the chat turn that started it; null for neither. */
+function workerJobOwner(project: string, found: WorkerFinding): JobOwner | null {
+  const worker = { id: found.id, title: found.title };
+  const base = { project, chatThreadId: found.chatThreadId, role: JobRole.Worker, worker };
+  if (found.runId) return { ...base, scope: { kind: JobScopeKind.Run, runId: found.runId } };
+  return found.turn ? { ...base, scope: { kind: JobScopeKind.Turn, turn: found.turn } } : null;
+}
+
+/** The chat's own session, as its brief and its seat read: no narrower job, no lead's turn. */
+function chatsOwnSession(p: DelegateParams, session: Pick<DelegationSession, "leadTurn">): boolean {
+  return !unattendedBrief(p) && !session.leadTurn && isChatsOwnSession(p);
+}
+
 /** A plugin tool named like one of the run's controls would be called in its place: refused, as a cover's name is. */
 function assertRunControlsFree(tools: SessionTools): void {
   const taken = tools.plugins.find((tool) => isRunControl(tool.name));
   if (taken) throw new Error(MESSAGE.toolCollision(taken.name));
 }
 
-/** How the session asks, if it does: the chat's own session's permissions, or a lead's or coordinator's. */
-function askFields({ person, lead }: SessionReach): Partial<DelegateRequest> {
+/**
+ * A director without a window — an Unreal game's, the Unreal Loop's lead, which works in the
+ * visible Unreal editor through its game's engine connector: only the run tools it was handed, each
+ * answered by the harness. No computer, `look` or capture; any other name is refused, never forwarded.
+ */
+function runToolsOnly(
+  forwarded: LiveTool[],
+  forward: (name: string, args: Record<string, unknown>) => Promise<LiveToolResult>,
+): DirectorTools {
+  const names = new Set(forwarded.map((tool) => tool.name));
+  const onLiveTool: OnLiveTool = async (name, args) => {
+    if (!names.has(name)) throw new Error(MESSAGE.unknownTool(name));
+    return forward(name, args);
+  };
+  return { liveTools: forwarded, onLiveTool };
+}
+
+/**
+ * The run a session's connector call works for (a run's worker or sub-agent, the Unreal Loop's
+ * lead): the call answers to the chat that run was started in.
+ */
+function callRunField(
+  session: Pick<DelegationSession, "attribution" | "liveRun" | "worker">,
+): Pick<ConnectorCallOptions, "runId"> {
+  const runId = session.attribution?.runId ?? session.worker?.runId ?? session.liveRun;
+  return runId ? { runId } : {};
+}
+
+/**
+ * How the session asks, if it does: the chat's own session's permissions, a lead's or coordinator's,
+ * or a worker's seat in the chat's mode.
+ */
+function askFields({ person, lead, worker }: SessionReach): Partial<DelegateRequest> {
+  if (worker) return { worker };
   if (person) return { permissions: person.request };
   return lead ? { leadAsks: lead.request } : {};
 }

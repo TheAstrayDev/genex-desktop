@@ -11,10 +11,10 @@ import { Icon } from "../ui/icons.tsx";
 import { AnimateHeight } from "../ui/animate-height.tsx";
 import { Presence } from "../ui/Presence.tsx";
 import { SignInCard } from "../ui/SignInCard.tsx";
-import { CHAT_WORDS, consentNeededWords } from "../words.ts";
+import { CHAT_WORDS, CONSENT_CHOICE_WORDS, consentNeededWords } from "../words.ts";
 import { EntryKind } from "../chat-entries.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
-import { ChatQuestion } from "./ChatQuestion.tsx";
+import { type ChatChoice, ChatQuestion } from "./ChatQuestion.tsx";
 import { ExportReview } from "./ExportReview.tsx";
 import { PermissionRequest } from "./PermissionRequest.tsx";
 import { PlanQuestion } from "./PlanQuestion.tsx";
@@ -34,7 +34,30 @@ export interface PlanPrompt {
   onRevise: () => void;
 }
 
-/** A plugin's permission request: Approve or Decline, with the request itself under Request details. */
+/** The consent card's answers, as `ChatQuestion` choice ids. */
+const ConsentChoice = { Once: "once", Always: "always", Decline: "decline" } as const;
+
+/** The choices a consent card offers: Always allow only on a connector's, for that exact tool. */
+function consentChoices(entry: Omit<Consent, "consentId" | "permission">): ChatChoice[] {
+  const always = entry.consentAlwaysOffered
+    ? [
+        {
+          id: ConsentChoice.Always,
+          ...CONSENT_CHOICE_WORDS.always(entry.consentTool ?? "", entry.consentSource ?? ""),
+        },
+      ]
+    : [];
+  return [
+    { id: ConsentChoice.Once, ...CONSENT_CHOICE_WORDS.once },
+    ...always,
+    { id: ConsentChoice.Decline, ...CONSENT_CHOICE_WORDS.decline },
+  ];
+}
+
+/**
+ * A plugin's or connector's permission request: Allow once, Always allow (a connector's only) or
+ * Don't allow, with the request itself under Request details.
+ */
 function ConsentCard({
   consentId,
   entry,
@@ -42,18 +65,16 @@ function ConsentCard({
 }: {
   consentId: string;
   entry: Omit<Consent, "consentId" | "permission">;
-  onConsent: (consentId: string, approved: boolean) => Promise<void>;
+  onConsent: (consentId: string, approved: boolean, always: boolean) => Promise<void>;
 }): JSX.Element {
+  const subtitle = entry.consentAction ?? (entry.consentPrompt ? entry.consentSource : undefined);
   return (
     <ChatQuestion
       title={entry.consentPrompt || consentNeededWords(entry.consentSource)}
-      description={entry.consentPrompt ? entry.consentSource : undefined}
+      description={subtitle}
       reopenLabel="Review permission request"
-      choices={[
-        { id: "approve", label: "Approve", description: "Allow this action once." },
-        { id: "decline", label: "Decline", description: "Continue without this action." },
-      ]}
-      onConfirm={(choice) => onConsent(consentId, choice === "approve")}
+      choices={consentChoices(entry)}
+      onConfirm={(choice) => onConsent(consentId, choice !== ConsentChoice.Decline, choice === ConsentChoice.Always)}
     >
       {entry.consentExport && <ExportReview review={entry.consentExport} />}
       <details className="group/request mt-2">
@@ -88,12 +109,14 @@ interface ComposerDockProps {
   plan: PlanPrompt | null;
   /** Plugins' permission requests that are still waiting. */
   consents: Consent[];
-  onConsent: (consentId: string, approved: boolean) => Promise<void>;
+  onConsent: (consentId: string, approved: boolean, always: boolean) => Promise<void>;
   /** Claude's own permission requests (and plans to approve) that are still waiting. */
   permissions: Consent[];
   onPermission: (requestId: string, answer: ToolPermissionAnswer) => Promise<void>;
   /** The modes a plan card offers to continue in: the chat's engine's, without an Auto its model cannot use. */
   planModes: readonly PermissionMode[];
+  /** A quiet card an engine plugin offers (its steps), shown while nothing else waits on the user. */
+  steps?: ReactNode;
   children: ReactNode;
 }
 
@@ -198,6 +221,7 @@ function WaitingCards({ cards, still }: { cards: DockCard[]; still: boolean }): 
 
 export function ComposerDock(props: ComposerDockProps): JSX.Element {
   const { connectModel, signIn, children } = props;
+  const cards = waitingCards(props);
   return (
     <div data-chat-composer className="max-h-full min-w-0 shrink-0 overflow-y-auto px-3.5 pb-3.5">
       {connectModel && (
@@ -209,7 +233,8 @@ export function ComposerDock(props: ComposerDockProps): JSX.Element {
         </div>
       )}
       {signIn ? <SignInCard {...signIn} /> : null}
-      <WaitingCards key={props.conversationKey} cards={waitingCards(props)} still={Boolean(props.loading)} />
+      <WaitingCards key={props.conversationKey} cards={cards} still={Boolean(props.loading)} />
+      {cards.length === 0 && !signIn ? props.steps : null}
       {children}
     </div>
   );

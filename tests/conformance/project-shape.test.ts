@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -23,6 +23,7 @@ import {
   studioContractGeneration,
 } from "../../src/substrate/game-workspace.ts";
 import { bootBudget } from "../../src/substrate/preview-ready.ts";
+import { webGameSignal } from "../../src/substrate/project-shape.ts";
 import { ensureRepo, git } from "../../src/substrate/snapshots.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import {
@@ -840,7 +841,8 @@ describe("a project's own shape", () => {
     const template = buildContractorBrief({ ask: "a pong game", scaffolded: true });
     assert.match(template, /When you build, follow CLAUDE\.md in the workspace root/);
     assert.match(template, /assets come from procedural code, imports, or the currently enabled plugin tools/);
-    assert.doesNotMatch(template, /Genex|blender__/, "disabled plugin tools are not injected by core briefs");
+    // The brief names Genex, the app it runs in (its identity line); never a disabled plugin's tools.
+    assert.doesNotMatch(template, /genex__|blender__/, "disabled plugin tools are not injected by core briefs");
     assert.ok(!/entry is/.test(template), template.slice(0, 400));
     // Both keep the rules that are about the studio, not about the game.
     for (const brief of [own, template]) assert.match(brief, /\.studio\/ \(gitignored\)/);
@@ -1271,12 +1273,9 @@ describe("the Open Game sheet", () => {
     const { games, base } = await workspaces();
     const fresh = path.join(base, "fresh");
     await mkdir(fresh, { recursive: true });
+    // An empty folder starts with no kind: it is promised Genex's bookkeeping and no starter.
     const promised = await games.plannedWrites(fresh);
-    assert.ok(promised.includes("index.html") && promised.includes("src/main.js"), promised.join(", "));
-    assert.ok(
-      promised.includes("studio.json") && promised.includes(".gitignore") && promised.includes(".git"),
-      promised.join(", "),
-    );
+    assert.deepEqual(promised, ["studio.json", ".gitignore", ".git"]);
     const before = await filesIn(fresh);
     await games.adopt(fresh);
     assert.deepEqual(added(before, await filesIn(fresh)), [...promised].sort(), "the sheet's list is what landed");
@@ -1310,6 +1309,156 @@ describe("the Open Game sheet", () => {
     const merged = JSON.parse(await readFile(path.join(noted, "studio.json"), "utf8")) as Record<string, unknown>;
     assert.equal(merged.note, "mine", "what the folder wrote is kept");
     assert.equal(merged.main, "src/main.ts");
+  });
+
+  it("a folder with files of its own and no web page is promised, and given, only Genex's bookkeeping", async () => {
+    const { games, base } = await workspaces();
+    const godotFolder = async (dir: string) => {
+      await mkdir(path.join(dir, "scripts"), { recursive: true });
+      await writeFile(path.join(dir, "project.godot"), '[application]\nconfig/name="Lantern"\n');
+      await writeFile(path.join(dir, "scripts", "player.gd"), "extends CharacterBody3D\n");
+    };
+    const godot = path.join(base, "godot-game");
+    await godotFolder(godot);
+    assert.deepEqual(await games.plannedWrites(godot), ["studio.json", ".gitignore", ".git"]);
+    const inspection = await games.inspect(godot);
+    assert.equal(inspection.ownFiles, true);
+    assert.deepEqual(inspection.starter, ["studio.json", ".gitignore", ".git"]);
+    const [row] = openOptions(inspection);
+    assert.equal(row?.button, "Open this folder");
+    assert.deepEqual(row?.choice, {});
+    const before = await filesIn(godot);
+    await games.adopt(godot);
+    assert.deepEqual(added(before, await filesIn(godot)), [".git", ".gitignore", "studio.json"]);
+    const meta = JSON.parse(await readFile(path.join(godot, "studio.json"), "utf8")) as Record<string, unknown>;
+    assert.equal(meta.contractVersion, undefined, "no web starter's stamp");
+    // Opened again, it still adds nothing and still offers to open the folder as it is.
+    const again = openOptions(await games.inspect(godot));
+    assert.deepEqual(
+      again.map((option) => [option.button, option.writes]),
+      [["Open this folder", []]],
+    );
+
+    // A folder with nothing of its own starts with no kind too: an empty one with only the Mac's
+    // own file and a repository, and one with only the notes and stills gathered before any game.
+    // Neither is promised a starter, and neither is said to hold files of its own.
+    const blank = path.join(base, "blank");
+    await mkdir(path.join(blank, ".git"), { recursive: true });
+    await writeFile(path.join(blank, ".DS_Store"), "");
+    const notes = path.join(base, "notes-only");
+    await mkdir(path.join(notes, "references"), { recursive: true });
+    await writeFile(path.join(notes, "notes.txt"), "a racing game\n");
+    await writeFile(path.join(notes, "README.md"), "# Ideas\n");
+    await writeFile(path.join(notes, "references", "mood.png"), "png");
+    for (const dir of [blank, notes]) {
+      assert.equal((await games.plannedWrites(dir)).includes("index.html"), false, dir);
+      assert.equal((await games.inspect(dir)).ownFiles, false, dir);
+    }
+
+    // Asking for the starter still writes it.
+    const asked = path.join(base, "godot-with-starter");
+    await godotFolder(asked);
+    assert.ok((await games.plannedWrites(asked, { template: true })).includes("index.html"));
+    await games.adopt(asked, { template: true });
+    assert.ok(await stat(path.join(asked, "index.html")), "the starter was written");
+  });
+
+  it("promises the ignore file when only a fact's rules are missing", async () => {
+    const { games, base } = await workspaces();
+    const godot = path.join(base, "godot-ignored");
+    await mkdir(godot, { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), '[application]\nconfig/name="Lantern"\n');
+    const generic = [".studio/", "node_modules", ".git.studio-backup", "dist/", "output/", ".env", ".playwright-cli/"];
+    await writeFile(path.join(godot, ".gitignore"), `${generic.join("\n")}\n`);
+    assert.ok((await games.plannedWrites(godot)).includes(".gitignore"), "the Godot rules are a promise");
+    await games.adopt(godot);
+    const lines = (await readFile(path.join(godot, ".gitignore"), "utf8")).split("\n").filter(Boolean);
+    assert.equal(lines.at(-1), "/.godot/");
+    assert.ok(!(await games.plannedWrites(godot)).includes(".gitignore"), "nothing left to add");
+  });
+
+  it("never promises an ignore file that is a link, and adoption leaves the link and what it names alone", async () => {
+    const { games, base } = await workspaces();
+    const godot = path.join(base, "godot-linked-ignore");
+    await mkdir(godot, { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), '[application]\nconfig/name="Lantern"\n');
+    const outside = path.join(base, "outside-rules");
+    const text = "# someone else's rules\n";
+    await writeFile(outside, text);
+    await symlink(outside, path.join(godot, ".gitignore"));
+    assert.ok(!(await games.plannedWrites(godot)).includes(".gitignore"), "a linked ignore file is no promise");
+    await games.adopt(godot);
+    assert.equal(await readFile(outside, "utf8"), text, "the file the link names is byte-identical");
+    assert.ok((await lstat(path.join(godot, ".gitignore"))).isSymbolicLink(), "the link is still a link");
+  });
+
+  it("a folder of its own whose studio.json can't be parsed is refused before any write, even with consent to version it", async () => {
+    const { games, base } = await workspaces();
+    const godot = path.join(base, "broken-meta");
+    await mkdir(path.join(godot, "addons", "dialogue", ".git"), { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), "[application]\n");
+    await writeFile(path.join(godot, "addons", "dialogue", "plugin.cfg"), "[plugin]\n");
+    await writeFile(path.join(godot, "studio.json"), "{");
+    const before = await filesIn(godot);
+    await assert.rejects(games.adopt(godot, { versionNested: true }));
+    assert.deepEqual(await filesIn(godot), before, "no .gitignore, no .git, no studio.json rewritten");
+    assert.equal(await readFile(path.join(godot, "studio.json"), "utf8"), "{");
+  });
+
+  it("a game knows whether its folder is a web game", async () => {
+    const { games, base } = await workspaces();
+    await games.scaffold("starter-game");
+    const vite = path.join(base, "vite-game");
+    await viteFolder(vite);
+    const viteGame = await games.adopt(vite);
+    const godot = path.join(base, "godot-game");
+    await mkdir(godot, { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), "[application]\n");
+    const godotGame = await games.adopt(godot);
+    const web = new Map((await games.list()).map((game) => [game.name, game.web]));
+    assert.deepEqual([web.get("starter-game"), web.get(viteGame.name), web.get(godotGame.name)], [true, true, false]);
+  });
+
+  it("a folder is a web game by its page or by the web starter's numeric stamp, and a broken studio.json is not one", async () => {
+    const { games, base } = await workspaces();
+    const rows: Array<[string, Record<string, string>, boolean]> = [
+      ["a page only", { "index.html": "<canvas></canvas>\n" }, true],
+      ["the starter's stamp with no page", { "src/main.js": "go();\n", "studio.json": '{"contractVersion":1}' }, true],
+      ["the stamp as text", { "src/main.js": "go();\n", "studio.json": '{"contractVersion":"1"}' }, false],
+      ["a studio.json that is not JSON", { "src/main.js": "go();\n", "studio.json": "{" }, false],
+      ["nothing at all", {}, false],
+    ];
+    for (const [label, files, web] of rows) {
+      const dir = path.join(base, label.replaceAll(" ", "-").replaceAll("'", ""));
+      await mkdir(dir, { recursive: true });
+      for (const [rel, text] of Object.entries(files)) {
+        await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+        await writeFile(path.join(dir, rel), text);
+      }
+      assert.equal(await webGameSignal(dir), web, label);
+      // Files of its own and no web page: a web game (by its page or its stamp) is not one.
+      const ownFiles = !web && Object.keys(files).length > 0;
+      assert.equal((await games.inspect(dir)).ownFiles, ownFiles, label);
+    }
+  });
+
+  it("the sheet's row for a web starter's folder with no page says the starter's files are added, as its writes do", async () => {
+    const { games, base } = await workspaces();
+    const dir = path.join(base, "stamped");
+    await mkdir(path.join(dir, "src"), { recursive: true });
+    await writeFile(path.join(dir, "src", "main.js"), "go();\n");
+    await writeFile(path.join(dir, "studio.json"), '{"contractVersion":1}');
+    const inspection = await games.inspect(dir);
+    assert.equal(inspection.ownFiles, false, "a web game by its stamp");
+    const row = openOptions(inspection).find((option) => option.id === ".");
+    assert.ok(row, "a row for the folder");
+    assert.ok(row.writes.includes("index.html"), "the starter's page is written");
+    assert.doesNotMatch(
+      `${row.headline} ${row.detail}`,
+      /no starter|empty/,
+      "never said to stay empty or get no starter",
+    );
+    assert.match(row.detail, /starter/);
   });
 
   it("writes a .gitignore before it makes the repo, so the first commit is the game and not its packages, output or secrets", async () => {
@@ -1390,7 +1539,8 @@ describe("the Open Game sheet", () => {
       "nothing was written around it",
     );
 
-    // Keeping the parent is the other answer, and it adds the studio's files without a game.
+    // Keeping the parent is the other answer: a folder of its own with no web page at its root,
+    // so it gets only Genex's bookkeeping, and no game or contract module beside the real one.
     const keptBefore = (await filesIn(parent)).filter((file) => !file.startsWith("wreckage"));
     await games.adopt(parent, { template: false });
     const keptAfter = (await filesIn(parent)).filter((file) => !file.startsWith("wreckage"));
@@ -1400,7 +1550,7 @@ describe("the Open Game sheet", () => {
       null,
       "no second game beside the real one",
     );
-    assert.match(await readFile(path.join(parent, "src", "studio.js"), "utf8"), /installStudio/);
+    assert.deepEqual(added(keptBefore, keptAfter), [".git", ".gitignore", "studio.json"]);
     // A path is never walked: only a folder the inspection listed can be opened.
     await assert.rejects(games.adopt(parent, { subdir: "../elsewhere" }), /not a path/);
     await assert.rejects(games.adopt(parent, { subdir: "nowhere" }), /there is no "nowhere" folder/);
@@ -1469,11 +1619,7 @@ describe("the Open Game sheet", () => {
     const written = added(before, await filesIn(parent));
     assert.deepEqual(written, [...row.writes].sort(), "the sheet's list is what landed");
     assert.equal(await games.nestedConsent(parent), true);
-    assert.match(
-      await readFile(path.join(parent, "src", "studio.js"), "utf8"),
-      /installStudio/,
-      "the contract module is still added",
-    );
+    assert.deepEqual(written, [".git", ".gitignore", "studio.json"], "only Genex's bookkeeping, no contract module");
   });
 
   it("offers the nested game first, the folder second, and a compiled export only to play", async () => {
@@ -1534,7 +1680,7 @@ describe("the Open Game sheet", () => {
       ["Start a game here"],
     );
     assert.deepEqual(alone[0]!.choice, {});
-    assert.ok(alone[0]!.writes.includes("index.html"));
+    assert.deepEqual(alone[0]!.writes, ["studio.json", ".gitignore", ".git"], "an empty folder gets no starter");
 
     const godot = path.join(base, "godot");
     await mkdir(godot, { recursive: true });
@@ -1694,7 +1840,7 @@ describe("the contract upgrade", () => {
     const rig = await startRig();
     rigs.push(rig);
     const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
-    await api["game.scaffold"]!({ name: "aged", title: "Aged" } as never);
+    await api["game.scaffold"]!({ name: "aged", title: "Aged", kind: "web" } as never);
     const dir = path.join(rig.core.layout.gamesRoot, "aged");
     const studio = path.join(dir, "src", "studio.js");
 

@@ -444,7 +444,8 @@ it("a consent question expires, and Stop or the end of a turn withdraws it", asy
     });
     assert.equal(result.consent, "declined");
     assert.equal(result.by, "timeout");
-    assert.match(String(result.message), /Ask the user/);
+    // Flipped: nobody answering is not a no; the agent carries on and asks again later.
+    assert.match(String(result.message), /not a no: carry on with other work and ask again later/);
     assert.equal(
       customEvents(await quick.core.listAllEvents(), "plugin_consent").filter(
         (p) => p.state === "declined" && p.by === "timeout",

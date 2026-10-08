@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { LoopSetting } from "../loop-setting.ts";
+import { DONT_WAIT_WORDS, UNREAL_WORDS } from "../words.ts";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover.tsx";
-import { PickerCaption, PickerSegmented, pickerItem } from "./PickerPanel.tsx";
+import { PickerCaption, PickerSegmented, PickerSeparator, PickerSwitch, pickerItem } from "./PickerPanel.tsx";
 import { Icon } from "./icons.tsx";
 import {
   formatDuration,
@@ -115,18 +116,107 @@ function CustomLimit({
   );
 }
 
+/** The Loop's segments: Off, ∞, the presets and Custom. While the game can't run a Loop, only Off can be picked. */
+function loopOptions(unavailable: boolean) {
+  const loop = { disabled: unavailable };
+  return [
+    { value: LoopChoice.Off, label: "Off" },
+    {
+      value: LoopChoice.UntilSatisfied,
+      // The prompt bar's own ∞, which mono would draw flat; the hidden ∞ is its text.
+      label: (
+        <>
+          <Icon name="infinity" />
+          <span className="sr-only">∞</span>
+        </>
+      ),
+      title: "Until the build passes",
+      ...loop,
+    },
+    { value: "0.5" as const, label: "30 m", ...loop },
+    { value: "1" as const, label: "1 h", ...loop },
+    { value: "2" as const, label: "2 h", ...loop },
+    { value: LoopChoice.Custom, label: "Custom", ...loop },
+  ];
+}
+
+/**
+ * "Don't wait for me" while the Loop is on: the chat's setting, read each time the menu opens, for
+ * the run going now or the chat's next run. Only the person's switch here (or their click on an
+ * agent's card) changes it; the host keeps it.
+ */
+function DontWaitRow({ threadId }: { threadId: string }) {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(true);
+  const id = useId();
+  useEffect(() => {
+    let open = true;
+    // Through a promise, so a window without the call (an older preload) leaves the switch off, never broken.
+    void Promise.resolve()
+      .then(() => window.studio.dontWaitState(threadId))
+      .then(
+        (state) => open && setOn(state.on),
+        () => undefined,
+      )
+      .finally(() => open && setBusy(false));
+    return () => {
+      open = false;
+    };
+  }, [threadId]);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    void Promise.resolve()
+      .then(() => window.studio.setDontWait(threadId, next))
+      .then(
+        (state) => setOn(state.on),
+        () => undefined,
+      )
+      .finally(() => setBusy(false));
+  };
+  const described = `${id}-description`;
+  return (
+    <div className={pickerItem} data-dont-wait-row>
+      <label htmlFor={id} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 self-stretch">
+        <span className="shrink-0">{DONT_WAIT_WORDS.label}</span>
+        <span id={described} className="picker-desc" title={DONT_WAIT_WORDS.description}>
+          {DONT_WAIT_WORDS.description}
+        </span>
+      </label>
+      <PickerSwitch
+        id={id}
+        checked={on}
+        disabled={busy}
+        label={DONT_WAIT_WORDS.label}
+        describedBy={described}
+        onChange={toggle}
+      />
+    </div>
+  );
+}
+
 /**
  * One Loop control: Off, until the build passes, a preset or a custom time. Without `onChange` the
- * Loop is shown, not changed (a build already owns it). Plan mode lives in Add (`ComposerAddMenu`).
+ * Loop is shown, not changed (a build already owns it). With `loopUnavailable` (an Unreal game
+ * until the Unreal Loop exists) it shows Off, offers Off alone and says why. Plan mode lives in
+ * Add (`ComposerAddMenu`). With `dontWaitThread`, while the Loop is on, it also holds the chat's
+ * "Don't wait for me" switch.
  */
 export function ComposerModeMenu({
   value,
   onChange,
   disabled,
+  loopUnavailable = false,
+  unavailableWhy,
+  dontWaitThread,
 }: {
   value: LoopSetting;
   onChange?: (next: LoopSetting) => void;
   disabled?: boolean;
+  loopUnavailable?: boolean;
+  /** Why there is no Loop, when the game can say (its project and where it is). */
+  unavailableWhy?: string;
+  /** The game chat whose "Don't wait for me" the menu switches while the Loop is on. */
+  dontWaitThread?: string;
 }) {
   const { on: loopOn, hours } = value;
   const timed = hours !== null;
@@ -136,6 +226,8 @@ export function ComposerModeMenu({
   const minutes = timed ? Math.round(hours * MINUTES_PER_HOUR) : null;
   // One setting per pick: two setters in a row would lose the first to a stale closure.
   const pick = (next: Choice) => {
+    // Off is already the Loop shown, and a pick would overwrite the one the chat keeps for later.
+    if (loopUnavailable) return;
     setDraft(null);
     setCustom(next === LoopChoice.Custom);
     onChange?.(chosenLoop(next, value));
@@ -198,24 +290,7 @@ export function ComposerModeMenu({
               label="Loop time limit"
               value={choice}
               onChange={pick}
-              options={[
-                { value: LoopChoice.Off, label: "Off" },
-                {
-                  value: LoopChoice.UntilSatisfied,
-                  // The prompt bar's own ∞, which mono would draw flat; the hidden ∞ is its text.
-                  label: (
-                    <>
-                      <Icon name="infinity" />
-                      <span className="sr-only">∞</span>
-                    </>
-                  ),
-                  title: "Until the build passes",
-                },
-                { value: "0.5", label: "30 m" },
-                { value: "1", label: "1 h" },
-                { value: "2", label: "2 h" },
-                { value: LoopChoice.Custom, label: "Custom" },
-              ]}
+              options={loopOptions(loopUnavailable)}
             />
           )}
           {onChange && customLimit !== null && (
@@ -227,8 +302,16 @@ export function ComposerModeMenu({
               onMinutes={setMinutes}
             />
           )}
-          <PickerCaption>{caption}</PickerCaption>
+          <PickerCaption>
+            {loopUnavailable ? (unavailableWhy ?? UNREAL_WORDS.loopUnavailable(null, "")) : caption}
+          </PickerCaption>
         </div>
+        {loopOn && !loopUnavailable && dontWaitThread && (
+          <>
+            <PickerSeparator />
+            <DontWaitRow threadId={dontWaitThread} />
+          </>
+        )}
       </PopoverContent>
     </Popover>
   );

@@ -57,6 +57,9 @@ import {
 } from "./rules.ts";
 import { planHeldWords, planSetWords, WAKE_START_NEXT } from "./wake-prompts.ts";
 import { NoteKind } from "./wake-schedule.ts";
+import { runIdentity } from "../workers/identity.ts";
+import { stoppableRoomClock, withWorkerRoom } from "../workers/room.ts";
+import { briefOf } from "../workers/director-pool.ts";
 import type { Night, StartingWorker, Worker } from "./night.ts";
 import type { FacetSpec } from "../spec.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
@@ -467,7 +470,7 @@ export async function holdForPlanReview(night: Night, id: string): Promise<strin
   if (held.reason === PlanHold.Answered) return planAnswered(night, id, held.said);
   if (held.reason === PlanHold.Slice && waking) return planHeldWords(id, state.planReviewUntil, Date.now());
   if (held.reason === PlanHold.Slice) {
-    return `the user asked to read the plan first and has not answered yet; the studio waits ${minutes(state.planReviewUntil - Date.now())} more minutes and then builds it as it stands. Call wait, then start "${id}" again.`;
+    return `the user asked to read the plan first and has not answered yet; the studio waits ${minutes(state.planReviewUntil - Date.now())} more minutes and then builds it as it stands. Call worker_wait, then start "${id}" again.`;
   }
   await planGoes(night, held.go);
   return null;
@@ -1086,7 +1089,7 @@ function startAnswer(worker: Worker, { budgetMs, roundWarning, policySpec, dirty
     ...(policySpec.warnings.length ? { policyWarnings: policySpec.warnings } : {}),
     ...(worker.mode === WorkerMode.Loop ? loopStartFields(worker) : {}),
     ...(dirty ? { note: lead ? LEAD_START_DIRTY : START_DIRTY } : {}),
-    next: waking ? WAKE_START_NEXT : "wait, or start another worker; worker_status for detail",
+    next: waking ? WAKE_START_NEXT : "worker_wait, or start another worker; worker_status for detail",
   });
 }
 
@@ -1100,7 +1103,7 @@ async function startPreconditions(night: Night, id: string, args: AnyRecord): Pr
   if (state.workers.has(id)) return `worker "${id}" already exists (${state.workers.get(id)?.state}); pick another id`;
   const buried = priorIdRefusal(night, id, slug(args.from));
   if (buried) return buried;
-  if (!String(args.brief ?? "").trim()) return "a worker needs a brief";
+  if (!briefOf(args)) return "a worker needs a brief (task)";
   if (!state.plan) {
     return `call plan first: the user must be able to read what this run is for before a builder starts. plan takes a summary in plain words and the parts you mean to hand out (id, title, seam, owns, done, minutes) — then start "${id}".`;
   }
@@ -1154,7 +1157,7 @@ export async function startWorker(night: Night, args: AnyRecord) {
     id,
     args,
     mode,
-    brief: String(args.brief ?? "").trim(),
+    brief: briefOf(args),
     owns: list(args.owns),
     ownsMain,
     cameras: list(args.cameras),
@@ -1303,6 +1306,11 @@ async function runLoopWorker(night: Night, worker: Worker): Promise<void> {
     // finished a round of its own and can measure itself.
     minIterationMs: medianRoundMs(),
     policy: worker.policy,
+    // A worker of the run: its build turns carry the grant (`worker: {`), so the host seats them in
+    // the mode of the chat the run was started in.
+    worker: workerGrant(night, worker),
+    // Genex's identity opens each fresh build session: the game's folder and what it holds.
+    identity: runIdentity(night),
     // The director's window into the machinery deciding its worker's night (M4.10). The
     // note only fires on a transition, so the lead is woken on what changed and on nothing else.
     onLoopState: (loop: AnyRecord) => {
@@ -1388,33 +1396,54 @@ function workerLimitOf(err: any, engine: string): AnyRecord {
   };
 }
 
-/** One turn of a single-session worker: its brief (or a steer) delegated to the builder's engine. */
+/**
+ * One turn of a single-session worker: its brief (or a steer) delegated to the builder's engine. A
+ * turn the chat's Settings ceiling has no room for yet waits for room until the worker's deadline
+ * (`withWorkerRoom`), unless the run or the worker is stopped meanwhile.
+ */
 function delegateSingle(night: Night, worker: Worker, prompt: string, resume: string | null): Promise<AnyRecord> {
+  const { ctx } = night;
+  // A stop the director asked for ends the wait too: the worker never takes the turn it waited for.
+  const stopped = () => Boolean(ctx.cancelled) || worker.stopRequested || !isRunning(worker);
+  return withWorkerRoom(
+    () => singleTurn(night, worker, prompt, resume),
+    worker.deadline,
+    stoppableRoomClock(stopped),
+  ).catch((err: any) => failedDelegation(night, err));
+}
+
+/** One delegation of a single-session worker's turn, as the host answers it (a refusal throws). */
+function singleTurn(night: Night, worker: Worker, prompt: string, resume: string | null): Promise<AnyRecord> {
   const { ctx, run } = night;
-  return ctx
-    .call(HostMethod.EngineDelegate, {
-      engine: roleEngine(run, RoleKey.Builder),
-      prompt,
+  return ctx.call(HostMethod.EngineDelegate, {
+    engine: roleEngine(run, RoleKey.Builder),
+    prompt,
+    project: run.project,
+    cwd: worker.worktree,
+    threadId: worker.threadId,
+    ...(run.model ? { model: run.model } : {}),
+    ...(roleEffort(run, RoleKey.Builder) ? { effort: roleEffort(run, RoleKey.Builder) } : {}),
+    ...(resume ? { resume } : {}),
+    timeoutMs: Math.max(MIN_DELEGATE_TIMEOUT_MS, worker.deadline - Date.now()),
+    selfCapture: {
       project: run.project,
-      cwd: worker.worktree,
-      threadId: worker.threadId,
-      ...(run.model ? { model: run.model } : {}),
-      ...(roleEffort(run, RoleKey.Builder) ? { effort: roleEffort(run, RoleKey.Builder) } : {}),
-      ...(resume ? { resume } : {}),
-      timeoutMs: Math.max(MIN_DELEGATE_TIMEOUT_MS, worker.deadline - Date.now()),
-      selfCapture: {
-        project: run.project,
-        root: worker.worktree,
-        runId: run.runId,
-        facetId: worker.id,
-        iteration: 1,
-        handle: worker.handle ?? undefined,
-        ...(worker.setup ? { setup: worker.setup } : {}),
-        label: worker.title,
-      },
-      ownership: singleOwnership(night, worker),
-    })
-    .catch((err: any) => failedDelegation(night, err));
+      root: worker.worktree,
+      runId: run.runId,
+      facetId: worker.id,
+      iteration: 1,
+      handle: worker.handle ?? undefined,
+      ...(worker.setup ? { setup: worker.setup } : {}),
+      label: worker.title,
+    },
+    ownership: singleOwnership(night, worker),
+    // A worker of the run (`worker: {`): the host seats it in the mode of the run's chat.
+    worker: workerGrant(night, worker),
+  });
+}
+
+/** The worker grant a builder's delegations carry: its id and title, and the run that started it. */
+function workerGrant(night: Night, worker: Worker): { id: string; title: string; runId: string } {
+  return { id: worker.id, title: worker.title, runId: night.run.runId };
 }
 
 /** Whatever a single session made is committed — partial work is worth more than a clean tree. */
@@ -1487,10 +1516,19 @@ async function runSingleSession(night: Night, worker: Worker, brief: string): Pr
  * steered at all.
  */
 async function runSingleWorker(night: Night, worker: Worker): Promise<void> {
-  const { noteWorkerLimit, ownShape, run, shape } = night;
+  const { gameFacts, noteWorkerLimit, ownShape, projectDir, run, shape } = night;
   // A conflict worker's merge is opened first; one that went through, or failed, needs no session.
   if (await mergeFirst(night, worker)) return;
-  const brief = singleWorkerBrief({ run, worker, shape, ownShape, setup: worker.setup });
+  // Genex's identity opens the brief: the game's folder and what the night found it holds.
+  const brief = singleWorkerBrief({
+    run,
+    worker,
+    shape,
+    ownShape,
+    setup: worker.setup,
+    facts: gameFacts ?? null,
+    gameFolder: projectDir || null,
+  });
   const delegation = await runSingleSession(night, worker, brief);
   worker.summary = String(delegation.summary ?? "").slice(0, SUMMARY_CHARS);
   if (delegation.limit) noteWorkerLimit(worker, delegation.limit);

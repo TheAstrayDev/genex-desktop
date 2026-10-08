@@ -8,6 +8,7 @@ import { DEFAULT_WALL_CLOCK_MS, MIN_DELEGATE_TIMEOUT_MS, PAGE_SEED } from "../co
 import { gatherEvidence } from "../evidence.ts";
 import { commitAll, GIT, gitAt, gitlinks, headOf, resetClean, shortSha } from "../git.ts";
 import { HostMethod } from "../host-methods.ts";
+import { factsOfGame, ProjectStarter } from "../folder-facts.ts";
 import { AttachedContract, StudioContract } from "../page-contract.ts";
 import { readDeclaredGame } from "../kinds.ts";
 import { appendLedger, ledgerFromEvents, loadGameLessons, readLedger } from "../ledger.ts";
@@ -28,6 +29,7 @@ import { nightClock, restoreNight } from "./journal.ts";
 import { clampDirectorMemory } from "./memory.ts";
 import { outcomesAwaitPlan, reopenCommits, reopenMarkOf } from "./reopen.ts";
 import { startingHeads } from "./rules.ts";
+import { runIdentity, withIdentity } from "../workers/identity.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../../types/harness.d.ts";
 import type { ProjectShape, ReferenceFrame } from "../../types/host-api.d.ts";
 import type { Evidence } from "../evidence.ts";
@@ -229,10 +231,13 @@ async function announceRunStart(
   });
 }
 
-/** The game, ready: scaffolded if new, on the current contract, loaded in the studio window. Answers its folder. */
+/**
+ * The game, ready: scaffolded if new, on the current contract, loaded in the studio window. Answers
+ * its folder, and keeps what the folder holds on the night for the brief (`gameFacts`).
+ */
 async function readyTheGame(night: Night): Promise<string> {
   const { ctx, decision, run } = night;
-  await ctx.call(HostMethod.GameScaffold, { name: run.project, title: run.project });
+  await ctx.call(HostMethod.GameScaffold, { name: run.project, title: run.project, kind: ProjectStarter.Web });
   const upgraded = await ctx.call(HostMethod.GameUpgradeContract, { project: run.project }).catch(() => null);
   if (upgraded?.upgraded)
     await decision(
@@ -241,8 +246,10 @@ async function readyTheGame(night: Night): Promise<string> {
     );
   await ctx.call(HostMethod.PreviewLoad, { project: run.project }).catch(() => {});
   const games = await ctx.call(HostMethod.GameList, {}).catch(() => []);
-  const projectDir = games.find((g: AnyRecord) => g.name === run.project)?.dir ?? null;
+  const game = games.find((g: AnyRecord) => g.name === run.project);
+  const projectDir = game?.dir ?? null;
   if (!projectDir) throw new Error(`project ${run.project} has no folder`);
+  night.gameFacts = factsOfGame(game);
   return projectDir;
 }
 
@@ -661,7 +668,8 @@ async function prepareInWorktree(
   try {
     const delegation = await ctx.call(HostMethod.EngineDelegate, {
       engine: roleEngine(run, RoleKey.Builder),
-      prompt: session.prompt,
+      // Genex's identity first: the game's folder and what the night found it holds.
+      prompt: withIdentity(runIdentity(night), session.prompt),
       project: run.project,
       cwd: integrationWorktree,
       threadId,

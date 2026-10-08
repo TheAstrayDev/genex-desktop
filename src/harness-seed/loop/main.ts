@@ -18,6 +18,7 @@ import { EngineId, supportsSessions } from "./model-roles.ts";
 import { compactThread } from "./compact.ts";
 import { compactSession } from "./session-compact.ts";
 import { directorTool } from "./director.ts";
+import { chatWorkerTool } from "./workers/chat-workers.ts";
 import { runSkillOpt } from "./skillopt.ts";
 import { learningOn } from "./learning.ts";
 import { loadSkills } from "./skills.ts";
@@ -60,6 +61,7 @@ const CAPABILITIES = [
   "message-queue",
   "rewind",
   "steer",
+  "workers",
 ];
 
 /**
@@ -178,6 +180,10 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
       // The director's session called one of its run tools; the answer travels back on
       // the dispatch result. Never throws: a tool's failure is a sentence to the director.
       return directorTool(action);
+    case "worker_tool":
+      // The chat's own session called a worker tool; the pool of its turn answers on the dispatch
+      // result. Never throws: a refusal is a sentence to the lead.
+      return chatWorkerTool(action);
     case "run_stop": {
       const active = studio.activeRuns.get(action.runId);
       if (active) {

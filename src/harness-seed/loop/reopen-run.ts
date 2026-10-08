@@ -13,7 +13,9 @@
  * coordinator is told, and its continue_build reopens the build instead of handing the work to one
  * builder turn (`finishedNight`), with the models the build was made with. A finished build no Loop
  * can go on from — no lead seated, a coordinator on a model without sessions, a kept older part — is
- * answered as with Loop off, and the chat says so once (`firstLoopUnused`).
+ * answered as with Loop off, and the chat says so once (`firstLoopUnused`). A game built in Unreal is
+ * neither: its finished Unreal Loop is never reopened, and the person's Loop message after it may
+ * start the next one (chat-dispatch.ts `startsNextUnrealLoop`).
  *
  * chat-dispatch.ts offers it only when every part it depends on says so (`servesReopen`): a seed
  * upgrade keeps a part the agent edited before, which would plan on the commission's model, bridge

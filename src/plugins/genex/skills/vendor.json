@@ -67,6 +67,31 @@
       "source": "@genex-ai/cli-demo/templates/skills/genex-updates/SKILL.md",
       "sha256": "abebfaa0d8d27ce76e24b8455873ec775a43fbb9098c99b465bdb404de292d89",
       "bytes": 4657
+    },
+    "genex-tool-model/SKILL.md": {
+      "source": "@genex-ai/cli-demo/templates/skills/genex-tool-model/SKILL.md",
+      "sha256": "f3b1f01dad1bc7bb44aa550bbb8ee4d589963a0574be7e341541d1c1e692b4b3",
+      "bytes": 5759
+    },
+    "genex-tool-character/SKILL.md": {
+      "source": "@genex-ai/cli-demo/templates/skills/genex-tool-character/SKILL.md",
+      "sha256": "c3ec9044ef2b3e88edccaf601221876f1276253c2533e92e2e0ba6c280cbadd4",
+      "bytes": 8762
+    },
+    "genex-tool-texture/SKILL.md": {
+      "source": "@genex-ai/cli-demo/templates/skills/genex-tool-texture/SKILL.md",
+      "sha256": "934a3f273ebf61d5635406b37ab1c8f7c736735c7cd4868f8fc377945bb9c6c5",
+      "bytes": 2382
+    },
+    "genex-tool-audio/SKILL.md": {
+      "source": "@genex-ai/cli-demo/templates/skills/genex-tool-audio/SKILL.md",
+      "sha256": "3cea90b64ee9b92cc67f3b82b85198427654b492d5823002faa9f05d7e13cab3",
+      "bytes": 3171
+    },
+    "genex-tool-image/SKILL.md": {
+      "source": "@genex-ai/cli-demo/templates/skills/genex-tool-image/SKILL.md",
+      "sha256": "d74589a791d7a89475566e72bbc5364e090f2f6fcec7ed78ee36c52a88661f02",
+      "bytes": 4315
     }
   },
   "license": {

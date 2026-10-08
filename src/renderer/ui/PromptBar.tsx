@@ -33,6 +33,7 @@ import {
   composerExtras,
   composerLoopView,
   type LoopSetting,
+  modeMenuReach,
   pinChatLoop,
   rememberChatLoop,
   RUNNING_BUILD,
@@ -137,7 +138,7 @@ function useLoopSettings(props: PromptBarProps) {
     removeKey(STORAGE_KEYS.autopilotReview);
   }, [conversationKey, coordinating]);
   const build = props.build ?? (coordinating ? RUNNING_BUILD : null);
-  const view = composerLoopView({ own: setting, build });
+  const view = composerLoopView({ own: setting, build, loopAvailable: props.loopAvailable });
   const chooseLoop = (next: LoopSetting): void => {
     setPick({ thread: conversationKey, setting: next });
     rememberChatLoop(browserStorage(), conversationKey, next);
@@ -146,7 +147,7 @@ function useLoopSettings(props: PromptBarProps) {
   const planAvailable = view.editable && !coordinating;
   // What the bulb, Add's row and the box show: plan review that this chat's next send will carry.
   const planOn = reviewPlan && planAvailable;
-  return { setting, view, chooseLoop, reviewPlan, setReviewPlan, planAvailable, planOn };
+  return { setting, view, chooseLoop, reviewPlan, setReviewPlan, planAvailable, planOn, gate: props.loopGate };
 }
 
 type Mention = { query: string; start: number; end: number };
@@ -476,6 +477,10 @@ interface PromptBarProps {
   build?: ComposerBuild | null;
   gameMode?: boolean;
   project?: string | null;
+  /** The game can run a Loop (`loopAvailableFor`); without it Mode offers Off alone and says why. */
+  loopAvailable?: boolean;
+  /** Why the game can't run a Loop, naming its project and where it is (`unrealLoopGate`). */
+  loopGate?: string;
   contexts?: ContextUsage[];
   contextUsage?: ContextUsage | null;
   onCompact?: () => void;
@@ -772,6 +777,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
           disabled={disabled}
           coordinating={coordinating}
           project={props.project}
+          conversationKey={props.conversationKey}
           loop={loop}
           limits={{
             contextUsage: props.contextUsage,
@@ -873,6 +879,8 @@ interface ComposerToolbarProps {
   disabled: boolean;
   coordinating: boolean;
   project?: string | null;
+  /** The game chat the composer sends to: its "Don't wait for me" is in Mode while the Loop is on. */
+  conversationKey?: string | undefined;
   loop: ReturnType<typeof useLoopSettings>;
   limits: ComposerLimitsInput;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -890,6 +898,10 @@ interface ComposerToolbarProps {
 function ComposerToolbar(props: ComposerToolbarProps): JSX.Element {
   const { gameMode, loop, permissions } = props;
   const { view } = loop;
+  // Mode's Loop changes only while no build owns the chat; during a run it opens read-only, so the
+  // person can still switch "Don't wait for me" for the run going now, on and off.
+  const reach = modeMenuReach({ view, coordinating: props.coordinating, threadId: props.conversationKey });
+  const { dontWaitThread } = reach;
   const toolbar = useRef<HTMLDivElement>(null);
   useToolbarFit(toolbar);
   return (
@@ -898,8 +910,11 @@ function ComposerToolbar(props: ComposerToolbarProps): JSX.Element {
       {gameMode && (
         <ComposerModeMenu
           value={view.shown}
-          onChange={view.editable ? loop.chooseLoop : undefined}
-          disabled={props.coordinating || !view.editable}
+          onChange={reach.changes ? loop.chooseLoop : undefined}
+          disabled={!reach.opens}
+          loopUnavailable={view.loopUnavailable === true}
+          unavailableWhy={loop.gate}
+          {...(dontWaitThread ? { dontWaitThread } : {})}
         />
       )}
       {gameMode && permissions && (

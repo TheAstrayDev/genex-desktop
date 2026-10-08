@@ -21,6 +21,8 @@ import { messageQueueState } from "../../src/shared/message-queue.ts";
 import { toEntries } from "../../src/renderer/chat-entries.ts";
 import { deliveryOrder } from "../../src/renderer/chat/delivery-order.ts";
 import { chatContext } from "../../src/shared/chat-history.ts";
+import { JobRole, JobScopeKind } from "../../src/shared/jobs.ts";
+import { PermissionMode } from "../../src/shared/permissions.ts";
 
 /** No night here may hang the suite: each is over in well under a minute when it works. */
 const RIG_TIMEOUT_MS = 240_000;
@@ -310,6 +312,51 @@ describe("the lead is woken, not kept in one long turn", () => {
     await until(() => aborted > 0, "the worker to be stopped", 30_000);
   });
 
+  it("R8. a job that ends while the lead rests is in its next digest", { timeout: RIG_TIMEOUT_MS }, async () => {
+    const { rig, project, runId, dispatch, finished } = await night("wake-by-job");
+    const lead: DelegateRequest[] = [];
+    let rested = false;
+    fakeEngine(rig, async (request) => {
+      if (!request.director) return hangUntilStopped(request, () => {});
+      lead.push(request);
+      const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
+      if (lead.length === 1) {
+        await call("plan", plan);
+        await call("worker_start", startSky);
+        rested = true;
+        return turnResult("lead-1", "the sky is building");
+      }
+      await call("finish", { summary: "the bake failed; stopping here", land: "no" });
+      return turnResult("lead-1", "done");
+    });
+    const running = dispatch();
+    await until(() => rested, "the lead's first turn to end");
+    const threadId = await rig.core.threadForGame(project.name);
+    const job = await rig.core.jobs.start({
+      owner: {
+        project: project.name,
+        chatThreadId: threadId,
+        role: JobRole.Lead,
+        scope: { kind: JobScopeKind.Run, runId },
+      },
+      title: "Light bake",
+      command: "echo baking; exit 3",
+      cwd: rig.core.games.dirFor(project.name),
+      policy: { allowedDomains: [], allowLocalBinding: true },
+      mode: PermissionMode.Auto,
+    });
+    const events = await finished();
+    await running;
+
+    assert.equal(lead.length, 2, lead.map((t) => t.prompt.slice(0, 60)).join(" | "));
+    assert.equal(lead[1]!.resume, "lead-1", "the same session is woken");
+    const woken = lead[1]!.prompt;
+    assert.match(woken, /Light bake \(`echo baking; exit 3`, started by you\) failed \(exit 3\)/, woken);
+    assert.match(woken, new RegExp(`read it with job_tail ${job.id}`));
+    const continued = customEvents(events, "director_continued").filter((e) => e.runId === runId);
+    assert.ok(((continued[0]?.reasons ?? []) as string[]).includes("job_ended"), JSON.stringify(continued));
+  });
+
   it("R7. a Stop while the night prepares opens no lead session: the run closes as stopped", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
@@ -386,10 +433,10 @@ describe("the long turn, one field away", () => {
 
       assert.equal(lead.length, 1);
       assert.ok(
-        (lead[0]!.liveTools ?? []).some((t) => t.name === "wait"),
+        (lead[0]!.liveTools ?? []).some((t) => t.name === "worker_wait"),
         "the long turn's wait",
       );
-      assert.match(lead[0]!.prompt, /`wait` is your loop/);
+      assert.match(lead[0]!.prompt, /`worker_wait` is your loop/);
       assert.match(results.finished, /run is closed/, results.finished);
     } finally {
       if (before === undefined) delete process.env.STUDIO_DIRECTOR_LOOP;
@@ -430,13 +477,14 @@ describe("the long turn, one field away", () => {
 
     assert.equal(lead.length, 2);
     assert.match(results.finished, /run is closed/, results.finished);
-    // The long turn is told its own loop — `wait` — and nothing of the wake loop's, playbook included.
-    assert.match(lead[0]!.prompt, /`wait` is your loop/);
+    // The long turn is told its own loop — `worker_wait`, the one worker model's name for its old
+    // `wait` — and nothing of the wake loop's, playbook included.
+    assert.match(lead[0]!.prompt, /`worker_wait` is your loop/);
     assert.doesNotMatch(lead[0]!.prompt, /end your turn/i);
     assert.doesNotMatch(lead[0]!.prompt, /asked once what next/i);
     assert.ok(lead[1]!.prompt.startsWith("The timed build still has"), lead[1]!.prompt.slice(0, 120));
     assert.ok(
-      (lead[0]!.liveTools ?? []).some((t) => t.name === "wait"),
+      (lead[0]!.liveTools ?? []).some((t) => t.name === "worker_wait"),
       "the long turn still has its wait",
     );
     const continued = customEvents(events, "director_continued").filter((e) => e.runId === runId);

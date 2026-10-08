@@ -33,7 +33,7 @@ import { commandNames, isWindows, isWindowsRunnable, pathDelimiter, toolchain } 
 import { windowsBaseEnv } from "../child-env.ts";
 import type { JsonSchemaValidator, JsonSchemaType } from "@modelcontextprotocol/sdk/validation";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
-import { McpHealth, McpTransport, type McpConnector } from "../../shared/mcp.ts";
+import { CONNECTOR_OUTCOME_META, McpHealth, McpTransport, type McpConnector } from "../../shared/mcp.ts";
 import type { LiveToolResult } from "../engines/types.ts";
 import { materializeSecrets, type SecretPort } from "./store.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -240,11 +240,37 @@ function structuredText(structured: unknown): string | undefined {
 }
 
 /**
+ * A connector's error answer. `outcomeUnknown` is set when the answer says the call may have taken
+ * effect before it failed ({@link CONNECTOR_OUTCOME_META}): the host records it so, and never
+ * repeats it on its own.
+ * It keeps Error's own name, so a record of it reads as the connector's words.
+ */
+export class ConnectorCallError extends Error {
+  readonly outcomeUnknown: boolean;
+  constructor(message: string, outcomeUnknown: boolean) {
+    super(message);
+    this.outcomeUnknown = outcomeUnknown;
+  }
+}
+
+/** Whether an answer's `_meta` says the call's outcome is unknown: exactly the marker, nothing like it. */
+function saysOutcomeUnknown(meta: unknown): boolean {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return false;
+  return (meta as Record<string, unknown>)[CONNECTOR_OUTCOME_META.Key] === CONNECTOR_OUTCOME_META.Unknown;
+}
+
+/**
  * An MCP result becomes the studio's own: text parts joined, images carried as images (a path is
- * not a picture), and `isError` raised so every engine reports it as a failed tool call.
+ * not a picture), and `isError` raised so every engine reports it as a failed tool call; an error
+ * that says its outcome is unknown is a {@link ConnectorCallError} saying so.
  */
 export function toLiveToolResult(result: unknown): LiveToolResult {
-  const value = (result ?? {}) as { content?: unknown; isError?: unknown; structuredContent?: unknown };
+  const value = (result ?? {}) as {
+    content?: unknown;
+    isError?: unknown;
+    structuredContent?: unknown;
+    _meta?: unknown;
+  };
   const parts: string[] = [];
   const images: ResultImage[] = [];
   for (const entry of Array.isArray(value.content) ? value.content : []) {
@@ -257,7 +283,11 @@ export function toLiveToolResult(result: unknown): LiveToolResult {
   const joined = parts.join("\n");
   const capped =
     joined.length > MAX_RESULT_CHARS ? `${joined.slice(0, MAX_RESULT_CHARS)}\n… (result truncated)` : joined;
-  if (value.isError) throw new Error(capped || "The connector reported an error with no message.");
+  if (value.isError)
+    throw new ConnectorCallError(
+      capped || "The connector reported an error with no message.",
+      saysOutcomeUnknown(value._meta),
+    );
   return images.length ? { text: capped, images } : capped;
 }
 

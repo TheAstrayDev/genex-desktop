@@ -17,7 +17,7 @@ import {
   checkCounts,
   checkReplanWords,
   circuitBreakWords,
-  connectorWords,
+  connectorStepWords,
   consentAskWords,
   decisionWords,
   fixWords,
@@ -54,6 +54,8 @@ import { morningWords } from "../../src/renderer/morning-words.ts";
 import { endedWords } from "../../src/renderer/round-status.ts";
 import { toEntries } from "../../src/renderer/chat-entries.ts";
 import { DirectorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
+import { WorkerTool } from "../../src/shared/workers.ts";
+import { connectorStep, showsPlayView, StepAction } from "../../src/renderer/chat/connector-steps.ts";
 import type { RunSummary } from "../../src/shared/run-summary.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 
@@ -840,6 +842,8 @@ describe("tools", () => {
   it("names the lead's and the chat's run tools, never 'used …'", () => {
     const names = [
       ...Object.values(DirectorTool).filter((name) => name !== DirectorTool.ResolveRoot),
+      // Every lead's and the chat's worker tools, the same six everywhere.
+      ...Object.values(WorkerTool),
       "capture",
       "checkpoint",
       "continue_build",
@@ -925,26 +929,74 @@ describe("tools", () => {
     );
   });
 
-  it("names the connector and the tool for a connector call, and never leaks an id", () => {
-    assert.equal(connectorWords({ connectorId: "figma", tool: "get_file", ok: true }), "asked figma for get file");
+  it("names a connector step by what it did, falls back to its connector and tool, and never leaks an id", () => {
+    const step = (tool: string, toolName?: string) => connectorStep({ tool, ...(toolName ? { toolName } : {}) });
+    assert.deepEqual(connectorStepWords(step("get_file"), "Figma"), {
+      label: "Figma · get_file",
+      active: "Working in Figma",
+      icon: "run",
+    });
     assert.equal(
-      connectorWords({ connectorId: "figma", tool: "get_file", ok: false, error: "no such file" }),
-      "figma · get file failed — no such file",
+      connectorStepWords(step("get_file"), "Figma", { ok: false, error: "no such file" }).label,
+      "Figma · get_file: no such file",
     );
-    // A record with nothing in it is still a sentence.
-    assert.equal(connectorWords({}), "asked a connector for a tool");
+    // A record with nothing in it is still a line.
+    assert.equal(connectorStepWords(step(""), "").active, "Working in a connector");
     // The server's own error text passes the same gate as the model's.
-    const leaky = connectorWords({
-      connectorId: "figma",
-      tool: "get_file",
+    const leaky = connectorStepWords(step("get_file"), "figma", {
       ok: false,
       error: "job run_fixture123456 died at 69f573d411",
-    });
+    }).label;
     assert.doesNotMatch(leaky, /run_fixture123456/);
     assert.doesNotMatch(leaky, /69f573d411/);
     // The card's own health words never borrow the two labels the build smoke matches exactly.
     const card = readFileSync(path.join(root, "src/renderer/panels/ConnectorsCard.tsx"), "utf8");
     assert.doesNotMatch(card, /\b(Retry|Ready)\b/);
+  });
+
+  it("every tool of the Genex editor helper's build and play toolsets has its own step", () => {
+    const toolsets = {
+      "genex_build.tools.GenexBuildTools": [
+        "set_route",
+        "track_terrain",
+        "dirt_material",
+        "run_script",
+        "shot_cameras",
+        "capture_shot",
+        "capture_play",
+        "motion_strip",
+        "import_model",
+        "import_character",
+        "import_animation",
+        "import_sound",
+        "retarget",
+        "attach_to_socket",
+        "audit",
+        "attach_mesh",
+      ],
+      "genex_play.tools.GenexPlayTools": [
+        "list_actions",
+        "hold",
+        "release_all",
+        "project_file",
+        "player_state",
+        "settle",
+        "drive_route",
+        "probe_route",
+      ],
+    };
+    const step = (toolset: string, toolName: string, args: Record<string, unknown> = {}) =>
+      connectorStep({ tool: "call_tool", toolset, toolName, args });
+    for (const [toolset, tools] of Object.entries(toolsets))
+      for (const tool of tools) assert.notEqual(step(toolset, tool).action, StepAction.Other, `${toolset} ${tool}`);
+    const build = "genex_build.tools.GenexBuildTools";
+    const label = (toolName: string, args: Record<string, unknown>) =>
+      connectorStepWords(step(build, toolName, args), "Unreal").label;
+    assert.match(label("run_script", { file: "track", args_json: "{}" }), /track/);
+    assert.match(label("capture_shot", { camera: "HeroCam_Start" }), /HeroCam_Start/);
+    assert.match(label("import_model", { file: "/tmp/bike.fbx", dest: "/Game/Bike", name: "SM_Bike" }), /SM_Bike/);
+    assert.equal(showsPlayView(step(build, "motion_strip", { frames: 4, interval_s: 0.5 }), false), true);
+    assert.equal(showsPlayView(step(build, "capture_play", { name: "jump" }), false), true);
   });
 
   it("folds a delegated minute into one closed line", () => {

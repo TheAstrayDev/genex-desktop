@@ -9,6 +9,7 @@ import type {
   PluginIndexView,
   PluginPanelDocument,
 } from "./plugins.ts";
+import type { PluginFileRequest } from "./plugin-file-request.ts";
 import type { McpConnectorView, McpTestResult, McpToolSummary } from "./mcp.ts";
 import type { McpConnectorDraft } from "./mcp-import.ts";
 import type { ConversationRecord, EventEnvelope, SnapshotRecord } from "./event-log.ts";
@@ -28,6 +29,7 @@ import type { ProviderUsageReport } from "./provider-usage.ts";
 import type { BootState, SandboxSetupResult } from "./boot.ts";
 import type { AppAbout, ReadyUpdate, UpdateCheckResult } from "./app-update.ts";
 import type { PermissionMode, PermissionSettingsView, ToolPermissionAnswer } from "./permissions.ts";
+import type { DontWaitState } from "./dont-wait.ts";
 import type { LiveBehindEvent } from "./live-behind.ts";
 import type { FieldRow, RunSharingDeleteResult, RunSharingStatus } from "./run-sharing.ts";
 
@@ -155,6 +157,8 @@ export interface StudioApi {
     project?: string,
   ): Promise<{ images?: Array<{ label: string; dataUrl: string }>; message?: string; ticket?: string }>;
   pluginAction(id: string, name: string, args: unknown, project?: string, ticket?: string): Promise<unknown>;
+  /** A plugin panel's Choose file: Studio's native file picker; the chosen file's real path, or null when cancelled. */
+  pluginChooseFile(id: string, request: PluginFileRequest): Promise<string | null>;
   /** The files Publish would put online for a game, for Studio's Publish dialog to show. Uploads nothing. */
   genexPublishReview(project: string): Promise<ExportReview>;
   /** Publish the game to the Genex gallery from Studio's Publish dialog, after the person approved `review`. */
@@ -168,7 +172,8 @@ export interface StudioApi {
   pluginUpdate(id: string): Promise<void>;
   pluginWatch(id: string, enabled: boolean): Promise<void>;
   /** The user's answer to a `plugin_consent` card; `resolved` is false once the question is no longer waiting. */
-  pluginConsent(consentId: string, approved: boolean): Promise<{ resolved: boolean }>;
+  /** The person's answer to a consent card; `always` (a connector's card) also allows that tool from now on. */
+  pluginConsent(consentId: string, approved: boolean, always?: boolean): Promise<{ resolved: boolean }>;
 
   /**
    * Claude Code permissions for game chats. Studio UI only (main-frame guarded); the harness has
@@ -181,6 +186,13 @@ export interface StudioApi {
   answerPermission(requestId: string, answer: ToolPermissionAnswer): Promise<{ resolved: boolean }>;
   /** Stop allowing a saved "always allow" rule for a game. */
   forgetPermission(project: string, rule: string): Promise<PermissionSettingsView>;
+  /**
+   * The person's "Don't wait for me" in a game chat, from the Loop menu or an agent's card
+   * (`offerId`): for the run going in the chat now, else its next run. Studio UI only.
+   */
+  setDontWait(threadId: string, on: boolean, offerId?: string): Promise<DontWaitState>;
+  /** What the Loop menu shows for "Don't wait for me" in a game chat. */
+  dontWaitState(threadId: string): Promise<DontWaitState>;
 
   /**
    * MCP connectors. Values never cross this boundary in either direction: a connector carries
@@ -201,6 +213,8 @@ export interface StudioApi {
   mcpCancelAuthorization(id: string): Promise<void>;
   mcpDisconnectAccount(id: string): Promise<void>;
   mcpTools(id: string): Promise<McpToolSummary[]>;
+  /** A plugin's connector asks again before every call: its "Always allow" answers are forgotten. */
+  mcpForgetAlwaysAllowed(id: string): Promise<void>;
 
   /** The platform and where startup stands (`shared/boot.ts`); the renderer asks before anything else. */
   bootState(): Promise<BootState>;
@@ -259,6 +273,12 @@ export interface StudioApi {
   renameThread(threadId: string, title: string): Promise<ConversationRecord>;
   compactThread(threadId: string, options?: { engine?: string; model?: string }): Promise<boolean>;
   archiveGame(project: string): Promise<boolean>;
+  /** How much space a game's version history takes, and how much clearing Rewind history frees. */
+  gameHistory(project: string): Promise<import("./game-history.ts").GameHistorySpace>;
+  /** Clear a game's Rewind history and finished builds' side tracks; refused while the game works. */
+  clearGameHistory(project: string): Promise<import("./game-history.ts").GameHistoryCleared>;
+  /** Takes back a game's engine link from its chat line; refused once the link has changed since. */
+  undoEngineLink(request: import("./game-engine.ts").EngineLinkUndo): Promise<boolean>;
   engines(): Promise<EngineDescriptor[]>;
   /** Plan limits of each signed-in subscription; reading them never starts a turn. */
   providerUsage(): Promise<ProviderUsageReport[]>;

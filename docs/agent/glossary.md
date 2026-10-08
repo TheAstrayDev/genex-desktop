@@ -62,7 +62,7 @@ is product copy, not this glossary.
   (`wake-schedule.ts` decides when, from typed `NoteKind` lines and timers). The digest opens each
   wake: the user's words verbatim, what happened, where the run stands and a short build card
   (`wake-prompts.ts`). `run.directorLoop: "turn"` (or `STUDIO_DIRECTOR_LOOP=turn` in the studio's
-  environment) keeps the older long turn with `wait`.
+  environment) keeps the older long turn with `worker_wait`.
 - **Lead / one session**: a waking night's director that is its chat's own session, leaving the
   game's changes to its workers while the build runs (`loop/director/lead-session.ts`). After the close the same
   session answers the chat with its hands back and the run's controls — `run_status`,
@@ -103,6 +103,28 @@ is product copy, not this glossary.
 - **Evidence pass**: one look at a build — load, prove the clock, drive, photograph, read
   (`loop/evidence.ts` `gatherEvidence`), with the one classifier of why a look failed.
 
+## The Unreal Loop
+
+A Loop in a game that builds in Unreal ([plugins](../plugins.md#mcp-servers)): no facets, judges
+or worktree merges, though the Builds graph draws it with the same records.
+
+- **Unreal lead**: the one session that builds the whole game in the open editor, in turns of the
+  same session, looking at its own captures (`loop/unreal/lead.ts`, its tools `lead-tools.ts`, its
+  brief `lead-prompts.ts`). Not the web run's **Lead / one session**, which leaves building to its
+  workers.
+- **Save point**: the lead's own checkpoint: save all, the log's new errors, a game-folder snapshot
+  under its label and the hero cameras' shots, drawn as a round it kept itself; `rewind` restores
+  one (`loop/unreal/save-point.ts`, `restore.ts`). The harness autosaves a dirty turn that made none.
+- **Milestone**: what the lead says it works on now; a row of the Builds graph
+  (`loop/unreal/lead-graph.ts`).
+- **Sub-agent**: a small job of one `AgentKind` (Blender model or prep, Genex cast, sound,
+  texture, C++) the lead starts in a copy of the game, offered only its kind's plugin tools; its
+  delivery lands in `assets/agents/<id>/` with a manifest (`loop/unreal/agents.ts`).
+- **Critic**: fresh-eyes advice on the lead's captures against ART.md and `references/`; it
+  changes nothing and is never a verdict (`loop/unreal/critic.ts`).
+- **Hero cameras**: the level's `GX_Shot_*` cameras the lead places; its `capture_shot` looks
+  through them, and every save point keeps their shots (the plugin's `hero-shots`).
+
 ## Three meanings of "loop"
 
 - **Loop mode**: the composer switch that makes a message start a run (after a finished build that
@@ -134,6 +156,8 @@ Avoid "journal" and "scoreboard" here: both are run terms above.
 - **Lane**: one way of building a case, a registry row in `evals/lanes.json` (Genex app or raw
   CLI, engine, model, effort, containment); lanes A–D are `genex-claude`, `raw-claude`,
   `raw-codex`, `genex-codex` (`scripts/evals/lanes/`). A lane id is data, never an engine id.
+  Not a Genex asset lane: one `genex__asset` operation with its fixed provider and options
+  (`LANE_OPTIONS`, `src/plugins/genex/request.ts`).
 - **Campaign**: a planned matrix of cases × lanes × reps (× app builds) with seeded order and
   canary brackets, run per provider stream and resumable (`scripts/evals/campaign/`).
 - **Exposure**: a case's label saying whether the harness was tuned on it (`none` or

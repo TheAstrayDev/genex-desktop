@@ -8,6 +8,8 @@
  * seventeen hours. Now it ends its turn after every decision and the studio wakes the same
  * session with a digest when something happens. Every clock here is a number the test chooses.
  */
+import { CoreFact } from "../../src/harness-seed/loop/folder-facts.ts";
+import { appIdentity } from "../../src/harness-seed/loop/project-prompts.ts";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -446,13 +448,14 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
 
   it("P4. a waking lead's tools have no wait and tell it to end its turn", () => {
     const tools = wakeTools(DIRECTOR_TOOLS, { lead: true });
+    // Flipped (one worker model): the wait a waking lead is not offered is `worker_wait` now.
     assert.deepEqual(
       tools.map((t) => t.name),
-      DIRECTOR_TOOLS.map((t) => t.name).filter((name) => name !== "wait"),
+      DIRECTOR_TOOLS.map((t) => t.name).filter((name) => name !== "worker_wait"),
     );
     const start = tools.find((t) => t.name === "worker_start")!;
     assert.match(start.description, /end your turn/);
-    assert.doesNotMatch(start.description, /use wait/);
+    assert.doesNotMatch(start.description, /use worker_wait/);
     // A waking lead writes nothing (one session): a conflict `integrate` meets goes to a worker.
     const integrate = tools.find((t) => t.name === "integrate")!;
     assert.match(integrate.description, /A conflict elsewhere goes to a worker/);
@@ -472,9 +475,9 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       assert.ok(tool.description.length > 40, `${tool.name} is described`);
     }
     assert.ok(JSON.stringify(tools).length <= JSON.stringify(DIRECTOR_TOOLS).length, "no bigger than the old set");
-    // The set the long turn is offered is left as it was, `wait` and all.
-    assert.ok(DIRECTOR_TOOLS.some((t) => t.name === "wait"));
-    assert.match(DIRECTOR_TOOLS.find((t) => t.name === "worker_start")!.description, /use wait/);
+    // The set the long turn is offered is left as it was, its wait (`worker_wait` now) and all.
+    assert.ok(DIRECTOR_TOOLS.some((t) => t.name === "worker_wait"));
+    assert.match(DIRECTOR_TOOLS.find((t) => t.name === "worker_start")!.description, /use worker_wait/);
   });
 
   it("P7. the build card gives a lead its rule (it builds in the integration worktree), and a director with its own hands its memory file — each within the card's bound", () => {
@@ -527,7 +530,11 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     const turn = directorBrief(base as never);
     assert.equal(directorBrief({ ...base, loop: DirectorLoop.Turn } as never), turn, "the default brief is unchanged");
     const wake = directorBrief({ ...base, loop: DirectorLoop.Wake } as never);
-    assert.ok(wake.length - skill.length < 5_000, `the wake brief's own words are ${wake.length - skill.length}`);
+    // Genex's identity, which every brief opens with, is not the wake brief's own words.
+    const identity = appIdentity({ folderLabel: "skate", facts: [{ id: CoreFact.WebGame, path: "." }] });
+    assert.ok(wake.includes(identity), "the brief carries Genex's identity");
+    const own = wake.length - skill.length - identity.length;
+    assert.ok(own < 5_000, `the wake brief's own words are ${own}`);
     const tools = wake.split("\n").find((line) => line.startsWith("- The run's own tools:"))!;
     assert.equal(
       tools,
@@ -550,8 +557,8 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       `the plan review adds ${reviewed.length - wake.length} characters`,
     );
     assert.ok(
-      reviewed.length - skill.length < 5_000 + WAKE_BRIEF.planReview.length,
-      `the reviewed wake brief's own words are ${reviewed.length - skill.length}`,
+      reviewed.length - skill.length - identity.length < 5_000 + WAKE_BRIEF.planReview.length,
+      `the reviewed wake brief's own words are ${reviewed.length - skill.length - identity.length}`,
     );
     assert.match(reviewed, /THE USER ASKED TO READ IT FIRST: your first worker waits for their word/);
     assert.match(reviewed, /end your turn after plan/);
@@ -808,7 +815,11 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
       contract: null,
       lead: { gameFolder: "/games/skate" },
     } as never);
-    assert.ok(plain.length - skill.length < 5_000, `the lead's brief's own words are ${plain.length - skill.length}`);
+    // Genex's identity, which every brief opens with, is not the lead's own words.
+    const identity = appIdentity({ folderLabel: "games/skate", facts: [{ id: CoreFact.WebGame, path: "." }] });
+    assert.ok(plain.includes(identity), "the lead's brief carries Genex's identity");
+    const own = plain.length - skill.length - identity.length;
+    assert.ok(own < 5_000, `the lead's brief's own words are ${own}`);
     const turn = directorBrief({ ...base, loop: DirectorLoop.Turn } as never);
     assert.match(turn, /Keep \.studio\/DIRECTOR\.md in your worktree current/);
     assert.match(turn, /Edit here yourself/);

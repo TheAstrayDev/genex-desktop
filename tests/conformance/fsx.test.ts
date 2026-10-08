@@ -7,7 +7,7 @@ import { constants as FS } from "node:fs";
 import { chmod, mkdir, readdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { it } from "node:test";
-import { atomicWriteText, openNoFollow, readRegularFile, replaceFile } from "../../src/substrate/fsx.ts";
+import { atomicWriteText, openNoFollow, readRegularFile, renameFolder, replaceFile } from "../../src/substrate/fsx.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 /** Windows keeps only a read-only flag, so there a mode is compared by its owner-write bit alone. */
@@ -53,6 +53,61 @@ it("elsewhere, and for any other error, a failed rename fails at once", async ()
     code: "ENOENT",
   });
   assert.equal(missing.tries.length, 1);
+});
+
+it("on Windows, a new folder's rename keeps trying while another app reads its files, within a budget", async () => {
+  const waits: number[] = [];
+  const sleep = async (ms: number) => {
+    waits.push(ms);
+  };
+  const flaky = flakyRename(["EPERM", "EBUSY", "EACCES"]);
+  const absent = async () => false;
+  await renameFolder("C:\\p\\.new", "C:\\p\\Game", { platform: "win32", rename: flaky.rename, sleep, exists: absent });
+  assert.equal(flaky.tries.length, 4);
+  const stuck = flakyRename(Array(10_000).fill("EPERM"));
+  waits.length = 0;
+  await assert.rejects(
+    renameFolder("C:\\p\\.new", "C:\\p\\Game", { platform: "win32", rename: stuck.rename, sleep, exists: absent }),
+    { code: "EPERM" },
+  );
+  const waited = waits.reduce((sum, ms) => sum + ms, 0);
+  assert.ok(waited >= 10_000, `keeps trying for several seconds or more (${waited} ms)`);
+  assert.ok(stuck.tries.length < 10_000, "and then gives up");
+});
+
+it("a folder's rename stops trying once something appears where it was going", async () => {
+  const flaky = flakyRename(["EPERM", "EPERM"]);
+  let checks = 0;
+  const appears = async () => ++checks > 0;
+  await assert.rejects(
+    renameFolder("C:\\p\\.new", "C:\\p\\Game", {
+      platform: "win32",
+      rename: flaky.rename,
+      sleep: async () => {},
+      exists: appears,
+    }),
+    { code: "EPERM" },
+  );
+  assert.equal(flaky.tries.length, 1);
+});
+
+it("elsewhere, and for any other error, a folder's rename fails at once", async () => {
+  for (const [platform, code] of [
+    ["darwin", "EPERM"],
+    ["win32", "ENOENT"],
+  ] as const) {
+    const once = flakyRename([code]);
+    await assert.rejects(
+      renameFolder("/p/.new", "/p/Game", {
+        platform,
+        rename: once.rename,
+        sleep: async () => {},
+        exists: async () => false,
+      }),
+      { code },
+    );
+    assert.equal(once.tries.length, 1, platform);
+  }
 });
 
 it("writes the whole text, with the requested mode, and leaves no temp file behind", async () => {

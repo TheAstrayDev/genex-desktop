@@ -580,6 +580,12 @@ test("the dialog says in one line why only the conversation rewinds, and offers 
       "Only the conversation rewinds: the files that changed were too large to save.",
     ],
   );
+  assert.equal(
+    rewindFilesWords({ state: "unavailable", reason: "too-large", tooLargeFiles: ["Content/big.uasset", "take2.wav"] })
+      .line,
+    "Only the conversation rewinds: the files that changed were too large to save: big.uasset, take2.wav.",
+    "the dialog names the files that keep the game files where they are",
+  );
   assert.equal(rewindFilesWords({ state: "none" }).line, "Only the conversation rewinds.");
   assert.equal(
     rewindFilesWords({ state: "unchanged", nested: [] }).line,
@@ -601,6 +607,20 @@ test("the dialog says in one line why only the conversation rewinds, and offers 
     "Including 1 file changed outside this chat: level.ts.",
   );
   assert.equal(restoresByDefault({ ...restore, outsideUnknown: true }), false);
+  assert.equal(
+    rewindFilesWords({ ...restore, tooLarge: 2, tooLargeFiles: ["Content/big.uasset", "audio/take2.wav"] }).nested,
+    "Too large to save, so they stay as they are: big.uasset, take2.wav.",
+    "the dialog names files too large to save before the person confirms",
+  );
+  assert.equal(
+    rewindFilesWords({ ...restore, tooLarge: 1, tooLargeFiles: ["big.uasset"] }).nested,
+    "Too large to save, so it stays as it is: big.uasset.",
+  );
+  assert.equal(
+    rewindFilesWords({ ...restore, tooLarge: 2 }).nested,
+    "2 files were too large to save and stay as they are.",
+    "an older answer without names keeps the count",
+  );
   assert.equal(restoresByDefault({ state: "unavailable", reason: "build-running" }), true, "no switch to start off");
   assert.deepEqual(
     [rewindBusyLabel(true), rewindBusyLabel(false), REWIND_WORDS.rewind, REWIND_WORDS.restoreFiles],

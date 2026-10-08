@@ -37,12 +37,20 @@ import {
   leadAskingOptions,
   leadScreenHook,
   liveControl,
+  neverTouchFence,
+  neverTouchHook,
+  sessionHomeOpen,
   permissionRules,
   preToolDeny,
   quietly,
   reportedMode,
   type RunningSession,
+  workerAskingOptions,
+  type WorkerBox,
+  workerBox,
+  workerReadOnly,
 } from "./claude-permissions.ts";
+import { neverTouchWhole } from "./never-touch.ts";
 import { describeWithSchema, zodShapeFromJsonSchema } from "./tool-schema.ts";
 import {
   type CompleteRequest,
@@ -60,6 +68,7 @@ import {
   type LiveToolResult,
   type LiveToolSpec,
   type StudioToolSpec,
+  type WorkerAsks,
 } from "./types.ts";
 import {
   CHECKPOINT_TOOL,
@@ -84,7 +93,7 @@ import {
   CompletionStop,
 } from "./common.ts";
 import { isInside, relativizeWorkspace } from "../paths.ts";
-import { baseDenyRead } from "../spawn.ts";
+import { baseDenyRead, claudeFoldersIn } from "../spawn.ts";
 import { isCommandScript, spawnCommand } from "../command-launch.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
@@ -94,6 +103,7 @@ import { EngineKind, EngineStatusCode, LoginSource } from "../../shared/engine-d
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { ContextSource } from "../../shared/context.ts";
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
+import { SessionCostLedger, sessionTotals, turnShare } from "./session-cost.ts";
 
 export interface ClaudeCodeEngineOptions {
   onModelsChanged?: () => void;
@@ -116,6 +126,11 @@ export interface ClaudeCodeEngineOptions {
   resolveCli?: typeof requireCodingCli;
   /** Injected in tests. */
   queryFn?: typeof import("@anthropic-ai/claude-agent-sdk").query;
+  /**
+   * Where each session's last running totals are kept across restarts (`session-cost.ts`); in
+   * memory only when absent.
+   */
+  sessionCosts?: string;
   /** Injected in tests. Production asks the `claude` CLI, never a credential file. */
   authStatusFn?: (home: string | null) => Promise<ClaudeAuthStatus>;
   /**
@@ -400,6 +415,8 @@ const AUTH_PATTERNS = [
 
 export class ClaudeCodeEngine implements Engine {
   #usage: ProviderUsage | null = null;
+  /** Each session's last running totals, so a delegation reports only its own share. */
+  readonly #costs: SessionCostLedger;
   #usageRead: Promise<ProviderUsage | null> | null = null;
   readonly #catalog: ModelCatalog;
   #telemetryAt = new WeakMap<object, number>();
@@ -492,6 +509,7 @@ export class ClaudeCodeEngine implements Engine {
     this.#executable = options.executable;
     this.#resolveCli = options.resolveCli ?? requireCodingCli;
     this.#queryFn = options.queryFn;
+    this.#costs = new SessionCostLedger(options.sessionCosts);
     this.#authStatusFn = options.authStatusFn;
     this.judgeCwd = options.judgeCwd ?? JUDGE_CWD;
     // The judge's filter is a default, not a policy the caller cannot change; the delegate's is
@@ -894,7 +912,7 @@ export class ClaudeCodeEngine implements Engine {
       name: STUDIO_MCP_SERVER,
       version: "1.0.0",
       tools: [
-        checkpointTool(kit, request.onEvent),
+        checkpointTool(kit, request),
         ...(onCapture ? [captureTool(kit, onCapture)] : []),
         ...(onLiveTool ? (request.liveTools ?? []).map((spec) => liveTool(kit, spec, onLiveTool)) : []),
         ...interviewTools.map((spec) => intakeTool(kit, spec)),
@@ -1029,7 +1047,23 @@ export class ClaudeCodeEngine implements Engine {
     return this.#classify(err as Error);
   }
 
+  /**
+   * One delegation, its usage its own: a resumed session's running totals less what the session
+   * reported last (`session-cost.ts`), so its turns add up to what it spent.
+   */
   async delegate(request: DelegateRequest): Promise<DelegateResult> {
+    const before = await this.#costs.before(request.resume);
+    const result = await this.#steered(request);
+    const totals = sessionTotals(result.usage);
+    if (!totals) return result;
+    if (result.sessionId) await this.#costs.settle(result.sessionId, totals);
+    // A CLI that answered as another session (the resume was not taken) reported that one's totals.
+    const continued = result.sessionId !== undefined && result.sessionId === request.resume;
+    return { ...result, usage: { ...result.usage, ...turnShare(continued ? before : undefined, totals) } };
+  }
+
+  /** The delegation, with the steer said ready exactly once when the host asked to steer it. */
+  async #steered(request: DelegateRequest): Promise<DelegateResult> {
     const ready = request.steer?.ready;
     if (!ready) return this.#delegate(request, null);
     // Steer (DelegateRequest.steer): `ready` is said exactly once, whatever ends the delegation —
@@ -1112,8 +1146,9 @@ export class ClaudeCodeEngine implements Engine {
    * The contractor's session. It is a hired hand in ONE workspace, and every option here keeps
    * it there: its own sandbox, only the studio's MCP server, and none of the user's own config.
    */
-  async #delegateOptions(request: DelegateRequest, ctx: SessionContext): Promise<Record<string, unknown>> {
+  async #delegateOptions(asked: DelegateRequest, ctx: SessionContext): Promise<Record<string, unknown>> {
     const { cliInstallation, login, controller } = ctx;
+    const request = await withSessionHome(asked, login.home ?? this.systemHome);
     const interviewTools = request.interviewTools ?? [];
     const maxTurns = request.compact ? COMPACT_MAX_TURNS : (request.maxTurns ?? this.#maxTurns);
     const { cwd, directories, protectedPaths, rules } = await this.#contractorReach(request, login);
@@ -1153,8 +1188,11 @@ export class ClaudeCodeEngine implements Engine {
       allowedTools: allowedToolsFor(request, interviewTools),
       disallowedTools: disallowedToolsFor(request),
       // No sandbox key at all for a session that asks: Claude Code's default, which a game's own
-      // project settings may still turn on. Every command it runs was asked about first.
-      ...(asks ? {} : { sandbox: unattendedSandbox(request, protectedPaths) }),
+      // project settings may still turn on. Every command it runs was asked about first. A worker
+      // is boxed in every mode, Bypass included (`workerSandbox`).
+      // The box denies the whole sign-in homes (`baseDenyRead`) whatever the session's own home
+      // hands it: it is fenced from the list as the host built it.
+      ...(await sandboxFor(asked, asks, protectedPaths)),
       ...(directories.length ? { additionalDirectories: directories } : {}),
       ...(await this.#delegateSettings(request, rules)),
       // Only pin a config home when the studio owns the login; otherwise let Claude Code find
@@ -1175,8 +1213,11 @@ export class ClaudeCodeEngine implements Engine {
     const cwd = path.resolve(request.cwd);
     const outsideCwd = (dir: string): boolean => !isInside(cwd, dir);
     const additional = (request.extraReads ?? []).map((dir) => path.resolve(dir)).filter(outsideCwd);
-    // The folders the person granted this chat ("Yes, and allow access to …") join the reads.
-    const granted = (asksOf(request)?.directories ?? []).map((dir) => path.resolve(dir)).filter(outsideCwd);
+    // The folders the person granted this chat ("Yes, and allow access to …") join the reads, and
+    // a worker's write roots its folders.
+    const granted = [...(rulesAsks(request)?.directories ?? []), ...workerWrites(request)]
+      .map((dir) => path.resolve(dir))
+      .filter(outsideCwd);
     // The config home this session's CLI uses: the studio's, the one the environment names, or
     // (the person's sign-in, or none) the CLI's default `~/.claude`.
     const configHome = login.home ?? this.systemHome;
@@ -1198,8 +1239,7 @@ export class ClaudeCodeEngine implements Engine {
       protectedPaths,
       configHome,
       cwd,
-      denyReads: request.denyReads ?? [],
-      permissions: asksOf(request),
+      ...ruleFences(request),
       // What the Claude home fence left readable, in the session's own log.
       warn: (message) => request.onEvent?.({ type: DelegateEventType.Stderr, payload: message }),
     });
@@ -1218,8 +1258,14 @@ export class ClaudeCodeEngine implements Engine {
         ...(Object.keys(rules).length ? { permissions: rules } : {}),
         // The chat's own session works in its game folder (the host checked), checkpointed before
         // each message; a lead or the coordinator answers for a build.
-        ...(asksOf(request)
-          ? { autoMode: autoModeRules({ cwd: path.resolve(request.cwd), gameFolder: Boolean(request.permissions) }) }
+        ...(rulesAsks(request)
+          ? {
+              autoMode: autoModeRules({
+                cwd: path.resolve(request.cwd),
+                gameFolder: Boolean(request.permissions),
+                worker: Boolean(request.worker),
+              }),
+            }
           : {}),
         // Current models return thinking blocks empty unless a summary is asked for; the chat
         // shows the summary under a collapsed "Thinking details". Display only.
@@ -1698,7 +1744,8 @@ function isFailedResult(result: SdkResult): boolean {
  * The tokens and cost a result reports, onto `usage`. The cost is the session's running total;
  * tokens are each result's own, so a steered session that answered twice adds them up. They are
  * the main loop's alone (the SDK's `usage`); every model the session called, subagents and
- * auxiliary calls included, is in `by_model` (its `modelUsage`).
+ * auxiliary calls included, is in `by_model` (its `modelUsage`). The cost and `by_model` become
+ * the delegation's own share once it ends (`delegate`, `session-cost.ts`).
  */
 function recordResultUsage(usage: Usage, result: SdkResult): void {
   const reported = result.usage;
@@ -1840,14 +1887,17 @@ function delegatePrompt(request: DelegateRequest): unknown {
 }
 
 /**
- * The session's PreToolUse hooks: the one that refuses an edit outside the facet's files, when the
- * delegation has an owner map, and a lead's or coordinator's screen (`leadScreenHook`), which sees
- * every tool call before Claude Code's own rules do.
+ * The session's PreToolUse hooks: a worker's never-touch screen first (`neverTouchHook`, every
+ * call, reads included, in every mode), the one that refuses an edit outside the facet's files,
+ * when the delegation has an owner map, and a lead's, coordinator's or asking worker's screen
+ * (`leadScreenHook`), which sees every tool call before Claude Code's own rules do.
  */
 function sessionHooks(request: DelegateRequest, cwd: string, run: RunState): { hooks?: unknown } {
+  const screen = request.leadAsks ?? askingWorker(request);
   const preToolUse = [
+    ...(request.worker ? [{ hooks: [neverTouchHook(request.worker.neverTouch, cwd)] }] : []),
     ...(request.ownership ? [{ matcher: EDIT_TOOLS_MATCHER, hooks: [ownershipHook(request.ownership, cwd)] }] : []),
-    ...(request.leadAsks ? [{ hooks: [leadScreenHook(request.leadAsks)] }] : []),
+    ...(screen ? [{ hooks: [leadScreenHook(screen)] }] : []),
   ];
   const hooks = {
     ...(preToolUse.length ? { PreToolUse: preToolUse } : {}),
@@ -1901,8 +1951,9 @@ function allowedToolsFor(request: DelegateRequest, interviewTools: StudioToolSpe
     ...interviewTools.map((t) => studioToolName(t.name)),
     // A session that asks gets no blanket allow either: it has no sandbox, and a bare "Bash"
     // would silence the very question it exists to ask. Its standing allows are the rules the
-    // person saved (settings `permissions.allow`).
-    ...(request.readOnly || asksOf(request) ? [] : [SHELL_TOOL]),
+    // person saved (settings `permissions.allow`). Nor does a worker: its box runs sandboxed
+    // commands unasked itself where its mode does (Auto), and asks about them where it does not.
+    ...(request.readOnly || asksOf(request) || request.worker ? [] : [SHELL_TOOL]),
     ...(researches(request) ? WEB_TOOLS : []),
   ];
 }
@@ -1912,32 +1963,105 @@ function allowedToolsFor(request: DelegateRequest, interviewTools: StudioToolSpe
  * web, and so may a read-only lead or coordinator the person may talk to (`leadAsks`), the chat's
  * main agent. Another read-only session answers from what it was handed, and a
  * performance-optimization candidate (an isolated copy of the game) is measured against its
- * baseline alone.
+ * baseline alone. A worker researches when it writes, or when its lead asked for research
+ * (`WorkerSeat.research`); a reader or a worker in Plan otherwise does not.
  */
 function researches(request: DelegateRequest): boolean {
-  return (!request.readOnly || Boolean(request.leadAsks)) && !request.optimization;
+  if (request.optimization) return false;
+  if (request.worker) return request.worker.research || !workerReadOnly(request.worker, Boolean(request.readOnly));
+  return !request.readOnly || Boolean(request.leadAsks);
 }
 
 /**
- * The tools the session never gets. A chat that may launch a build is still a full contractor:
- * it answers, researches or edits itself and launches only when the ask needs a build. A
- * read-only session (the playtester) may not even run a command. A read-only lead or coordinator
- * the person may talk to (`leadAsks`), the chat's main agent, keeps what the chat's own session
- * keeps, its helpers included; the chat's mode decides each call.
+ * The tools the session never gets. No session gets Claude Code's own sub-agents (Agent, Task):
+ * Genex runs the workers, under the person's ceiling and the chat's mode. A chat that may launch a
+ * build is still a full contractor: it answers, researches or edits itself and launches only when
+ * the ask needs a build. A read-only session (the playtester) may not even run a command. A
+ * read-only lead or coordinator the person may talk to (`leadAsks`), the chat's main agent, keeps
+ * what the chat's own session keeps; the chat's mode decides each call.
  */
 function disallowedToolsFor(request: DelegateRequest): string[] {
-  if (request.readOnly && request.leadAsks) return [...MESSAGING_TOOLS, ...ASKING_TOOLS];
-  if (request.readOnly) return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
+  if (request.worker) return workerDisallowedTools(request);
+  if (request.readOnly && !request.leadAsks)
+    return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
   return [
     ...MESSAGING_TOOLS,
-    ...(request.optimization ? [...SUBAGENT_TOOLS, ...WEB_TOOLS] : []),
+    ...SUBAGENT_TOOLS,
+    ...(request.optimization ? WEB_TOOLS : []),
     ...(asksOf(request) ? ASKING_TOOLS : []),
   ];
+}
+
+/**
+ * A worker never gets messaging, Claude Code's own sub-agents (depth is one) or its ways to ask the
+ * person; a read-only one (Plan, a reader) not its edits or shell either, and the web only when it
+ * researches.
+ */
+function workerDisallowedTools(request: DelegateRequest): string[] {
+  const readOnly = Boolean(request.worker && workerReadOnly(request.worker, Boolean(request.readOnly)));
+  return [
+    ...MESSAGING_TOOLS,
+    ...SUBAGENT_TOOLS,
+    ...ASKING_TOOLS,
+    ...(readOnly ? [...EDIT_TOOLS, SHELL_TOOL] : []),
+    ...(researches(request) ? [] : WEB_TOOLS),
+  ];
+}
+
+/**
+ * A worker's request whose never-touch list keeps open what its own Claude home hands the session
+ * (`sessionHomeOpen`): a sign-in root may hold that home, and the session still Reads what the CLI
+ * saved there for it, and reads (never writes) what every session of that home sources. Every
+ * other request as it came.
+ */
+async function withSessionHome(request: DelegateRequest, configHome: string | null): Promise<DelegateRequest> {
+  const seat = request.worker;
+  if (!seat || !configHome) return request;
+  const handed = await sessionHomeOpen(configHome, request.cwd);
+  const open = [...new Set([...seat.neverTouch.open, ...handed.open])];
+  const readOpen = [...new Set([...(seat.neverTouch.readOpen ?? []), ...handed.readOpen])];
+  return { ...request, worker: { ...seat, neverTouch: { ...seat.neverTouch, open, readOpen } } };
 }
 
 /** What the session asks with: the person's own session's permissions, or a lead's; none when unattended. */
 function asksOf(request: DelegateRequest): DelegateAsks | undefined {
   return request.permissions ?? request.leadAsks;
+}
+
+/** A worker's way to ask, when its seat lets it ask (not read-only, its engine able to ask). */
+function askingWorker(request: DelegateRequest): WorkerAsks | undefined {
+  const seat = request.worker;
+  if (!seat?.asks || workerReadOnly(seat, Boolean(request.readOnly))) return undefined;
+  return seat.asks;
+}
+
+/** What the session's rules and Auto settings are built from: whoever asks, a worker that asks included. */
+function rulesAsks(request: DelegateRequest): DelegateAsks | undefined {
+  return asksOf(request) ?? askingWorker(request);
+}
+
+/** A worker's write roots, when its box lets it write. */
+function workerWrites(request: DelegateRequest): string[] {
+  const seat = request.worker;
+  if (!seat || workerReadOnly(seat, Boolean(request.readOnly))) return [];
+  return seat.writeRoots;
+}
+
+/**
+ * The session's deny inputs: the host's reads, and for a worker the never-touch roots no open
+ * folder sits in, unreadable and (for one that asks) never edited, so Claude Code's own file tools
+ * are fenced in every mode as well as by the hook. A root holding an open folder (Genex's data,
+ * holding the worker's copy) is left to the hook here and fenced around in the box.
+ */
+function ruleFences(request: DelegateRequest): { denyReads: string[]; permissions: DelegateAsks | undefined } {
+  const denyReads = request.denyReads ?? [];
+  const asks = rulesAsks(request);
+  if (!request.worker) return { denyReads, permissions: asks };
+  const whole = neverTouchWhole(request.worker.neverTouch);
+  return {
+    denyReads: [...denyReads, ...whole],
+    permissions: asks ? { ...asks, protectWrites: [...asks.protectWrites, ...whole] } : undefined,
+  };
 }
 
 /**
@@ -1948,6 +2072,7 @@ function asksOf(request: DelegateRequest): DelegateAsks | undefined {
  * answers (claude-permissions.ts). The picker switches either mid-turn.
  */
 function permissionOptions(request: DelegateRequest, running: RunningSession): Record<string, unknown> {
+  if (request.worker) return workerAskingOptions(request.worker, running, Boolean(request.readOnly));
   if (request.permissions) return askingOptions(request.permissions, running);
   if (request.leadAsks) return leadAskingOptions(request.leadAsks, running);
   return { permissionMode: "acceptEdits" };
@@ -1968,6 +2093,59 @@ function unattendedSandbox(request: DelegateRequest, protectedPaths: string[]): 
       denyRead: [...baseDenyRead(), ...(request.denyReads ?? []), ...protectedPaths],
     },
   };
+}
+
+/** The session's sandbox: none for a session that asks; a worker's box, in every mode; else the unattended one. */
+async function sandboxFor(
+  request: DelegateRequest,
+  asks: DelegateAsks | undefined,
+  protectedPaths: string[],
+): Promise<{ sandbox?: Record<string, unknown> }> {
+  if (request.worker) {
+    const box = workerBox(request.worker, Boolean(request.readOnly));
+    return { sandbox: await workerSandbox(request, box, protectedPaths) };
+  }
+  return asks ? {} : { sandbox: unattendedSandbox(request, protectedPaths) };
+}
+
+/**
+ * A worker's box: it writes its roots (in Bypass the home folder too), never the studio's protected
+ * folders nor anything the never-touch list names, fenced around its own open folders
+ * (`neverTouchFence`). Bypass and Auto run its sandboxed commands unasked; any other mode asks. A
+ * command it wants run outside the box goes through the mode's own approval
+ * (`allowUnsandboxedCommands`): Auto's classifier, the person in Accept edits and Manual; none in
+ * Bypass, nor where nobody can be asked. Outside the box only the never-touch hook holds it. The
+ * sandbox takes no network wildcard, so a command's network use is asked about as the mode asks
+ * (Bypass allows it).
+ */
+async function workerSandbox(
+  request: DelegateRequest,
+  box: WorkerBox,
+  protectedPaths: string[],
+): Promise<Record<string, unknown>> {
+  const fence = request.worker ? await neverTouchFence(request.worker.neverTouch) : { reads: [], writes: [] };
+  const roots = workerWrites(request);
+  const writes = box.home ? [os.homedir(), ...roots] : roots;
+  return {
+    enabled: true,
+    autoAllowBashIfSandboxed: box.autoAllow,
+    allowUnsandboxedCommands: box.unsandboxed,
+    filesystem: {
+      ...(box.writes && writes.length ? { allowWrite: writes } : {}),
+      denyWrite: [...protectedPaths, ...fence.writes, ...workerClaudeFolders(request.cwd, roots)],
+      denyRead: [...baseDenyRead(), ...(request.denyReads ?? []), ...protectedPaths, ...fence.reads],
+    },
+  };
+}
+
+/**
+ * Claude Code's own folder in the worker's folder and every folder it writes, as write denies: a
+ * later session there (the chat's own, a lead's, the person's terminal) loads the settings and hooks
+ * it holds, and a copy's work merges into the game. Spelled as the harness's own box spells them
+ * (`claudeFolderDenyWrites`): on macOS in any case and before they exist.
+ */
+function workerClaudeFolders(cwd: string, roots: readonly string[]): string[] {
+  return claudeFoldersIn([cwd, ...roots]);
 }
 
 /** A system message that says which mode the session runs in: its init, or a status that changed it. */
@@ -2030,17 +2208,26 @@ type ToolAnswer = {
   isError?: boolean;
 };
 
-/** `checkpoint`: the contractor says the game just became worth seeing; the chat shows the note. */
-function checkpointTool(kit: McpKit, onEvent: DelegateRequest["onEvent"]) {
+/**
+ * `checkpoint`: the contractor says the game just became worth seeing; the chat shows the note, and
+ * the studio's own checkpoint, when the delegation has one, answers what it did. A checkpoint that
+ * failed reports as failed, never ending the build.
+ */
+function checkpointTool(kit: McpKit, request: Pick<DelegateRequest, "onEvent" | "onCheckpoint">) {
   const { tool, z } = kit;
   return tool(
     StudioTool.Checkpoint,
     CHECKPOINT_TOOL.description,
     { note: z.string().describe(CHECKPOINT_TOOL.note) },
-    async (args: { note: string }) => {
+    async (args: { note: string }): Promise<ToolAnswer> => {
       const note = String(args.note ?? "").slice(0, CHECKPOINT_NOTE_CHARS);
-      onEvent?.({ type: DelegateEventType.Checkpoint, payload: { note } });
-      return { content: [{ type: "text" as const, text: CHECKPOINT_TOOL.reply }] };
+      request.onEvent?.({ type: DelegateEventType.Checkpoint, payload: { note } });
+      if (!request.onCheckpoint) return { content: [{ type: "text", text: CHECKPOINT_TOOL.reply }] };
+      try {
+        return { content: [{ type: "text", text: await request.onCheckpoint(note) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: CHECKPOINT_TOOL.failed(errorMessage(err)) }], isError: true };
+      }
     },
   );
 }

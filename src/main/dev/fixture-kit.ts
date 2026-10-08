@@ -42,8 +42,12 @@ export const FixtureName = {
   Notifications: "notifications",
   BuildGraph: "build-graph",
   LargeBuildGraph: "large-build-graph",
+  /** An Unreal lead's runs on the Builds graph: milestones, save points, sub-agents and the critic's advice. */
+  LeadGraph: "lead-graph",
   SandboxSetup: "sandbox-setup",
   UpdateReady: "update-ready",
+  UnrealGame: "unreal-game",
+  UnrealChat: "unreal-chat",
 } as const;
 export type FixtureName = (typeof FixtureName)[keyof typeof FixtureName];
 

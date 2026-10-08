@@ -26,17 +26,43 @@ import { afterNightNote } from "./after-night-prompts.ts";
 import { commissionHours, reopenAsked, reopens } from "./reopen-run.ts";
 import { type ReopenGrant, reopenRunTool } from "./reopen-run-prompts.ts";
 import { steeredCall } from "./chat-steer.ts";
+import { engineOfGame, GameEngine } from "./game-engine.ts";
+import { holdsWebGame } from "./web-game.ts";
+import {
+  CoreFact,
+  factsOfGame,
+  hasFact,
+  kindPending,
+  servedAsWeb,
+  servedFactsKey,
+  servedFactsOf,
+} from "./folder-facts.ts";
+import { offersUnrealGame } from "./unreal-prompts.ts";
+import { factsReadyPrompt, UNREAL_KIND } from "./project-prompts.ts";
+import {
+  EditorWait,
+  UNREAL_START_WAIT_MS,
+  type UnrealInvoke,
+  unrealOnComputer,
+  WAIT_MESSAGE,
+  waitEndWords,
+  waitForEditor,
+} from "./unreal/editor-wait.ts";
+import { unrealReadyPrompt } from "./unreal/editor-wait-prompts.ts";
 import { EngineFailure, StopReason } from "./outage.ts";
 import { HostMethod } from "./host-methods.ts";
 import { StudioContract } from "./page-contract.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
-import { clip, CLIP_BRIEF, CLIP_GAME_TITLE } from "./text.ts";
+import { clip, CLIP_BRIEF, CLIP_DETAIL, CLIP_GAME_TITLE } from "./text.ts";
+import { isPlainRecord } from "./json.ts";
 import { SECOND_MS, sleep } from "./time.ts";
 import { recordFirstPreview } from "./first-preview.ts";
 import { canFallBack, runToolLoop } from "./tool-loop.ts";
 import { briefSummary, goesOn } from "./chat-continuity.ts";
 import { compactedSummary, endedByCompaction } from "./compaction-log.ts";
+import { EDITOR_ACTIVITY_TOOL, type EditorActivity, editorActivityOf } from "./unreal/editor-activity.ts";
 import { TurnStop, sayInTurn } from "./turn-record.ts";
+import { type ChatWorkersSeat, chatWorkersGrant, withChatWorkers } from "./workers/chat-workers.ts";
 import type { TurnOptions, TurnOutcome } from "./turn-loop.ts";
 import type { AnyRecord, CallResult, HarnessCtx, HarnessTool, ToolCtx, ToolOutcome } from "../types/harness.d.ts";
 import type {
@@ -46,6 +72,7 @@ import type {
   DelegateImage,
   DelegateResult,
   Message,
+  PluginKindOffer,
   StudioToolSpec,
 } from "../types/host-api.d.ts";
 
@@ -55,6 +82,19 @@ const PREVIEW_SETTLE_MS = 1.5 * SECOND_MS;
 const BARE_ASK_CHARS = 24;
 /** …and has fewer than this many words. */
 const BARE_ASK_WORDS = 4;
+/**
+ * The Unreal plugin's harness tools an Unreal game's chat turn runs as it ends, by their agent
+ * names: what the editor is doing (`unreal/editor-activity.ts`, read as the Unreal lead's save
+ * points read it) and saving all, which the lead's save points name alike
+ * (`unreal/live-contract.ts` `UnrealLivePluginTool`); a chat turn spells its own so it never loads
+ * the Unreal Loop. Never rename a value.
+ */
+const UnrealTurnTool = {
+  EditorActivity: EDITOR_ACTIVITY_TOOL,
+  SaveAll: "unreal__save-all",
+} as const;
+/** A chat turn's snapshot of its Unreal game's work: the game folder. */
+const UNREAL_SNAPSHOT_SCOPE = "game";
 /**
  * Whose engine call a `messages` record's `usage` reports when it is not the chat's own
  * (`usage_source`). `delegation`: a delegated turn's reply carrying its contractor's report, which
@@ -122,7 +162,21 @@ const MESSAGE = {
   loadsClean: "The game loads clean in the preview.",
   done: "Done.",
   pickUp: " — send a message to pick up where it left off",
+  unrealSaved: (count: number) =>
+    `This turn left ${unsavedFiles(count)} in Unreal, so Genex saved them and took a snapshot of the game.`,
+  unrealPartlySaved: (left: number) =>
+    `Genex saved Unreal's work and took a snapshot of the game, but ${left} ${left === 1 ? "file" : "files"} stayed unsaved.`,
+  unrealSavedNoSnapshot: (why: string) => `Genex saved Unreal's work, but couldn't take a snapshot of the game: ${why}`,
+  unrealPlaying: (count: number) =>
+    `This turn left ${unsavedFiles(count)} in Unreal, but the game is playing there, so Genex didn't save them. Stop the play session, then save in Unreal.`,
+  unrealNotSaved: (why: string) => `This turn left unsaved work in Unreal, and Genex couldn't save it: ${why}`,
+  unrealSnapshotReason: "Unsaved Unreal work at the end of a chat turn",
 } as const;
+
+/** "1 unsaved file", "412 unsaved files". */
+function unsavedFiles(count: number): string {
+  return `${count} unsaved ${count === 1 ? "file" : "files"}`;
+}
 
 /** What a delegated turn works with once its chat is read and its folder chosen. */
 interface Handoff {
@@ -143,6 +197,16 @@ interface Handoff {
   descriptor: GameProject | null;
   projectDir: string | null;
   scaffolded: boolean;
+  /**
+   * The folder has no kind yet (made by this turn, or by New game before the chat's first ask), this
+   * is the chat's first ask, and an engine plugin is on: the brief asks which kind first, with the
+   * question card bridged in (unreal-prompts.ts `engineChoiceRule`).
+   */
+  engineChoice: boolean;
+  /** The kinds the plugins on offer this game (`plugins.tools`'s `kinds`): the question card's options. */
+  kinds: PluginKindOffer[];
+  /** The folder holds an Unreal project and the Unreal plugin is off: its brief says it has no Unreal tools. */
+  pluginsOff: boolean;
   /** Nothing has been made in this game yet: a first message there is a blank page, not code to inspect. */
   fresh: boolean;
   /** "folder AI Games/rift", never an absolute path — the last two segments say it all. */
@@ -177,6 +241,36 @@ export async function runDelegatedTurn(ctx: HarnessCtx, options: DelegatedOption
     return { stopped: TurnStop.Done, round: 0, engine };
   }
   const handoff = await placeHandoff(ctx, options, chat);
+  // The chat's own session may run workers for this turn: they stop when it ends, however it ends.
+  return withChatWorkers(ctx, chatWorkersSeat(options, handoff), () => handOver(ctx, options, handoff));
+}
+
+/**
+ * The workers a chat turn offers its session from, or null: only the chat's own turn (its message
+ * steers it), never a run's builder, and only in a game folder.
+ */
+function chatWorkersSeat(options: DelegatedOptions, handoff: Handoff): ChatWorkersSeat | null {
+  const { steer, runId, threadId, engine, model, effort } = options;
+  const { project, projectDir, folderLabel, descriptor, commission } = handoff;
+  if (!steer || runId || !projectDir) return null;
+  return {
+    threadId,
+    turn: steer.messageId,
+    engine,
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+    commission,
+    project,
+    gameDir: projectDir,
+    folderLabel,
+    facts: factsOfGame(descriptor),
+    holds: descriptor?.holds ?? null,
+  };
+}
+
+/** The turn's ask, handed to its contractor in the folder chosen for it, and what it did reported. */
+async function handOver(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<TurnOutcome> {
+  const { turnId, engine } = options;
   const briefFor = await briefWriter(ctx, options, handoff);
   await recordHandoff(ctx, options, handoff);
   const callId = await recordDelegateRequest(ctx, options, handoff);
@@ -197,11 +291,71 @@ export async function runDelegatedTurn(ctx: HarnessCtx, options: DelegatedOption
     await sayInTurn(ctx, turnId, MESSAGE.stopped);
     return { stopped: TurnStop.Aborted, round: 0, engine };
   }
+  // Before anything the turn recorded starts (a build, a run), and before the folder is compared.
+  const unrealSaved = await saveUnrealTurn(ctx, options, handoff);
   const change = await folderChange(ctx, handoff.project, before);
   // Anything at all refreshes the chat's view of the game; a read-only setup or status turn
   // changed nothing and keeps the current preview.
   if (change.any) ctx.notify("game.changed", { project: handoff.project });
-  return finishTurn(ctx, options, handoff, `${callId}_intake`, result, change);
+  const outcome = await finishTurn(ctx, options, handoff, `${callId}_intake`, result, change);
+  // Said after the builder's own report, which it follows from.
+  if (unrealSaved) await sayInTurn(ctx, turnId, unrealSaved);
+  // A turn that changed what the project is goes on by itself, with the tools for its new kind.
+  return continueOnNewFacts(ctx, options, handoff, { result, outcome });
+}
+
+/**
+ * A chat turn's save is the harness's own step and part of the chat's checkpoint, which Plan mode
+ * holds back: a planning chat's editor is neither read for saving nor saved.
+ */
+const CHECKPOINT_STEP = { step: true, checkpoint: true } as const;
+
+/**
+ * What the editor of the turn's Unreal game is doing as the turn ends: a play session runs, and how
+ * many packages are unsaved. Null when the plugin can't say both.
+ */
+async function unrealActivity(
+  ctx: HarnessCtx,
+  options: DelegatedOptions,
+  project: string,
+): Promise<EditorActivity | null> {
+  const name = UnrealTurnTool.EditorActivity;
+  const call = { project, threadId: options.threadId, name, args: {}, ...CHECKPOINT_STEP };
+  return editorActivityOf(await ctx.call(HostMethod.PluginsInvoke, call).catch(() => null));
+}
+
+/** A failure's message, on one line and cut short. */
+function reasonOf(err: unknown): string {
+  return clip(String((err as Error)?.message ?? err).replace(/\s+/g, " "), CLIP_DETAIL);
+}
+
+/**
+ * An Unreal game's chat turn that left unsaved work in its editor: Genex saves it and snapshots the
+ * game folder, and the chat is told (the line returned). Never during a play session, where the
+ * person may be playing: the chat is told the work stays unsaved. A run's turn has its own saves, an
+ * editor that can't say is left alone, and a save that failed is not snapshotted.
+ */
+async function saveUnrealTurn(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<string | null> {
+  if (options.runId) return null;
+  if ((await engineAtTurnEnd(ctx, handoff)) !== GameEngine.Unreal) return null;
+  const { project } = handoff;
+  const activity = await unrealActivity(ctx, options, project);
+  if (!activity || activity.dirty <= 0) return null;
+  if (activity.playing) return MESSAGE.unrealPlaying(activity.dirty);
+  const call = { project, threadId: options.threadId, name: UnrealTurnTool.SaveAll, args: {}, ...CHECKPOINT_STEP };
+  const saved = await ctx.call(HostMethod.PluginsInvoke, call).then(
+    (answer: unknown) => ({ answer }),
+    (err: unknown) => ({ error: reasonOf(err) }),
+  );
+  if ("error" in saved) return MESSAGE.unrealNotSaved(saved.error);
+  const reason = MESSAGE.unrealSnapshotReason;
+  const failed = await ctx.call(HostMethod.SnapshotCreate, { scope: UNREAL_SNAPSHOT_SCOPE, reason, project }).then(
+    () => null,
+    (err: unknown) => reasonOf(err),
+  );
+  if (failed) return MESSAGE.unrealSavedNoSnapshot(failed);
+  const left = isPlainRecord(saved.answer) && Array.isArray(saved.answer.dirty) ? saved.answer.dirty.length : 0;
+  return left ? MESSAGE.unrealPartlySaved(left) : MESSAGE.unrealSaved(activity.dirty);
 }
 
 /**
@@ -223,7 +377,8 @@ async function finishTurn(
   // After a paused night the session may ask to resume it: the chat does that once the reply ends.
   const resume = options.afterNight ? resumeAsked(options.afterNight, recorded) : null;
   if (resume) return handBack(ctx, options, result, MESSAGE.resumedAnyway, { resumeRun: resume });
-  const calls = launchTool ? recorded : [];
+  // A Loop chat may ask or launch; any chat asked to choose its engine may ask.
+  const calls = launchTool || handoff.engineChoice ? recorded : [];
   const question = calls.find((c) => c.name === askUser.name);
   const launch = calls.find((c) => c.name === launchTool?.name);
   // A question is not approval to start. Even if the model also recorded a launch, wait for
@@ -234,6 +389,141 @@ async function finishTurn(
   if (reopen) return handBack(ctx, options, result, MESSAGE.reopenedAnyway, { reopenRun: reopen });
   if (launchTool && launch) return launchFromChat(ctx, options, handoff, launchTool, intakeId, result, launch.args);
   return reportBuild(ctx, options, handoff, result, change);
+}
+
+/** A finished turn as it stands: the builder's result and the turn's outcome. */
+type FinishedTurn = { result: DelegateResult; outcome: TurnOutcome };
+
+/** The Unreal plugin's harness tools for this chat's game, its calls recorded in this chat. */
+function unrealInvoke(ctx: HarnessCtx, options: DelegatedOptions, project: string): UnrealInvoke {
+  return (name, args) =>
+    ctx.call(HostMethod.PluginsInvoke, { project, threadId: options.threadId, name, args, step: true });
+}
+
+/** Whether a chat's own turn (no run's) ended as it should, with a session to go on in. */
+function endedWithSession(options: DelegatedOptions, turn: FinishedTurn): boolean {
+  if (options.runId) return false;
+  return turn.outcome.stopped === TurnStop.Done && turn.result.ok && Boolean(turn.result.sessionId);
+}
+
+/** Whether a game is linked to its Unreal project: the link the Unreal plugin finds the project by. */
+function linkedToUnreal(game: Handoff["descriptor"]): boolean {
+  return engineOfGame(game) === GameEngine.Unreal && hasFact(factsOfGame(game), CoreFact.UnrealProject);
+}
+
+/** The Unreal project file a game is linked to, or null when it is linked to none. */
+function unrealLinkOf(game: Handoff["descriptor"]): string | null {
+  return linkedToUnreal(game) ? (game?.engine?.project ?? null) : null;
+}
+
+/**
+ * A chat's own turn that changed what its project is (the served facts at its end differ from its
+ * start's: a port, or project files it wrote): tools are fixed per turn, so the same session goes on
+ * by itself, with the tools and a brief for the new kind. A turn that linked the game to an Unreal
+ * project, or switched its link to another, first waits for the editor to answer (`continueOnUnreal`). A run's turn, a turn that did
+ * not end as it should, one whose facts are the same (a folder with no kind that took the web
+ * starter included) and one whose game still has no facts end as they did.
+ */
+async function continueOnNewFacts(
+  ctx: HarnessCtx,
+  options: DelegatedOptions,
+  handoff: Handoff,
+  turn: FinishedTurn,
+): Promise<TurnOutcome> {
+  if (!endedWithSession(options, turn)) return turn.outcome;
+  const game = await gameAtTurnEnd(ctx, handoff);
+  // Still no facts (files of its own that no rule knows give no kind): nothing new to go on with.
+  if (factsOfGame(game).length === 0) return turn.outcome;
+  if (servedFactsKey(handoff.descriptor) === servedFactsKey(game)) return turn.outcome;
+  const next = await withFactsNow(ctx, handoff, game);
+  // A new link, or a switch to another project: either way that project's editor may still be opening.
+  const link = unrealLinkOf(game);
+  if (link && link !== unrealLinkOf(handoff.descriptor)) return continueOnUnreal(ctx, options, next, turn);
+  return goOnInSession(ctx, options, next, turn, factsReadyPrompt(servedFactsOf(game)));
+}
+
+/**
+ * The turn's handoff for the game as it is now: its descriptor, and the plugins on offer for it. Its
+ * kind is decided, so the next brief neither asks which kind it is nor reads it as a new starter.
+ */
+async function withFactsNow(ctx: HarnessCtx, handoff: Handoff, game: Handoff["descriptor"]): Promise<Handoff> {
+  const offer = await pluginOffer(ctx, handoff.project, game);
+  return { ...handoff, descriptor: game, scaffolded: false, fresh: false, engineChoice: false, ...offer };
+}
+
+/**
+ * A turn that linked the game to its Unreal project while Unreal still opens it: the chat says it
+ * waits, waits for the editor to answer (unreal/editor-wait.ts), then the same session goes on by
+ * itself with what it said it would build first. Stop ends the wait; an editor that stops opening
+ * without answering is said plainly.
+ */
+async function continueOnUnreal(
+  ctx: HarnessCtx,
+  options: DelegatedOptions,
+  handoff: Handoff,
+  turn: FinishedTurn,
+): Promise<TurnOutcome> {
+  const invoke = unrealInvoke(ctx, options, handoff.project);
+  const clock = { now: () => Date.now(), cancelled: () => Boolean(ctx.cancelled) };
+  const now = await waitForEditor(invoke, clock, 0);
+  if (now.state !== EditorWait.Starting && now.state !== EditorWait.Ready) return turn.outcome;
+  if (now.state === EditorWait.Starting) {
+    await sayInTurn(ctx, options.turnId, WAIT_MESSAGE.waiting(now.project));
+    ctx.setStatus?.(`waiting for Unreal to open ${now.project ?? handoff.project}`);
+  }
+  const ready = now.state === EditorWait.Ready ? now : await waitForEditor(invoke, clock, UNREAL_START_WAIT_MS);
+  if (ctx.cancelled) {
+    await sayInTurn(ctx, options.turnId, WAIT_MESSAGE.stopped);
+    return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
+  }
+  if (ready.state !== EditorWait.Ready) {
+    await sayInTurn(ctx, options.turnId, waitEndWords(ready));
+    return turn.outcome;
+  }
+  return goOnInSession(ctx, options, handoff, turn, unrealReadyPrompt(ready.project));
+}
+
+/**
+ * The same session, told `prompt` (its project's new kind, or that Unreal answers now), goes on as
+ * the chat's current turn (a message sent while it waited joins it), recorded and reported like the
+ * turn's first leg. A session that cannot be resumed starts afresh from a brief for the handoff as
+ * it is now, never the brief of the kind the turn started with.
+ */
+async function goOnInSession(
+  ctx: HarnessCtx,
+  options: DelegatedOptions,
+  handoff: Handoff,
+  turn: FinishedTurn,
+  prompt: string,
+): Promise<TurnOutcome> {
+  const { turnId, engine } = options;
+  const briefFor = await briefWriter(ctx, options, handoff);
+  const callId = await recordDelegateRequest(ctx, options, handoff);
+  const before = await contentStamps(ctx, handoff.project);
+  let result: DelegateResult;
+  try {
+    result = await steeredCall(ctx, options.steer, {
+      prompt,
+      resume: turn.result.sessionId ?? null,
+      call: (text, resume, images) => delegate(ctx, options, handoff, text, resume, images),
+      fresh: () => `${briefFor(false)}\n\n${prompt}`,
+    });
+  } catch (err: any) {
+    return handleDelegateFailure(ctx, options, handoff.project, callId, err);
+  }
+  await recordDelegateResult(ctx, turnId, callId, result);
+  await bookmarkSession(ctx, options, handoff.project, result);
+  if (result.stopReason === StopReason.Stopped) {
+    await sayInTurn(ctx, turnId, MESSAGE.stopped);
+    return { stopped: TurnStop.Aborted, round: 0, engine };
+  }
+  // The leg that built in Unreal is the one most likely to leave its editor's work unsaved.
+  const unrealSaved = await saveUnrealTurn(ctx, options, handoff);
+  const change = await folderChange(ctx, handoff.project, before);
+  if (change.any) ctx.notify("game.changed", { project: handoff.project });
+  const outcome = await finishTurn(ctx, options, handoff, `${callId}_intake`, result, change);
+  if (unrealSaved) await sayInTurn(ctx, turnId, unrealSaved);
+  return outcome;
 }
 
 /** Stamps nobody took: every check that compares them runs. */
@@ -272,7 +562,17 @@ async function folderChange(ctx: HarnessCtx, project: string, before: ContentSta
 /** The chat as the turn finds it, before any folder is chosen or made. */
 type ChatReading = Omit<
   Handoff,
-  "project" | "descriptor" | "projectDir" | "scaffolded" | "fresh" | "folderLabel" | "extraReads" | "startedAt"
+  | "project"
+  | "descriptor"
+  | "projectDir"
+  | "scaffolded"
+  | "fresh"
+  | "engineChoice"
+  | "kinds"
+  | "pluginsOff"
+  | "folderLabel"
+  | "extraReads"
+  | "startedAt"
 > & {
   project: string | null;
   games: GameProject[];
@@ -365,6 +665,7 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
     // is working in, the way every run brief already is (autopilot.ts, director.ts).
     const descriptor = games.find((g) => g.name === chat.project) ?? null;
     const projectDir = descriptor?.dir ?? null;
+    const offer = await pluginOffer(ctx, chat.project, descriptor);
     return {
       ...reading,
       project: chat.project,
@@ -372,6 +673,8 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
       projectDir,
       scaffolded: false,
       fresh: await isFreshGame(ctx, chat, descriptor),
+      engineChoice: asksKind(options, chat, descriptor, offer.kinds),
+      ...offer,
       folderLabel: folderLabel(projectDir, chat.project),
       extraReads,
       startedAt: Date.now(),
@@ -387,6 +690,7 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
     threadId: options.threadId,
   });
   const project = created.name as string;
+  const offer = await pluginOffer(ctx, project, created);
   return {
     ...reading,
     project,
@@ -394,6 +698,9 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
     projectDir: created.dir,
     scaffolded: true,
     fresh: true,
+    // A game the studio just made has no kind yet: with an engine plugin on, the user picks first.
+    engineChoice: offer.kinds.length > 0,
+    ...offer,
     folderLabel: folderLabel(created.dir, project),
     extraReads,
     startedAt: Date.now(),
@@ -419,6 +726,42 @@ async function isFreshGame(ctx: HarnessCtx, chat: ChatReading, descriptor: GameP
   }
 }
 
+/**
+ * Whether the brief asks which kind the game is, with the question card: any fresh brief on a folder
+ * that still has no kind (the host's facts say it), while an engine plugin offers a kind, so a
+ * greeting first never loses the card. A folder that has a kind, a resumed session (the answer to the
+ * card comes back to it) and a run's own turn are never asked.
+ */
+function asksKind(
+  options: DelegatedOptions,
+  chat: ChatReading,
+  descriptor: GameProject | null,
+  kinds: readonly PluginKindOffer[],
+): boolean {
+  if (!kindPending(descriptor) || chat.resume || options.runId) return false;
+  return kinds.length > 0;
+}
+
+/** What the plugins on offer a game's session: the kinds their tools make, and whether its Unreal project has no plugin on. */
+interface PluginOffer {
+  kinds: PluginKindOffer[];
+  pluginsOff: boolean;
+}
+
+/**
+ * What the plugins on offer this game (`plugins.tools {project}`): the kinds their tools make (a
+ * host that lists none: the Unreal plugin's, while it serves its new-game tool), and whether the
+ * folder's Unreal project has no Unreal plugin on. A host that cannot say offers nothing.
+ */
+async function pluginOffer(ctx: HarnessCtx, project: string, descriptor: GameProject | null): Promise<PluginOffer> {
+  const plugins = await ctx.call(HostMethod.PluginsTools, { project }).catch(() => null);
+  const unrealOn = offersUnrealGame(plugins?.tools);
+  const listed = Array.isArray(plugins?.kinds) ? plugins.kinds : null;
+  const kinds = listed ?? (unrealOn ? [UNREAL_KIND] : []);
+  const pluginsOff = !unrealOn && hasFact(factsOfGame(descriptor), CoreFact.UnrealProject);
+  return { kinds, pluginsOff };
+}
+
 /** "folder AI Games/rift", never an absolute path — the last two segments say it all. */
 function folderLabel(projectDir: string | null | undefined, project: string): string {
   return projectDir ? projectDir.split("/").slice(-2).join("/") : project;
@@ -437,6 +780,11 @@ async function briefWriter(
   const missing = await contractMissing(ctx, handoff);
   // A reopen's rules live in the after-night note: a change goes to the build, not to a launch.
   const launch = handoff.reopening ? null : launchGrant(handoff);
+  // The engine question offers Unreal as this computer has it: ready, only a newer one, or none.
+  const unrealEngine = handoff.engineChoice
+    ? await unrealOnComputer(unrealInvoke(ctx, options, handoff.project))
+    : null;
+  const workers = Object.keys(chatWorkersGrant(options.threadId, options.steer?.messageId));
   return (resumed) =>
     buildContractorBrief({
       ask,
@@ -452,9 +800,20 @@ async function briefWriter(
       // The one thing in the brief that is spelled per engine (M4.8b): a Codex session cannot
       // call an mcp__ name and a Claude session cannot run the bridge command.
       engine: options.engine,
+      // The engine the GAME builds in: an Unreal game is briefed for its editor, not as a page.
+      gameEngine: engineOfGame(descriptor),
+      engineProject: descriptor?.engine?.project ?? null,
       launch,
+      engineChoice: handoff.engineChoice,
+      unrealEngine,
+      // What the folder holds decides the rules; a host that lists no facts leaves them to the engine.
+      facts: Array.isArray(descriptor?.facts) ? descriptor.facts : null,
+      holds: descriptor?.holds ?? null,
+      kinds: handoff.kinds,
+      pluginsOff: handoff.pluginsOff,
       afterNight: options.afterNight ? afterNightNote(options.afterNight, options.engine, reopenGrant(handoff)) : null,
       compacted: handoff.compacted,
+      workers: workers.length > 0,
     });
 }
 
@@ -494,7 +853,7 @@ function launchGrant(handoff: Handoff): LaunchGrant | null {
  */
 async function contractMissing(ctx: HarnessCtx, handoff: Handoff): Promise<boolean> {
   const briefForBuiltGame = !handoff.resume && handoff.descriptor?.built === true;
-  if (!briefForBuiltGame) return false;
+  if (!briefForBuiltGame || !servedAsWeb(handoff.descriptor)) return false;
   const readiness = await ctx.call(HostMethod.GameValidate, { project: handoff.project }).catch(() => null);
   return readiness?.contract === StudioContract.Missing;
 }
@@ -520,8 +879,14 @@ function handoffText(options: DelegatedOptions, handoff: Handoff): string {
   if (resume) return `Resuming the contractor in ${where} — same chat, its context restored.`;
   return [
     buildOpening(handoff, where),
-    `${who} works alone and can't ask questions mid-build, so it builds from this chat. It shows checkpoints in the preview as it goes and reports back here when done.`,
+    `${who} works alone and can't ask questions mid-build, so it builds from this chat. ${progressWords(handoff)}`,
   ].join(" ");
+}
+
+/** How the build shows its progress: checkpoints in the web preview, or, for any other kind, its report alone. */
+function progressWords(handoff: Handoff): string {
+  if (!servedAsWeb(handoff.descriptor)) return "It reports back here when done.";
+  return "It shows checkpoints in the preview as it goes and reports back here when done.";
 }
 
 function buildOpening(handoff: Handoff, where: string): string {
@@ -587,7 +952,9 @@ async function recordDelegateRequest(ctx: HarnessCtx, options: DelegatedOptions,
  */
 function senses(options: DelegatedOptions, handoff: Handoff): AnyRecord {
   const { project, projectDir } = handoff;
-  if (!projectDir) return {};
+  // Only a web game (or a folder with no kind yet, served as one) is a page to capture or drive: an
+  // Unreal game is seen in its editor, and any other kind in its own app.
+  if (!projectDir || !servedAsWeb(handoff.descriptor)) return {};
   return {
     selfCapture: {
       project,
@@ -599,21 +966,28 @@ function senses(options: DelegatedOptions, handoff: Handoff): AnyRecord {
   };
 }
 
+/** A tool of the harness's own, as the session is handed it. */
+const bridged = (tool: HarnessTool) =>
+  ({ name: tool.name, description: tool.description, parameters: tool.parameters }) as StudioToolSpec;
+
 /** A Loop chat's own tools, bridged in: its launch, and its question. */
 function bridgedTools(launchTool: HarnessTool): StudioToolSpec[] {
-  return [
-    { name: launchTool.name, description: launchTool.description, parameters: launchTool.parameters },
-    { name: askUser.name, description: askUser.description, parameters: askUser.parameters },
-  ] as StudioToolSpec[];
+  return [bridged(launchTool), bridged(askUser)];
+}
+
+/** The question card alone, for an Auto chat asked to choose its new game's engine. */
+function questionCard(handoff: Handoff): StudioToolSpec[] {
+  return handoff.engineChoice ? [bridged(askUser)] : [];
 }
 
 /**
- * What the session is handed beside its own tools: a Loop chat's launch and question; after a night it
+ * What the session is handed beside its own tools: a Loop chat's launch and question, or the question
+ * alone for a new game's engine; after a night it
  * led, the run's controls, a paused night's resume, and — reopening a finished build — the reopen
  * first, beside the launch for a start over.
  */
 function sessionTools(options: DelegatedOptions, handoff: Handoff): AnyRecord {
-  const launch = handoff.launchTool ? bridgedTools(handoff.launchTool) : [];
+  const launch = handoff.launchTool ? bridgedTools(handoff.launchTool) : questionCard(handoff);
   if (!options.afterNight) return launch.length ? { interviewTools: launch } : {};
   const grant = afterNightGrant(options.afterNight);
   const reopen = handoff.reopening ? [reopenRunTool] : [];
@@ -667,6 +1041,8 @@ function delegate(
     ...(options.deadlineMs ? { timeoutMs: Math.max(MIN_DELEGATE_TIMEOUT_MS, options.deadlineMs - Date.now()) } : {}),
     // This session is the chat's current turn: what the person sends meanwhile reaches it.
     ...(options.steer ? { chatTurn: { messageId: options.steer.messageId } } : {}),
+    // The chat's own turn may run workers while its pool is open (workers/chat-workers.ts).
+    ...chatWorkersGrant(threadId, options.steer?.messageId),
   });
 }
 
@@ -877,7 +1253,7 @@ async function askInChat(
   change: FolderChange,
 ): Promise<TurnOutcome> {
   const { turnId, engine } = options;
-  const check = change.source ? await lookAtBuild(ctx, options, handoff, result) : NOTHING_SEEN;
+  const check = await previewOfTurn(ctx, options, handoff, result, change);
   const said = [result.summary?.trim(), check.health].filter(Boolean).join("\n\n");
   if (said) await sayInTurn(ctx, turnId, said);
   await recordInterviewQuestion({ ...ctx, ...options, turnId } as ToolCtx, args);
@@ -1005,6 +1381,47 @@ const NOTHING_SEEN: PreviewCheck = Object.freeze({
 });
 
 /**
+ * What the preview showed of a finished turn: it is looked at when it changed the game's sources
+ * and the game is a web page as the turn ends. A game that is no web page (linked to Unreal, or a
+ * folder with no web game in it) has nothing for the preview to show: a black canvas would tell
+ * the user to fix a screen that was never there and teach SkillOpt failed builds, so it gets no
+ * health pass and no `build_observation`.
+ */
+async function previewOfTurn(
+  ctx: HarnessCtx,
+  options: DelegatedOptions,
+  handoff: Handoff,
+  result: DelegateResult,
+  change: FolderChange,
+): Promise<PreviewCheck> {
+  if (!change.source) return NOTHING_SEEN;
+  if (!(await webGameAtTurnEnd(ctx, handoff))) return NOTHING_SEEN;
+  return lookAtBuild(ctx, options, handoff, result);
+}
+
+/**
+ * The game as the host lists it when the turn ends: the turn itself may have linked it to Unreal
+ * (the turn that answers the engine question makes the Unreal project) or changed what its folder
+ * holds. A host that cannot answer, or no longer lists the game, leaves the descriptor the turn
+ * started with.
+ */
+async function gameAtTurnEnd(ctx: HarnessCtx, handoff: Handoff): Promise<Handoff["descriptor"]> {
+  const games = await ctx.call(HostMethod.GameList).catch(() => null);
+  const game = Array.isArray(games) ? games.find((g) => g.name === handoff.project) : undefined;
+  return game ?? handoff.descriptor;
+}
+
+/** The game's engine as the turn ends (`gameAtTurnEnd`). */
+async function engineAtTurnEnd(ctx: HarnessCtx, handoff: Handoff): Promise<GameEngine> {
+  return engineOfGame(await gameAtTurnEnd(ctx, handoff));
+}
+
+/** Whether the game is a web page as the turn ends (`gameAtTurnEnd`, `holdsWebGame`). */
+async function webGameAtTurnEnd(ctx: HarnessCtx, handoff: Handoff): Promise<boolean> {
+  return holdsWebGame(await gameAtTurnEnd(ctx, handoff));
+}
+
+/**
  * USE the studio's own senses: load the game and see whether it actually runs, instead of
  * taking the contractor's word for it (the first build shipped with zero verification), and
  * record what was seen.
@@ -1044,7 +1461,7 @@ async function reportBuild(
   change: FolderChange,
 ): Promise<TurnOutcome> {
   const { turnId, engine } = options;
-  const check = change.source ? await lookAtBuild(ctx, options, handoff, result) : NOTHING_SEEN;
+  const check = await previewOfTurn(ctx, options, handoff, result, change);
   // A finished build Loop could have reopened, changed by the session's own hands: say so, since
   // the person picked a Loop and no build started (golden-boot-glory).
   const direct = handoff.reopening && change.source && result.ok ? MESSAGE.madeDirectly : null;

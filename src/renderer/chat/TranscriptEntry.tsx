@@ -17,7 +17,10 @@ import { AssetResults } from "./AssetResults.tsx";
 import { ChatDisclosure } from "./ChatDisclosure.tsx";
 import { CommandRun } from "./CommandRun.tsx";
 import { ChatQuestion } from "./ChatQuestion.tsx";
+import { EngineLinkLine } from "./EngineLinkLine.tsx";
 import { PermissionOutcome } from "./PermissionRequest.tsx";
+import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
+import { DontWaitOfferCard } from "./DontWaitOfferCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
 import { UserMessage } from "./UserMessage.tsx";
 import { WorkLog } from "./WorkLog.tsx";
@@ -68,7 +71,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
   const deliveries = useMemo(() => (entry.kind === EntryKind.Assets ? [entry.delivery] : []), [entry]);
   switch (entry.kind) {
     case WORK_KIND:
-      return <WorkLog items={entry.items} />;
+      return <WorkLog items={entry.items} deliveries={entry.deliveries} onOpenAssets={context.onShowAssets} />;
     case EntryKind.Assets:
       return <AssetResults deliveries={deliveries} onOpenAssets={context.onShowAssets} />;
     case EntryKind.User:
@@ -124,6 +127,10 @@ export const TranscriptEntry = memo(function TranscriptEntry({
       return <ActionEntry entry={entry} context={context} resume={resume} />;
     case EntryKind.Compaction:
       return <CompactionEntry messages={entry.messages} summary={entry.summary} />;
+    case EntryKind.PluginSuggestion:
+      return <PluginSuggestionCard entry={entry} onNotice={onNotice} />;
+    case EntryKind.DontWaitOffer:
+      return <DontWaitOfferCard entry={entry} onNotice={onNotice} />;
     default:
       return null;
   }
@@ -210,7 +217,7 @@ function SystemEntry({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind
   return (
     <div className="flex min-w-0 flex-col gap-1 text-chat-sub leading-relaxed text-ink-2">
       {showsHeading && <span className="text-[12px] font-medium text-ink-3">{systemHeading(tag)}</span>}
-      <span>{stopped ? "Stopped" : <FileText text={entry.text} />}</span>
+      <span className="[overflow-wrap:anywhere]">{stopped ? "Stopped" : <FileText text={entry.text} />}</span>
     </div>
   );
 }
@@ -271,6 +278,8 @@ function ActionEntry({
       </ChatDisclosure>
     );
   }
+  if (entry.action === EntryAction.EngineLink)
+    return <EngineLinkLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Live) {
     return (
       <div data-build-updated className="flex min-w-0 items-center gap-3 text-chat text-ink-3">
@@ -300,7 +309,7 @@ function ActionEntry({
   return (
     <div key={entry.id} className="flex min-w-0 flex-col gap-1 text-chat-sub leading-relaxed text-ink-2">
       <span className="text-[12px] font-medium text-ink-3">{entry.tag}</span>
-      <span className="min-w-0">
+      <span className="min-w-0 [overflow-wrap:anywhere]">
         <FileText text={entry.text} />
         {entry.action === EntryAction.Rewind && snapshotId ? (
           <ResultButton

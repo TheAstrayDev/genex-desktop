@@ -21,7 +21,16 @@ import { resetToolchain } from "../../substrate/toolchain.ts";
 import { buildFailureNote, servedAfterBuild } from "../game-build.ts";
 import type { BuildProblem, InstallResult } from "../../shared/build-problem.ts";
 import { describeUnknownImage, sniffImage } from "../../substrate/image-sniff.ts";
-import { claudeFolderChanges, git } from "../../substrate/snapshots.ts";
+import {
+  claudeFolderChanges,
+  type CopySize,
+  git,
+  SnapshotRefusal,
+  SnapshotRefusedError,
+  WRITER_COPY_MAX_BYTES,
+} from "../../substrate/snapshots.ts";
+import { sizeWords } from "../../shared/byte-size.ts";
+import { isAssetPath, ruleMatches } from "../../shared/project-workspace.ts";
 import type { DelegateRequest } from "../../substrate/engines/types.ts";
 import type { ReferenceFrame } from "../../shared/protocol.ts";
 import type { Revision } from "../../shared/optimization.ts";
@@ -39,7 +48,7 @@ import {
 } from "../../shared/agent-screen.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { CAMERA_SETTLE_MS, DEFAULT_SHOT_QUALITY, DEFAULT_STILL_QUALITY, captureSurface, tookPage } from "./capture.ts";
-import { PreviewIdentityState, type ServedRoot } from "./internals.ts";
+import { delegationsIn, PreviewIdentityState, type ServedRoot } from "./internals.ts";
 import { iterationDir, safePathSegment } from "./run-shots.ts";
 import { readyNote, servedKey, strayPage } from "./page-report.ts";
 import type { SessionPort } from "./session-port.ts";
@@ -103,8 +112,19 @@ const REFERENCE_NOTE = /\.(md|txt|json)$/i;
 /** How long the stand-in stays open once the harness stops using it: a game in it keeps running. */
 const STAND_IN_IDLE_MS = 2 * MINUTE_MS;
 
+/** How many of a too-large copy's largest folders its refusal names. */
+const COPY_FOLDERS_NAMED = 3;
+
 /** Errors the user reads when a build cannot be shown or landed, and why a reference is no still. */
 const MESSAGE = {
+  // Every copy holds the whole game, whatever the task, and the person reads it when a build
+  // cannot start: so it names no worker and no smaller task. What to do comes first: a lead's
+  // reason is clipped to a couple of hundred characters.
+  copyTooLarge: (size: CopySize, cap: number) =>
+    `This game is too large to copy, so nothing that needs its own copy of it can start; work in the game folder itself. A copy would take ${sizeWords(size.bytes)}, more than the ${sizeWords(cap)} allowed (most of it in ${size.folders
+      .slice(0, COPY_FOLDERS_NAMED)
+      .map((folder) => `${folder.folder} ${sizeWords(folder.bytes)}`)
+      .join(", ")}).`,
   noPreview: "no preview is attached (headless mode)",
   profilingNeedsStage: "profiling requires a stage preview",
   previewChanged: "The selected preview changed while this build was preparing. Open the build again when ready.",
@@ -973,6 +993,28 @@ export class PreviewService {
   }
 
   /**
+   * How a worker's copy of `commit` is made, checked before anything is: its nested repositories'
+   * files leave out the game's copy-skip and ignore rules (only the ignore rules when the copy
+   * versions them: it commits what it receives, and tracked files are never left out), and a copy
+   * larger than a copy may take is refused (`CopyTooLarge`) with its size and where that is.
+   */
+  async prepareWriterCopy(
+    project: string,
+    commit: string,
+  ): Promise<{ versionNested: boolean; skip: (rel: string) => boolean }> {
+    const { games, snapshots } = this.#core;
+    const { versionNested } = await this.nestedPolicy(games.dirFor(project));
+    const rules = await games.copyRulesOf(project);
+    const left = versionNested ? rules.ignored : rules.skip;
+    const skip = (rel: string) => left.some((rule) => ruleMatches(rel, rule));
+    const size = await snapshots.copySize(project, commit, skip);
+    const cap = this.#core.options.writerCopyMaxBytes ?? WRITER_COPY_MAX_BYTES;
+    if (size.bytes > cap)
+      throw new SnapshotRefusedError(SnapshotRefusal.CopyTooLarge, project, MESSAGE.copyTooLarge(size, cap));
+    return { versionNested, skip };
+  }
+
+  /**
    * The project's reference stills as frames: every image under `references/`, sniffed
    * (the bytes decide), resized to `maxPx` on the long side when the preview can, at most
    * `max`. Unreadable files are listed in `skipped` with what they turned out to be.
@@ -1055,7 +1097,8 @@ export class PreviewService {
       return readContainedImage(dir, p.file, { prefixes: [], ...resize });
     }
     if (isGenexRef(p.file)) return this.#readGenexOutput(p.project, p.file, resize);
-    return readContainedImage(this.#core.games.dirFor(p.project), p.file, resize);
+    if (!isAssetPath(p.file, await this.#x.assets.assetFolders(p.project))) return null;
+    return readContainedImage(this.#core.games.dirFor(p.project), p.file, { prefixes: [], ...resize });
   }
 
   /** A downscale to `maxPx` for an image read, when one is asked for and the preview can. */
@@ -1147,8 +1190,8 @@ export class PreviewService {
     this.#core.snapshots.register({ name: project, dir: projectDir });
     // The chat's own session asking to land (a run control) holds the folder while it waits for
     // this answer: it is not a contractor building there. Anyone else in the folder is.
-    const building = [...this.#x.activeDelegations.entries()].some(
-      ([cwd, delegation]) => path.resolve(cwd) === path.resolve(projectDir) && delegation.abort !== asker,
+    const building = delegationsIn(this.#x.activeDelegations, projectDir).some(
+      (delegation) => delegation.abort !== asker,
     );
     if (building) throw new Error(MESSAGE.contractorBuilding(project));
     const resolved = (await git(projectDir, ["rev-parse", "--verify", `${commit}^{commit}`]).catch(() => "")).trim();

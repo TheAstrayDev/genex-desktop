@@ -17,7 +17,7 @@
  * vendored three.js — so restore is a pure checkout. {@link SnapshotEngine.restore} still calls
  * the `afterRestore` hook where an install step would go.
  */
-import { cp, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, readdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ensureDir, pathExists } from "./fsx.ts";
 import { shortId } from "./ids.ts";
@@ -43,11 +43,29 @@ export const SnapshotRefusal = {
   BranchChanged: "branch-changed",
   HistoryChanged: "history-changed",
   RescueFailed: "rescue-failed",
+  /** A worker's copy of the game would be larger than a copy may be (`WRITER_COPY_MAX_BYTES`). */
+  CopyTooLarge: "copy-too-large",
 } as const;
 export type SnapshotRefusal = (typeof SnapshotRefusal)[keyof typeof SnapshotRefusal];
 
 /** git output a host call may buffer before it fails. */
 const GIT_MAX_BUFFER_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The most disk a worker's copy of a game may take. Up to eight workers copy one game at once; past
+ * this a copy costs the person's disk more than the work is worth, and the lead should work in the
+ * game folder itself instead.
+ */
+export const WRITER_COPY_MAX_BYTES = 2 * 1024 ** 3;
+
+/** Folders a copy never receives from a nested repository: its history, and packages it links instead. */
+const NEVER_COPIED = new Set([".git", "node_modules"]);
+
+/** What a worker's copy of a game would take, in all and by top-level folder, largest first. */
+export interface CopySize {
+  bytes: number;
+  folders: Array<{ folder: string; bytes: number }>;
+}
 
 const MESSAGE = {
   UnknownWorkspace: (name: string) => `unknown workspace: ${name}`,
@@ -130,16 +148,24 @@ export const GIT_ENV = {
  */
 export { HOST_GIT_CONFIG } from "./git-policy.ts";
 
-export async function git(dir: string, args: string[], env: Record<string, string> = {}): Promise<string> {
+/** Git as the studio in `dir`; `input`, when given, is written to its standard input. */
+export async function git(
+  dir: string,
+  args: string[],
+  env: Record<string, string> = {},
+  input?: string,
+): Promise<string> {
   const environment = hostGitEnv({ ...GIT_ENV, ...env });
   const config = await hostGitConfig(dir, environment);
-  const { stdout } = await startWithRecovery(() =>
-    execFileAsync("git", [...config, "-C", dir, ...hostGitArgs(args)], {
+  const { stdout } = await startWithRecovery(() => {
+    const running = execFileAsync("git", [...config, "-C", dir, ...hostGitArgs(args)], {
       windowsHide: true,
       env: environment,
       maxBuffer: GIT_MAX_BUFFER_BYTES,
-    }),
-  );
+    });
+    if (input !== undefined) running.child.stdin?.end(input);
+    return running;
+  });
   return stdout;
 }
 
@@ -199,10 +225,61 @@ async function stagePublicChanges(dir: string): Promise<void> {
   await git(dir, ["add", "-A"]);
 }
 
+/** One `git ls-tree -r -l -z` entry of a file: its size and path (a nested repository's pointer is no blob). */
+const TRACKED_BLOB = /^\d+ blob [0-9a-f]+ +(\d+)\t(.+)$/s;
+
+/** A path inside the game, POSIX, as copy rules read it. */
+const gameRelative = (gameDir: string, file: string): string => path.relative(gameDir, file).split(path.sep).join("/");
+
+/** A copy's size rule and tally: what it leaves out, by the path inside the game, and where sizes add up. */
+interface CopyTally {
+  skip: (rel: string) => boolean;
+  add: (rel: string, bytes: number) => void;
+}
+
+/** Tally the files of one folder a copy receives, never through a link; answers its subfolders it receives. */
+async function tallyFolder(gameDir: string, folder: string, tally: CopyTally): Promise<string[]> {
+  const subfolders: string[] = [];
+  for (const entry of await readdir(path.join(gameDir, folder), { withFileTypes: true }).catch(() => [])) {
+    const child = `${folder}/${entry.name}`;
+    if (NEVER_COPIED.has(entry.name) || tally.skip(child)) continue;
+    if (entry.isDirectory()) subfolders.push(child);
+    else if (entry.isFile()) tally.add(child, (await lstat(path.join(gameDir, child)).catch(() => null))?.size ?? 0);
+  }
+  return subfolders;
+}
+
+/**
+ * Tally each file a copy receives from the nested repository at `rel`: never its history or
+ * packages, nor what the tally skips, and never through a link.
+ */
+async function tallyNested(gameDir: string, rel: string, tally: CopyTally): Promise<void> {
+  const root = await lstat(path.join(gameDir, rel)).catch(() => null);
+  if (!root?.isDirectory() || tally.skip(rel)) return;
+  const pending = [rel];
+  for (let folder = pending.pop(); folder !== undefined; folder = pending.pop())
+    pending.push(...(await tallyFolder(gameDir, folder, tally)));
+}
+
 export class SnapshotEngine {
   readonly workspaces: Map<string, string>;
   /** Optional hook for dependency restore; no-op by design (see file header). */
   afterRestore?: (workspace: WorkspaceSpec) => Promise<void>;
+  /**
+   * Called before the engine commits a game folder (never the harness's): its owner tops up the
+   * folder's ignore rules for what it holds now and may answer those rules' lines (a string
+   * array), which a restore then never deletes. A rejection never stops the commit; the owner reports it.
+   */
+  beforeCommit?: (workspace: WorkspaceSpec) => Promise<readonly string[] | undefined>;
+  /**
+   * Called after a restore put a game folder back, with the ignore lines its last `beforeCommit`
+   * answered: its owner writes them into the restored ignore file, so what a restore leaves on disk
+   * because they ignore it stays out of every commit after it, though the restored folder may no
+   * longer hold what named those rules. A rejection never stops the restore; the owner reports it.
+   */
+  keepIgnoring?: (workspace: WorkspaceSpec, lines: readonly string[]) => Promise<void>;
+  /** Per game folder, the ignore lines its last `beforeCommit` answered. */
+  readonly #ruleLines = new Map<string, readonly string[]>();
 
   constructor(workspaces: WorkspaceSpec[]) {
     this.workspaces = new Map(workspaces.map((w) => [w.name, w.dir]));
@@ -218,8 +295,24 @@ export class SnapshotEngine {
     this.workspaces.set(spec.name, spec.dir);
   }
 
+  /** A repository for every workspace that has none yet; a game's rules are topped up before its first commit. */
   async init(): Promise<void> {
-    for (const dir of this.workspaces.values()) await ensureRepo(dir);
+    for (const [name, dir] of this.workspaces) {
+      // Only a folder about to get its first commit: init runs for every game at each start.
+      if (!(await pathExists(path.join(dir, ".git")))) await this.#beforeCommit(name, dir);
+      await ensureRepo(dir);
+    }
+  }
+
+  /** The `beforeCommit` hook for a game folder, keeping the lines it answers; what it throws stays with its owner. */
+  async #beforeCommit(name: string, dir: string): Promise<void> {
+    if (name === HARNESS_WORKSPACE || !this.beforeCommit) return;
+    const lines = await this.beforeCommit({ name, dir }).catch(() => undefined);
+    const answered: unknown[] = Array.isArray(lines) ? lines : [];
+    this.#ruleLines.set(
+      dir,
+      answered.filter((line): line is string => typeof line === "string" && line !== ""),
+    );
   }
 
   #namesForScope(scope: SnapshotScope, gameWorkspace?: string): string[] {
@@ -248,9 +341,13 @@ export class SnapshotEngine {
     const refs: SnapshotRecordGit = {};
     for (const name of this.#namesForScope(options.scope, options.gameWorkspace)) {
       const dir = this.dirFor(name);
-      await ensureRepo(dir);
       // `add -A` in the middle of the user's merge would commit their conflict markers for them.
-      if (name !== HARNESS_WORKSPACE) await this.#refuseMidOperation(name, dir);
+      // Refused before the rules are topped up, so a refusal writes nothing; a folder with no
+      // repository yet is in no git operation.
+      const hasRepo = await pathExists(path.join(dir, ".git"));
+      if (name !== HARNESS_WORKSPACE && hasRepo) await this.#refuseMidOperation(name, dir);
+      await this.#beforeCommit(name, dir);
+      await ensureRepo(dir);
       await stagePublicChanges(dir);
       // --allow-empty: a snapshot must exist even when nothing changed, so that timeline
       // positions and `healthy` marks stay addressable.
@@ -316,12 +413,21 @@ export class SnapshotEngine {
         throw new SnapshotRefusedError(SnapshotRefusal.RescueFailed, name, MESSAGE.RescueFailed(errorMessage(err)));
       }
     }
-    for (const { name, dir, commit } of targets) {
-      await git(dir, ["reset", "-q", "--hard", "--end-of-options", commit]);
-      await git(dir, ["clean", "-qfd"]);
-      await this.afterRestore?.({ name, dir });
-    }
+    for (const { name, dir, commit } of targets) await this.#resetTo(name, dir, commit);
     return rescue;
+  }
+
+  /**
+   * Put a workspace back to `commit` and remove what it did not hold. What a game's rules ignore
+   * now stayed out of its rescue, so it is never cleaned either: an older save point's ignore file
+   * may not name the engine's scratch yet, so its owner writes those rules back into it (`keepIgnoring`).
+   */
+  async #resetTo(name: string, dir: string, commit: string): Promise<void> {
+    const kept = name === HARNESS_WORKSPACE ? [] : (this.#ruleLines.get(dir) ?? []);
+    await git(dir, ["reset", "-q", "--hard", "--end-of-options", commit]);
+    if (kept.length > 0) await this.keepIgnoring?.({ name, dir }, kept).catch(() => {});
+    await git(dir, ["clean", "-qfd", ...kept.flatMap((line) => ["-e", line])]);
+    await this.afterRestore?.({ name, dir });
   }
 
   /** `refs/heads/<branch>`, or null when HEAD is detached. */
@@ -383,9 +489,10 @@ export class SnapshotEngine {
     workspace: string,
     commit: string,
     targetDir: string,
-    options: { versionNested?: boolean } = {},
+    options: { versionNested?: boolean; skip?: (rel: string) => boolean } = {},
   ): Promise<string> {
     const dir = this.dirFor(workspace);
+    const skip = options.skip ?? (() => false);
     const resolved = await resolveCommit(dir, commit);
     await git(dir, ["worktree", "add", "--detach", "-f", "--end-of-options", targetDir, resolved]);
     // A game with its own build needs its dependencies in the copy too: node_modules is
@@ -403,7 +510,9 @@ export class SnapshotEngine {
       await cp(source, target, {
         recursive: true,
         force: true,
-        filter: (from) => path.basename(from) !== ".git" && path.basename(from) !== "node_modules",
+        // Besides its history and packages, what the game's copy rules leave out (`skip`, by the
+        // path inside the game): an engine's scratch a worker never needs.
+        filter: (from) => !NEVER_COPIED.has(path.basename(from)) && !skip(gameRelative(dir, from)),
       }).catch(() => {});
     }
     if (options.versionNested) await this.#versionNested(targetDir, nested, resolved);
@@ -456,6 +565,31 @@ export class SnapshotEngine {
       ["commit", "-q", "-m", `studio: version ${staged.join(", ")} — the game's own repositories`],
       date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {},
     );
+  }
+
+  /**
+   * What a worker's copy of `commit` would take: every file the commit tracks (a copy checks them
+   * all out) and the working files of each nested repository that the copy receives (`skip` names
+   * what it leaves out, by the path inside the game; links are never followed), by top-level
+   * folder, largest first.
+   */
+  async copySize(workspace: string, commit: string, skip: (rel: string) => boolean): Promise<CopySize> {
+    const dir = this.dirFor(workspace);
+    const resolved = await resolveCommit(dir, commit);
+    const byFolder = new Map<string, number>();
+    const add = (rel: string, bytes: number) => {
+      const folder = rel.split("/")[0] ?? rel;
+      byFolder.set(folder, (byFolder.get(folder) ?? 0) + bytes);
+    };
+    for (const entry of (await git(dir, ["ls-tree", "-r", "-l", "-z", "--end-of-options", resolved])).split("\0")) {
+      const blob = TRACKED_BLOB.exec(entry);
+      if (blob?.[1] && blob[2]) add(blob[2], Number(blob[1]));
+    }
+    for (const rel of await this.nestedRepositories(workspace, resolved)) await tallyNested(dir, rel, { skip, add });
+    const folders = [...byFolder]
+      .map(([folder, bytes]) => ({ folder, bytes }))
+      .sort((a, b) => b.bytes - a.bytes || a.folder.localeCompare(b.folder));
+    return { bytes: folders.reduce((sum, folder) => sum + folder.bytes, 0), folders };
   }
 
   /** Paths a commit records as nested repositories (gitlinks, mode 160000). */

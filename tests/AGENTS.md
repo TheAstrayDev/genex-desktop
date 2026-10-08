@@ -35,6 +35,19 @@ through the JS API imports `@typescript/typescript6`.
   drives the Zustand stores through `createStudio` with it, with no DOM.
 - `fake-ollama.ts`, `scripted-claude.ts`, `scripted-codex.ts`: scripted engines, no network.
 - `snapshot-fixtures.ts`: dirty, untracked and nested user repositories.
+- `unreal-lead-host.ts`: a fake host for the Unreal Loop's lead (its scripted turns calling the
+  run tools, the editor's answers, the clock);
+  `unreal-editor-stand-in.ts`: the editor the Unreal plugin's queue talks to.
+- `project-fixtures.ts`: the synthetic project folders in `fixtures/projects/` (`copyProject`
+  copies one into a test's folder and adds the files its engine writes while it runs), reads of a
+  listed game's facts, a fake harness `ctx` whose `game.*` calls reach a `coreLite`, and a plugin
+  registry with the toy engine plugin (`fixtures/toy-engine-plugin/`) installed.
+- `worker-chat.ts`: a game chat with a run started in it, fake engines (two delegated, one local)
+  that record each request, a copy of the game in that run's folder and the chat's permission rows,
+  for worker seats and their questions (`worker-seats`, `worker-questions`, `dont-wait`,
+  `chat-workers`), agent jobs through a `jobSpawn` the test gives it (`job-tools`), and `app_look`
+  through the stub port and a recording `screenAccess` (`app-look-tool`). Its waits are on what
+  happened (`untilSeen`, `nextCard`), never on a clock.
 - `git.ts`, `tmp.ts`: temporary repositories and directories with cleanup. A test removes its own
   temporary folder with `removeTree` (or leaves it to `tmpDir`), not a bare `rm`: on Windows a
   sandboxed test file's srt-win entries re-propagate through all of `%TEMP%` and hold each folder
@@ -49,15 +62,21 @@ through the JS API imports `@typescript/typescript6`.
 
 Characterization so far: the `api()` keys and `StudioCore` surface (`core-surface`,
 `rpc-surface`), the seed contracts the app keeps its own copy of (`seed-contracts`), spike
-snapshot/worktree sequences (`loop-sequences`) and snapshots of a user's own repository
-(`snapshots`). Not yet: autopilot, gauntlet and facet-loop sequences, and golden
-`studio:dev` snapshots of the `app-basics`, `chat-history` and `run-controls` fixtures; until
-then those paths rely on the rig suites and the source gates in the allowlisted tests.
+snapshot/worktree sequences (`loop-sequences`), snapshots of a user's own repository
+(`snapshots`), which loop runs a run, the tools each lead is offered and the Unreal lead's editor
+calls, events, graph and journal (`loop-survival`), and the ten use cases of any project
+(`project-use-cases`; a test marked `todo` names the phase that turns it green, and a marked
+test whose body passes prints `✔ … # phase N:` under `--test-reporter=spec`: that phase removes
+its mark). Not yet: autopilot, gauntlet and facet-loop sequences, and golden `studio:dev`
+snapshots of the `app-basics`, `chat-history` and `run-controls` fixtures; until then those paths
+rely on the rig suites and the source gates in the allowlisted tests.
 
 ## Fixtures (`fixtures/`)
 
-`harness-ok/` is a minimal harness, `games/` holds code-shape samples, `asset-previews/` holds
-format samples, `transcripts/` holds recorded provider streams. Keep fixtures small and synthetic.
+`harness-ok/` is a minimal harness, `games/` holds code-shape samples, `projects/` holds the
+kinds of project Genex opens, `toy-engine-plugin/` holds a made-up engine's plugin,
+`asset-previews/` holds format samples, `transcripts/` holds recorded provider streams. Keep
+fixtures small and synthetic.
 
 ## Electron runners (`e2e/`)
 

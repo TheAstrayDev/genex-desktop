@@ -138,6 +138,7 @@ describe("the door: what the app opens on launch", () => {
         pathLabel: name,
         library: true,
         built: false,
+        facts: [{ id: "web-game", path: ".", source: "core" }],
         shape: {
           entry: "index.html",
           main: "src/main.js",

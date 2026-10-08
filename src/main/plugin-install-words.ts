@@ -145,3 +145,37 @@ export function actionApprovalDetail(args: unknown): string | undefined {
   const empty = args === undefined || args === null || (typeof args === "object" && Object.keys(args).length === 0);
   return empty ? undefined : JSON.stringify(args, null, 2);
 }
+
+/** The confirm button of an action no review described. */
+const APPROVE = "Approve";
+const CANCEL = "Cancel";
+
+/** What a confirmed action's native dialog shows; `buttons` is always Cancel, then the confirm button. */
+export interface ActionApprovalDialog {
+  title: string;
+  message: string;
+  detail?: string;
+  buttons: [cancel: string, confirm: string];
+}
+
+/**
+ * A confirmed action's native dialog. When the plugin's review asked its own question, the dialog
+ * asks that, shows the review's own words under it (never the arguments as JSON) and confirms with
+ * the action's name; otherwise it asks the manifest's confirmation over the arguments, with Approve.
+ */
+export function actionApprovalDialog(input: {
+  plugin: string;
+  action: { label: string; confirmation?: string };
+  review: { message?: string; detail?: string };
+  args: unknown;
+}): ActionApprovalDialog {
+  const { plugin, action, review, args } = input;
+  const title = `${plugin}: ${action.label}`;
+  if (review.message) {
+    const detail = review.detail ? { detail: review.detail } : {};
+    return { title, message: review.message, ...detail, buttons: [CANCEL, action.label] };
+  }
+  const detail = actionApprovalDetail(args);
+  const message = action.confirmation ?? action.label;
+  return { title, message, ...(detail ? { detail } : {}), buttons: [CANCEL, APPROVE] };
+}

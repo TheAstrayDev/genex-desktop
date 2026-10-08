@@ -25,6 +25,8 @@ export interface GameLibraryEntry {
   trustProjectSettings?: boolean;
   cover?: GameCover;
   primaryThreadId?: string;
+  /** The folder's content stamp as New game made it (`GameProject.scaffoldStamp`). */
+  scaffoldStamp?: string;
   /** The title waits for the game's first idea; any title given since clears it. */
   provisional?: boolean;
 }
