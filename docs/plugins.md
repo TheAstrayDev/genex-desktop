@@ -837,6 +837,14 @@ assets remain ordinary files. A fixture `assets.deliver` must leave an `asset_de
 the project's log and a card on the Assets tab; no paid generation is needed for either. Use
 fixture accounts and existing assets, with no additional paid generation.
 
+`genex-cover.test.ts` pins the Genex cover the same way, with a fake `observe` and the cover routes
+on the fixture API: `genex__cover` shoots only the `genex-cover` demo into the plugin's storage
+(the game folder locked, never read) and answers its preview; a publish sends the frame only after
+its job is recorded done, sends nothing for unchanged bytes or over the owner's own cover, stays
+done with a warning when the commit is refused, limited, failed or silent, skips the shot without
+enough of its invocation left, never sends from a listed game's draft, and is stopped by the next
+publish; `genex__cover-set` waits for consent and sends nothing without a hosted project.
+
 `plugin-marketplace.test.ts` drives `PluginMarketplace` with an injected `fetchImpl` and never
 touches the network: index validation, spec parsing, the 6 h cache with its stale-plus-error path,
 the `marketplace.json` override and its https-only rule, `offline: true` never fetching, GitHub
