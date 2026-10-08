@@ -259,6 +259,29 @@ export interface PreviewSetup {
 export const GameFront = { Begin: "begin" } as const;
 export type GameFront = (typeof GameFront)[keyof typeof GameFront];
 
+/**
+ * The `__studio` verbs that put a named view on screen (`src/game-template/src/studio.js`): the
+ * game's demo names, one demo run to its end state, and one camera placed.
+ */
+export const GameView = { Demos: "demos", Demo: "demo", DebugCamera: "debugCamera" } as const;
+export type GameView = (typeof GameView)[keyof typeof GameView];
+
+/** How a still is encoded: lossless PNG, or a high-quality JPEG when the PNG is over its byte limit. */
+export const StillMimeType = { Png: "image/png", Jpeg: "image/jpeg" } as const;
+export type StillMimeType = (typeof StillMimeType)[keyof typeof StillMimeType];
+
+/**
+ * A still's exposure, measured on a small downscale of it. Every number is 0–1: Rec.709 luma of
+ * the sRGB bytes as they are (no linearisation), its mean and standard deviation, the share of
+ * samples below a luma of 0.10, and the share above the preview's unlit threshold (8 of 255).
+ */
+export interface StillExposure {
+  lumaMean: number;
+  lumaStdDev: number;
+  nearBlackFraction: number;
+  litFraction: number;
+}
+
 /** Which signal answered: the studio's own page shim, the game's own contract, or nothing. Wire values. */
 export const ReadyVia = {
   Shim: "shim",

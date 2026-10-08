@@ -27,6 +27,9 @@ exports work with no enabled plugins.
   `mcpServers requires apiVersion 2`, `tools[].confirmation requires apiVersion 2`) rather than silently ignored, so a package cannot
   claim API 1 and still ship API 2 behaviour.
 - API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills and (bundled Genex only) `tools[].host`. Lower-version manifests cannot claim those declarations.
+- API 3's `observe` also takes an optional `still` (additive; no manifest field or capability of
+  its own). A host older than the option ignores it and answers an ordinary observation, so a
+  caller checks the answer for `still` or `stillProblem`.
 - Plugin tool parameters are scalar (`string` / `number` / `boolean` properties); API 3 also accepts `type: "object"`, optionally with `acceptJsonString` for a migrated scalar (`toolParameter` in `src/substrate/plugins/manifest.ts`; see the plugin guide's structured arguments). External MCP tools retain their full nested schemas.
 
 ## Package and distribution
@@ -417,7 +420,21 @@ Available services are capability checked and scoped to the calling plugin:
 - `jobs.read` / `jobs.write`: durable provider references, not a credit ledger.
 - `events.emit`: sanitized progress to Studio, with host-bound project/thread attribution. A
   payload of kind `toolbar` is a toolbar status update (see above).
-- `observe`: current game loading/capture/audio evidence for authorized local files.
+- `observe`: current game loading/capture/audio evidence for authorized local files. With
+  `still` (API 3, additive) it photographs one named view instead: `{ project, root, files: [],
+  still: { demo | camera, width, height, maxBytes? } }` loads the bound game on a hidden window of
+  its own at `width`×`height` (whole pixels, 320–1920 × 240–1200), puts it in play, runs the
+  `config.demos` entry to its end state or places the camera (`config.cameras` or a built-in
+  `eye:*`), and reads the canvas. The answer is `{ still: { image, mimeType, width, height, source,
+  view, stats, preview } }`: a PNG, or the first JPEG at quality 95, 90 or 85 that fits `maxBytes`
+  (64 KiB–16 MiB, default 8 MiB), never larger than asked; `stats` holds `lumaMean`, `lumaStdDev`,
+  `nearBlackFraction` (luma below 0.10) and `litFraction`, each 0–1 on a small downscale; `preview`
+  is a JPEG at most 1280 px. Otherwise it is `{ stillProblem: { code, reason?, available? } }` with
+  `unavailable`, `load_failed`, `view_unknown` (with the names the game has, at most 32),
+  `view_failed`, `capture_failed`, `too_large` or `timeout` (one minute for the whole still). A
+  still never borrows Live: a build with no hidden window answers `unavailable`. Every field is
+  checked before anything runs, and the window is given back however the still ends
+  (`core/view-still.ts`).
 - `export.stage` (capability `export`, API 2): Studio writes the public export of the bound game
   under the plugin's own storage (`publish/<project>/dist`) and returns the export result; it
   needs a project binding and is `Export unavailable` in sessions without the host export. The

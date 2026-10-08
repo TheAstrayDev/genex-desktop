@@ -85,8 +85,26 @@ test("a backend written against the SDK declaration compiles clean", (t) => {
         const job: unknown = await ctx.host('jobs.read', { id: 'job-1' });
         await ctx.host('events.emit', { kind: 'toolbar', item: 'publish', badge: 'Draft', tone: 'info' });
         await ctx.host('observe', { project: 'g', root: '/games/g', files: ['index.html'] });
-        return { root, text, written, delivered, dir: exported.dir, files: exported.files, token, job };
+        const shot = await ctx.host('observe', {
+          project: 'g', root: '/games/g', files: [],
+          still: { demo: 'hero-shot', width: 1920, height: 1080, maxBytes: 8388608 },
+        });
+        let still: { bytes: Uint8Array; mime: 'image/png' | 'image/jpeg'; mean: number; spread: number; dark: number; lit: number; preview: Uint8Array } | null = null;
+        let problem: { code: PluginStillProblemCode; names: string[] | undefined; reason: string | undefined } | null = null;
+        if ('still' in shot) {
+          const { image, mimeType, width, height, source, view, stats, preview } = shot.still;
+          const side: number = width + height;
+          const read: 'page' | 'compositor' = source;
+          const named: string | undefined = view.demo ?? view.camera;
+          still = { bytes: image, mime: mimeType, mean: stats.lumaMean + side * 0, spread: stats.lumaStdDev, dark: stats.nearBlackFraction, lit: stats.litFraction, preview };
+          void read; void named;
+        } else {
+          problem = { code: shot.stillProblem.code, names: shot.stillProblem.available, reason: shot.stillProblem.reason };
+        }
+        await ctx.host('observe', { project: 'g', root: '/games/g', files: [], still: { camera: 'eye:down', width: 1280, height: 720 } });
+        return { root, text, written, delivered, dir: exported.dir, files: exported.files, token, job, still, problem };
       }
+      import type { PluginStillProblemCode } from ${quote(sdk)};
     `,
     "panel.ts": `
       import type { PluginPanelContext } from ${quote(sdk)};
@@ -120,6 +138,19 @@ test("the SDK manifest mirror, its skills and tool hosts, and src/shared/plugins
       declare const sdkStatus: SdkStatus; declare const sharedStatus: SharedStatus;
       export const statusToShared: SharedStatus = sdkStatus;
       export const statusToSdk: SdkStatus = sharedStatus;
+    `,
+    "still.ts": `
+      import type { PluginStillRequest as SdkRequest, PluginStillAnswer as SdkAnswer, PluginStillProblemCode as SdkCode } from ${quote(sdk)};
+      import type { PluginStillRequest as SharedRequest, PluginStillAnswer as SharedAnswer, PluginStillProblemCode as SharedCode } from ${quote(shared)};
+      declare const sdkRequest: SdkRequest; declare const sharedRequest: SharedRequest;
+      export const requestToShared: SharedRequest = sdkRequest;
+      export const requestToSdk: SdkRequest = sharedRequest;
+      declare const sdkAnswer: SdkAnswer; declare const sharedAnswer: SharedAnswer;
+      export const answerToShared: SharedAnswer = sdkAnswer;
+      export const answerToSdk: SdkAnswer = sharedAnswer;
+      declare const sdkCode: SdkCode; declare const sharedCode: SharedCode;
+      export const codeToShared: SharedCode = sdkCode;
+      export const codeToSdk: SdkCode = sharedCode;
     `,
     "skills.ts": `
       import type { PluginSkill as SdkSkill, PluginFileSkill as SdkFileSkill, PluginManifestTool as SdkManifestTool, PluginHostTool as SdkHost } from ${quote(sdk)};
@@ -164,5 +195,34 @@ test("an undeclared host method and a non-scalar tool argument are compile error
   assert.ok(
     wrongArgs.some((d) => d.file?.fileName.endsWith("nested.ts")),
     "tool arguments must stay scalar",
+  );
+
+  const wrongStills: Record<string, string> = {
+    "both.ts": `{ demo: 'hero', camera: 'close', width: 1920, height: 1080 }`,
+    "neither.ts": `{ width: 1920, height: 1080 }`,
+    "unsized.ts": `{ demo: 'hero' }`,
+  };
+  for (const [file, still] of Object.entries(wrongStills)) {
+    const diagnostics = compile(t, {
+      [file]: `
+        import type { PluginContext } from ${quote(sdk)};
+        export const run = (ctx: PluginContext) => ctx.host('observe', { project: 'g', root: '/g', files: [], still: ${still} });
+      `,
+    });
+    assert.ok(
+      diagnostics.some((d) => d.file?.fileName.endsWith(file)),
+      `a still must name exactly one view and its size (${file})`,
+    );
+  }
+  const filesBesideStill = compile(t, {
+    "files.ts": `
+      import type { PluginContext } from ${quote(sdk)};
+      export const run = (ctx: PluginContext) =>
+        ctx.host('observe', { project: 'g', root: '/g', files: ['index.html'], still: { demo: 'hero', width: 1920, height: 1080 } });
+    `,
+  });
+  assert.ok(
+    filesBesideStill.some((d) => d.file?.fileName.endsWith("files.ts")),
+    "a still observes no files",
   );
 });
