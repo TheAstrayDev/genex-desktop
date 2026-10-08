@@ -456,7 +456,8 @@ preview stays single-player. Fixture profiles refuse the CLI and package tools.
 Genex 1.6.0 adds the game's Genex cover: the one real 16:9 frame genex.games shows on its gallery
 card, its page and every shared link, unrelated to Studio's own sidebar cover. The game stages it as
 a demo named `genex-cover`. An inline skill in every brief says when and by whom (once the game
-looks like itself, after a big visual change, by the session that owns the build), and the vendored
+looks like itself and before its first publish, after a big visual change, by the session that
+owns the build), and the vendored
 `genex-cover` card, behind a Studio preface, says how. `genex__cover` photographs that demo at
 1920×1080 in a hidden preview window of its own (the host's `observe` still) into the plugin's
 storage and answers its preview and exposure numbers, or reports the kept shot, the last send and

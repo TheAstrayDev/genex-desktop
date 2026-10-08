@@ -2,9 +2,10 @@
 
 You are building inside AI Game Studio. Below the upstream marker is Genex's cover card, unchanged.
 Where it disagrees with this preface, this preface wins. Everything before the card's "Capture and
-send — lane mechanics" holds here as written: when, the honest frame, the moment, composition,
-light and judging. That section (its cover entry, both of its lanes and its table of answers) does
-not apply in Studio: this preface replaces it.
+send — lane mechanics" holds here (when, the honest frame, the moment, composition, light and
+judging), with §4's steps 1, 6 and 7 as this preface says for a demo. That section (its cover
+entry, both of its lanes and its table of answers) does not apply in Studio: this preface replaces
+it.
 
 ## The cover shot is the demo named `genex-cover`
 
@@ -13,34 +14,49 @@ not apply in Studio: this preface replaces it.
   module of its own, for example `src/cover-shot.js`. It is game code: it ships with the game,
   merges like any change and does nothing unless something runs that demo. No URL flag, no
   `window.__cover`, no dev-only import.
-- A demo runs synchronously and leaves the game paused on its end state, so `genex-cover` does the
-  card's §4 in one call, setting everything absolutely so a second run lands the same frame: the
-  place, its time of day and weather; the cast posed with the game's own clips; the game's own
-  effect fired and brought to its peak by stepping the game's own update with a fixed step; the
-  physics settled; every overlay hidden (the HUD, which is `__studio.hud.clear()` in a game built
-  on Studio's template, the crosshair, the cursor, prompts, debug helpers); the quality governor
-  held; then the camera placed, with `aspect = 16 / 9` (an orthographic camera widened to 16:9) and
-  its projection updated.
-- Studio opens the shot's window at 1920×1080 before the game loads, so the game's own resize gives
-  the drawing buffer that size. Leave `setSize` and the pixel ratio alone, unless the game fixes its
-  own buffer size: then set 1920×1080 inside the demo.
+- A demo runs synchronously, and Studio photographs as soon as it returns: a promise it returns is
+  never awaited. So `genex-cover` does the card's §4 in one call, setting everything absolutely so
+  a second run lands the same frame: a place the game has already loaded by the time it reports
+  ready (preload what the shot needs at boot: the demo cannot wait for step 1's detail); its time
+  of day and weather; the cast posed with the game's own clips; the game's own effect fired and
+  brought to its peak by stepping the game's own update with a fixed step, settling frames
+  included (step 7's renders happen inside the demo); the physics settled; every overlay hidden
+  (the HUD, which is `__studio.hud.clear()` in a game built on Studio's template, the crosshair,
+  the cursor, prompts, debug helpers); the quality governor held; then the camera placed and its
+  projection updated.
+- End `genex-cover` with `window.__studio.pause()`. Studio's `demo()` pauses only a loop it steps
+  (a game that passes `update`); this also stops Studio's clock for a game that runs its own loop,
+  so nothing moves between the demo and the photograph and a second shot lands the same bytes.
+- Studio opens the shot's window at 1920×1080 before the game loads, so the game's own resize
+  already gives the camera a 16:9 aspect and the drawing buffer that size (step 6). Leave the
+  aspect, `setSize` and the pixel ratio to it: the critic runs this demo in a window that is not
+  16:9, and a forced `aspect = 16 / 9` would stretch that photo and those of the demos and drives
+  that follow it on the same page. Only a game that fixes its own buffer size sets 1920×1080 and
+  the matching aspect inside the demo.
 - Studio's critic runs every demo and photographs its end frame, this one too, so the shot must not
   touch sign-in, saves, scores or progress (as the card says).
 - Candidates: write two to four staging functions in the cover module, point `genex-cover` at one,
-  shoot it, compare, and leave `genex-cover` on the winner. Publish shoots whatever `genex-cover`
-  stages at that moment.
-- A game kept as it is (you were asked to publish it, not to change it): write no `genex-cover`
-  demo. Publish then sends no cover and Genex keeps its own; the owner can set one on the game's
-  page.
+  shoot it, compare, and leave `genex-cover` on the winner, then shoot it once more: the kept shot
+  is always the last one taken, and that is what `genex__cover-set` sends. Publish shoots whatever
+  `genex-cover` stages at that moment.
+- The demo is a standing choice: Publish shoots and sends what it stages without asking. Keep
+  `genex-cover` only while its frame passes §5. When none does, or Genex refused it as too dark and
+  the game is dark by design, delete the demo: with none, Publish sends nothing and the owner can
+  set a cover on the game's page.
+- A game whose code its owner keeps untouched (a folder they brought and asked only to publish;
+  never a game Studio built) gets no `genex-cover` demo: Publish then sends no cover and Genex keeps
+  its own. A game Studio built gets its demo before its first publish.
 
 ## Check it: `genex__cover`
 
 - `genex__cover {"operation":"shoot"}` runs `genex-cover` in a hidden window of its own at
-  1920×1080, keeps that frame as the game's shot and answers with its preview image and its numbers:
-  `stats.lumaMean`, `stats.lumaStdDev` and `stats.nearBlackFraction` are the card's mean, spread and
-  near-black share, measured the gate's way on a small downscale of the whole frame, and `advice`
-  names what they suggest (`too_dark`, `flat`, `dim`, `small`, `not_16_9`). You never meter in the
-  page and never pass an image through JavaScript. Judge the preview as §5 says before any send.
+  1920×1080, keeps that frame as the game's shot, replacing the last one, and answers with its
+  preview image and its numbers: `shot.stats.lumaMean`, `shot.stats.lumaStdDev` and
+  `shot.stats.nearBlackFraction` are the card's mean, spread and near-black share, measured the
+  gate's way on a small downscale of the whole frame, `shot.advice` names what they suggest
+  (`too_dark`, `flat`, `dim`, `small`, `not_16_9`), and `sends` says when the shot goes out. You
+  never meter in the page and never pass an image through JavaScript. Judge the preview as §5 says
+  before any send.
 - A `problem` instead means no new shot was taken and the last one is kept: `view_unknown` (no demo
   by that name; `available` lists the game's demos), `view_failed` (the demo threw; `reason` says
   how), `load_failed`, `timeout` (stage faster), `too_large`, `capture_failed` or `unavailable`.
@@ -67,7 +83,7 @@ not apply in Studio: this preface replaces it.
 | `applied` | Done until the look changes. Record the shot where the project keeps its design notes. |
 | `outranked`, `kept_owner` | The owner chose this cover on genex.games. Final: never resend, never ask them to clear it. |
 | `unchanged` | Genex already answered for this exact frame (`settled` says how); nothing was sent. |
-| `rejected` | `reason` `too_dark`: one brighter honest moment of the same game, or, dark by design, stop: the owner can set one on the game's page. `flat`: the canvas had not drawn, a fade or loading screen was up, or sky or fog fills the frame: reframe. Any other reason: fix the file, not the game. |
+| `rejected` | `reason` `too_dark`: one brighter honest moment of the same game, or, dark by design, delete the `genex-cover` demo and stop: the owner can set one on the game's page. `flat`: the canvas had not drawn, a fade or loading screen was up, or sky or fog fills the frame: reframe. Any other reason: fix the file, not the game. |
 | `invalid` | Refused before sending: fix the shot, not the game. |
 | `failed` | Not sent (sign-in, the hourly limit, the network or no answer in time). Nothing is wrong with the frame; the next publish tries again. |
 | `none` | There was no `genex-cover` shot: Genex keeps its own cover. |
