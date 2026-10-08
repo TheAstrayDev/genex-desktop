@@ -81,7 +81,7 @@
     },
     {
       "name": "cover-set",
-      "description": "Make the kept genex-cover shot this game's Genex cover now, without publishing: the picture on its gallery card, its page and every shared link. Shoot and judge it with genex__cover first. The user approves each call, so it can wait several minutes for the answer; never repeat a declined or expired request unless the user asks again. With no hosted Genex project yet it sends nothing: the shot goes with the first publish. A cover the owner chose on genex.games always stays. Genex limits cover uploads per hour: send one judged frame, and never resend a refused one unchanged. The answer's kind says how it went.",
+      "description": "Make the kept genex-cover shot this game's Genex cover now, without publishing: the picture on its gallery card, its page and every shared link. Shoot and judge it with genex__cover first. The user approves each call, so it can wait several minutes for the answer; never repeat a declined or expired request unless the user asks again. With no hosted Genex project yet it sends nothing: the shot goes with the first publish. A cover the owner chose on genex.games always stays. Genex limits cover uploads per hour: send one judged frame, and never send a frame Genex turned down again unchanged. The answer's kind says how it went.",
       "parameters": {
         "type": "object",
         "properties": {}
