@@ -27,7 +27,7 @@ exports work with no enabled plugins.
   `mcpServers requires apiVersion 2`, `tools[].confirmation requires apiVersion 2`) rather than silently ignored, so a package cannot
   claim API 1 and still ship API 2 behaviour.
 - API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills and (bundled Genex only) `tools[].host`. Lower-version manifests cannot claim those declarations.
-- Plugin tool parameters stay scalar (`string` / `number` / `boolean` properties). External MCP tools retain their full nested schemas.
+- Plugin tool parameters are scalar (`string` / `number` / `boolean` properties); API 3 also accepts `type: "object"`, optionally with `acceptJsonString` for a migrated scalar (`toolParameter` in `src/substrate/plugins/manifest.ts`; see the plugin guide's structured arguments). External MCP tools retain their full nested schemas.
 
 ## Package and distribution
 
