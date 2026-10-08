@@ -7,8 +7,21 @@
  * (docs/agent/recipes.md, "Provider or engine").
  */
 
-/** How a subscription signs in: Claude through a piped or embedded terminal plus status polling, Codex through its native login reported from the in-app console. */
-export type LoginKind = "terminal" | "console" | "none";
+/**
+ * How a provider signs in: Claude through a piped or embedded terminal plus status polling, Codex
+ * through its native login reported from the in-app console, OpenCode through its own `auth login`
+ * in the embedded terminal (which keeps every provider it signs in to), `none` for an engine with
+ * no sign-in of its own (a local model, or OpenRouter, whose key is pasted in Settings).
+ */
+export type LoginKind = "terminal" | "console" | "cli" | "none";
+
+/**
+ * Who pays for a provider's work: nobody (`local`), a plan the person already has
+ * (`subscription`, throttled server-side, never billed per call), or per token (`metered`). A
+ * choice the app makes on its own — a fallback, a first ready engine — never lands on a metered
+ * provider: only the person's explicit pick spends their credits.
+ */
+export type Billing = "local" | "subscription" | "metered";
 
 /**
  * Which roles a provider can run: `presets` has the model rows and single-pick presets of
@@ -39,6 +52,7 @@ export interface ProviderInfo {
   readonly subscription: boolean;
   readonly login: LoginKind;
   readonly roles: RoleSupport;
+  readonly billing: Billing;
   /** Subscriptions only. */
   readonly signIn: SignInCopy | null;
 }
@@ -49,6 +63,8 @@ export const EngineId = {
   Codex: "codex",
   Bonsai: "bonsai",
   Ollama: "ollama",
+  OpenCode: "opencode",
+  OpenRouter: "openrouter",
 } as const;
 export type EngineId = (typeof EngineId)[keyof typeof EngineId];
 
@@ -60,6 +76,7 @@ export const PROVIDERS = [
     subscription: true,
     login: "terminal",
     roles: "presets",
+    billing: "subscription",
     signIn: {
       product: "your Claude subscription",
       card: "Use your Claude subscription",
@@ -76,6 +93,7 @@ export const PROVIDERS = [
     subscription: true,
     login: "console",
     roles: "presets",
+    billing: "subscription",
     signIn: {
       product: "your ChatGPT subscription",
       card: "Use your ChatGPT subscription",
@@ -86,8 +104,42 @@ export const PROVIDERS = [
       who: "Codex handles that part",
     },
   },
-  { id: EngineId.Bonsai, label: "Bonsai", subscription: false, login: "none", roles: "sessions", signIn: null },
-  { id: EngineId.Ollama, label: "Ollama", subscription: false, login: "none", roles: "completion", signIn: null },
+  {
+    id: EngineId.Bonsai,
+    label: "Bonsai",
+    subscription: false,
+    login: "none",
+    roles: "sessions",
+    billing: "local",
+    signIn: null,
+  },
+  {
+    id: EngineId.Ollama,
+    label: "Ollama",
+    subscription: false,
+    login: "none",
+    roles: "completion",
+    billing: "local",
+    signIn: null,
+  },
+  {
+    id: EngineId.OpenCode,
+    label: "OpenCode",
+    subscription: false,
+    login: "cli",
+    roles: "sessions",
+    billing: "metered",
+    signIn: null,
+  },
+  {
+    id: EngineId.OpenRouter,
+    label: "OpenRouter",
+    subscription: false,
+    login: "none",
+    roles: "sessions",
+    billing: "metered",
+    signIn: null,
+  },
 ] as const satisfies readonly ProviderInfo[];
 
 type Provider = (typeof PROVIDERS)[number];
@@ -110,4 +162,14 @@ export function providerInfo(id: string | null | undefined): ProviderInfo | unde
 /** How this engine signs in; `none` for a local engine or one the table does not list. */
 export function loginKind(id: string | null | undefined): LoginKind {
   return providerInfo(id)?.login ?? "none";
+}
+
+/** True for a provider billed per token: the app never picks one on the person's behalf. */
+export function isMetered(id: string | null | undefined): boolean {
+  return providerInfo(id)?.billing === "metered";
+}
+
+/** True for a model this Mac runs itself: free, and never rate limited by anyone else. */
+export function isLocalEngine(id: string | null | undefined): boolean {
+  return providerInfo(id)?.billing === "local";
 }

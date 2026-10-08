@@ -91,7 +91,9 @@ A sign-in event names its own provider; its adjacent harness reply replaces dupl
 Install (Update for a CLI too old) in Settings → Model Providers and the chat's sign-in card, and
 Set up in first launch, installs Claude Code or Codex with its vendor's own installer, in the background:
 `install.sh` on macOS and Linux, `install.ps1` on Windows, from `claude.ai` and
-`chatgpt.com/codex`. Main fetches the script over HTTPS itself, runs it as the person with the
+`chatgpt.com/codex`. Settings installs OpenCode the same way from `opencode.ai/install` (macOS and
+Linux only; it publishes no Windows script) into `~/.opencode/bin`, and updates it with
+`opencode upgrade`. Main fetches the script over HTTPS itself, runs it as the person with the
 contractor environment (no keys, none of the other vendor's variables; Codex with
 `CODEX_NON_INTERACTIVE=1` so it asks nothing), keeps only its last output for `studio.log` and
 stops it after ten minutes. Both installers use folders discovery already searches (`~/.local/bin`;
@@ -101,6 +103,52 @@ second press joins it and every button follows it (`cli.install`). The page name
 `studio:cli-install.start` is native, so fixture profiles refuse it. Like the person's own terminal,
 the installer runs outside `ProcessSandbox` ([cli-installer.ts](../src/substrate/cli-installer.ts)).
 A failure says why; Settings then adds the vendor's install guide.
+
+## OpenRouter and OpenCode
+
+Both are metered (`billing: "metered"` in `shared/providers.ts`): every token is paid to someone,
+so `EngineRegistry` never offers one as a fallback or a first ready engine, and the sign-in gate's
+local finish and the reference judge never pick one. Only the person's explicit pick runs on them.
+
+**OpenRouter** ([openrouter.ts](../src/substrate/engines/openrouter.ts)) is a direct engine on the
+same pi-ai path as Ollama ([pi-completions.ts](../src/substrate/engines/pi-completions.ts)), and a
+game chat or build runs as a Genex session (`LocalSessions`, under OpenRouter's own id), as Bonsai's
+does. Settings sends a pasted key over `studio:openrouter.key.save` (native); main checks it with
+`GET /key`, keeps it only when accepted (`openrouter-api-key` in the SecretStore under
+`userData/secrets/providers`, which no agent process may read) and answers with the engine status,
+never the key. A locked store saves nothing and says so. The public `/models` list is read without
+the key; only tool-calling models are listed, with their context, reply cap, vision, reasoning
+efforts and price. OpenRouter picks no default model. Context is estimated from characters before
+each request (compaction runs early rather than late); 401/403 is a sign-in failure, 402 a usage
+limit, 429 a rate limit. Errors are redacted before they are logged.
+
+**OpenCode** ([opencode.ts](../src/substrate/engines/opencode.ts)) is a delegated engine that runs
+`opencode run --format json --pure` with the brief on stdin, resumed by `--session`. OpenCode keeps
+its own sign-ins (`opencode auth login`, which Sign in runs in a terminal inside its Settings row,
+never the dock, so Settings stays open; when it prints an https page, main keeps the address and the
+row offers Open sign-in page, `studio:terminal.open-link`) and the studio never reads them: it is Ready once `opencode models --verbose` lists a model. OpenCode lists its
+own free models to anyone, so while those are all it lists the account is `none` and the Settings
+row reads Free models only with Sign in first; the free models still run. It has no sandbox of
+its own, so each session runs in `ProcessSandbox`: the workspace (a scratch folder when read-only)
+plus OpenCode's state and cache are writable, its own data folder is exempt from the credential
+denies for that sandbox only (`SandboxOptions.ownHome`), and only the picked model's provider hosts
+(the address OpenCode lists, or for a built-in provider listed with none, its known API and
+browser sign-in hosts) and OpenCode's catalogs (`models.dev`, `models.opencode.ai`) are reachable.
+`OPENCODE_CONFIG_CONTENT` sets every permission to allow or deny, never ask, denies web fetch and other folders to a build, and lets a read-only session run only the
+studio bridge (`node .studio/bridge/tool.mjs`), which carries the studio's tools as it does for Codex.
+A provider's HTTP status in an `error` event decides the failure kind, as for OpenRouter; a 400 or
+404 for a picked model ends the build saying which model the provider refused and to pick another;
+a 403 for a picked model whose provider has no host Genex knows says the sandbox kept OpenCode from
+it, not to sign in again; and a failure on one of OpenCode's free models says so, keeping its kind.
+OpenCode lists every OpenAI model even on a ChatGPT sign-in, where OpenAI refuses some, so while
+Codex is signed in the picker starts OpenCode's GPT models with the ones Codex lists
+(`runnableModels` in `renderer/model-lineup.ts`). Recorded streams:
+`tests/fixtures/transcripts/opencode-*` (OpenCode 1.18).
+
+Residual risk: the CLI must read its sign-ins and its bash tool shares its sandbox, so an OpenCode
+session can read OpenCode's own `auth.json`, and its commands can reach the provider host the session
+calls. OpenCode's permission rules keep its own tools inside the workspace, but that is not an OS
+boundary. Every other sandbox still denies the folder.
 
 ## MCP setup
 

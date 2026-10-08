@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { limitKind, limitResetMs } from "../../src/substrate/engines/claude-code.ts";
+import { classifyHttpFailure } from "../../src/substrate/engines/types.ts";
 import { consoleProblems } from "../../src/harness-seed/loop/gauntlet.ts";
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "../../src/shared/duration.ts";
 
@@ -70,6 +71,24 @@ describe("engine limits", () => {
       MINUTE_MS,
       "a dated reset already past is a minute away, never negative",
     );
+  });
+});
+
+describe("HTTP failures of an API engine", () => {
+  it("classifies each status by its code, never by the body's words", () => {
+    const rows: Array<[number, string, string]> = [
+      [429, "slow down", "rate_limit"],
+      [401, "bad key", "auth"],
+      [403, "forbidden", "auth"],
+      // A metered account out of credits: no in-run wait refills it, so the run ends rather than retrying.
+      [402, "Insufficient credits", "usage_limit"],
+      [500, "boom", "unavailable"],
+      [503, "overloaded", "unavailable"],
+      [400, "rate limit exceeded", "other"],
+    ];
+    for (const [status, body, kind] of rows)
+      assert.equal(classifyHttpFailure("openrouter", status, body).kind, kind, `${status}`);
+    assert.equal(classifyHttpFailure("openrouter", 429, "retry-after: 7").retryAfterMs, 7000);
   });
 });
 

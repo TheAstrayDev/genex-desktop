@@ -313,6 +313,8 @@ export interface StudioApi {
   }): Promise<StudioSettingsView>;
   /** Settings → Copy diagnostics: versions, provider status and the recent log, already redacted. */
   diagnostics(): Promise<string>;
+  /** Send feedback (the sidebar's bug button): posts the report to genex.games; throws when it was not taken. */
+  sendFeedback(draft: import("./feedback.ts").FeedbackDraft): Promise<void>;
   /** Settings → Licenses: Genex's MIT license and the third-party notices this build ships. */
   licenses(): Promise<import("./licenses.ts").LicenseTexts>;
   /** Settings → Privacy: whether Share build metrics is on, paused or offered at all. */
@@ -337,6 +339,15 @@ export interface StudioApi {
   claudeLoginCode(code: string): Promise<ClaudeLoginState>;
   claudeLoginOpenBrowser(): Promise<unknown>;
   claudeLoginCancel(): Promise<unknown>;
+  /** OpenCode's own sign-in (`opencode auth login`), in the terminal dock. */
+  openCodeSignIn(): Promise<{ started: boolean; missingCli?: boolean }>;
+  /**
+   * Check a pasted OpenRouter API key with OpenRouter and keep it in the OS secret store when it is
+   * accepted. The answer is OpenRouter's status; the key never comes back.
+   */
+  openRouterKeySave(key: string): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /** Forget the saved OpenRouter key. */
+  openRouterKeyClear(): Promise<import("./engine-descriptor.ts").EngineStatus>;
   terminalList(): Promise<import("./terminal.ts").TerminalSession[]>;
   terminalAccessibility(): Promise<boolean>;
   terminalOpen(project: string): Promise<import("./terminal.ts").TerminalSession>;
@@ -348,6 +359,8 @@ export interface StudioApi {
   terminalAcknowledge(id: string, count: number): Promise<void>;
   terminalStop(id: string): Promise<void>;
   terminalRemove(id: string): Promise<void>;
+  /** Open, in the browser, the sign-in page this terminal session printed (none: nothing opens). */
+  terminalOpenLink(id: string): Promise<void>;
   onTerminal(listener: (event: import("./terminal.ts").TerminalEvent) => void): () => void;
   onClaudeLogin(listener: (state: ClaudeLoginState) => void): () => void;
   codexLoginState(): Promise<CodexLoginState>;

@@ -184,13 +184,23 @@ describe("Copy diagnostics", () => {
       blender: true,
       autoResume: true,
     };
+    const sent: unknown[] = [];
     registerSettingsIpc(handle, {
       core: { settings, updateSettings: async () => settings },
       diagnostics: async () => "the report",
+      feedback: async (payload) => {
+        sent.push(payload);
+      },
       licenses: async () => ({ license: "MIT License", bundled: null, notices: "# Notices" }),
     });
     const result = await listeners.get("studio:diagnostics")!({ sender: "studio", senderFrame: "main" }, undefined);
     assert.deepEqual(result, { ok: true, value: "the report" }, "fixture-safe, and answers the text");
+    const feedback = await listeners.get("studio:feedback.send")!(
+      { sender: "studio", senderFrame: "main" },
+      { text: "Crash", screen: "home", appLogs: false, chatId: null },
+    );
+    assert.equal(feedback.ok, false, "a fixture profile never posts feedback");
+    assert.deepEqual(sent, []);
     const licenses = await listeners.get("studio:licenses")!({ sender: "studio", senderFrame: "main" }, undefined);
     assert.deepEqual(
       licenses,

@@ -89,6 +89,7 @@ import { RELEASE_CHECK_INTERVAL_MS, latestRelease } from "./release-check.ts";
 import { UpdateAction } from "../shared/app-update.ts";
 import { gatedHostTool } from "./core/genex-cli.ts";
 import { diagnosticsText, gatherDiagnostics } from "./diagnostics.ts";
+import { type FeedbackSources, sendFeedback } from "./feedback.ts";
 import { renderGameCover } from "./game-cover-renderer.ts";
 import { createIpcHandle, pushToRenderer } from "./ipc-handle.ts";
 import { registerBootIpc } from "./ipc/boot.ts";
@@ -454,11 +455,15 @@ app.on("accessibility-support-changed", (_event, enabled) => {
 let liveThreadStatus: ThreadStatusMap = {};
 /** An eval-lane launch's view of the core's UI events (it digests the game its chat seeds); null otherwise. */
 let evalLaneUiTap: ((event: UiEvent) => void) | null = null;
-const { codexLogin, claudeLogin } = createLoginControllers({
+const { codexLogin, claudeLogin, openCodeLogin } = createLoginControllers({
   terminals,
   openExternal: (url) => shell.openExternal(url),
   subscription,
   pushUiEvent,
+  onOpenCodeSignedIn: async () => {
+    if (core?.engines.has(EngineId.OpenCode)) await core.engines.get(EngineId.OpenCode).refreshModels?.(true);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenCode } });
+  },
   showCodexState: (state) => {
     preview?.setOccluded(state.visible);
     const page = livePage();
@@ -1042,6 +1047,18 @@ async function diagnosticsReport(studio: StudioCore): Promise<string> {
   );
 }
 
+/** Send feedback's report: this build and OS, the diagnostics report and the open chat's newest events. */
+function feedbackSources(studio: StudioCore): FeedbackSources {
+  return {
+    app: { version: app.getVersion(), packaged: app.isPackaged },
+    os: { platform: process.platform, release: os.release(), arch: process.arch },
+    home: app.getPath("home"),
+    diagnostics: () => diagnosticsReport(studio),
+    chatEvents: (threadId, count) => studio.store.listEvents(threadId, { limit: count, tail: true }),
+    fetch,
+  };
+}
+
 /** Every IPC channel, registered once per launch by its domain's registrar in `./ipc/`. */
 function registerIpc(studio: StudioCore): void {
   const handle = createIpcHandle(ipcMain, {
@@ -1058,6 +1075,7 @@ function registerIpc(studio: StudioCore): void {
     terminals,
     accessibilityEnabled: () => app.isAccessibilitySupportEnabled(),
     shellPath: async () => (await toolchain()).path,
+    openExternal: (url) => shell.openExternal(url),
   });
   registerThreadsIpc(handle, {
     core: studio,
@@ -1086,6 +1104,7 @@ function registerIpc(studio: StudioCore): void {
   registerSettingsIpc(handle, {
     core: studio,
     diagnostics: () => diagnosticsReport(studio),
+    feedback: (payload) => sendFeedback(payload, feedbackSources(studio)),
     licenses: () => readLicenseTexts(resources),
   });
   registerRunSharingIpc(handle, { sharing: runSharing });
@@ -1096,6 +1115,7 @@ function registerIpc(studio: StudioCore): void {
   registerLoginIpc(handle, {
     claudeLogin,
     codexLogin,
+    openCodeLogin,
     subscription,
     pushUiEvent,
     busy: () => keepAwake.held || (core?.budget.userInFlight ?? 0) > 0,
