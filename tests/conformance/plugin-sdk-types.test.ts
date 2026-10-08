@@ -91,18 +91,22 @@ test("a backend written against the SDK declaration compiles clean", (t) => {
         });
         let still: { bytes: Uint8Array; mime: 'image/png' | 'image/jpeg'; mean: number; spread: number; dark: number; lit: number; preview: Uint8Array } | null = null;
         let problem: { code: PluginStillProblemCode; names: string[] | undefined; reason: string | undefined } | null = null;
-        if ('still' in shot) {
+        let olderHost = false;
+        if ('still' in shot && shot.still) {
           const { image, mimeType, width, height, source, view, stats, preview } = shot.still;
           const side: number = width + height;
           const read: 'page' | 'compositor' = source;
           const named: string | undefined = view.demo ?? view.camera;
           still = { bytes: image, mime: mimeType, mean: stats.lumaMean + side * 0, spread: stats.lumaStdDev, dark: stats.nearBlackFraction, lit: stats.litFraction, preview };
           void read; void named;
-        } else {
+        } else if ('stillProblem' in shot && shot.stillProblem) {
           problem = { code: shot.stillProblem.code, names: shot.stillProblem.available, reason: shot.stillProblem.reason };
+        } else {
+          // A host older than stills ignored the option and answered an ordinary observation.
+          olderHost = true;
         }
         await ctx.host('observe', { project: 'g', root: '/games/g', files: [], still: { camera: 'eye:down', width: 1280, height: 720 } });
-        return { root, text, written, delivered, dir: exported.dir, files: exported.files, token, job, still, problem };
+        return { root, text, written, delivered, dir: exported.dir, files: exported.files, token, job, still, problem, olderHost };
       }
       import type { PluginStillProblemCode } from ${quote(sdk)};
     `,
@@ -214,6 +218,21 @@ test("an undeclared host method and a non-scalar tool argument are compile error
       `a still must name exactly one view and its size (${file})`,
     );
   }
+  // An API-3 host older than stills answers a plain observation: neither field is a given.
+  const assumedAnswer = compile(t, {
+    "assumed.ts": `
+      import type { PluginContext } from ${quote(sdk)};
+      export async function run(ctx: PluginContext) {
+        const shot = await ctx.host('observe', { project: 'g', root: '/g', files: [], still: { demo: 'hero', width: 1920, height: 1080 } });
+        if (!('still' in shot)) return shot.stillProblem.code;
+        return null;
+      }
+    `,
+  });
+  assert.ok(
+    assumedAnswer.some((d) => d.file?.fileName.endsWith("assumed.ts")),
+    "an answer that is not a still is not necessarily a still problem",
+  );
   const filesBesideStill = compile(t, {
     "files.ts": `
       import type { PluginContext } from ${quote(sdk)};

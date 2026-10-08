@@ -279,8 +279,8 @@ export type PluginStillView = { demo: string; camera?: undefined } | { camera: s
  * own at `width`×`height` (whole pixels, 320–1920 by 240–1200), encoded as PNG, or as the
  * best JPEG (quality 95, 90, then 85) that fits `maxBytes` (64 KiB to 16 MiB, default 8 MiB).
  * The image is never larger than asked; a game that draws smaller is not scaled up. A host older
- * than this option ignores `still` and answers an ordinary observation, so check the answer for
- * `still` or `stillProblem`.
+ * than this option ignores `still` and answers an ordinary observation ({@link PluginStillIgnored}),
+ * so check the answer for `still`, then `stillProblem`, and handle neither.
  */
 export type PluginStillRequest = PluginStillView & { width: number; height: number; maxBytes?: number };
 /**
@@ -323,6 +323,11 @@ export interface PluginStillProblem {
   available?: string[];
 }
 export type PluginStillAnswer = { still: PluginStill } | { stillProblem: PluginStillProblem };
+/**
+ * What an API-3 host older than stills answers instead: it ignores `still` and returns an ordinary
+ * observation, with neither `still` nor `stillProblem`. Check for each before reading it.
+ */
+export type PluginStillIgnored = { still?: undefined; stillProblem?: undefined; [key: string]: unknown };
 
 /** Sanitized progress for Studio. `kind: 'toolbar'` updates a toolbar item's badge. */
 export interface PluginEvent {
@@ -364,11 +369,14 @@ export interface PluginHostCall {
   (method: "jobs.read", args: { id: string }): Promise<unknown>;
   (method: "jobs.write", args: { id: string; value: unknown }): Promise<true>;
   (method: "events.emit", args: PluginEvent): Promise<true>;
-  /** API 3: one named view of the bound game as a still; see {@link PluginStillRequest}. */
+  /**
+   * API 3: one named view of the bound game as a still; see {@link PluginStillRequest}. A host
+   * older than the option answers an ordinary observation ({@link PluginStillIgnored}).
+   */
   (
     method: "observe",
     args: { project: string; root: string; files: []; still: PluginStillRequest },
-  ): Promise<PluginStillAnswer>;
+  ): Promise<PluginStillAnswer | PluginStillIgnored>;
   (method: "observe", args: { project: string; root: string; files: string[] }): Promise<unknown>;
   /** Current plugin's explicitly unlocked memory lease; null never triggers OS access. */
   (method: "credentials.session"): Promise<string | null>;

@@ -29,7 +29,8 @@ exports work with no enabled plugins.
 - API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills and (bundled Genex only) `tools[].host`. Lower-version manifests cannot claim those declarations.
 - API 3's `observe` also takes an optional `still` (additive; no manifest field or capability of
   its own). A host older than the option ignores it and answers an ordinary observation, so a
-  caller checks the answer for `still` or `stillProblem`.
+  caller checks the answer for `still`, then `stillProblem`, and handles neither (the SDK types the
+  answer as `PluginStillAnswer | PluginStillIgnored`).
 - Plugin tool parameters are scalar (`string` / `number` / `boolean` properties); API 3 also accepts `type: "object"`, optionally with `acceptJsonString` for a migrated scalar (`toolParameter` in `src/substrate/plugins/manifest.ts`; see the plugin guide's structured arguments). External MCP tools retain their full nested schemas.
 
 ## Package and distribution
