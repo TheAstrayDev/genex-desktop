@@ -214,6 +214,11 @@
       "file": "skills/genex-tool-publish/SKILL.md"
     },
     {
+      "name": "genex-cover",
+      "summary": "Read before making or refreshing this game's Genex cover: once it first looks like itself, after a big visual change, or before its first publish. How to stage the genex-cover demo from the game's own world, light and effects (no HUD, no text, 16:9), judge it with genex__cover and send it.",
+      "file": "skills/genex-cover/SKILL.md"
+    },
+    {
       "name": "genex-updates",
       "summary": "What Genex update nudges, update-required refusals and out-of-credit lines mean in Studio, which pins the Genex CLI and its SDK packages.",
       "file": "skills/genex-updates/SKILL.md"

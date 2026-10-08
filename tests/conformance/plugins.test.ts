@@ -2076,8 +2076,9 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
     assert.match(guidance, /genex__skill \{"name":"genex-threejs-multiplayer"\}/);
     assert.doesNotMatch(guidance, /Two rules that decide whether it feels good/, "a card's body is never in the brief");
     assert.doesNotMatch(guidance, /\[genex\/asset-workflow\]/, "the duplicate of the asset tool's description is gone");
-    // The Genex cover: an inline skill every brief carries.
+    // The Genex cover: an inline skill every brief carries, beside the card read on demand.
     assert.match(guidance, /\[genex\/cover\]\n[^\n]*set_game_cover[^\n]*genex-cover/);
+    assert.match(guidance, /\[genex\/genex-cover\] [^\n]*genex__skill \{"name":"genex-cover"\}/);
     const tools = registry.tools().filter((t) => t.name.startsWith("genex__"));
     for (const text of [guidance, ...tools.map((t) => t.description)]) assert.doesNotMatch(text, /npx genex/);
     const names = tools.map((t) => t.name);
@@ -2090,6 +2091,12 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
       "genex__cover-set",
     ])
       assert.ok(names.includes(name), `${name} in ${names.join(", ")}`);
+    const cover = splitVendoredSkill(await readGenexSkill(registry, "genex-cover", binding));
+    assert.equal(
+      cover.preface,
+      await readFile(path.resolve("src/plugins/genex/skills/genex-cover/PREFACE.md"), "utf8"),
+      "Studio's own way to stage, check and send the cover comes first",
+    );
     const multiplayer = splitVendoredSkill(await readGenexSkill(registry, "genex-threejs-multiplayer", binding));
     const preface = await readFile(
       path.resolve("src/plugins/genex/skills/genex-threejs-multiplayer/PREFACE.md"),
