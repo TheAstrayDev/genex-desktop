@@ -1,5 +1,5 @@
 import type { RuntimeInstallPhase } from "./model-install.ts";
-import type { StillExposure, StillMimeType } from "./preview-contract.ts";
+import type { CaptureSource, StillExposure, StillMimeType } from "./preview-contract.ts";
 
 /** Where a plugin's native runtime stands on this Mac (`PluginNativeStatus.state`). */
 export const NativeRuntimeState = {
@@ -684,7 +684,7 @@ export interface PluginStill {
   width: number;
   height: number;
   /** `page` is the page's own read of its canvas; `compositor` is the window's frame. */
-  source: "page" | "compositor";
+  source: CaptureSource;
   view: PluginStillView;
   stats: StillExposure;
   /** JPEG, at most 1280 px on its long side. */

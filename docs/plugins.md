@@ -424,8 +424,8 @@ Available services are capability checked and scoped to the calling plugin:
   `still` (API 3, additive) it photographs one named view instead: `{ project, root, files: [],
   still: { demo | camera, width, height, maxBytes? } }` loads the bound game on a hidden window of
   its own at `width`×`height` (whole pixels, 320–1920 × 240–1200), puts it in play, runs the
-  `config.demos` entry to its end state or places the camera (`config.cameras` or a built-in
-  `eye:*`), and reads the canvas. The answer is `{ still: { image, mimeType, width, height, source,
+  `config.demos` entry to its end state or places the camera (one the page lists in `cameras()` or
+  `eyes()`, or `default`; any other name is never called), and reads the canvas. The answer is `{ still: { image, mimeType, width, height, source,
   view, stats, preview } }`: a PNG, or the first JPEG at quality 95, 90 or 85 that fits `maxBytes`
   (64 KiB–16 MiB, default 8 MiB), never larger than asked; `stats` holds `lumaMean`, `lumaStdDev`,
   `nearBlackFraction` (luma below 0.10) and `litFraction`, each 0–1 on a small downscale; `preview`
@@ -433,8 +433,9 @@ Available services are capability checked and scoped to the calling plugin:
   `unavailable`, `load_failed`, `view_unknown` (with the names the game has, at most 32),
   `view_failed`, `capture_failed`, `too_large` or `timeout` (one minute for the whole still). A
   still never borrows Live: a build with no hidden window answers `unavailable`. Every field is
-  checked before anything runs, and the window is given back however the still ends
-  (`core/view-still.ts`).
+  checked before anything runs, and the window is given back however the still ends; once its
+  budget gives a still up, nothing reaches that window again, and a closed preview refuses every
+  later call rather than build a new view (`core/view-still.ts`).
 - `export.stage` (capability `export`, API 2): Studio writes the public export of the bound game
   under the plugin's own storage (`publish/<project>/dist`) and returns the export result; it
   needs a project binding and is `Export unavailable` in sessions without the host export. The

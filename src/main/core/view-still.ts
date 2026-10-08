@@ -31,6 +31,8 @@ export const STILL_TIMEOUT_MS = 60 * SECOND_MS;
 const STILL_PREVIEW_MAX_PX = 1280;
 /** How much of the page's own words about a view a problem quotes. */
 const PAGE_REASON_CHARS = 240;
+/** The view the game renders itself: the page places it whatever names its cameras have. */
+const DEFAULT_CAMERA = "default";
 
 const MESSAGE = {
   noHiddenWindow: "this build has no hidden window to take a still on, and a still never borrows the person's own",
@@ -67,6 +69,25 @@ function problem(code: PluginStillProblemCode, detail: Omit<PluginStillProblem, 
 }
 
 const canStill = (port: PreviewPort): port is StillPort => typeof port.still === "function";
+
+/**
+ * The still's window as its steps reach it: every call is refused once the budget has given the
+ * still up. A step already waiting on the page (its load, a ready probe, `start`, `demos`) goes on
+ * when the page answers, but nothing it then asks reaches a window already given back, where a
+ * closed preview would build itself a new view to answer.
+ */
+function untilAbandoned(port: StillPort, abandoned: AbortSignal): StillPort {
+  return new Proxy(port, {
+    get(target, key) {
+      const value: unknown = Reflect.get(target, key);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        abandoned.throwIfAborted();
+        return value.apply(target, args);
+      };
+    },
+  });
+}
 
 /** The pool, when it has hidden windows; null when the only window is the person's own, or none. */
 function hiddenPool(previews: StillPreviews): PreviewPool | null {
@@ -115,13 +136,36 @@ function viewOutcome(called: PageAnswer): PluginStillAnswer | null {
   return problem(PluginStillProblemCode.ViewFailed, { reason });
 }
 
+/** The names a page lists for `method`, none when it has no such list, or why the call failed. */
+async function listedNames(port: PreviewPort, method: GameView): Promise<{ names: unknown[] } | { threw: string }> {
+  const listed = await pageCall(port, method);
+  if ("threw" in listed) return listed;
+  return { names: Array.isArray(listed.answer) ? listed.answer : [] };
+}
+
 /** Run a demo the game lists, to its end state; a name it does not list is never called. */
 async function runDemo(port: PreviewPort, name: string): Promise<PluginStillAnswer | null> {
-  const listed = await pageCall(port, GameView.Demos);
+  const listed = await listedNames(port, GameView.Demos);
   if ("threw" in listed) return problem(PluginStillProblemCode.ViewFailed, { reason: listed.threw });
-  const names: unknown[] = Array.isArray(listed.answer) ? listed.answer : [];
-  if (!names.includes(name)) return problem(PluginStillProblemCode.ViewUnknown, { available: viewNames(names) });
+  if (!listed.names.includes(name))
+    return problem(PluginStillProblemCode.ViewUnknown, { available: viewNames(listed.names) });
   return viewOutcome(await pageCall(port, GameView.Demo, name));
+}
+
+/**
+ * Place a camera the game lists (its own `cameras()` and the built-in `eyes()`), or its own view
+ * by `default`; any other name is never called. Every game looks a camera up on a plain object, so
+ * an unlisted `constructor` or `toString` would otherwise "place" a camera the game never had.
+ */
+async function placeCamera(port: PreviewPort, name: string): Promise<PluginStillAnswer | null> {
+  const cameras = await listedNames(port, GameView.Cameras);
+  if ("threw" in cameras) return problem(PluginStillProblemCode.ViewFailed, { reason: cameras.threw });
+  const eyes = await listedNames(port, GameView.Eyes);
+  if ("threw" in eyes) return problem(PluginStillProblemCode.ViewFailed, { reason: eyes.threw });
+  const names = [...cameras.names, ...eyes.names];
+  if (name !== DEFAULT_CAMERA && !names.includes(name))
+    return problem(PluginStillProblemCode.ViewUnknown, { available: viewNames(names) });
+  return viewOutcome(await pageCall(port, GameView.DebugCamera, name));
 }
 
 /** The view a checked order names, as the answer echoes it. */
@@ -171,8 +215,8 @@ async function photograph(port: StillPort, order: PluginStillOrder): Promise<Plu
 
 /**
  * Size the window, load the game, put it in play, place the view and photograph it. A still its
- * budget gave up on (`abandoned`) stops at its next step: its window is already given back, and
- * nothing may load, play or photograph in it again.
+ * budget gave up on (`abandoned`) stops where it is: its window is already given back, and nothing
+ * may load, probe, play or photograph in it again, inside a step or between two.
  */
 async function shoot(
   previews: StillPreviews,
@@ -182,7 +226,7 @@ async function shoot(
 ): Promise<PluginStillAnswer> {
   const window = await sizedWindow(pool, session, order);
   if ("refused" in window) return window.refused;
-  const { port } = window;
+  const port = untilAbandoned(window.port, abandoned);
   const loaded = await previews
     .loadServed(port, binding.project, binding.directory, undefined, true)
     .catch((err: unknown) => ({ problem: errorMessage(err) }));
@@ -190,10 +234,7 @@ async function shoot(
   if (loaded.problem) return problem(PluginStillProblemCode.LoadFailed, { reason: loaded.problem });
   await previews.applySetup(port, null);
   abandoned.throwIfAborted();
-  const placed =
-    order.demo !== undefined
-      ? await runDemo(port, order.demo)
-      : viewOutcome(await pageCall(port, GameView.DebugCamera, order.camera));
+  const placed = order.demo !== undefined ? await runDemo(port, order.demo) : await placeCamera(port, order.camera);
   abandoned.throwIfAborted();
   if (placed) return placed;
   return photograph(port, order);

@@ -1,5 +1,11 @@
 import { previewVisibility } from "./preview-visibility.ts";
-import { CaptureSurface, type PreviewGone, PreviewConsoleSource, previewGone } from "../shared/preview-contract.ts";
+import {
+  CaptureSource,
+  CaptureSurface,
+  type PreviewGone,
+  PreviewConsoleSource,
+  previewGone,
+} from "../shared/preview-contract.ts";
 import { PreviewProfiler, type ProfileRequest } from "../substrate/preview-profiler.ts";
 /**
  * Game preview.
@@ -96,6 +102,7 @@ const MESSAGE = {
     `screenshot found no compositor frame; retrying once without changing window visibility (${reason})`,
   notMethodName: (method: string) => `not a studio method name: ${method}`,
   consoleUnavailable: "Console observation unavailable; no console-clean claim is possible",
+  closed: "this game window was closed",
 } as const;
 
 export type { PageCaptureInfo };
@@ -203,6 +210,12 @@ export class GamePreview {
     if (this.#view && !this.#view.webContents.isDestroyed()) this.#view.setVisible(visible);
   });
   #session: Session | null = null;
+  /**
+   * Closed for good (`destroy`): a pooled window's lease ended. Anything still waiting on its page
+   * when it closed is refused rather than given a new view, which would leak a renderer and leave
+   * this window's handlers serving the next window opened on the same partition.
+   */
+  #closed = false;
   #observed = false;
   #renderingVisible = true;
   /** Whether the speakers are off: from the start for an agent's window, as `setAudioMuted` says for Live. */
@@ -297,6 +310,7 @@ export class GamePreview {
 
   /** Create the view and install the protocol handler on its partition. */
   create(): WebContentsView {
+    if (this.#closed) throw new Error(MESSAGE.closed);
     if (this.#view) return this.#view;
     const partition = this.options.partition ?? "game-preview";
     const gameSession = session.fromPartition(partition);
@@ -827,7 +841,7 @@ export class GamePreview {
       },
       // What was PHOTOGRAPHED, not how it was read: a compositor frame is the whole page, and
       // the page's own end-of-frame read is the canvas.
-      surface: source === "compositor" ? "page" : "canvas",
+      surface: source === CaptureSource.Compositor ? CaptureSurface.Page : CaptureSurface.Canvas,
     };
   }
 
@@ -901,7 +915,8 @@ export class GamePreview {
     const size = stillFit(taken, request);
     // A compositor frame on a Retina display holds more pixels than its size says; resizing it to
     // the size it reports is what makes the encoded image that size.
-    const resize = shot.source === "compositor" || size.width !== taken.width || size.height !== taken.height;
+    const resize =
+      shot.source === CaptureSource.Compositor || size.width !== taken.width || size.height !== taken.height;
     const image = resize ? shot.image.resize({ ...size, quality: "best" }) : shot.image;
     const encoded = encodeStill(
       { png: () => image.toPNG(), jpeg: (quality) => image.toJPEG(quality) },
@@ -929,7 +944,7 @@ export class GamePreview {
   async #capture(
     opts: { page?: boolean; surface?: CaptureSurface } = {},
     maxSamples?: number,
-  ): Promise<{ image: NativeImage; source: "page" | "compositor"; info: PageCaptureInfo | null; stats?: PixelStats }> {
+  ): Promise<{ image: NativeImage; source: CaptureSource; info: PageCaptureInfo | null; stats?: PixelStats }> {
     const asked = resolveSurface(opts);
     const chosen = await chooseCapture(asked, {
       pageUi: () => this.pageUi(),
@@ -969,7 +984,7 @@ export class GamePreview {
    */
   async #capturePageSurface(): Promise<{
     image: NativeImage;
-    source: "page" | "compositor";
+    source: CaptureSource;
     info: PageCaptureInfo | null;
   }> {
     const view = this.create();
@@ -981,7 +996,7 @@ export class GamePreview {
     let failure: unknown = null;
     try {
       const first = await compositor();
-      if (first) return { image: first, source: "compositor", info: null };
+      if (first) return { image: first, source: CaptureSource.Compositor, info: null };
     } catch (err) {
       failure = err;
     }
@@ -995,7 +1010,7 @@ export class GamePreview {
       }
       await sleep(COMPOSITOR_RETRY_MS);
       const second = await compositor();
-      if (second) return { image: second, source: "compositor", info: null };
+      if (second) return { image: second, source: CaptureSource.Compositor, info: null };
     } catch (err) {
       failure = err;
     }
@@ -1008,7 +1023,7 @@ export class GamePreview {
         message: MESSAGE.pageSurfaceFallback(failure ? errorMessage(failure) : null),
       });
     }
-    if (fallback) return { image: fallback.image, source: "page", info: fallback.info };
+    if (fallback) return { image: fallback.image, source: CaptureSource.Page, info: fallback.info };
     throw failure ?? new Error(MESSAGE.noFrame);
   }
 
@@ -1019,18 +1034,18 @@ export class GamePreview {
    */
   async #captureCanvas(
     pageTimeoutMs = PAGE_CAPTURE_TIMEOUT_MS,
-  ): Promise<{ image: NativeImage; source: "page" | "compositor"; info: PageCaptureInfo | null }> {
+  ): Promise<{ image: NativeImage; source: CaptureSource; info: PageCaptureInfo | null }> {
     const view = this.create();
     // First choice: ask the page itself. `__studio.capture()` re-renders and reads the WebGL
     // canvas in one JS turn, so the pixels never touch the compositor — a window that is
     // covered, on another Space, or on a sleeping display photographs exactly the same. One
     // occluded run lost every first-iteration build to "display surface not available".
     const pageShot = await this.#capturePageSide(pageTimeoutMs);
-    if (pageShot) return { image: pageShot.image, source: "page", info: pageShot.info };
+    if (pageShot) return { image: pageShot.image, source: CaptureSource.Page, info: pageShot.info };
     const declined = this.#pageCaptureInfo;
     await this.#awaitPresent();
     try {
-      return { image: await view.webContents.capturePage(), source: "compositor", info: declined };
+      return { image: await view.webContents.capturePage(), source: CaptureSource.Compositor, info: declined };
     } catch (err) {
       // Occluded windows can lose their compositor surface too. The failed request can wake
       // the compositor, so allow one paced retry without changing the user's window state.
@@ -1047,7 +1062,7 @@ export class GamePreview {
       }
       await sleep(COMPOSITOR_RETRY_MS);
       await this.#awaitPresent();
-      return { image: await view.webContents.capturePage(), source: "compositor", info: declined };
+      return { image: await view.webContents.capturePage(), source: CaptureSource.Compositor, info: declined };
     }
   }
 
@@ -1407,6 +1422,7 @@ export class GamePreview {
 
   async destroy(): Promise<void> {
     void this.#profiler.invalidate("preview disposed");
+    this.#closed = true;
     this.#view?.webContents.close();
     this.#view = null;
     const retired = this.#session;

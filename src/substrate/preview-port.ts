@@ -7,6 +7,7 @@ import type { PageUi, PageUiAnswer } from "./page-ui.ts";
 import type { PreviewInputAction } from "./preview-input.ts";
 import type { PixelDiff, PixelStats } from "./pixel-stats.ts";
 import type {
+  CaptureSource,
   CaptureSurface,
   CropRect,
   PreviewConsoleEntry,
@@ -33,7 +34,7 @@ export interface PreviewStill {
   width: number;
   height: number;
   /** Which path read the frame: the page's own canvas read, or the window's compositor. */
-  source: "page" | "compositor";
+  source: CaptureSource;
   stats: StillExposure;
   preview: Buffer;
 }

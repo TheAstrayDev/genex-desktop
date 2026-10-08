@@ -25,6 +25,13 @@ export const CaptureSurface = {
 } as const;
 export type CaptureSurface = (typeof CaptureSurface)[keyof typeof CaptureSurface];
 
+/**
+ * Which path took a picture: `page` is the page's own end-of-frame read of its canvas, which works
+ * on a covered window; `compositor` is the window's frame (Electron's `capturePage`).
+ */
+export const CaptureSource = { Page: "page", Compositor: "compositor" } as const;
+export type CaptureSource = (typeof CaptureSource)[keyof typeof CaptureSource];
+
 /** What a capture proved about the frame, plus whether the page even has a canvas to light. */
 export interface PreviewPixelStats extends PixelStats {
   canvas: boolean;
@@ -261,9 +268,16 @@ export type GameFront = (typeof GameFront)[keyof typeof GameFront];
 
 /**
  * The `__studio` verbs that put a named view on screen (`src/game-template/src/studio.js`): the
- * game's demo names, one demo run to its end state, and one camera placed.
+ * game's demo names, one demo run to its end state, the game's camera names and its built-in eye
+ * cameras, and one camera placed.
  */
-export const GameView = { Demos: "demos", Demo: "demo", DebugCamera: "debugCamera" } as const;
+export const GameView = {
+  Demos: "demos",
+  Demo: "demo",
+  Cameras: "cameras",
+  Eyes: "eyes",
+  DebugCamera: "debugCamera",
+} as const;
 export type GameView = (typeof GameView)[keyof typeof GameView];
 
 /** How a still is encoded: lossless PNG, or a high-quality JPEG when the PNG is over its byte limit. */

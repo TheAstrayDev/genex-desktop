@@ -232,6 +232,8 @@ describe("observe refuses what a plugin may not ask, before anything runs", () =
 interface PageScript {
   demos?: unknown;
   demo?: unknown;
+  cameras?: unknown;
+  eyes?: unknown;
   debugCamera?: unknown;
   loadError?: string;
   /** Runs inside the load; a load that never settles is a page that never arrives. */
@@ -241,6 +243,8 @@ interface PageScript {
   noStill?: boolean;
   /** Told each time the studio asks the page whether it is ready. */
   onReadyProbe?: () => void;
+  /** Runs inside each `__studio` call before it answers; one that waits is a page slow to answer that call. */
+  answering?: (method: string) => Promise<void> | undefined;
 }
 
 /** The frame a fake port photographs. */
@@ -257,11 +261,14 @@ const FRAME = {
 function pageAnswer(page: PageScript, method: string, arg: unknown): unknown {
   if (method === "demos") return page.demos ?? ["hero-shot"];
   if (method === "demo") return page.demo ?? { ok: true, demo: arg, result: null };
+  if (method === "cameras") return page.cameras ?? ["default", "close"];
+  if (method === "eyes") return page.eyes ?? ["eye:spawn", "eye:here", "eye:down"];
   if (method === "debugCamera") return page.debugCamera ?? { ok: true, camera: arg };
   return { ok: true };
 }
 
-type FakePort = PreviewPort & { log: string[]; asked: PreviewStillRequest[] };
+/** A fake window: what it was asked, in order, and every call it got once it had been given back. */
+type FakePort = PreviewPort & { log: string[]; asked: PreviewStillRequest[]; late: string[] };
 /** A still's answer as a plugin reads it: one of the two fields is set. */
 type StillAnswer = { still?: PluginStill; stillProblem?: PluginStillProblem };
 
@@ -274,16 +281,24 @@ function windows(page: PageScript = {}) {
   const port = (id: string): FakePort => {
     const own: string[] = [];
     const asked: PreviewStillRequest[] = [];
+    const late: string[] = [];
+    let gone = false;
     const note = (entry: string) => {
       own.push(entry);
       if (id !== "live") log.push(entry);
+    };
+    /** A real preview builds itself a new view to answer a call once it is closed: here it is only written down. */
+    const touch = (method: string) => {
+      if (gone) late.push(method);
     };
     let url: string | null = null;
     let loadError: string | null = null;
     const fake = {
       log: own,
       asked,
+      late,
       async load(_project: string, entry?: string) {
+        touch("load");
         note("load");
         await page.load?.();
         url = `http://localhost:4173/${entry ?? "index.html"}`;
@@ -291,47 +306,59 @@ function windows(page: PageScript = {}) {
         return url;
       },
       async reload() {
+        touch("reload");
         note("reload");
       },
       async screenshot() {
+        touch("screenshot");
         note("screenshot");
         return Buffer.alloc(0);
       },
       async evaluate() {
+        touch("evaluate");
         page.onReadyProbe?.();
         return { via: ReadyVia.Shim, ready: true, phase: ReadyPhase.Ready };
       },
       async studioState() {
+        touch("studioState");
         return {};
       },
       async studioCall(method: string, arg?: unknown) {
+        touch(`studioCall:${method}`);
         note(arg === undefined ? `call:${method}` : `call:${method}:${String(arg)}`);
+        await page.answering?.(method);
         return pageAnswer(page, method, arg);
       },
       async input() {
+        touch("input");
         note("input");
         return { ok: true, applied: 0, width: 0, height: 0 };
       },
       consoleEntries: () => [],
-      status: () => ({
-        project: null,
-        url,
-        crashed: false,
-        unresponsive: false,
-        loadError,
-        consoleErrors: 0,
-        consoleAvailable: true,
-      }),
+      status: () => {
+        touch("status");
+        return {
+          project: null,
+          url,
+          crashed: false,
+          unresponsive: false,
+          loadError,
+          consoleErrors: 0,
+          consoleAvailable: true,
+        };
+      },
       setViewSize(size: { width: number; height: number } | null) {
         note(size ? `resize:${size.width}x${size.height}` : "restore");
       },
       async dispose() {
         note("release");
+        gone = true;
       },
       ...(page.noStill
         ? {}
         : {
             async still(request: PreviewStillRequest) {
+              touch("still");
               note("still");
               asked.push(request);
               return page.still ? page.still(request) : { still: { ...FRAME } };
@@ -395,7 +422,6 @@ function heldClock() {
 function lateLoad() {
   let started: () => void = () => {};
   let arrive: () => void = () => {};
-  let probed: () => void = () => {};
   const script: PageScript = {
     load: () => {
       started();
@@ -403,18 +429,45 @@ function lateLoad() {
         arrive = resolve;
       });
     },
-    onReadyProbe: () => probed(),
   };
   return {
     script,
     started: new Promise<void>((resolve) => {
       started = resolve;
     }),
-    probed: new Promise<void>((resolve) => {
-      probed = resolve;
+    arrive: () => arrive(),
+  };
+}
+
+/** A page that answers `__studio.<method>` only when the test lets it. */
+function lateAnswer(method: string) {
+  let started: () => void = () => {};
+  let arrive: () => void = () => {};
+  const script: PageScript = {
+    answering: (called) => {
+      if (called !== method) return undefined;
+      started();
+      return new Promise<void>((resolve) => {
+        arrive = resolve;
+      });
+    },
+  };
+  return {
+    script,
+    started: new Promise<void>((resolve) => {
+      started = resolve;
     }),
     arrive: () => arrive(),
   };
+}
+
+/** Every call a still's windows got after they were given back. */
+const usedAfterRelease = (made: FakePort[]) => made.flatMap((window) => window.late);
+
+/** Let everything a page's late answer leads to run: it is all promise steps, no timers. */
+async function settle() {
+  await setImmediate();
+  await setImmediate();
 }
 
 /** The pooled window's whole life when a still of the default size ends before the picture. */
@@ -440,6 +493,8 @@ describe("a plugin's still of one named view", () => {
       "resize:1280x720",
       "load",
       "call:start",
+      "call:cameras",
+      "call:eyes",
       "call:debugCamera:eye:down",
       "still",
       "restore",
@@ -488,12 +543,35 @@ describe("a plugin's still of a view the game cannot put on screen", () => {
     assert.deepEqual(answer, { stillProblem: { code: PluginStillProblemCode.ViewUnknown, available: [] } });
   });
 
-  it("names the cameras the game has when it has none by that name", async () => {
-    const host = await stillHost({ debugCamera: { ok: false, available: ["default", "close", "eye:down"] } });
-    const answer = await host.still({ camera: "wide", width: 1920, height: 1080 });
-    assert.equal(answer.stillProblem?.code, PluginStillProblemCode.ViewUnknown);
-    assert.deepEqual(answer.stillProblem?.available, ["default", "close", "eye:down"]);
-    assert.ok(!host.log.includes("still"));
+  it("names the cameras the game has when it has none by that name, and never asks the page to place it", async () => {
+    // A page that would place anything it is asked to: the template looks a name up on a plain
+    // object, so an inherited `constructor` or `toString` would "place" a camera it never declared.
+    const page = { cameras: ["default", "close", "close", 7], eyes: ["eye:down"], debugCamera: { ok: true } };
+    for (const name of ["wide", "constructor", "toString", "hasOwnProperty"]) {
+      const host = await stillHost(page);
+      const answer = await host.still({ camera: name, width: 1920, height: 1080 });
+      assert.equal(answer.stillProblem?.code, PluginStillProblemCode.ViewUnknown, name);
+      assert.deepEqual(answer.stillProblem?.available, ["default", "close", "eye:down"], name);
+      assert.deepEqual(
+        host.log,
+        [...UNTIL_VIEW, "call:cameras", "call:eyes", "restore", "release"],
+        `${name}: no camera was placed and no picture taken`,
+      );
+    }
+  });
+
+  it("places the game's own view by `default` even when the game names its cameras otherwise", async () => {
+    const host = await stillHost({ cameras: ["close"], eyes: [] });
+    const answer = await host.still({ camera: "default", width: 1920, height: 1080 });
+    assert.deepEqual(answer.still?.view, { camera: "default" });
+    assert.ok(host.log.includes("call:debugCamera:default"));
+  });
+
+  it("answers view_unknown for a camera on a page with no camera contract", async () => {
+    const host = await stillHost({ cameras: { __missing: true }, eyes: { __missing: true } });
+    const answer = await host.still({ camera: "close", width: 1920, height: 1080 });
+    assert.deepEqual(answer, { stillProblem: { code: PluginStillProblemCode.ViewUnknown, available: [] } });
+    assert.ok(!host.log.some((entry) => entry.startsWith("call:debugCamera")));
   });
 
   const FAILED_VIEWS: Array<[label: string, page: PageScript, still: Record<string, unknown>]> = [
@@ -559,7 +637,7 @@ describe("a plugin's still that ends before its picture", () => {
     assert.deepEqual(host.live.log, []);
   });
 
-  it("stops a still it gave up on at its next step: a page that arrives late is never played or photographed", async () => {
+  it("never touches its window again once its budget gave up: a page that arrives late is not even asked if it is ready", async () => {
     const clock = heldClock();
     const page = lateLoad();
     const host = await stillHost(page.script, { wait: clock.wait });
@@ -568,15 +646,43 @@ describe("a plugin's still that ends before its picture", () => {
     clock.fire();
     assert.equal((await answer).stillProblem?.code, PluginStillProblemCode.Timeout);
     page.arrive();
-    await page.probed;
-    // Everything the late page's ready answer leads to runs before the next turn of the loop.
-    await setImmediate();
+    await settle();
+    assert.deepEqual(
+      usedAfterRelease(host.made),
+      [],
+      "no ready probe, no status, nothing after the window was given back",
+    );
     assert.deepEqual(
       host.log,
       ["acquire", "resize:1920x1080", "load", "restore", "release"],
       "nothing was played, placed or photographed in the window after it was given back",
     );
   });
+
+  const SLOW_ANSWERS: Array<[method: string, still: Record<string, unknown>, until: string[]]> = [
+    ["start", STILL, UNTIL_VIEW],
+    ["demos", STILL, [...UNTIL_VIEW, "call:demos"]],
+    ["demo", STILL, [...UNTIL_VIEW, "call:demos", "call:demo:hero-shot"]],
+  ];
+  for (const [method, still, until] of SLOW_ANSWERS) {
+    it(`never touches its window again once its budget gave up during __studio.${method}()`, async () => {
+      const clock = heldClock();
+      const page = lateAnswer(method);
+      const host = await stillHost(page.script, { wait: clock.wait });
+      const answer = host.still(still);
+      await page.started;
+      clock.fire();
+      assert.equal((await answer).stillProblem?.code, PluginStillProblemCode.Timeout);
+      page.arrive();
+      await settle();
+      assert.deepEqual(usedAfterRelease(host.made), [], "the page's late answer led to no call on the closed window");
+      assert.deepEqual(
+        host.log,
+        [...until, "restore", "release"],
+        "nothing ran, was placed or photographed after release",
+      );
+    });
+  }
 
   it("refuses a malformed still through the real host before any window is opened", async () => {
     const host = await stillHost();
