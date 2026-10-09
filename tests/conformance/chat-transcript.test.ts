@@ -434,3 +434,77 @@ it("a sign-in failure and its adjacent harness reply render one notice", () => {
   const rendered = rows.flatMap((row) => ("text" in row ? [row.text] : []));
   assert.equal(rendered.filter((text) => /Codex/.test(String(text))).length, 1);
 });
+
+describe("transcriptEntries: the Genex cover card", () => {
+  const reply = (n: number, content: string) =>
+    event(n, { type: "messages", messages: [{ role: "assistant", content }] } as EventData);
+  /** One plugin call as the host records it: started, then finished. */
+  const call = (
+    n: number,
+    callId: string,
+    over: Record<string, unknown> = {},
+    finished: Record<string, unknown> = {},
+  ) => {
+    const started = {
+      callId,
+      pluginId: "genex",
+      pluginName: "Genex Tools",
+      tool: "cover",
+      toolName: "genex__cover",
+      args: "operation=shoot",
+      project: "harbor-run",
+      engine: "claude-code",
+      role: "chat",
+      ...over,
+    };
+    return [
+      custom(n, "plugin_tool_started", started),
+      custom(n + 1, "plugin_tool", { ...started, ok: true, result: "{}", images: 1, durationMs: 900, ...finished }),
+    ];
+  };
+  const cards = (list: ConversationEntry[]) =>
+    list.flatMap((e) => (e.kind === "genex-cover" ? [{ callId: e.callId, project: e.project }] : []));
+  const kinds = (list: ConversationEntry[]) => list.map((e) => e.kind);
+
+  it("shows one card, for the latest shot the thread kept, after its work and before the reply", () => {
+    const threadEvents = [
+      user(1, "Make this game's Genex cover."),
+      ...call(2, "first"),
+      ...call(4, "status", { args: "operation=status" }, { images: 0 }),
+      ...call(6, "second"),
+      reply(8, "The harbour at sunset."),
+      user(9, "A bit brighter."),
+      ...call(10, "kept"),
+      ...call(12, "asset", { tool: "asset", toolName: "genex__asset", args: "operation=image prompt=boat" }),
+      reply(14, "Brighter now."),
+    ];
+    const list = entries({ threadEvents });
+    assert.deepEqual(cards(list), [{ callId: "kept", project: "harbor-run" }]);
+    assert.deepEqual(kinds(list), ["user", "work", "assistant", "user", "work", "genex-cover", "work", "assistant"]);
+    assert.equal(toolChips(list).filter((chip) => chip === "cover").length, 4, "every shot stays a row of the work");
+  });
+
+  it("keeps the last kept shot's card when a later shot failed or kept nothing", () => {
+    const failed = [...call(1, "kept"), ...call(3, "broken", {}, { ok: false, error: "The game did not load" })];
+    assert.deepEqual(cards(entries({ threadEvents: failed })), [{ callId: "kept", project: "harbor-run" }]);
+    // A shot the host could not take answers its problem and no picture: the last shot stays kept.
+    const problem = [...call(1, "kept"), ...call(3, "no-demo", {}, { images: 0, result: '{"problem":{}}' })];
+    assert.deepEqual(cards(entries({ threadEvents: problem })), [{ callId: "kept", project: "harbor-run" }]);
+  });
+
+  it("reads the call by its plugin, tool and operation, whichever side named the tool", () => {
+    const older = call(1, "older", { tool: undefined, toolName: "mcp__studio__genex__cover" });
+    assert.deepEqual(cards(entries({ threadEvents: older })), [{ callId: "older", project: "harbor-run" }]);
+    const prefixed = call(1, "prefixed", { tool: "mcp__studio__genex__cover" });
+    assert.deepEqual(cards(entries({ threadEvents: prefixed })), [{ callId: "prefixed", project: "harbor-run" }]);
+    const others: Array<[string, Record<string, unknown>]> = [
+      ["a status check", { args: "operation=status" }],
+      ["no operation", { args: "" }],
+      ["an operation that only starts like shoot", { args: "operation=shooter" }],
+      ["another plugin's cover tool", { pluginId: "lens", toolName: "lens__cover" }],
+      ["another Genex tool", { tool: "cover-set", toolName: "genex__cover-set" }],
+    ];
+    for (const [name, over] of others) assert.deepEqual(cards(entries({ threadEvents: call(1, "c", over) })), [], name);
+    assert.deepEqual(cards(entries({ threadEvents: call(1, "c").slice(0, 1) })), [], "a shot still running");
+  });
+});

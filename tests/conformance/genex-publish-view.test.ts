@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   coverAsk,
+  coverCardPublish,
   offeredTitle,
   PublishGate,
   publishGate,
@@ -108,6 +109,19 @@ test("every open game has Publish on its stage strip, whether Genex is on, off, 
   assert.equal(studioPublishButton([genex({ enabled: false, removed: true, state: "disabled" })], "game"), true);
   assert.equal(studioPublishButton([], "game"), true);
   assert.equal(studioPublishButton([], null), false, "with no game open there is nothing to publish");
+});
+
+test("the chat's Genex cover card offers Publish while Genex's own Publish is on the strip and nothing publishes", () => {
+  assert.equal(coverCardPublish([genex()], "game", state()), true);
+  assert.equal(coverCardPublish([genex()], "game", null), true, "a record not read yet hides nothing");
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job() })), false, "a publish is running");
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "unresolved" }) })), false);
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "done", phase: "done" }) })), true);
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "failed", phase: "failed" }) })), true);
+  assert.equal(coverCardPublish([genex({ enabled: false, state: "disabled" })], "game", state()), false, "Genex off");
+  assert.equal(coverCardPublish([genex({ removed: true })], "game", state()), false, "Genex removed");
+  assert.equal(coverCardPublish([], "game", state()), false, "Genex missing");
+  assert.equal(coverCardPublish([genex()], null, state()), false, "no game to publish");
 });
 
 test("a running attempt shows its steps: every publish tests the draft before it goes live", () => {

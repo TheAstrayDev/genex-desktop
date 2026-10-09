@@ -20,7 +20,13 @@ import { isCoordinatorTool } from "../shared/coordinator.ts";
 import { SessionActivityRole } from "../shared/chat-activity.ts";
 import type { EventData, Message } from "../shared/event-log.ts";
 import { EventKind } from "../shared/event-log.ts";
-import { type AssetDeliveredPayload, deliveredToBuild, isAssetDelivery } from "../shared/game-assets.ts";
+import {
+  type AssetDeliveredPayload,
+  deliveredToBuild,
+  digestOperation,
+  isAssetDelivery,
+} from "../shared/game-assets.ts";
+import { GENEX_COVER_TOOL, GENEX_PLUGIN_ID, GenexCoverOperation } from "../shared/genex.ts";
 import { SteerDelivery } from "../shared/message-queue.ts";
 import { engineLabel, roleName } from "../shared/model-roles.ts";
 import { ExecutionStatus, RoundOutcome, roundOutcome } from "../shared/run-state.ts";
@@ -86,6 +92,8 @@ export const EntryKind = {
   Learning: "learning",
   Question: "question",
   Assets: "assets",
+  /** The Genex cover a builder kept, with Publish beside it. */
+  GenexCover: "genex-cover",
   Action: "action",
   Morning: "morning",
   Compaction: "compaction",
@@ -136,6 +144,11 @@ export type Entry =
       pending: boolean;
     }
   | { kind: typeof EntryKind.Assets; id: string; delivery: AssetDeliveredPayload }
+  /**
+   * The game's kept Genex cover, after the thread's latest `genex__cover` shoot that kept one: its
+   * picture is read from Genex's storage by the game's name, so only that last shot has a card.
+   */
+  | { kind: typeof EntryKind.GenexCover; id: string; callId: string; project?: string }
   /** A card with one affordance: Resume a paused run, prefill a steering message, or Rewind. */
   | {
       kind: typeof EntryKind.Action;
@@ -200,6 +213,8 @@ export type Entry =
     };
 
 type ToolsEntry = Extract<Entry, { kind: typeof EntryKind.Tools }>;
+/** The card of the Genex cover a builder kept. */
+export type GenexCoverEntry = Extract<Entry, { kind: typeof EntryKind.GenexCover }>;
 type ActionEntry = Extract<Entry, { kind: typeof EntryKind.Action }>;
 
 /** A plugin's permission card in the transcript. */
@@ -378,6 +393,8 @@ interface ChatDraft {
    * straight away and the second rewrites that same line — one line per call, not two.
    */
   pluginCalls: Map<string, ToolChipRow>;
+  /** The Genex cover card, after the latest shoot that kept a shot: a later one moves it there. */
+  coverCard: GenexCoverEntry | null;
   /**
    * A delegated builder's own chip row, by the tool it called. The SDK mirrors the call but never
    * its result, so a plugin tool that failed used to leave a row that looked like it worked; the
@@ -428,6 +445,7 @@ function newChatDraft(events: EventEnvelope[]): ChatDraft {
     runByCall: new Map(),
     workerCalls: new Set(),
     pluginCalls: new Map(),
+    coverCard: null,
     hostedTools: new Set(
       events.flatMap((e) => {
         const started = customEvent(e, CustomEvent.PluginToolStarted);
@@ -1098,6 +1116,36 @@ function narratePluginCall(chat: ChatDraft, event: EventEnvelope): void {
   row.state = pluginCallState(closing, payload.ok);
   row.failed = row.state === ToolState.Failed;
   row.detail = [{ text }, ...(raw.result ? [{ text: String(raw.result) }] : [])];
+  if (row.state === ToolState.Succeeded && keptGenexCover(payload)) showGenexCover(chat, event.id, payload);
+}
+
+type PluginCallPayload = CustomPayload<typeof CustomEvent.PluginTool | typeof CustomEvent.PluginToolStarted>;
+
+/**
+ * A finished `genex__cover` shoot that kept a new shot: Genex's own tool asked to shoot, and its
+ * answer carried the shot's preview (a shot the host could not take answers none, and the last
+ * shot stays kept). The tool is read however the record names it (`cover`, `genex__cover`,
+ * `mcp__studio__genex__cover`).
+ */
+function keptGenexCover(payload: PluginCallPayload): boolean {
+  const named = pluginToolKey(String(payload.tool ?? payload.toolName ?? ""));
+  const tool = named.startsWith(`${GENEX_PLUGIN_ID}__`) ? named.slice(GENEX_PLUGIN_ID.length + 2) : named;
+  const genexCover = payload.pluginId === GENEX_PLUGIN_ID && tool === GENEX_COVER_TOOL;
+  const shoot = digestOperation(payload.args) === GenexCoverOperation.Shoot;
+  return genexCover && shoot && Number(payload.images ?? 0) > 0;
+}
+
+/** The cover card moves to after this shoot: only the latest kept shot is the one Genex's storage holds. */
+function showGenexCover(chat: ChatDraft, eventId: string, payload: PluginCallPayload): void {
+  const earlier = chat.coverCard ? chat.entries.indexOf(chat.coverCard) : -1;
+  if (earlier >= 0) chat.entries.splice(earlier, 1);
+  chat.coverCard = {
+    kind: EntryKind.GenexCover,
+    id: eventId,
+    callId: payload.callId ?? eventId,
+    ...(payload.project ? { project: payload.project } : {}),
+  };
+  chat.entries.push(chat.coverCard);
 }
 
 function pluginCallState(closing: boolean, ok: boolean | undefined): ToolState {

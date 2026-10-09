@@ -2,8 +2,8 @@
  * The Publish dialog's view of Genex's publish record: where the game is (not online, draft only,
  * public), the running attempt's steps, how the last one ended, and the one press the next step needs. What Publish asks
  * for first (Genex installed and on, then an account), whether to ask the game's chat for a Genex
- * cover, and whether Studio puts Publish on the strip itself are decided here too. Pure, so the
- * dialog only draws it.
+ * cover, whether Studio puts Publish on the strip itself and whether the chat's cover card offers
+ * Publish are decided here too. Pure, so the dialog only draws it.
  */
 import {
   cleanGenexTitle,
@@ -279,4 +279,17 @@ export const isGenexPublish = (entry: PluginToolbarEntry): boolean =>
 /** Whether Studio puts Publish on the strip itself: a game is open and Genex, off or gone, adds none. */
 export function studioPublishButton(plugins: readonly PluginInfo[], project: string | null): boolean {
   return Boolean(project) && !toolbarItems(plugins, project).some(isGenexPublish);
+}
+
+/**
+ * Whether the chat's Genex cover card offers Publish: Genex's own Publish is on the strip (Genex
+ * installed and on), and no publish of this game runs. A record not read yet hides nothing.
+ */
+export function coverCardPublish(
+  plugins: readonly PluginInfo[],
+  project: string | null,
+  state: GenexPublishState | null,
+): boolean {
+  if (!project || !toolbarItems(plugins, project).some(isGenexPublish)) return false;
+  return !isLive(state?.job);
 }

@@ -177,6 +177,16 @@ export interface PluginToolStartedPayload {
   at: string;
 }
 
+/**
+ * The operation a call asked for, read back from its arguments digest (`args`), which the host
+ * writes as `key=value` pairs with `operation` always first (`argsDigest`). Null when the call
+ * named none: a value that only mentions `operation=` later in the digest is never read as one.
+ */
+export function digestOperation(args: string | undefined): string | null {
+  const [first = ""] = (args ?? "").split(" ");
+  return first.startsWith("operation=") ? first.slice("operation=".length) : null;
+}
+
 /** Thread custom event `plugin_tool`, appended after the call returns or throws. */
 export interface PluginToolFinishedPayload extends PluginToolStartedPayload {
   ok: boolean;
