@@ -684,7 +684,9 @@ Genex:
   it spends first, the agent's text last and clipped), and a call Studio would refuse asks nobody. The token reaches the
   preload on stdin; the network is `api.genex.games` only; the games root and every game are
   write-denied; a run stops after 90 s; output is redacted and capped at 64 KiB. A project
-  command sees only `{id, slug}` from the publish workspace. `genex-package` backs
+  command sees only `{id, slug}` from the publish workspace. On Windows, an offline native
+  job keeps the run folder private while the harness is active; the host relays pinned-origin
+  HTTP through anonymous pipes ([Windows sandbox](windows-sandbox.md)). `genex-package` backs
   `genex__package`: it adds `@genex-ai/multiplayer` or `@genex-ai/embed-sdk` at the exact pin in
   `GENEX_GAME_PACKAGES` (`shared/genex.ts`) with the game's package manager, only in the bound
   game or a git worktree of it under Studio's scratch (by realpath), never in a template game

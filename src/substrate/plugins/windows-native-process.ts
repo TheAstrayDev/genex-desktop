@@ -32,25 +32,24 @@ function helperPath(): string {
   return script;
 }
 
-function startHelper(script: string, spec: string, cleanupOnly = false) {
+function startHelper(script: string, spec: string, cleanupOnly = false, interactive = false) {
   const system = envValue(process.env, "SystemRoot") || "C:\\Windows";
   const powershell = path.join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  return spawn(
-    powershell,
-    [
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      script,
-      "-SpecFile",
-      spec,
-      ...(cleanupOnly ? ["-CleanupOnly"] : []),
-    ],
-    { env: windowsBaseEnv(process.env), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
-  );
+  const args = [
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    script,
+    "-SpecFile",
+    spec,
+    ...(cleanupOnly ? ["-CleanupOnly"] : []),
+  ];
+  const options = { env: windowsBaseEnv(process.env), windowsHide: true };
+  if (interactive) return spawn(powershell, args, { ...options, stdio: ["pipe", "pipe", "pipe"] });
+  return spawn(powershell, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
 }
 
 /** A fresh trusted broker can undo flushed grants after a crashed or forcibly stopped broker. */
@@ -109,6 +108,7 @@ function nativeEnvironment(p: NativeProcessRequest): Record<string, string> {
     TMP: p.scratch,
     TEMP: p.scratch,
     TMPDIR: p.scratch,
+    ...p.environment,
   };
 }
 
@@ -144,15 +144,23 @@ export async function runWindowsNativeProcess(p: NativeProcessRequest): Promise<
 
 /** The helper stops and cleans up its own job before the host falls back to killing a stuck broker. */
 function executeHelper(p: NativeProcessRequest, script: string, spec: string, control: string) {
-  const child = startHelper(script, spec);
+  const child = startHelper(script, spec, false, !!p.channel);
+  child.stdin?.on("error", () => {});
+  p.channel?.connect((payload) => {
+    if (child.stdin?.writable) child.stdin.write(payload);
+  });
   let stdout = Buffer.alloc(0);
   let stderr = Buffer.alloc(0);
+  let truncated = false;
   let reason: NativeEndReason = NativeEndReason.Exit;
   let force: ReturnType<typeof setTimeout> | undefined;
   child.stdout.on("data", (data) => {
-    stdout = Buffer.concat([stdout, data]).subarray(-p.maxOutputBytes);
+    const output = p.channel ? p.channel.stdout(data) : data;
+    truncated ||= stdout.length + output.length > p.maxOutputBytes;
+    stdout = Buffer.concat([stdout, output]).subarray(-p.maxOutputBytes);
   });
   child.stderr.on("data", (data) => {
+    truncated ||= stderr.length + data.length > p.maxOutputBytes;
     stderr = Buffer.concat([stderr, data]).subarray(-p.maxOutputBytes);
   });
   const stop = (why: NativeEndReason) => {
@@ -183,7 +191,7 @@ function executeHelper(p: NativeProcessRequest, script: string, spec: string, co
     child.once("close", async (code) => {
       cleanup();
       try {
-        resolve(await closedResult(code, reason, control, stdout, stderr));
+        resolve(await closedResult(code, reason, control, stdout, stderr, truncated));
       } catch (error) {
         reject(error);
       }
@@ -198,8 +206,9 @@ async function closedResult(
   control: string,
   stdout: Buffer,
   stderr: Buffer,
+  truncated: boolean,
 ): Promise<NativeProcessResult> {
-  const output = { stdout: stdout.toString("utf8"), stderr: stderr.toString("utf8"), signal: null };
+  const output = { stdout: stdout.toString("utf8"), stderr: stderr.toString("utf8"), signal: null, truncated };
   if (code !== 0) {
     if (reason === NativeEndReason.Exit) throw new Error(MESSAGE.helperFailed(output.stderr));
     return { ...output, code: null, reason, pid: null };

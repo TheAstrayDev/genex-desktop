@@ -16,6 +16,13 @@ export interface NativeProcessRequest {
   signal: AbortSignal;
   timeoutMs: number;
   maxOutputBytes: number;
+  /** Host-selected, credential-free environment additions for a trusted native executable. */
+  environment?: Record<string, string>;
+  /** Anonymous stdio transport; never serialized into the broker's disk specification. */
+  channel?: {
+    connect(write: (payload: string) => void): void;
+    stdout(chunk: Buffer): Buffer;
+  };
 }
 
 /** Captured outcome after a native process and its sandbox broker stop. */
@@ -24,6 +31,8 @@ export interface NativeProcessResult {
   signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
+  /** Whether captured output exceeded the per-stream bound. */
+  truncated?: boolean;
   reason: string;
   pid: number | null;
 }

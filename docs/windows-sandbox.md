@@ -106,6 +106,21 @@ guard through unrelated profile folders. Removing legacy inheritable entries sti
 once. Every sandboxed process can read a run's env file until the command deletes it, and PATH
 folders under the profile whole. A broker outlives an Electron crash.
 
+The bundled Genex CLI needs a private writable run folder while the shared-account harness is
+active. Its Windows calls therefore use `ProcessSandbox.runNative`: an offline AppContainer
+with a distinct SID, scoped file grants and the same 90-second command deadline. The harness
+cannot read or modify that folder, and the CLI cannot read the harness's files. Node preload
+imports use file URLs, including drive letters and spaces.
+
+The trusted host relays the CLI's `fetch` calls over inherited anonymous stdin/stdout pipes.
+It checks the pinned API origin before each request and redirect; no AppContainer network
+capability is enabled. Credentials travel only in those pipes, never the command line,
+environment or broker specification. Individual request cancellation and Stop abort pending
+host requests; sandbox disposal stops native jobs. Requests are limited to 1 MiB, responses to
+8 MiB and captured command output to 64 KiB. `genex-cli-windows.test.ts` proves private-file
+boundaries, origin and redirect refusals, cancellation and output limits on real Windows jobs;
+`genex-cli-tool.test.ts` also runs the bundled, pinned CLI against a fixture API.
+
 ## Broker build
 
 Windows builds require Rust and MSVC build tools for the pinned native dependency. The application

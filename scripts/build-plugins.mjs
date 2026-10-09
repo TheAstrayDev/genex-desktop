@@ -77,6 +77,7 @@ async function buildGenex(root, resources, { dependencies }) {
   for (const file of ["plugin.json", "icon.png", "publish.html"])
     await cp(path.join(root, "src/plugins/genex", file), path.join(target, file));
   await cp(path.join(root, "src/genex-host/preload.mjs"), path.join(target, "preload.mjs"));
+  await cp(path.join(root, "src/genex-host/stdio-fetch.mjs"), path.join(target, "stdio-fetch.mjs"));
   // The vendored skills ship even in a dependency-free build: each SKILL.md already holds its preface.
   await cp(path.join(root, "src/plugins/genex/skills"), path.join(target, "skills"), {
     recursive: true,

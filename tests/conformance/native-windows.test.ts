@@ -87,6 +87,10 @@ $raw = New-Object System.Security.AccessControl.RawSecurityDescriptor($acl.GetSe
 $sid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-21-111-222-333-444')
 $ace = New-Object System.Security.AccessControl.CommonAce([System.Security.AccessControl.AceFlags]::Inherited, [System.Security.AccessControl.AceQualifier]::AccessAllowed, 128, $sid, $false, $null)
 $raw.DiscretionaryAcl.InsertAce(0, $ace)
+# Keep this hostile ordering independent of the fixture parent's inheritance: a private
+# Windows profile may contain only inherited ACEs, which the first insertion alone leaves canonical.
+$explicit = New-Object System.Security.AccessControl.CommonAce([System.Security.AccessControl.AceFlags]::None, [System.Security.AccessControl.AceQualifier]::AccessAllowed, 128, $sid, $false, $null)
+$raw.DiscretionaryAcl.InsertAce($raw.DiscretionaryAcl.Count, $explicit)
 $raw.SetFlags(($raw.ControlFlags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -band (-bnot 0x500))
 $bytes = New-Object byte[] $raw.BinaryLength
 $raw.GetBinaryForm($bytes, 0)
