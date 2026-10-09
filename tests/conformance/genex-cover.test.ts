@@ -25,9 +25,6 @@ import {
   COVER_MAX_BYTES,
   COVER_VIEW,
   type CoverCamera,
-  CoverOutcomeKind,
-  type CoverSent,
-  type CoverShot,
   decideSend,
   INVOCATION_BUDGET_MS,
   MESSAGE as COVER_MESSAGE,
@@ -35,6 +32,7 @@ import {
   parseCoverAnswer,
   parseCoverView,
 } from "../../src/plugins/genex/cover.ts";
+import { GenexCoverOutcome, type GenexCoverSent, type GenexCoverShot } from "../../src/shared/genex.ts";
 import { PluginConsentDeclined, PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import {
   buildGenexPluginFor,
@@ -132,7 +130,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string, ms =
 }
 
 describe("which frame is sent", () => {
-  const shot = (sha256: string): CoverShot => ({
+  const shot = (sha256: string): GenexCoverShot => ({
     sha256,
     width: 1920,
     height: 1080,
@@ -142,31 +140,31 @@ describe("which frame is sent", () => {
     stats: LIT,
     takenAt: "2026-10-09T10:00:00.000Z",
   });
-  const sent = (kind: CoverSent["kind"], sha256?: string): CoverSent => ({
+  const sent = (kind: GenexCoverSent["kind"], sha256?: string): GenexCoverSent => ({
     kind,
     at: "2026-10-09T10:00:00.000Z",
     ...(sha256 ? { sha256 } : {}),
   });
 
   it("sends a frame Genex has not answered for, and nothing for one it has or for none at all", () => {
-    const rows: Array<[string, CoverShot | null, CoverSent | null, ReturnType<typeof decideSend>]> = [
-      ["no shot", null, null, { send: false, kind: CoverOutcomeKind.None }],
-      ["no shot, an earlier answer", null, sent(CoverOutcomeKind.Applied, "a"), { send: false, kind: "none" }],
+    const rows: Array<[string, GenexCoverShot | null, GenexCoverSent | null, ReturnType<typeof decideSend>]> = [
+      ["no shot", null, null, { send: false, kind: GenexCoverOutcome.None }],
+      ["no shot, an earlier answer", null, sent(GenexCoverOutcome.Applied, "a"), { send: false, kind: "none" }],
       ["a first shot", shot("a"), null, { send: true }],
-      ["the frame Genex set", shot("a"), sent(CoverOutcomeKind.Applied, "a"), { send: false, kind: "unchanged" }],
+      ["the frame Genex set", shot("a"), sent(GenexCoverOutcome.Applied, "a"), { send: false, kind: "unchanged" }],
       [
         "the frame the owner outranked",
         shot("a"),
-        sent(CoverOutcomeKind.Outranked, "a"),
+        sent(GenexCoverOutcome.Outranked, "a"),
         { send: false, kind: "unchanged" },
       ],
-      ["the frame Genex refused", shot("a"), sent(CoverOutcomeKind.Rejected, "a"), { send: false, kind: "unchanged" }],
-      ["a file that is no cover", shot("a"), sent(CoverOutcomeKind.Invalid, "a"), { send: false, kind: "unchanged" }],
-      ["the owner's pick held", shot("a"), sent(CoverOutcomeKind.KeptOwner, "a"), { send: false, kind: "unchanged" }],
-      ["already unchanged", shot("a"), sent(CoverOutcomeKind.Unchanged, "a"), { send: false, kind: "unchanged" }],
-      ["a send that failed", shot("a"), sent(CoverOutcomeKind.Failed, "a"), { send: true }],
-      ["a new frame", shot("b"), sent(CoverOutcomeKind.Applied, "a"), { send: true }],
-      ["after a publish with no shot", shot("a"), sent(CoverOutcomeKind.None), { send: true }],
+      ["the frame Genex refused", shot("a"), sent(GenexCoverOutcome.Rejected, "a"), { send: false, kind: "unchanged" }],
+      ["a file that is no cover", shot("a"), sent(GenexCoverOutcome.Invalid, "a"), { send: false, kind: "unchanged" }],
+      ["the owner's pick held", shot("a"), sent(GenexCoverOutcome.KeptOwner, "a"), { send: false, kind: "unchanged" }],
+      ["already unchanged", shot("a"), sent(GenexCoverOutcome.Unchanged, "a"), { send: false, kind: "unchanged" }],
+      ["a send that failed", shot("a"), sent(GenexCoverOutcome.Failed, "a"), { send: true }],
+      ["a new frame", shot("b"), sent(GenexCoverOutcome.Applied, "a"), { send: true }],
+      ["after a publish with no shot", shot("a"), sent(GenexCoverOutcome.None), { send: true }],
     ];
     for (const [name, frame, memo, expected] of rows) assert.deepEqual(decideSend(frame, memo), expected, name);
   });
@@ -250,9 +248,9 @@ describe("what the CLI says about a cover", () => {
 
 /** What genex__cover answers, as the assertions read it. */
 type CoverAnswerView = {
-  shot: CoverShot & { advice: string[] };
+  shot: GenexCoverShot & { advice: string[] };
   problem: { code: string; available?: string[] };
-  kept: CoverShot;
+  kept: GenexCoverShot;
   images?: unknown;
   last: unknown;
   hosted: unknown;
@@ -604,7 +602,7 @@ describe("a publish sends the staged frame after it is done", () => {
       assert.equal(lens.shots, 1, "Publish shoots the demo again after exporting");
       assert.deepEqual(fx.seen.mints, [{ jobId: done.job?.id, jobState: "done" }], "sent only after the job was done");
       assert.deepEqual(fx.seen.puts, [png("first")]);
-      assert.equal(done.cover?.last?.kind, CoverOutcomeKind.Applied);
+      assert.equal(done.cover?.last?.kind, GenexCoverOutcome.Applied);
       assert.equal(done.cover?.last?.jobId, done.job?.id);
       assert.equal(done.cover?.last?.coverUrl, AGENT_COVER);
       assert.equal(done.cover?.sending, false);
@@ -629,7 +627,7 @@ describe("a publish sends the staged frame after it is done", () => {
         "gallery",
         camera(() => still("first")),
       );
-      assert.equal(again.cover?.last?.kind, CoverOutcomeKind.Unchanged);
+      assert.equal(again.cover?.last?.kind, GenexCoverOutcome.Unchanged);
       assert.equal(fx.seen.mints.length, 1, "an unchanged frame is not uploaded again");
       fx.live.coverSource = "owner";
       const owned = await fx.publish(
@@ -637,7 +635,7 @@ describe("a publish sends the staged frame after it is done", () => {
         camera(() => still("second")),
       );
       assert.equal(owned.job?.state, "done", owned.job?.error);
-      assert.equal(owned.cover?.last?.kind, CoverOutcomeKind.KeptOwner);
+      assert.equal(owned.cover?.last?.kind, GenexCoverOutcome.KeptOwner);
       assert.equal(owned.cover?.last?.coverUrl, OWNER_COVER);
       assert.equal(fx.seen.mints.length, 1, "the owner's cover stands: nothing is uploaded");
       assert.equal(owned.warnings, undefined);
@@ -652,11 +650,11 @@ describe("a cover never fails a publish", () => {
     if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
     const fx = await coverFixture({ sendMs: 3000 });
     try {
-      const rows: Array<[Commit, CoverSent["kind"]]> = [
-        ["rejected", CoverOutcomeKind.Rejected],
-        ["rate-limited", CoverOutcomeKind.Failed],
-        ["error", CoverOutcomeKind.Failed],
-        ["silent", CoverOutcomeKind.Failed],
+      const rows: Array<[Commit, GenexCoverSent["kind"]]> = [
+        ["rejected", GenexCoverOutcome.Rejected],
+        ["rate-limited", GenexCoverOutcome.Failed],
+        ["error", GenexCoverOutcome.Failed],
+        ["silent", GenexCoverOutcome.Failed],
       ];
       for (const [commit, kind] of rows) {
         fx.live.commit = commit;
@@ -679,12 +677,12 @@ describe("a cover never fails a publish", () => {
         "gallery",
         camera(() => still("silent")),
       );
-      assert.equal(retried.cover?.last?.kind, CoverOutcomeKind.Applied, "a failed send is tried again");
+      assert.equal(retried.cover?.last?.kind, GenexCoverOutcome.Applied, "a failed send is tried again");
       const refused = await fx.publish(
         "gallery",
         camera(() => still("rejected")),
       );
-      assert.equal(refused.cover?.last?.kind, CoverOutcomeKind.Applied, "a new frame after a refusal is sent");
+      assert.equal(refused.cover?.last?.kind, GenexCoverOutcome.Applied, "a new frame after a refusal is sent");
     } finally {
       await fx.close();
     }
@@ -733,7 +731,7 @@ describe("when a publish shoots and sends", () => {
         camera(() => noDemo),
       );
       assert.equal(done.job?.state, "done", done.job?.error);
-      assert.equal(done.cover?.last?.kind, CoverOutcomeKind.None);
+      assert.equal(done.cover?.last?.kind, GenexCoverOutcome.None);
       assert.equal(done.cover?.shot, null);
       assert.deepEqual(fx.seen.mints, []);
       assert.ok(done.warnings?.includes(COVER_MESSAGE.NoShotSent));
@@ -771,7 +769,7 @@ describe("when a publish shoots and sends", () => {
         camera(() => still("draft")),
       );
       assert.ok(first.job?.uploadedAt, first.job?.error);
-      assert.equal(first.cover?.last?.kind, CoverOutcomeKind.Applied, "a draft of a game never public sends it");
+      assert.equal(first.cover?.last?.kind, GenexCoverOutcome.Applied, "a draft of a game never public sends it");
       assert.deepEqual(fx.seen.puts, [png("draft")]);
       const listed = await fx.publish(
         "gallery",
@@ -811,7 +809,7 @@ describe("when a publish shoots and sends", () => {
         "the first upload was stopped before the second publish sent its own",
       );
       assert.notEqual(second.job?.id, first.job?.id);
-      assert.equal(second.cover?.last?.kind, CoverOutcomeKind.Applied);
+      assert.equal(second.cover?.last?.kind, GenexCoverOutcome.Applied);
       assert.equal(second.cover?.last?.jobId, second.job?.id);
       assert.equal(fx.seen.commits, 2);
       assert.deepEqual(fx.seen.puts, [png("first"), png("second")]);
@@ -840,7 +838,7 @@ describe("a draft's cover", () => {
         [{ jobId: draft.job?.id, jobState: "running" }],
         "sent after the upload, not the check",
       );
-      assert.equal(draft.cover?.last?.kind, CoverOutcomeKind.Applied);
+      assert.equal(draft.cover?.last?.kind, GenexCoverOutcome.Applied);
       assert.equal(draft.cover?.last?.jobId, draft.job?.id);
     } finally {
       await fx.close();
@@ -855,7 +853,7 @@ describe("a draft's cover", () => {
         "draft",
         camera(() => still("draft")),
       );
-      assert.equal(first.cover?.last?.kind, CoverOutcomeKind.Applied, first.job?.error);
+      assert.equal(first.cover?.last?.kind, GenexCoverOutcome.Applied, first.job?.error);
       // The owner lists the game with the dashboard's Publish button: Studio deploys nothing and
       // its own record still says draft until it next asks Genex.
       fx.live.game.status = "published";
@@ -883,7 +881,7 @@ describe("genex__cover-set", () => {
         camera(() => still("first")),
       );
       const answer = await fx.genex.coverSet(PROJECT);
-      assert.equal(answer.kind, CoverOutcomeKind.NotHosted);
+      assert.equal(answer.kind, GenexCoverOutcome.NotHosted);
       assert.deepEqual(fx.seen.mints, []);
     } finally {
       await fx.close();
@@ -903,17 +901,17 @@ describe("genex__cover-set", () => {
         camera(() => still("second")),
       );
       const applied = await fx.genex.coverSet(PROJECT);
-      assert.equal(applied.kind, CoverOutcomeKind.Applied);
+      assert.equal(applied.kind, GenexCoverOutcome.Applied);
       assert.deepEqual(fx.seen.puts, [png("first"), png("second")]);
       const unchanged = await fx.genex.coverSet(PROJECT);
-      assert.equal(unchanged.kind, CoverOutcomeKind.Unchanged);
+      assert.equal(unchanged.kind, GenexCoverOutcome.Unchanged);
       fx.live.commit = "outranked";
       await fx.genex.coverShoot(
         PROJECT,
         camera(() => still("third")),
       );
       const outranked = await fx.genex.coverSet(PROJECT);
-      assert.equal(outranked.kind, CoverOutcomeKind.Outranked);
+      assert.equal(outranked.kind, GenexCoverOutcome.Outranked);
       assert.equal(outranked.coverUrl, OWNER_COVER);
       assert.equal(fx.seen.puts.length, 3);
     } finally {
@@ -942,11 +940,11 @@ describe("a shot taken while a send runs", () => {
           camera(() => still("third")),
         );
       const sent = await fx.genex.coverSet(PROJECT);
-      assert.equal(sent.kind, CoverOutcomeKind.Applied);
+      assert.equal(sent.kind, GenexCoverOutcome.Applied);
       assert.deepEqual(fx.seen.puts.at(-1), png("second"), "the send uploads the shot it set out with");
       assert.equal(sent.sha256, sha256(png("second")), "and records those bytes");
       const next = await fx.genex.coverSet(PROJECT);
-      assert.equal(next.kind, CoverOutcomeKind.Applied, "the newer shot is not mistaken for one Genex has");
+      assert.equal(next.kind, GenexCoverOutcome.Applied, "the newer shot is not mistaken for one Genex has");
       assert.deepEqual(fx.seen.puts.at(-1), png("third"));
       const left = await filesUnder(path.join(fx.host, "covers", PROJECT));
       assert.deepEqual(left, ["sent.json", "shot.json", "shot.png"], "no copy of a sent frame is left behind");
