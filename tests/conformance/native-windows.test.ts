@@ -70,7 +70,7 @@ async function running(pid: number) {
 }
 
 /** Pin this exact process before killing the broker: a PID can be reused in the parallel suite. */
-async function observeExit(pid: number) {
+async function observeExit(pid: number, { immediate = false } = {}) {
   const powershell = path.join(
     process.env.SystemRoot || "C:\\Windows",
     "System32/WindowsPowerShell/v1.0/powershell.exe",
@@ -81,9 +81,9 @@ async function observeExit(pid: number) {
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `$ErrorActionPreference='Stop';$observed=Get-Process -Id ${pid};$null=$observed.Handle;[Console]::WriteLine('pinned');if(-not $observed.WaitForExit(5000)){throw 'Native process did not exit'};$observed.Dispose()`,
+      `$ErrorActionPreference='Stop';$observed=Get-Process -Id ${pid};$null=$observed.Handle;[Console]::WriteLine('pinned');${immediate ? "$null=[Console]::ReadLine();if(-not $observed.HasExited){throw 'Native process is still running after cancellation completed'}" : "if(-not $observed.WaitForExit(5000)){throw 'Native process did not exit'}"};$observed.Dispose()`,
     ],
-    { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+    { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
   );
   let output = "";
   let stderr = "";
@@ -110,7 +110,17 @@ async function observeExit(pid: number) {
   void exited.catch(() => {});
   await ready;
   assert.match(output, /pinned/, stderr);
-  return { exited };
+  let checked = false;
+  return {
+    exited,
+    assertExited: () => {
+      if (immediate && !checked) {
+        checked = true;
+        child.stdin.end("check\n");
+      }
+      return exited;
+    },
+  };
 }
 
 async function noncanonicalFixture(folder: string, script: string) {
@@ -438,18 +448,22 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
       [pidFile],
       { signal: stop.signal },
     );
+    let observer: Awaited<ReturnType<typeof observeExit>> | undefined;
     try {
       await marker(pidFile);
       const pid = Number(await readFile(pidFile, "utf8"));
-      assert.ok(await running(pid), "descendant is alive before cancellation");
+      observer = await observeExit(pid, { immediate: true });
       stop.abort();
       const result = await held;
       assert.equal(result.reason, "cancelled", result.stderr);
-      assert.equal(await running(pid), false, "job object ends even a detached descendant");
+      // Query the pinned process immediately after completion: tasklist can show a dead process
+      // until its handles close, or a newly reused PID in a parallel suite.
+      await observer.assertExited();
       assert.equal((await exec("icacls.exe", [f.output])).stdout, before.stdout);
     } finally {
       stop.abort();
       await held;
+      await observer?.assertExited();
     }
   });
 
