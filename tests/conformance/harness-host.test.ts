@@ -41,6 +41,10 @@ before(async () => {
   root = await tmpDir("studio-host-");
   sandbox = await ProcessSandbox.create({
     writableRoots: [root],
+    readableRoots: [
+      path.dirname(BOOTSTRAP),
+      fileURLToPath(new URL("../../node_modules/electron/dist", import.meta.url)),
+    ],
     scratchDir: path.join(root, "scratch"),
     secretPaths: [path.join(root, "secrets")],
   });

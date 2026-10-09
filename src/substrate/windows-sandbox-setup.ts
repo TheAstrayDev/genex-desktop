@@ -10,9 +10,22 @@
  */
 import path from "node:path";
 import { MINUTE_MS } from "../shared/duration.ts";
+import { activateWindowsGit, ensureWindowsGit } from "./windows-git.ts";
 
 /** Past the ~2 minutes after which Windows dismisses an unanswered UAC prompt on its own. */
 const INSTALL_TIMEOUT_MS = 3 * MINUTE_MS;
+const MESSAGE = {
+  Incomplete: "Windows sandbox setup did not finish. Choose Set up to try again and approve the Windows prompt.",
+} as const;
+type SetupRuntime = Pick<
+  typeof import("@anthropic-ai/sandbox-runtime"),
+  "installWindowsSandboxAsync" | "resolveSrtWin" | "checkWindowsSandboxStatusAsync"
+>;
+
+function ready(status: import("@anthropic-ai/sandbox-runtime").WindowsInstallResult): boolean {
+  const userReady = status.user.provisioned && status.user.credPresent && !!status.user.sid;
+  return userReady && status.wfp.state !== "absent";
+}
 
 /** A path inside the app archive, as the unpacked copy a process can run; any other path unchanged. */
 export function unpackedPath(file: string, sep: string = path.sep): string {
@@ -27,9 +40,20 @@ export async function srtWinPath(): Promise<string> {
 }
 
 /** Install the Windows sandbox; `cancelled` when the administrator prompt was dismissed. */
-export async function installWindowsSandbox(): Promise<{ cancelled: boolean }> {
-  const { installWindowsSandboxAsync, resolveSrtWin } = await import("@anthropic-ai/sandbox-runtime");
+export async function installWindowsSandbox(runtime?: SetupRuntime): Promise<{ cancelled: boolean }> {
+  const { installWindowsSandboxAsync, resolveSrtWin, checkWindowsSandboxStatusAsync } =
+    runtime ?? (await import("@anthropic-ai/sandbox-runtime"));
   const srtWin = resolveSrtWin({ path: await srtWinPath() });
+  // SDK installation rotates the shared account's password. Preserve already working installs.
+  if (ready(await checkWindowsSandboxStatusAsync({ srtWin }))) return { cancelled: false };
   const result = await installWindowsSandboxAsync({ srtWin, timeoutMs: INSTALL_TIMEOUT_MS });
-  return { cancelled: result.cancelled === true };
+  if (result.cancelled) return { cancelled: true };
+  if (!ready(result)) throw new Error(MESSAGE.Incomplete);
+  return { cancelled: false };
+}
+
+/** All Windows first-run prerequisites from the app: private Git when missing, then shipped Sandbox. */
+export async function installWindowsPrerequisites(data: string): Promise<{ cancelled: boolean }> {
+  activateWindowsGit(await ensureWindowsGit(data));
+  return installWindowsSandbox();
 }

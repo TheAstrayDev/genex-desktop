@@ -24,7 +24,7 @@
 | --- | --- |
 | macOS (Apple Silicon) | [`Genex.dmg`](https://github.com/genex-games/genex-desktop/releases/latest/download/Genex.dmg) |
 | Linux (x64) | `.deb`, `.rpm` or `.zip` from the [latest release](https://github.com/genex-games/genex-desktop/releases/latest) |
-| Windows | Soon |
+| Windows (x64) | Source build; see [Windows setup and validation](docs/windows-sandbox.md) |
 
 Genex is early: expect rough edges, and tell us about them in
 [issues](https://github.com/genex-games/genex-desktop/issues).
@@ -47,7 +47,7 @@ Genex is early: expect rough edges, and tell us about them in
 
 ### Contributing
 
-You need macOS on Apple Silicon, Git and Node 24.
+You need Git and Node 24. Windows x64 builds also need Rust and MSVC build tools for the sandbox broker; packaged users need none of these tools.
 
 ```bash
 git clone https://github.com/genex-games/genex-desktop.git
@@ -63,7 +63,8 @@ The fixture runs the app with scripted models and sample games, so it needs no a
 
 **AI-assisted contribution:** The Windows native runtime and Unity 6 integration in
 [PR #54](https://github.com/genex-games/genex-desktop/pull/54) were developed with assistance
-from OpenAI Codex. The PR documents validation results and remaining acceptance checks.
+from OpenAI Codex, as were the Windows desktop and first-run setup improvements. Contributions
+include regression tests and documented validation limits.
 
 ### Build a plugin
 

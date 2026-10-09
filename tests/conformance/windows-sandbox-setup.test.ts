@@ -6,7 +6,60 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
-import { srtWinPath, unpackedPath } from "../../src/substrate/windows-sandbox-setup.ts";
+import { installWindowsSandbox, srtWinPath, unpackedPath } from "../../src/substrate/windows-sandbox-setup.ts";
+import type { WindowsInstallResult } from "@anthropic-ai/sandbox-runtime";
+
+const STATUS: WindowsInstallResult = {
+  user: {
+    provisioned: true,
+    credPresent: true,
+    sid: "test-sid",
+    realUserSid: "host-sid",
+    groupExists: true,
+    inBuiltinUsers: true,
+    inSandboxGroup: true,
+    hiddenFromLogon: true,
+  },
+  wfp: { state: "installed", filters: 6 },
+};
+
+function installer(before: WindowsInstallResult, after = STATUS) {
+  const calls: unknown[] = [];
+  const runtime = {
+    resolveSrtWin: (config?: { path: string }) => ({ exe: config?.path ?? "test-helper", prependArgs: [] }),
+    checkWindowsSandboxStatusAsync: async () => before,
+    installWindowsSandboxAsync: async (options: unknown) => {
+      calls.push(options);
+      return after;
+    },
+  };
+  return { runtime, calls };
+}
+
+test("a working sandbox is never reinstalled or has its password rotated", async () => {
+  const f = installer(STATUS);
+  assert.deepEqual(await installWindowsSandbox(f.runtime), { cancelled: false });
+  assert.deepEqual(f.calls, []);
+});
+
+for (const after of [
+  { ...STATUS, user: { ...STATUS.user, provisioned: false } },
+  { ...STATUS, user: { ...STATUS.user, credPresent: false } },
+  { ...STATUS, wfp: { state: "absent" as const, filters: 0 } },
+]) {
+  test("incomplete provisioning never reports install success", async () => {
+    const f = installer({ ...STATUS, user: { ...STATUS.user, provisioned: false } }, after);
+    await assert.rejects(installWindowsSandbox(f.runtime), /setup did not finish/);
+  });
+}
+
+test("UAC cancellation remains retryable, and installs run only the shipped executable", async () => {
+  const missing = { ...STATUS, user: { ...STATUS.user, provisioned: false } };
+  const f = installer(missing, { ...missing, cancelled: true });
+  assert.deepEqual(await installWindowsSandbox(f.runtime), { cancelled: true });
+  assert.equal(f.calls.length, 1);
+  assert.equal((f.calls[0] as { srtWin: { exe: string } }).srtWin.exe, await srtWinPath());
+});
 
 test("a path inside app.asar becomes its app.asar.unpacked twin; any other path is unchanged", () => {
   const win = "\\";

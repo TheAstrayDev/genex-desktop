@@ -14,7 +14,7 @@ using System.Text;
 namespace GenexNative {
     public sealed class Outcome {
         public int code;
-        public int pid;
+        public int? pid;
         public string reason;
     }
 
@@ -288,6 +288,10 @@ namespace GenexNative {
             } finally { if (sid != IntPtr.Zero) FreeSid(sid); }
         }
 
+        static bool StopRequested(string control, int parentPid) {
+            return File.Exists(System.IO.Path.Combine(control, "stop")) || !ParentAlive(parentPid);
+        }
+
         public static Outcome Run(string profile, string binary, string[] args, string cwd, string[] reads, string[] writes, string[] denied, Hashtable env, string control, int parentPid) {
             IntPtr sid = IntPtr.Zero, attributes = IntPtr.Zero, capabilities = IntPtr.Zero;
             IntPtr handles = IntPtr.Zero, environment = IntPtr.Zero, job = IntPtr.Zero, packagePolicy = IntPtr.Zero, jobList = IntPtr.Zero;
@@ -297,6 +301,10 @@ namespace GenexNative {
             var grants = new List<Grant>();
             ReadCapabilities allowedCapabilities = null;
             try {
+                // The host can stop an unready compiler before any grants exist.
+                // Once this marker exists, recovery must handle a partially prepared job.
+                File.WriteAllText(System.IO.Path.Combine(control, "broker.ready"), "ready");
+                if (StopRequested(control, parentPid)) return new Outcome { code = 1, pid = null, reason = "cancelled" };
                 int result = CreateAppContainerProfile(profile, "Genex native job", "Temporary isolated native asset job", IntPtr.Zero, 0, out sid);
                 if (result != 0) Marshal.ThrowExceptionForHR(result);
                 created = true;
@@ -342,6 +350,7 @@ namespace GenexNative {
                 jobList = Marshal.AllocHGlobal(IntPtr.Size);
                 Marshal.WriteIntPtr(jobList, job);
                 Check(UpdateProcThreadAttribute(attributes, 0, new IntPtr(JobAttribute), jobList, new IntPtr(IntPtr.Size), IntPtr.Zero, IntPtr.Zero), "Assign native job at creation");
+                if (StopRequested(control, parentPid)) return new Outcome { code = 1, pid = null, reason = "cancelled" };
                 if (!CreateProcess(binary, command, IntPtr.Zero, IntPtr.Zero, true, CreateFlags, environment, cwd, ref startup, out child)) {
                     int error = Marshal.GetLastWin32Error();
                     var message = error == 5
@@ -357,10 +366,11 @@ namespace GenexNative {
                     Check(GetTokenInformation(token, 29, out isContainer, 4, out returned), "Verify native AppContainer token");
                     if (isContainer != 1) throw new IOException("Windows did not create an AppContainer token");
                 } finally { CloseHandle(token); }
+                if (StopRequested(control, parentPid)) return new Outcome { code = 1, pid = child.Pid, reason = "cancelled" };
                 Check(ResumeThread(child.Thread) != UInt32.MaxValue, "Resume native runtime");
                 var reason = "exit";
                 while (WaitForSingleObject(child.Process, 100) == WaitTimeout) {
-                    if (File.Exists(System.IO.Path.Combine(control, "stop")) || !ParentAlive(parentPid)) {
+                    if (StopRequested(control, parentPid)) {
                         reason = "cancelled";
                         Check(TerminateJobObject(job, 1), "Stop native process tree");
                         Check(WaitForSingleObject(child.Process, 5000) == 0, "Wait for stopped native runtime");

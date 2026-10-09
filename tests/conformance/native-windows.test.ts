@@ -370,6 +370,25 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     }
   });
 
+  it("a startup deadline stops an unready broker without launching the runtime or leaving grants", async () => {
+    const f = await setup();
+    const before = (await exec("icacls.exe", [f.output])).stdout;
+    const sideEffect = path.join(f.output, "must-not-run.txt");
+    const started = Date.now();
+    const timed = await f.run("require('node:fs').writeFileSync(process.argv[1], 'late')", [sideEffect], {
+      timeoutMs: 1,
+    });
+    assert.equal(timed.reason, "timeout");
+    assert.equal(timed.pid, null, "no runtime was created before the deadline");
+    assert.ok(Date.now() - started < 10_000, "startup timeout also has bounded cleanup");
+    assert.equal(existsSync(sideEffect), false, "a cancelled launch cannot run late");
+    assert.equal((await exec("icacls.exe", [f.output])).stdout, before, "no temporary grants survive");
+    assert.equal(
+      (await readdir(f.root)).some((name) => name.startsWith(".native-control-")),
+      false,
+    );
+  });
+
   it("a timeout is bounded and a normal exit also removes detached descendants", async () => {
     const f = await setup();
     const started = Date.now();

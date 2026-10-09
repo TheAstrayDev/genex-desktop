@@ -40,6 +40,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Native Windows ACL regressions
+        if: ${{ !inputs.files }}
+        run: cargo test --release --locked --manifest-path native/srt-win/Cargo.toml
       - if: ${{ !inputs.files }}
         run: npm run typecheck
       - if: ${{ !inputs.files }}
