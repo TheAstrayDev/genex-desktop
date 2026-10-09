@@ -26,9 +26,9 @@ unchanged. Where it disagrees with this preface, this preface wins.
   game keeps, and Publish shoots and sends it; read `genex__skill {"name":"genex-cover"}`. Before
   any publish of a game Studio built, the first or an update, check `genex__cover
   {"operation":"status"}`: with no kept shot it gets its `genex-cover` demo, shot and checked,
-  first. After a publish whose `cover.last.kind` is `none`, offer once to make one. Only a game
-  whose owner keeps its code untouched gets none: Publish then sends no cover and Genex keeps its
-  own.
+  first. After a publish whose own cover outcome is `none` (`cover.last.jobId` is its `jobId`),
+  offer once to make one, and not again in this chat once the user says no. Only a game whose
+  owner keeps its code untouched gets none: Publish then sends no cover and Genex keeps its own.
 - `npx genex doctor` is `genex__cli {"command":"doctor"}`. Other commands map onto Studio tools as
   the `genex` skill describes (`genex__skill {"name":"genex"}`).
 

@@ -458,7 +458,8 @@ card, its page and every shared link, unrelated to Studio's own sidebar cover. T
 a demo named `genex-cover`. An inline skill in every brief says when and by whom (once the game
 looks like itself; before every publish, the first or an update, it checks `genex__cover` status
 and shoots first while no shot is kept; after a big visual change; by the session that owns the
-build; after a publish that sent no frame it offers once to make one), and the vendored
+build; after a publish whose own outcome sent no frame it offers once to make one, never again
+once declined; none of this for a game whose owner keeps its code untouched), and the vendored
 `genex-cover` card, behind a Studio preface, says how. `genex__cover` photographs that demo at
 1920×1080 in a hidden preview window of its own (the host's `observe` still) into the plugin's
 storage and answers its preview and exposure numbers, or reports the kept shot, the last send and
@@ -466,7 +467,8 @@ the cover Genex holds with who chose it. A publish, and a draft until the game i
 shoots the demo again after exporting and sends the frame once the upload is recorded, through the
 pinned CLI's `genex cover --json` in Studio's publish copy; `genex__cover-set` sends it now after a
 consent card. Bytes Genex already answered for, and a cover the owner picked on genex.games, are
-never uploaded again; a refused, rate-limited, failed or silent send leaves the publish done with a
+never uploaded again; the owner's pick is recorded (`kept_owner`) whenever Genex reports it, at a
+send or a status check, a shot kept or not; a refused, rate-limited, failed or silent send leaves the publish done with a
 warning in `genex__publish-status`. Nothing is read from or written to the game folder for it.
 While the plugin reports no shot to send and no cover the owner chose, Studio's own Publish dialog
 offers Ask for a cover, which leaves the request in the game's chat composer, unsent
