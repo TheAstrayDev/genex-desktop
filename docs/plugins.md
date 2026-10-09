@@ -684,8 +684,9 @@ Genex:
   dialog; that dialog's press is the consent, and for a live game it offers Publish update.
   Publish is left out while Genex puts no Publish on the strip (off or removed) and while
   publish-status reports an attempt running (`coverCardPublish`, read on mount, on Genex's plugin
-  events and on the dialog's cadence by `use-genex-publishing.ts`). Genex-specific on purpose and
-  with no manifest field: when plugin pictures get a general home in the chat, the card moves onto
+  events and on the dialog's cadence by `use-genex-publishing.ts`). The cover guidance (inline
+  `cover` skill, `genex-cover` preface) tells the builder to shoot the winner last and then say one
+  line, never how to publish. Genex-specific on purpose and with no manifest field: when plugin pictures get a general home in the chat, the card moves onto
   it and keeps only Publish.
 - `~/.genex` is on the protected and secret path lists every sandboxed engine and native job is
   denied, and the workspace content filters skip `.genex` folders.
