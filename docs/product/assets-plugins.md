@@ -2,7 +2,7 @@
 
 ## Assets in a game
 
-Assets groups `assets/` and `public/assets/` files by source and generation, even before a
+Assets groups `assets/`, `public/assets/` and native Unity `Assets/Generated/` files by source and generation, even before a
 build exists; deliveries and external changes refresh it. Cards hide metadata; animation-only GLBs fold
 into their model.
 
@@ -20,13 +20,13 @@ do not prove correct integration or passing checks.
 The prompt bar's Add menu holds reference attachments, plugin and MCP switches, Connect and
 Manage. Enabled, connected, signed in and permitted are different states.
 
-Plugins opens a workspace page with Plugins/Skills, search, rows and details. Plugins and MCP
-servers show their own pictures (manifest `icon`, MCP `serverInfo.icons`) or an initial. The
-list shows installed plugins (Genex as the game dev tools router), servers you added, the
-Marketplace (Coming soon until the catalog has something new) and the plugin guide. Install from GitHub takes a pasted link and pins its latest release
-(else the default branch's newest commit). Games build, preview and export without plugins.
+Plugins shows Plugins/Skills, search, details, installed plugins, added MCP servers, Marketplace
+and the guide. Icons come from plugin `icon` or MCP `serverInfo.icons`, falling back to initials.
+Marketplace shows Coming soon until the catalog adds entries. Install from GitHub pins the latest
+release or newest default-branch commit. Browser games build, preview and export without plugins.
 The host draws Genex's app-wide page (shared balance, the tools it routes) and Local Blender's
-runtime card. Connect, unapproved, reuses a saved account or
+runtime card. Unity source projects use the bundled [Unity Editor workspace](../unity.md),
+including bridge setup, native tools and player builds. Connect, unapproved, reuses a saved account or
 opens browser sign-in; setup survives restart and reinstall. Game spend is in the usage panel.
 Enabled Genex suggests assets in planning; workers use it once the account is ready. User
 preferences win; failures and fallbacks are disclosed.

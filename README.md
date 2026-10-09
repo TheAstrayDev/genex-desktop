@@ -37,7 +37,8 @@ Genex is early: expect rough edges, and tell us about them in
 → Make 3D assets locally with the Blender plugin\
 → Meshy, Tripo, ElevenLabs and more through the Genex tools router\
 → Export anywhere, or publish to the web\
-→ Unity and Unreal plugins soon\
+→ Edit Unity 6 scenes, scripts and assets; run native tests and builds with the Unity plugin\
+→ Unreal plugin soon\
 → Native C++ games soon
 
 > [!TIP]
@@ -79,6 +80,7 @@ npm run plugin:doctor -- ~/studio-plugins/my-plugin      # check it the way Gene
    maintainer reviews it, and it appears in every Genex app's Marketplace.
 
 The [plugin guide](docs/PLUGIN_GUIDE.md) covers tools, panels, settings and accounts.
+The [Unity guide](docs/unity.md) covers the activated Editor requirement and native workflow.
 
 ### Documentation
 

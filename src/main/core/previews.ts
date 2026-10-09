@@ -56,6 +56,7 @@ import { LiveGate, type LiveOffer } from "./live-gate.ts";
 import type { LiveBehindEvent } from "../../shared/live-behind.ts";
 import type { GameSoundRequest } from "../../shared/game-sound.ts";
 import { liveAudible, type LiveSound } from "../game-sound.ts";
+import { UNITY_EDITOR_REQUIRED } from "../../shared/unity.ts";
 
 /** The most cameras one capture photographs. */
 const MAX_CAPTURE_CAMERAS = 8;
@@ -578,6 +579,7 @@ export class PreviewService {
   ): Promise<{ entry: string; root: string | undefined; loopback: boolean; stale: string | null } | null> {
     const descriptor = (await this.#core.games.list().catch(() => [] as GameProject[])).find((g) => g.name === project);
     const shape = descriptor?.shape ?? TEMPLATE_SHAPE;
+    if (shape.kind === "unity") throw new Error(UNITY_EDITOR_REQUIRED);
     const loopback = descriptor?.built === true;
     const base = root ?? this.#core.games.dirFor(project);
     const outcome = await this.#core.builds.ensure({ project, dir: base, shape });
@@ -603,7 +605,14 @@ export class PreviewService {
   }
 
   /** `preview.load`: serve a game (or a checked worktree of it) into a preview, one load per handle at a time. */
-  loadPreview(p: HarnessParams<"preview.load">): Promise<string> {
+  async loadPreview(p: HarnessParams<"preview.load">): Promise<string> {
+    const game = (await this.#core.games.list()).find((candidate) => candidate.name === p.project);
+    if (game?.shape.kind === "unity") {
+      if (p.handle || p.root || p.candidateId) throw new Error(UNITY_EDITOR_REQUIRED);
+      await this.stopLive();
+      this.#x.servedRoots.delete(LIVE_HANDLE);
+      return `unity:${encodeURIComponent(p.project)}`;
+    }
     const handle = p.handle ?? LIVE_HANDLE;
     return serial(this.#x.previewOperations, handle, async () => {
       const profiling = Boolean(p.candidateId && p.revision);
