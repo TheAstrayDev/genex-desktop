@@ -76,8 +76,9 @@ Internet is required only when Git needs downloading. Sandbox installation uses 
 `srt-win.exe` in `app.asar.unpacked`, never an npm package installed by the user.
 
 A ready Sandbox is not reinstalled: the SDK otherwise rotates its shared account's password.
-Installation verifies post-install account, credentials and filter status; core initialization
-still performs the non-elevated egress verification when BFE enumeration is unavailable.
+Setup verifies account, credentials and actual non-elevated egress containment before reusing
+or accepting an installation. Unreadable BFE status alone cannot declare success; inactive
+filters trigger repair, and temporary helper grants are released even when verification fails.
 The boot gate publishes Ready before creating the replacement renderer, preventing a second
 automatic install. Automatic private Git installation is currently x64-only.
 

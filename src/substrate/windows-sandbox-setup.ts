@@ -19,12 +19,38 @@ const MESSAGE = {
 } as const;
 type SetupRuntime = Pick<
   typeof import("@anthropic-ai/sandbox-runtime"),
-  "installWindowsSandboxAsync" | "resolveSrtWin" | "checkWindowsSandboxStatusAsync"
+  | "installWindowsSandboxAsync"
+  | "resolveSrtWin"
+  | "checkWindowsSandboxStatusAsync"
+  | "grantWindowsAcl"
+  | "revokeWindowsAcl"
+  | "verifyWindowsWfpEgress"
 >;
 
 function ready(status: import("@anthropic-ai/sandbox-runtime").WindowsInstallResult): boolean {
   const userReady = status.user.provisioned && status.user.credPresent && !!status.user.sid;
   return userReady && status.wfp.state !== "absent";
+}
+
+/** BFE enumeration alone cannot prove containment, especially for a non-administrator. */
+async function sandboxReady(
+  status: import("@anthropic-ai/sandbox-runtime").WindowsInstallResult,
+  srtWin: import("@anthropic-ai/sandbox-runtime").SrtWinSpawn,
+  runtime: SetupRuntime,
+): Promise<boolean> {
+  const sandboxUserSid = status.user.sid;
+  if (!ready(status) || !sandboxUserSid) return false;
+  // Setup runs before a core exists. Only the exact helper receives a temporary bootstrap grant.
+  try {
+    runtime.grantWindowsAcl({ read: [srtWin.exe], write: [], sandboxUserSid, srtWin });
+    await runtime.verifyWindowsWfpEgress({ srtWin });
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "wfp_fence_inactive") return false;
+    throw error;
+  } finally {
+    runtime.revokeWindowsAcl({ sandboxUserSid, srtWin });
+  }
 }
 
 /** A path inside the app archive, as the unpacked copy a process can run; any other path unchanged. */
@@ -41,14 +67,14 @@ export async function srtWinPath(): Promise<string> {
 
 /** Install the Windows sandbox; `cancelled` when the administrator prompt was dismissed. */
 export async function installWindowsSandbox(runtime?: SetupRuntime): Promise<{ cancelled: boolean }> {
-  const { installWindowsSandboxAsync, resolveSrtWin, checkWindowsSandboxStatusAsync } =
-    runtime ?? (await import("@anthropic-ai/sandbox-runtime"));
+  const srt = runtime ?? (await import("@anthropic-ai/sandbox-runtime"));
+  const { installWindowsSandboxAsync, resolveSrtWin, checkWindowsSandboxStatusAsync } = srt;
   const srtWin = resolveSrtWin({ path: await srtWinPath() });
   // SDK installation rotates the shared account's password. Preserve already working installs.
-  if (ready(await checkWindowsSandboxStatusAsync({ srtWin }))) return { cancelled: false };
+  if (await sandboxReady(await checkWindowsSandboxStatusAsync({ srtWin }), srtWin, srt)) return { cancelled: false };
   const result = await installWindowsSandboxAsync({ srtWin, timeoutMs: INSTALL_TIMEOUT_MS });
   if (result.cancelled) return { cancelled: true };
-  if (!ready(result)) throw new Error(MESSAGE.Incomplete);
+  if (!(await sandboxReady(result, srtWin, srt))) throw new Error(MESSAGE.Incomplete);
   return { cancelled: false };
 }
 
