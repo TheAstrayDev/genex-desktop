@@ -5,6 +5,7 @@
  * plugin names, and answers null, touching nothing, for everything else.
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { lstat, mkdir, readdir, realpath, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { before, it } from "node:test";
@@ -131,6 +132,12 @@ const HOSTILE: Array<[string, () => Promise<unknown>, () => ProjectAssetRead]> =
   ["a shot that is a link out", () => plantShot(path.join(outside, "secret.png")), () => cover(GAME)],
   ["a shot that is a link to a folder", () => plantShot(path.join(outside, "planted")), () => cover(GAME)],
   ["a shot that is a folder", async () => mkdir(path.join(await keep({}), "shot.png")), () => cover(GAME)],
+  // A read that opened it would wait for a writer forever: refused before it is opened.
+  [
+    "a shot that is a named pipe",
+    async () => void execFileSync("mkfifo", [path.join(await keep({}), "shot.png")]),
+    () => cover(GAME),
+  ],
   [
     "a shot over the size cap",
     () => keep({ "shot.png": Buffer.concat([PNG, Buffer.alloc(GENEX_COVER_MAX_BYTES)]) }),
