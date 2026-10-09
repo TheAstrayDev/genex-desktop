@@ -38,10 +38,10 @@ describe("asset checkpoint worktree authority", () => {
     const api = core.api();
     const runId = `deep-${"x".repeat(160)}`;
     const target = path.join(core.layout.scratch, "autopilot", runId, "integration");
-    assert.ok(target.length > 260);
     const before = await git(core.games.dirFor("pong"), ["worktree", "list", "--porcelain", "-z"]);
     const open = () => api[HostMethod.SnapshotWorktree]({ project: "pong", runId, name: "integration" });
     if (process.platform === "win32") {
+      assert.ok(target.length > 260, "the Windows fixture reaches the worktree path limit");
       await assert.rejects(open(), { name: "WindowsWorktreePathError", code: "windows-worktree-path-too-long" });
       assert.equal(await git(core.games.dirFor("pong"), ["worktree", "list", "--porcelain", "-z"]), before);
       await assert.rejects(stat(path.dirname(target)), /ENOENT/);
