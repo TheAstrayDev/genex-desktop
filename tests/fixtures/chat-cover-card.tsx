@@ -16,6 +16,8 @@ import type { ChatPanelProps } from "../../src/renderer/chat/chat-panel-props.ts
 import { OPEN_BESIDE_EVENT, type BesideTarget } from "../../src/renderer/open-beside.ts";
 import { PLUGIN_SETUP_EVENT } from "../../src/renderer/plugin-setup.ts";
 import { studio } from "../../src/renderer/state/studio.ts";
+import { Icon } from "../../src/renderer/ui/icons.tsx";
+import { ResultButton } from "../../src/renderer/ui/ResultButton.tsx";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import { EventKind, ThreadKind, type EventEnvelope } from "../../src/shared/event-log.ts";
 import { ProjectAssetScope, type ProjectAssetRead } from "../../src/shared/game-assets.ts";
@@ -278,6 +280,13 @@ function render(events: EventEnvelope[]) {
         <div style={{ display: "flex", width: 520, height: "100%" }}>
           <ChatPanel {...props} events={events} stateEvents={events} />
         </div>
+        {/* The chat's result button as a build card draws Play, out of view: what Publish is measured against. */}
+        <div aria-hidden style={{ position: "absolute", left: -9999, top: 0 }}>
+          <ResultButton data-reference-result-button tabIndex={-1}>
+            <Icon name="play" size={12} className="fill-current" />
+            Play
+          </ResultButton>
+        </div>
         <div style={{ flex: 1, background: "var(--inset)", padding: 12 }}>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <PluginToolbar plugins={plugins} project={GAME} emptyGame={false} onNotice={noop} onOpenChange={noop} />
@@ -291,6 +300,23 @@ function render(events: EventEnvelope[]) {
 /** The shot a picture shows, by the scenario whose bytes it carries. */
 const shotIn = (img: HTMLImageElement): string | null =>
   Object.keys(SHOTS).find((key) => img.src.endsWith(SHOTS[key]?.card.slice(-40) ?? "")) ?? null;
+
+/** How a button is set: its height, its type and its glyph's size. */
+function buttonType(button: HTMLElement | null) {
+  if (!button) return null;
+  const style = getComputedStyle(button);
+  const glyph = button.querySelector("svg")?.getBoundingClientRect();
+  return {
+    height: Math.round(button.getBoundingClientRect().height),
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontWeight: style.fontWeight,
+    glyph: glyph ? Math.round(glyph.width) : null,
+  };
+}
+
+/** The chat's result button (Play on a build card), as the reference Publish is set against. */
+const resultButtonType = () => buttonType(document.querySelector<HTMLElement>("[data-reference-result-button]"));
 
 /** One card as a person meets it: its picture, caption and Publish, and where it sits. */
 function cardView(card: HTMLElement) {
@@ -313,6 +339,9 @@ function cardView(card: HTMLElement) {
       : null,
     publish: publish?.textContent?.trim() ?? null,
     publishLabel: publish?.getAttribute("aria-label") ?? null,
+    publishType: buttonType(publish),
+    resultButtonType: resultButtonType(),
+    publishFill: publish ? getComputedStyle(publish).backgroundColor : null,
     cursors: [...card.querySelectorAll("button")].map((button) => getComputedStyle(button).cursor),
     afterReply: reply ? Boolean(card.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_PRECEDING) : null,
   };

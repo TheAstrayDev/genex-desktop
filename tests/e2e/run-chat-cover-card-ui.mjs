@@ -72,6 +72,7 @@ app.whenReady().then(async()=>{
   assert.ok(card.image.width>=300&&card.image.width<=420,'large enough to judge, never wider than a result card: '+card.image.width);
   assert.equal(card.publish,'Publish');
   assert.ok(card.publishLabel.startsWith(card.publish),'the name a voice or a reader uses starts with the words on the button');
+  assert.deepEqual(card.publishType,card.resultButtonType,'Publish is set as the result buttons of the chat are (Play), only its fill is the accent');
   assert.equal(card.afterReply,true,'the card follows the builder\\'s line, as the turn ends');
   assert.deepEqual(kept.work,['Worked on 4 steps'],'every shot and the model stay in the work, as rows');
   assert.deepEqual(card.cursors,['pointer','pointer'],'the picture and Publish show the pointer');

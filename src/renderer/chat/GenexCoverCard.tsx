@@ -90,13 +90,15 @@ function CoverPublish({ project }: { project: string }): JSX.Element | null {
   const { read, state } = useGenexPublishState(project, onStrip);
   if (!read || !coverCardPublish(plugins, project, state)) return null;
   return (
+    // The chat's result button (Play on a build card) in size and type; the accent fill marks it due.
     <Button
       variant="default"
+      className="result-button"
       data-genex-cover-publish
       aria-label={WORDS.coverCardPublishLabel}
       onClick={() => openPluginSetup(GENEX_PLUGIN_ID)}
     >
-      <Icon name="globe" />
+      <Icon name="globe" size={12} />
       <span>{WORDS.publish}</span>
     </Button>
   );
