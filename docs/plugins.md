@@ -664,6 +664,14 @@ Genex:
   only during that publish, five minutes at most). Other files are asked about in chat as usual.
   Only the bundled Genex, on; the same action from a panel or toolbar still goes through the
   review, ticket and native confirmation.
+- That dialog also reads the cover record publish-status answers (`GenexPublishState.cover`, typed
+  in `shared/genex.ts` with the plugin's outcome kinds as `GenexCoverOutcome`). While it reports no
+  kept shot and no send running, the owner chose no cover on genex.games (`kept_owner`,
+  `outranked`) and no publish runs, one quiet line offers Ask for a cover (`[data-genex-cover-ask]`,
+  `coverAsk` in `genex-publish-view.ts`): it closes the dialog and leaves "Make this game's Genex
+  cover." in that game's chat composer (`renderer/compose-in-chat.ts`), never sent. A Genex plugin
+  older than covers answers no record, and the line stays hidden. Genex-specific core UI, accepted
+  by the owner; a second plugin with a cover would need a declared host surface instead.
 - `~/.genex` is on the protected and secret path lists every sandboxed engine and native job is
   denied, and the workspace content filters skip `.genex` folders.
 - Core reads Genex job folders under `engine-homes/genex/projects/*/jobs` for the Assets inventory
