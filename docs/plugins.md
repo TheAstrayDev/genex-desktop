@@ -673,21 +673,23 @@ Genex:
   cover." in that game's chat composer (`renderer/compose-in-chat.ts`), never sent. A Genex plugin
   older than covers answers no record, and the line stays hidden. Genex-specific core UI, accepted
   by the owner; a second plugin with a cover would need a declared host surface instead.
-- The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`): after the
+- The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`) for the
   thread's latest `genex__cover` call from plugin `genex` whose operation is `shoot` and whose
   answer carried a picture (`chat-entries.ts`, the tool read with or without `genex__` and
-  `mcp__studio__`); earlier shots stay rows of the work. Its picture is the kept shot read through
-  `readProjectAsset`'s `genex-cover` scope (below), never a tool result's image, so a shot that
-  can no longer be read leaves no card. Under it, the caption Genex cover and a primary Publish
-  (`[data-genex-cover-publish]`) that dispatches the `studio:plugin-setup` window event with
+  `mcp__studio__`). Like a build's result card it goes up once that work has ended, after the turn's
+  reply (or a build's result card when the build's builder shot it), never mid-turn, and a newer
+  kept shot takes it down at once; earlier shots stay rows of the work. Its picture is the kept shot
+  read through `readProjectAsset`'s `genex-cover` scope (below), never a tool result's image, so a
+  shot that can no longer be read leaves no card. Under it, the caption Genex cover and a primary
+  Publish (`[data-genex-cover-publish]`) that dispatches the `studio:plugin-setup` window event with
   `{id: "genex"}` (`renderer/plugin-setup.ts`), so the stage strip opens Studio's own Publish
-  dialog; that dialog's press is the consent, and for a live game it offers Publish update.
-  Publish is left out while Genex puts no Publish on the strip (off or removed) and while
-  publish-status reports an attempt running (`coverCardPublish`, read on mount, on Genex's plugin
-  events and on the dialog's cadence by `use-genex-publishing.ts`). The cover guidance (inline
-  `cover` skill, `genex-cover` preface) tells the builder to shoot the winner last and then say one
-  line, never how to publish. Genex-specific on purpose and with no manifest field: when plugin pictures get a general home in the chat, the card moves onto
-  it and keeps only Publish.
+  dialog; that dialog's press is the consent, and for a live game it offers Publish update. Publish
+  is left out while Genex puts no Publish on the strip (off or removed) and while publish-status
+  reports an attempt running (`coverCardPublish`, read on mount, on Genex's plugin events and on the
+  dialog's cadence by `use-genex-publishing.ts`). The cover guidance (inline `cover` skill,
+  `genex-cover` preface) tells the builder to shoot the winner last and then say one line, never how
+  to publish. Genex-specific on purpose and with no manifest field: when plugin pictures get a
+  general home in the chat, the card moves onto it and keeps only Publish.
 - `~/.genex` is on the protected and secret path lists every sandboxed engine and native job is
   denied, and the workspace content filters skip `.genex` folders.
 - Core reads Genex job folders under `engine-homes/genex/projects/*/jobs` for the Assets inventory
@@ -879,7 +881,8 @@ never sends from a listed game's draft (listed from the dashboard too), sends th
 however shots interleave, and is stopped by the next publish; `genex__cover-set` waits for consent
 and sends nothing without a hosted project; a bad project name reaches no host and writes nothing.
 The chat's cover card: `chat-transcript.test.ts` pins which shoot gets it (the latest that kept a
-shot, read by plugin, tool and operation), `genex-publish-view.test.ts` when it offers Publish,
+shot, read by plugin, tool and operation) and when (its turn or build ended, the work one group),
+`genex-publish-view.test.ts` when it offers Publish,
 and `npm run test:ui -- chat-cover-card-ui` renders the production chat beside the stage strip:
 the kept shot at 16:9, Publish opening the dialog, Publish hidden while publishing or with Genex
 off, and no card once the shot is gone.

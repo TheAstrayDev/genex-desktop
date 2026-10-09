@@ -1,10 +1,10 @@
 /**
  * The chat's Genex cover card, in a disposable Electron profile with a fake `window.studio`: the
  * production ChatPanel beside the production stage strip of the same game. The thread's latest
- * `genex__cover` shoot that kept a shot leaves one card, the game's kept shot (read from Genex's
- * storage by the game's name), captioned Genex cover, with Publish, which opens Studio's own
- * Publish dialog through the strip. A running publish or Genex turned off hide Publish; a shot
- * that can no longer be read leaves no card.
+ * `genex__cover` shoot that kept a shot leaves one card once the turn that took it has ended: the
+ * game's kept shot (read from Genex's storage by the game's name), captioned Genex cover, with
+ * Publish, which opens Studio's own Publish dialog through the strip. A running publish or Genex
+ * turned off hide Publish; a shot that can no longer be read leaves no card.
  */
 import { build } from "esbuild";
 import { spawn } from "node:child_process";
@@ -57,7 +57,7 @@ app.whenReady().then(async()=>{
  const step=async(name,source)=>{const result=await js(source);report.steps[name]=result;return result;};
  try {
   await wc.loadFile(${JSON.stringify(path.join(out, "chat-cover-card.html"))});
-  // Two candidates, a model and the winner in one turn: one card, the kept shot, after the work and before the reply.
+  // Two candidates, a model and the winner in one turn: one card, the kept shot, once the turn has ended.
   const kept=await step('kept','window.coverCard.open("kept")');
   assert.equal(kept.cards.length,1,'one card for the thread');
   const [card]=kept.cards;
@@ -71,7 +71,7 @@ app.whenReady().then(async()=>{
   assert.ok(card.image.width>=300&&card.image.width<=420,'large enough to judge, never wider than a result card: '+card.image.width);
   assert.equal(card.publish,'Publish');
   assert.ok(card.publishLabel.startsWith(card.publish),'the name a voice or a reader uses starts with the words on the button');
-  assert.equal(card.beforeReply,true,'the builder\\'s line follows the card');
+  assert.equal(card.afterReply,true,'the card follows the builder\\'s line, as the turn ends');
   assert.deepEqual(kept.work,['Worked on 4 steps'],'every shot and the model stay in the work, as rows');
   assert.deepEqual(card.cursors,['pointer','pointer'],'the picture and Publish show the pointer');
   assert.ok(kept.reads.length>=1);
@@ -99,6 +99,15 @@ app.whenReady().then(async()=>{
   assert.equal(off.cards[0].publish,null,'no Publish while Genex is off');
   await js('window.coverCard.reveal()');
   report.genexOff=await capture('cover-card-genex-off');
+  // The builder still at work after the winner: no card, so Publish never sits beside a cover still being chosen.
+  const running=await step('running','window.coverCard.open("running")');
+  assert.deepEqual(running.cards,[]);
+  assert.deepEqual(running.work,['Worked on 5 steps']);
+  // A tool after the winner: the turn's work stays one group, the card after the builder's line.
+  const checked=await step('checked','window.coverCard.open("checked")');
+  assert.deepEqual(checked.work,['Worked on 5 steps']);
+  assert.equal(checked.cards.length,1);
+  assert.equal(checked.cards[0].afterReply,true);
   // A later turn's kept shot takes the card; the earlier turn keeps only its rows.
   const turns=await step('turns','window.coverCard.open("turns")');
   assert.deepEqual(turns.cards.map((c)=>c.callId),['brighter']);

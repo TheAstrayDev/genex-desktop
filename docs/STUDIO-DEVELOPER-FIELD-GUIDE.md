@@ -499,8 +499,9 @@ reports no shot to send and no owner's cover, and its press closes the dialog an
 in that game's composer once however often it is pressed, focused and unsent (screenshots in `.studio-dev/evidence/`). A fixture
 profile cannot show this dialog's body, since its Genex account is never connected.
 `run-chat-cover-card-ui.mjs` renders the production ChatPanel beside the production stage strip:
-the thread's latest kept `genex__cover` shot is one Genex cover card read through the `genex-cover`
-scope, whose Publish opens the Publish dialog through the strip; Publish is gone while a publish
+the thread's latest kept `genex__cover` shot is one Genex cover card once its turn has ended (none
+mid-turn, the turn's work one group), read through the `genex-cover` scope, whose Publish opens the
+Publish dialog through the strip; Publish is gone while a publish
 runs or Genex is off, the card is gone with its shot, light and dark are captured (screenshots in
 `.studio-dev/evidence/`).
 `planning-capabilities.test.ts` and the host cases in

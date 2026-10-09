@@ -1,9 +1,9 @@
 /**
  * Test-owned production ChatPanel beside the production stage strip of the same game: the
- * thread's latest `genex__cover` shoot that kept a shot leaves one card, the game's kept shot read
- * from Genex's storage (`readProjectAsset`, scope `genex-cover`), captioned Genex cover with
- * Publish, which opens Studio's own Publish dialog through the strip. A running publish or Genex
- * turned off hide Publish; a shot that can no longer be read leaves no card.
+ * thread's latest `genex__cover` shoot that kept a shot leaves one card once its turn has ended,
+ * the game's kept shot read from Genex's storage (`readProjectAsset`, scope `genex-cover`),
+ * captioned Genex cover with Publish, which opens Studio's own Publish dialog through the strip. A
+ * running publish or Genex turned off hide Publish; a shot that can no longer be read leaves no card.
  */
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -94,8 +94,11 @@ const envelope = (data: EventEnvelope["data"]): EventEnvelope => ({
 });
 const said = (role: "user" | "assistant", content: string) =>
   envelope({ type: EventKind.Messages, messages: [{ role, content }] } as EventEnvelope["data"]);
-const turn = (type: typeof EventKind.TurnStarted | typeof EventKind.TurnEnded) =>
-  envelope({ type } as EventEnvelope["data"]);
+/** A turn's edge as the substrate writes it, carrying the turn's id. */
+const turn = (type: typeof EventKind.TurnStarted | typeof EventKind.TurnEnded, turnId: string) => ({
+  ...envelope((type === EventKind.TurnEnded ? { type, status: "ok" } : { type }) as EventEnvelope["data"]),
+  turn_id: turnId,
+});
 const custom = (eventType: string, payload: Record<string, unknown>) =>
   envelope({ type: EventKind.Custom, event_type: eventType, payload } as EventEnvelope["data"]);
 /** One Genex call as the host records it: started, then finished, its answer's pictures counted. */
@@ -120,30 +123,48 @@ function call(tool: string, callId: string, args: string, images: number) {
 }
 const shoot = (callId: string) => call("cover", callId, "operation=shoot", 1);
 
-/** A builder asked for a cover: two candidates, a model, then the winner shot last, and its line. */
-function coverTurn(): EventEnvelope[] {
+/** A builder asked for a cover, at work: two candidates, a model, then the winner shot last. */
+function coverWork(): EventEnvelope[] {
   return [
+    turn(EventKind.TurnStarted, "cover"),
     said("user", "Make this game's Genex cover."),
-    turn(EventKind.TurnStarted),
     ...shoot("first"),
     ...shoot("second"),
     ...call("asset", "boat", "operation=model prompt=a red fishing boat", 1),
     ...shoot("kept"),
+  ];
+}
+/** The same turn, ended with the builder's one line. */
+function coverTurn(): EventEnvelope[] {
+  return [
+    ...coverWork(),
     said("assistant", "The cover is the harbour at sunset, the boat leaving the pier."),
-    turn(EventKind.TurnEnded),
+    turn(EventKind.TurnEnded, "cover"),
   ];
 }
 /** The events each scenario's chat holds, and the shot Genex's storage keeps for the game. */
 const SCENARIOS: Record<string, { events: () => EventEnvelope[]; shot: string | null }> = {
   kept: { events: coverTurn, shot: "kept" },
+  /** The builder still at work after the winner: no card until the turn ends. */
+  running: { events: () => [...coverWork(), ...call("cover", "check", "operation=status", 0)], shot: "kept" },
+  /** A status check after the winner: the turn's work stays one group, the card after the reply. */
+  checked: {
+    events: () => [
+      ...coverWork(),
+      ...call("cover", "check", "operation=status", 0),
+      said("assistant", "The cover is the harbour at sunset, the boat leaving the pier."),
+      turn(EventKind.TurnEnded, "cover"),
+    ],
+    shot: "kept",
+  },
   turns: {
     events: () => [
       ...coverTurn(),
+      turn(EventKind.TurnStarted, "brighter"),
       said("user", "A bit brighter."),
-      turn(EventKind.TurnStarted),
       ...shoot("brighter"),
       said("assistant", "Brighter now: the same harbour an hour earlier."),
-      turn(EventKind.TurnEnded),
+      turn(EventKind.TurnEnded, "brighter"),
     ],
     shot: "brighter",
   },
@@ -264,7 +285,7 @@ function cardView(card: HTMLElement) {
     publish: publish?.textContent?.trim() ?? null,
     publishLabel: publish?.getAttribute("aria-label") ?? null,
     cursors: [...card.querySelectorAll("button")].map((button) => getComputedStyle(button).cursor),
-    beforeReply: reply ? Boolean(card.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING) : null,
+    afterReply: reply ? Boolean(card.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_PRECEDING) : null,
   };
 }
 
@@ -299,7 +320,8 @@ async function open(name: string, options: { genex?: "on" | "off"; publishing?: 
     await frame();
     const images = [...document.querySelectorAll<HTMLImageElement>("[data-genex-cover] img")];
     if (images.length && images.every((img) => img.complete && img.naturalWidth > 0)) break;
-    if (!scenario.shot && i > 30) break;
+    // No card to wait for: a chat with none, or one whose shot is gone.
+    if (!document.querySelector("[data-genex-cover]") && i > 30) break;
   }
   await settle(20);
   return sample();
