@@ -1,6 +1,6 @@
 /** Real Windows native jobs: isolated input/output, no network and bounded process trees. */
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
@@ -67,6 +67,50 @@ async function marker(file: string) {
 async function running(pid: number) {
   const { stdout } = await exec("tasklist.exe", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"]);
   return stdout.split("\n").some((line) => line.includes(`"${pid}"`));
+}
+
+/** Pin this exact process before killing the broker: a PID can be reused in the parallel suite. */
+async function observeExit(pid: number) {
+  const powershell = path.join(
+    process.env.SystemRoot || "C:\\Windows",
+    "System32/WindowsPowerShell/v1.0/powershell.exe",
+  );
+  const child = spawn(
+    powershell,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `$ErrorActionPreference='Stop';$observed=Get-Process -Id ${pid};$null=$observed.Handle;[Console]::WriteLine('pinned');if(-not $observed.WaitForExit(5000)){throw 'Native process did not exit'};$observed.Dispose()`,
+    ],
+    { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let output = "";
+  let stderr = "";
+  let pinned = () => {};
+  const ready = new Promise<void>((resolve) => {
+    pinned = resolve;
+  });
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+    if (output.includes("pinned")) pinned();
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const exited = new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => {
+      pinned();
+      if (code === 0) resolve();
+      else reject(new Error(stderr));
+    });
+  });
+  // Register rejection immediately, even if preparation fails before the caller awaits it.
+  void exited.catch(() => {});
+  await ready;
+  assert.match(output, /pinned/, stderr);
+  return { exited };
 }
 
 async function noncanonicalFixture(folder: string, script: string) {
@@ -235,9 +279,10 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
       .catch((error: unknown) => error);
     await marker(brokerFile);
     const { pid, broker } = JSON.parse(await readFile(brokerFile, "utf8"));
+    const observer = await observeExit(pid);
     await exec("taskkill.exe", ["/PID", String(broker), "/F"]);
     assert.ok((await held) instanceof Error);
-    assert.equal(await running(pid), false);
+    await observer.exited;
     assert.deepEqual(await snapshot(), before, "crash recovery also preserves existing descendants");
     assert.deepEqual(await securitySnapshot(paths, f.root), descriptorBefore);
   });
