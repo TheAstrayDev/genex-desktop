@@ -900,6 +900,20 @@ fn try_apply_object_aces(path: &str, sid: &LocalPsid, set: SbAceSet) -> Result<b
         return Ok(false);
     }
     let new = rebuild_acl(kept.2, &set.head_aces(sid.as_psid()), &kept, &[])?;
+    let mut control = 0u16;
+    let mut revision = 0u32;
+    unsafe { GetSecurityDescriptorControl(sd.ptr, &mut control, &mut revision) }
+        .context("GetSecurityDescriptorControl(object-only)")?;
+    let auto_inherited = control & windows::Win32::Security::SE_DACL_AUTO_INHERITED.0 != 0;
+    // SetSecurityInfo changes non-auto-inherited descriptors, materializing parent
+    // ACEs on unprotected ones (including our normalized descriptors). Preserve it
+    // with the same object-only writer, after repinning and verifying file identity.
+    let (handle, security_only) = if !security_only && !auto_inherited {
+        drop(handle);
+        (pin_object_for_security_write(&name, &info)?, true)
+    } else {
+        (handle, security_only)
+    };
     if security_only {
         write_locked_object_dacl(&name, &sd, &new)?;
         return Ok(true);
@@ -923,6 +937,42 @@ fn try_apply_object_aces(path: &str, sid: &LocalPsid, set: SbAceSet) -> Result<b
         &format!("SetSecurityInfo(object-only, '{path}')"),
     )?;
     Ok(true)
+}
+
+/// Repin after dropping a DELETE-capable handle; refuse replacement during the reopen gap.
+fn pin_object_for_security_write(
+    name: &[u16],
+    expected: &windows::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION,
+) -> Result<crate::util::OwnedHandle> {
+    use windows::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_DATA, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        GetFileInformationByHandle, OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
+    };
+    let handle = crate::util::OwnedHandle(
+        unsafe {
+            CreateFileW(
+                pcwstr(name),
+                (READ_CONTROL | WRITE_DAC | FILE_READ_DATA).0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                None,
+            )
+        }
+        .context("CreateFileW(repin object-only)")?,
+    );
+    let mut actual = BY_HANDLE_FILE_INFORMATION::default();
+    unsafe { GetFileInformationByHandle(handle.raw(), &mut actual) }
+        .context("GetFileInformationByHandle(repin object-only)")?;
+    if actual.dwVolumeSerialNumber != expected.dwVolumeSerialNumber
+        || actual.nFileIndexHigh != expected.nFileIndexHigh
+        || actual.nFileIndexLow != expected.nFileIndexLow
+    {
+        bail!("object replaced while repinning security write");
+    }
+    Ok(handle)
 }
 
 /// The narrow handle cannot use SetSecurityInfo's MAXIMUM_ALLOWED fast path.

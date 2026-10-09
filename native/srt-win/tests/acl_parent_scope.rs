@@ -239,6 +239,29 @@ fn locked_parent_keeps_protection_other_principals_and_sibling_descriptors() {
         assert_eq!(snapshot(&sibling), before[1], "sibling permissions changed");
         assert_eq!(std::fs::read_to_string(&sibling).unwrap(), "sentinel");
         drop(lock);
+        // A later run may see the normalized descriptor without the locking service.
+        // SetSecurityInfo must not materialize fresh inherited ACEs or rewrite siblings.
+        let original = snapshot(&fixture.0);
+        apply_sandbox_aces(
+            fixture.0.to_str().unwrap(),
+            TEST_SID,
+            SbAceSet {
+                deny_fdc: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        apply_sandbox_aces(fixture.0.to_str().unwrap(), TEST_SID, SbAceSet::default()).unwrap();
+        assert_eq!(
+            snapshot(&fixture.0),
+            original,
+            "unlocked repeat changed the descriptor"
+        );
+        assert_eq!(
+            snapshot(&sibling),
+            before[1],
+            "unlocked repeat changed sibling permissions"
+        );
     }
 }
 

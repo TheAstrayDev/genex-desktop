@@ -9,12 +9,11 @@ Launch opens **home**: one composer over an optional picture. A game opens its c
 the stage (Live, Builds once planned, Assets); Harness opens its conversation and Activity;
 Plugins fills the workspace.
 
-Unity 6 uses a native stage and explicitly installed bridge to an activated Editor;
-browser-scored Auto/Loop remains browser-only ([Unity](../unity.md)).
+Unity uses a native stage and activated Editor ([Unity](../unity.md)); browser-scored Auto/Loop remains browser-only.
 
 Settings is a modal: Model Providers, Local Models, Appearance, Games, Harness, Permissions,
 Privacy and About. Narrow windows use a drawer; wide ones remember the sidebar.
-Windows sizes windows to the display's work area; acceptance launches keep fixed dimensions.
+Windows respects the display's work area; acceptance keeps fixed dimensions.
 
 The bell keeps questions, plans and permission requests until answered, then build endings and
 sign-outs; a count marks waiting work, a dot unread news. Rows open where the answer lives;
@@ -28,10 +27,9 @@ Start building opens home; a typed idea waits in its composer.
 
 Genex Tools then offers **Connect Genex plugin** once.
 
-If the process sandbox cannot start, the window shows **Set up the protected workspace**: what
-is missing and Retry. Normal Windows launches begin built-in setup automatically once:
-Genex downloads private Git Bash when missing and provisions the shipped Sandbox through one
-administrator prompt. Cancellation and failures keep Set up available. Linux offers install commands.
+**Set up the protected workspace** handles missing sandbox prerequisites. Windows starts setup
+once: private Git Bash when missing, then the shipped Sandbox through one administrator prompt.
+Cancellation and failures keep Set up available. Linux offers install commands. Retry checks again.
 
 ## Main actions
 

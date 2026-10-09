@@ -32,6 +32,12 @@ through the propagating writer. Owned-fixture tests cover the sharing violation,
 protected and unprotected descriptors, other principals, existing/future siblings
 and release. No policy deadline is extended.
 
+On a later unlocked run, a descriptor without AUTO_INHERITED also uses the pinned
+object-only writer: SetSecurityInfo would otherwise rematerialize parent ACEs or
+change the bookkeeping marker. The DELETE-capable handle is released before
+repinning; volume/file identity must match across that reopen gap or the operation
+fails closed. The descriptor and siblings must round-trip byte for byte on repeat.
+
 The Electron / React / TypeScript application remains the original stack. Rust and
 the Windows MSVC build tools are build prerequisites for this native dependency.
 `scripts/build-windows-sandbox.mjs` compiles with `--locked` and a static CRT into the
