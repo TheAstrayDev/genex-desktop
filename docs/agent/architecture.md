@@ -1140,8 +1140,8 @@ managed local runtime; core has no Blender tool of its own.
   identity signs with the hardened runtime and `build/entitlements.mac.plist` (`allow-jit` only, no
   library-validation exemption, so third-party native addons do not load); the `APPLE_API_*` key
   notarizes. A signed build refuses a `local.` bundle id. Windows makes a per-user Squirrel
-  `Genex-Setup.exe`, unsigned until a `WINDOWS_SIGN_*` certificate, signtool parameters or hook
-  turns on `@electron/windows-sign`; Squirrel's `--squirrel-*` launches only create or remove the
+  `Genex-Setup.exe`, signed in releases by
+  [SignPath](../../.github/actions/windows-signpath/action.yml) (locally by `WINDOWS_SIGN_*`); Squirrel's `--squirrel-*` launches only create or remove the
   shortcuts and exit ([`src/main/windows-install.ts`](../../src/main/windows-install.ts)). Fuses (`FusesPlugin`) keep run-as-node and
   file:// privileges, turn off `NODE_OPTIONS` and `--inspect`, and require the integrity-checked
   `app.asar`. [`src/main/auto-update.ts`](../../src/main/auto-update.ts) wires `update-electron-app`
