@@ -61,6 +61,10 @@ The fixture runs the app with scripted models and sample games, so it needs no a
 [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request; coding agents start at
 [AGENTS.md](AGENTS.md).
 
+**AI-assisted contribution:** The Windows native runtime and Unity 6 integration in
+[PR #54](https://github.com/genex-games/genex-desktop/pull/54) were developed with assistance
+from OpenAI Codex. The PR documents validation results and remaining acceptance checks.
+
 ### Build a plugin
 
 Plugins give Genex's agents new tools: an asset generator, an engine bridge, a service your
