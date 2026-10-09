@@ -315,7 +315,11 @@ export interface GenexCoverFrameStats {
   darkShare: number;
 }
 
-/** The last cover send, kept in `covers/<project>/sent.json`: what decides whether a frame is sent again. */
+/**
+ * The game's last cover answer, kept in `covers/<project>/sent.json`: a send's outcome, or the
+ * owner's pick a status check heard of (`kept_owner`, no `sha256`). It decides whether a frame is
+ * sent again.
+ */
 export interface GenexCoverSent {
   kind: GenexCoverOutcome;
   at: string;

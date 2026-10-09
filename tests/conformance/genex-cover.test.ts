@@ -32,6 +32,7 @@ import {
   parseCoverAnswer,
   parseCoverView,
 } from "../../src/plugins/genex/cover.ts";
+import { coverAsk } from "../../src/renderer/panels/plugins/genex/genex-publish-view.ts";
 import { GenexCoverOutcome, type GenexCoverSent, type GenexCoverShot } from "../../src/shared/genex.ts";
 import { PluginConsentDeclined, PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import {
@@ -813,6 +814,56 @@ describe("when a publish shoots and sends", () => {
       assert.equal(second.cover?.last?.jobId, second.job?.id);
       assert.equal(fx.seen.commits, 2);
       assert.deepEqual(fx.seen.puts, [png("first"), png("second")]);
+    } finally {
+      await fx.close();
+    }
+  });
+});
+
+describe("the owner's own cover, while Studio keeps no shot", () => {
+  it("is recorded as the owner's pick by a publish, so the dialog asks for no cover over it", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await coverFixture();
+    try {
+      const first = await fx.publish(
+        "gallery",
+        camera(() => noDemo),
+      );
+      assert.equal(first.cover?.last?.kind, GenexCoverOutcome.None, first.job?.error);
+      assert.equal(coverAsk(first), true, "no shot and no cover the owner chose: the dialog asks");
+      // The owner sets the game's cover on genex.games; Studio still has no genex-cover shot.
+      fx.live.coverSource = "owner";
+      const owned = await fx.publish(
+        "gallery",
+        camera(() => noDemo),
+      );
+      assert.equal(owned.job?.state, "done", owned.job?.error);
+      assert.equal(owned.cover?.shot, null);
+      assert.equal(owned.cover?.last?.kind, GenexCoverOutcome.KeptOwner);
+      assert.equal(owned.cover?.last?.jobId, owned.job?.id);
+      assert.equal(owned.cover?.last?.coverUrl, OWNER_COVER);
+      assert.equal(owned.warnings?.includes(COVER_MESSAGE.NoShotSent), false, "nobody is told no cover was sent");
+      assert.deepEqual(fx.seen.mints, [], "nothing is uploaded");
+      assert.equal(coverAsk(owned), false, "the dialog asks for no cover over the owner's");
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("is recorded as the owner's pick by a status check, so the ask ends before the next publish", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await coverFixture();
+    try {
+      await fx.publish(
+        "gallery",
+        camera(() => noDemo),
+      );
+      fx.live.coverSource = "owner";
+      const status = await fx.genex.coverStatus(PROJECT);
+      assert.equal((status.hosted as { coverSource: string }).coverSource, "owner");
+      assert.equal((status.last as GenexCoverSent).kind, GenexCoverOutcome.KeptOwner);
+      assert.equal(coverAsk(await fx.genex.publishView(PROJECT)), false);
+      assert.deepEqual(fx.seen.mints, [], "a status check uploads nothing");
     } finally {
       await fx.close();
     }

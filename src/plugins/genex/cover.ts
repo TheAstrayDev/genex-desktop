@@ -450,15 +450,23 @@ export function unchangedRecord(last: GenexCoverSent, at: string, jobId?: string
   return { ...record, ...jobOf(jobId) };
 }
 
-/** The owner's own pick is the cover: nothing was uploaded over it. */
-export const keptOwnerRecord = (shot: GenexCoverShot, view: CoverView, at: string, jobId?: string): GenexCoverSent => ({
+/** The owner's own pick is the cover: nothing was uploaded over it (the kept shot, when there was one). */
+export const keptOwnerRecord = (
+  shot: GenexCoverShot | null,
+  view: CoverView,
+  at: string,
+  jobId?: string,
+): GenexCoverSent => ({
   kind: GenexCoverOutcome.KeptOwner,
   at,
-  sha256: shot.sha256,
+  ...(shot ? { sha256: shot.sha256 } : {}),
   ...jobOf(jobId),
   coverUrl: view.coverUrl,
   coverSource: view.coverSource,
 });
+
+/** Genex's view when it says the owner's own pick is the cover, else null. */
+export const ownerPick = (view: CoverView | null): CoverView | null => (ownerHolds(view) ? view : null);
 
 /** Why a publish took no new shot, from the problem the host named. */
 export function reshootLine(code: PluginStillProblem["code"]): string {

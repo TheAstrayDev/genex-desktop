@@ -53,7 +53,7 @@ import {
   MIN_REMAINING_FOR_SHOT_MS,
   noneRecord,
   OUTCOME_GUIDANCE,
-  ownerHolds,
+  ownerPick,
   parseCoverAnswer,
   parseCoverView,
   PROBLEM_GUIDANCE,
@@ -1094,16 +1094,33 @@ export class GenexTools {
     const [shot, last, pages] = await Promise.all([readShot(dir), readSent(dir), this.#pages(project)]);
     const asksGenex = Boolean(pages.slug) && Boolean(await this.#token());
     const hosted = asksGenex ? await this.#hostedCoverView(project) : null;
+    const noted = await this.#keepOwnerPick(project, dir, hosted);
     const delivery = coverDelivery(pages);
     return {
       operation: CoverOperation.Status,
       shot: shot ? { ...shot, advice: coverAdvice(shot) } : null,
-      last,
+      last: noted ?? last,
       sending: this.#coverSteps.has(project),
       hosted,
       sends: delivery,
       guidance: statusGuidance(shot, hosted, delivery),
     };
+  }
+  /**
+   * With no shot kept, the owner's own cover that Genex reports is kept as the game's last cover
+   * answer, so nothing asks for a cover the owner chose. A running send or a kept shot records its
+   * own answer instead; an owner's pick already kept is left as it is. Null when nothing was kept.
+   */
+  async #keepOwnerPick(project: string, dir: string, view: CoverView | null): Promise<GenexCoverSent | null> {
+    const owner = ownerPick(view);
+    if (!owner || this.#coverSteps.has(project)) return null;
+    return this.#coverWrite(project, async () => {
+      const [shot, last] = await Promise.all([readShot(dir), readSent(dir)]);
+      if (shot || last?.kind === GenexCoverOutcome.KeptOwner) return null;
+      const record = keptOwnerRecord(null, owner, new Date(this.#now()).toISOString());
+      await writeSent(dir, record);
+      return record;
+    });
   }
   /**
    * genex__cover-set, after the user said yes: send the kept shot now through the same step a publish
@@ -1201,12 +1218,15 @@ export class GenexTools {
     const at = () => new Date(this.#now()).toISOString();
     if (!shot || !copy) {
       const unchanged = decision.send === false && decision.kind === GenexCoverOutcome.Unchanged && last;
-      return this.#keepSent(dir, signal, unchanged ? unchangedRecord(last, at(), jobId) : noneRecord(at(), jobId));
+      if (unchanged) return this.#keepSent(dir, signal, unchangedRecord(last, at(), jobId));
+      // Nothing to send: still ask who chose the cover, so the owner's pick is never taken for none.
+      const owner = ownerPick(await this.#hostedCoverView(project, signal));
+      return this.#keepSent(dir, signal, owner ? keptOwnerRecord(null, owner, at(), jobId) : noneRecord(at(), jobId));
     }
     try {
-      const view = await this.#hostedCoverView(project, signal);
+      const owner = ownerPick(await this.#hostedCoverView(project, signal));
       if (signal.aborted) return null;
-      if (view && ownerHolds(view)) return this.#keepSent(dir, signal, keptOwnerRecord(shot, view, at(), jobId));
+      if (owner) return this.#keepSent(dir, signal, keptOwnerRecord(shot, owner, at(), jobId));
       const answer = await this.#uploadCover(project, copy, signal);
       return this.#keepSent(dir, signal, sentRecord(answer, shot, at(), jobId));
     } finally {
