@@ -32,7 +32,8 @@ import { EventKind, ThreadKind, SnapshotScope } from "../shared/event-log.ts";
 import { assetKind, isAudioFile, type AssetDeliveredPayload } from "../shared/game-assets.ts";
 import { coverFromBrief, replaceableCover, type GameUpdate } from "../shared/game-library.ts";
 import type { HarnessHostHandlers, HarnessParams, HarnessResult, HostMethod } from "../shared/harness-api.ts";
-import type { ExportReview, PluginBinding } from "../shared/plugins.ts";
+import type { ExportReview, PluginBinding, PluginStillAnswer, PluginStillOrder } from "../shared/plugins.ts";
+import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import {
   type BootNotice,
@@ -330,6 +331,8 @@ export interface StudioCoreOptions {
   rewindBuildStop?: { timeoutMs?: number; now?: () => number; sleep?: (ms: number) => Promise<unknown> };
   /** The clock, timers and memory reading host auto-resume uses (`core/auto-resume.ts`); a test seam. */
   autoResume?: Partial<Pick<AutoResumeDeps, "now" | "setTimer" | "clearTimer" | "freeMb">>;
+  /** A plugin still's budget (default one minute) and the clock it runs on (`core/view-still.ts`); a test seam. */
+  pluginStill?: ViewStillOptions;
   /** A planned automatic resume started (true) or stopped (false) waiting; main holds the Mac awake meanwhile. */
   onAutoResumePending?: (pending: boolean) => void;
   onUiEvent?: (event: UiEvent) => void;
@@ -757,7 +760,7 @@ export class StudioCore {
     this.pluginServices = new PluginServices(
       path.join(this.layout.engineHomes, "plugins", "data"),
       { genex: path.join(this.layout.engineHomes, "genex") },
-      (binding, files) => this.#observeAssets(binding, files),
+      (binding, files, still) => (still ? this.#observeStill(binding, still) : this.#observeAssets(binding, files)),
     );
     this.pluginServices.onEvent = (id, event, binding) =>
       this.emit(UiEvent.PluginEvent, { id, event, project: binding?.project, threadId: binding?.threadId });
@@ -862,6 +865,14 @@ export class StudioCore {
     } finally {
       await session.release();
     }
+  }
+
+  /**
+   * A plugin's still of one named view (`observe` with `still`): on a hidden window of its own at
+   * the asked size, never Live, given back however it ends (`core/view-still.ts`).
+   */
+  #observeStill(binding: PluginBinding, still: PluginStillOrder): Promise<PluginStillAnswer> {
+    return viewStill(this.#previews, binding, still, this.options.pluginStill);
   }
 
   /**
