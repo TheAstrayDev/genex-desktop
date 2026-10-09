@@ -264,7 +264,10 @@ what is missing, one line and one press (an accent-tinted line "Publishing goes 
 plugin, a blue chip with ↗ that closes the dialog and opens the plugin's page, and Install Genex plugin or
 Turn on Genex plugin in the footer; Connect Genex with the
 browser code), then shows the Game page row (a Test version row only while a draft is online and
-the game is not public), a stepped progress bar, and the accent Publish (Publish update once public). While it asks to set up (under the tinted line) or to publish, "Native app export for Mac,
+the game is not public), a stepped progress bar, and the accent Publish (Publish update once public). While the plugin
+reports no Genex cover shot to send and the owner chose none, one 13px ink-3 line under the game row ("No cover yet.
+Genex shows a real frame of your game.") carries a quiet sm Ask for a cover at its trailing edge; it closes the dialog
+and leaves the ask in that game's composer, cursor at the end, never sent. Hidden while publishing. While it asks to set up (under the tinted line) or to publish, "Native app export for Mac,
 Windows and Mobile coming soon" sits just above the buttons, in the description's type. More (⋯) and the switch sit beside every
 plugin's title. Back to workspace and sidebar navigation restore the preserved conversation. Export is the first item of the game
 chat header's ⋯ menu and uses that chat's bound game; it is disabled on drafts and absent from Harness. Preserve the mounted

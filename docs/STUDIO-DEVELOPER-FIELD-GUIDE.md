@@ -493,6 +493,11 @@ navigation; component fixtures do not prove account access or native game layeri
 Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's own account card
 and checks that a failed connect keeps its reason after the status is read again. It does not
 establish real browser/Keychain authorization.
+`run-publish-cover-ask-ui.mjs` renders the production Publish dialog beside the production
+ChatPanel of the same game with a fake `window.studio`: the cover ask shows only while the plugin
+reports no shot to send and no owner's cover, and its press closes the dialog and leaves the ask
+in that game's composer once however often it is pressed, focused and unsent (screenshots in `.studio-dev/evidence/`). A fixture
+profile cannot show this dialog's body, since its Genex account is never connected.
 `planning-capabilities.test.ts` and the host cases in
 `promptbar-redesign.test.ts` check current planning context and the tool-free boundary.
 
