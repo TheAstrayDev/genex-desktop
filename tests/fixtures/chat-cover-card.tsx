@@ -19,8 +19,9 @@ import { studio } from "../../src/renderer/state/studio.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import { EventKind, ThreadKind, type EventEnvelope } from "../../src/shared/event-log.ts";
 import { ProjectAssetScope, type ProjectAssetRead } from "../../src/shared/game-assets.ts";
-import { GenexAction, type GenexPublishState } from "../../src/shared/genex.ts";
+import { GenexAction, type GenexCoverRecord, GenexCoverOutcome, type GenexPublishState } from "../../src/shared/genex.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
+import { CaptureSource, StillMimeType } from "../../src/shared/preview-contract.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
 const GAME = "harbor-run";
@@ -145,6 +146,17 @@ function coverTurn(): EventEnvelope[] {
 /** The events each scenario's chat holds, and the shot Genex's storage keeps for the game. */
 const SCENARIOS: Record<string, { events: () => EventEnvelope[]; shot: string | null }> = {
   kept: { events: coverTurn, shot: "kept" },
+  /** The builder published in the turn: Genex took the kept frame, so the card offers no Publish. */
+  published: {
+    events: () => [
+      ...coverWork(),
+      ...call("publish", "publish", "kind=gallery", 0),
+      ...call("publish-status", "live", "operation=status", 0),
+      said("assistant", "The harbour at sunset is the cover, and the game is live."),
+      turn(EventKind.TurnEnded, "cover"),
+    ],
+    shot: "kept",
+  },
   /** The builder still at work after the winner: no card until the turn ends. */
   running: { events: () => [...coverWork(), ...call("cover", "check", "operation=status", 0)], shot: "kept" },
   /** A status check after the winner: the turn's work stays one group, the card after the reply. */
@@ -188,6 +200,23 @@ const running: GenexPublishState = {
   ...idle,
   job: { id: "j1", kind: "gallery", state: "running", phase: "uploading", startedAt: AT },
 };
+const KEPT_SHA = "a".repeat(64);
+/** The kept frame, which the publish re-shot and Genex took. */
+const sentCover: GenexCoverRecord = {
+  shot: {
+    sha256: KEPT_SHA,
+    width: 1920,
+    height: 1080,
+    mimeType: StillMimeType.Jpeg,
+    bytes: 240_000,
+    source: CaptureSource.Page,
+    stats: { lumaMean: 0.42, lumaStdDev: 0.21, nearBlackFraction: 0.04, litFraction: 0.96 },
+    takenAt: AT,
+  },
+  last: { kind: GenexCoverOutcome.Applied, at: AT, sha256: KEPT_SHA },
+  sending: false,
+};
+const published: GenexPublishState = { ...idle, cover: sentCover };
 
 let publishState: GenexPublishState = idle;
 let keptShot: string | null = "kept";
@@ -303,10 +332,16 @@ function sample() {
   };
 }
 
-/** Open a chat holding scenario `name`, Genex as `genex` says, a publish idle or running. */
-async function open(name: string, options: { genex?: "on" | "off"; publishing?: boolean } = {}) {
+/** The publish record a scenario's chat reads: a publish running, the kept frame sent, or idle. */
+function recordFor(options: { publishing?: boolean; sent?: boolean }): GenexPublishState {
+  if (options.publishing) return running;
+  return options.sent ? published : idle;
+}
+
+/** Open a chat holding scenario `name`, Genex as `genex` says, a publish idle, running or done with the kept frame. */
+async function open(name: string, options: { genex?: "on" | "off"; publishing?: boolean; sent?: boolean } = {}) {
   const scenario = SCENARIOS[name] ?? SCENARIOS.kept;
-  publishState = options.publishing ? running : idle;
+  publishState = recordFor(options);
   plugins = options.genex === "off" ? [genexPlugin({ enabled: false, state: "disabled" })] : [genexPlugin()];
   keptShot = scenario.shot;
   setups.length = 0;

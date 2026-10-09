@@ -12,6 +12,7 @@ import {
   GENEX_PUBLISH_PANEL,
   GenexAction,
   GenexCoverOutcome,
+  type GenexCoverRecord,
   type GenexCoverSent,
   GenexHostedStatus,
   GenexPublishJobState,
@@ -282,8 +283,30 @@ export function studioPublishButton(plugins: readonly PluginInfo[], project: str
 }
 
 /**
+ * Answers that leave nothing for a publish to do about a frame: Genex took it, already had it, or
+ * the owner's own pick stands over it. A failed send or no hosted project is retried by the next
+ * publish, and a refused frame is replaced by the shot it takes.
+ */
+const FRAME_ANSWERED = new Set<GenexCoverOutcome>([
+  GenexCoverOutcome.Applied,
+  GenexCoverOutcome.Unchanged,
+  GenexCoverOutcome.Outranked,
+  GenexCoverOutcome.KeptOwner,
+]);
+
+/** Whether Genex has answered for the kept frame itself, then or when these bytes were first sent. */
+function keptFrameAnswered(cover: GenexCoverRecord | undefined): boolean {
+  const shot = cover?.shot;
+  const last = cover?.last;
+  if (!shot || last?.sha256 !== shot.sha256) return false;
+  return FRAME_ANSWERED.has(last.settled ?? last.kind);
+}
+
+/**
  * Whether the chat's Genex cover card offers Publish: Genex's own Publish is on the strip (Genex
- * installed and on), and no publish of this game runs. A record not read yet hides nothing.
+ * installed and on), no publish of this game runs, and Genex has not yet answered for the kept
+ * frame (a publish re-shoots and sends it, so once one has, the cover's next step is done). A
+ * record not read yet hides nothing.
  */
 export function coverCardPublish(
   plugins: readonly PluginInfo[],
@@ -291,5 +314,5 @@ export function coverCardPublish(
   state: GenexPublishState | null,
 ): boolean {
   if (!project || !toolbarItems(plugins, project).some(isGenexPublish)) return false;
-  return !isLive(state?.job);
+  return !isLive(state?.job) && !keptFrameAnswered(state?.cover);
 }

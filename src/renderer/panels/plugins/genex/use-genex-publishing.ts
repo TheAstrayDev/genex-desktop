@@ -1,8 +1,9 @@
 /**
- * A game's Genex publish record for a surface that only needs to know whether a publish runs (the
- * chat's cover card): read when it mounts, again whenever Genex announces something, and on the
- * Publish dialog's cadence, quicker while an attempt runs. Nothing is read while `enabled` is
- * false. The last record read for a game is remembered, so a card that remounts knows it at once.
+ * A game's Genex publish record for a surface that only needs whether a publish runs and how the
+ * kept cover frame was answered (the chat's cover card): read when it mounts, again whenever Genex
+ * announces something, and on the Publish dialog's cadence, quicker while an attempt runs. Nothing
+ * is read while `enabled` is false. The last record read for a game is remembered, so a card that
+ * remounts knows it at once.
  */
 import { useEffect, useState } from "react";
 import { SECOND_MS } from "../../../../shared/duration.ts";

@@ -3,8 +3,9 @@
  * production ChatPanel beside the production stage strip of the same game. The thread's latest
  * `genex__cover` shoot that kept a shot leaves one card once the turn that took it has ended: the
  * game's kept shot (read from Genex's storage by the game's name), captioned Genex cover, with
- * Publish, which opens Studio's own Publish dialog through the strip. A running publish or Genex
- * turned off hide Publish; a shot that can no longer be read leaves no card.
+ * Publish, which opens Studio's own Publish dialog through the strip. A running publish, Genex
+ * turned off or a kept frame Genex already took hide Publish; a shot that can no longer be read
+ * leaves no card.
  */
 import { build } from "esbuild";
 import { spawn } from "node:child_process";
@@ -99,6 +100,13 @@ app.whenReady().then(async()=>{
   assert.equal(off.cards[0].publish,null,'no Publish while Genex is off');
   await js('window.coverCard.reveal()');
   report.genexOff=await capture('cover-card-genex-off');
+  // The builder published in the turn and Genex took the kept frame: the card is done, with no Publish.
+  const sent=await step('sent','window.coverCard.open("published",{sent:true})');
+  assert.equal(sent.cards.length,1);
+  assert.equal(sent.cards[0].publish,null,'nothing is left to publish for this cover');
+  assert.deepEqual(sent.work,['Worked on 6 steps']);
+  await js('window.coverCard.reveal()');
+  report.sent=await capture('cover-card-sent');
   // The builder still at work after the winner: no card, so Publish never sits beside a cover still being chosen.
   const running=await step('running','window.coverCard.open("running")');
   assert.deepEqual(running.cards,[]);
@@ -117,7 +125,7 @@ app.whenReady().then(async()=>{
   const gone=await step('gone','window.coverCard.open("lost")');
   assert.deepEqual(gone.cards,[]);
   assert.deepEqual(report.errors,[]);
-  console.log('PASS chat cover card: the latest kept shot, Publish opens the dialog, hidden while publishing or with Genex off, gone with its shot');
+  console.log('PASS chat cover card: the latest kept shot once its turn ends, Publish opens the dialog, hidden while publishing, with Genex off or once the frame went out, gone with its shot');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

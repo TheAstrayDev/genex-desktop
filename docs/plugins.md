@@ -684,12 +684,15 @@ Genex:
   Publish (`[data-genex-cover-publish]`) that dispatches the `studio:plugin-setup` window event with
   `{id: "genex"}` (`renderer/plugin-setup.ts`), so the stage strip opens Studio's own Publish
   dialog; that dialog's press is the consent, and for a live game it offers Publish update. Publish
-  is left out while Genex puts no Publish on the strip (off or removed) and while publish-status
-  reports an attempt running (`coverCardPublish`, read on mount, on Genex's plugin events and on the
-  dialog's cadence by `use-genex-publishing.ts`). The cover guidance (inline `cover` skill,
-  `genex-cover` preface) tells the builder to shoot the winner last and then say one line, never how
-  to publish. Genex-specific on purpose and with no manifest field: when plugin pictures get a
-  general home in the chat, the card moves onto it and keeps only Publish.
+  is left out while Genex puts no Publish on the strip (off or removed), while publish-status
+  reports an attempt running, and once Genex has answered for the kept frame itself (`applied`,
+  `unchanged`, `outranked` or `kept_owner` for its hash: a publish re-shoots and sends it, so the
+  cover's next step is done; `failed` and `not_hosted` keep it) (`coverCardPublish`, read on mount,
+  on Genex's plugin events and on the dialog's cadence by `use-genex-publishing.ts`). The cover
+  guidance (inline `cover` skill, `genex-cover` preface) tells the builder to shoot the winner last
+  and then say one line, never how to publish. Genex-specific on purpose and with no manifest field:
+  when plugin pictures get a general home in the chat, the card moves onto it and keeps only
+  Publish.
 - `~/.genex` is on the protected and secret path lists every sandboxed engine and native job is
   denied, and the workspace content filters skip `.genex` folders.
 - Core reads Genex job folders under `engine-homes/genex/projects/*/jobs` for the Assets inventory
@@ -884,8 +887,8 @@ The chat's cover card: `chat-transcript.test.ts` pins which shoot gets it (the l
 shot, read by plugin, tool and operation) and when (its turn or build ended, the work one group),
 `genex-publish-view.test.ts` when it offers Publish,
 and `npm run test:ui -- chat-cover-card-ui` renders the production chat beside the stage strip:
-the kept shot at 16:9, Publish opening the dialog, Publish hidden while publishing or with Genex
-off, and no card once the shot is gone.
+the kept shot at 16:9, Publish opening the dialog, Publish hidden while publishing, with Genex
+off or once Genex took the frame, and no card once the shot is gone.
 
 `plugin-marketplace.test.ts` drives `PluginMarketplace` with an injected `fetchImpl` and never
 touches the network: index validation, spec parsing, the 6 h cache with its stale-plus-error path,

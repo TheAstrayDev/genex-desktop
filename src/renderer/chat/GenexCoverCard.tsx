@@ -2,7 +2,8 @@
  * The Genex cover a builder kept, as a result in the chat: the shot itself at 16:9, captioned
  * "Genex cover", with Publish beside it, which opens Studio's own Publish dialog for this game
  * (that dialog's press is the consent; a live game is offered Publish update there). Publish is
- * hidden while a publish of the game runs and while Genex puts no Publish on the strip.
+ * hidden while a publish of the game runs, while Genex puts no Publish on the strip, and once
+ * Genex has answered for the kept frame (`coverCardPublish`).
  *
  * The picture is the game's kept shot, read from Genex's storage by the game's name
  * (`readProjectAsset`'s `genex-cover` scope), never a picture a tool result carried: a shot that
@@ -79,8 +80,9 @@ async function openShot(project: string, shown: string): Promise<void> {
 }
 
 /**
- * Publish beside the cover: opens Studio's Publish dialog, unless Genex is off or already
- * publishing. It waits for the game's first publish record, so it never shows and then goes.
+ * Publish beside the cover: opens Studio's Publish dialog, unless Genex is off, already
+ * publishing or done with this frame. It waits for the game's first publish record, so it never
+ * shows and then goes.
  */
 function CoverPublish({ project }: { project: string }): JSX.Element | null {
   const plugins = usePlugins((s) => s.list);
