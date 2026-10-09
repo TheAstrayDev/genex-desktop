@@ -382,7 +382,11 @@ game view trailed its slot right after each change and before the next ([perform
 `fixture.graph` takes `other-project-frames` or `append-round`
 only in `large-build-graph`. Traces accept `toplevel` for renderer task durations.
 No arbitrary eval, PID, webContents ID or output path is accepted.
-Scoped DOM inspection resolves one visible enabled non-occluded target. CDP dispatches actual
+Scoped DOM inspection resolves one visible enabled non-occluded target. A modal dialog or menu
+that has just opened takes pointer input one render later, so an input sent at once can be
+refused `target-not-visible` with nothing dispatched: send it with `requestWhenReachable`
+(`scripts/studio-dev/client.ts`), which tries again until the target is reachable, rather
+than sleeping. CDP dispatches actual
 pointer-down/up, keyboard and Unicode insertText to the desktop without system focus/pointer
 movement. The native macOS select did not accept background keys on pinned Electron. The select
 operation reports unsupported-surface if keys do not apply. Open an earlier build with its chat
