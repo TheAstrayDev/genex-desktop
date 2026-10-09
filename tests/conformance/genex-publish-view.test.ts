@@ -134,17 +134,17 @@ test("a live game shows its link and when it was updated", () => {
     state({
       slug: "g",
       status: "published",
-      galleryUrl: "https://genex.games/world/g",
+      galleryUrl: "https://genex.games/g",
       lastPublishAt: "2026-10-06T11:58:00Z",
       job: job({ state: "done", phase: "ready" }),
     }),
     now,
   );
-  assert.equal(live.link, "https://genex.games/world/g");
+  assert.equal(live.link, "https://genex.games/g");
   assert.equal(live.status, "Live · updated 2m ago");
   assert.equal(live.failure, null);
   assert.equal(
-    publishView(state({ slug: "g", galleryUrl: "https://genex.games/world/g" })).link,
+    publishView(state({ slug: "g", galleryUrl: "https://genex.games/g" })).link,
     null,
     "a draft has no public link",
   );
