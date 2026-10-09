@@ -51,6 +51,9 @@ it.
   shoot it, compare, and leave `genex-cover` on the winner, then shoot it once more: the kept shot
   is always the last one taken, and that is what `genex__cover-set` sends. Publish shoots whatever
   `genex-cover` stages at that moment.
+- The person sees that last shot: the chat shows the thread's latest kept shot as a card captioned
+  Genex cover, with a Publish button that opens Studio's Publish dialog. So shoot the winner last,
+  and after it say one short line about the cover; never walk the person through publishing.
 - The demo is a standing choice: Publish shoots and sends what it stages without asking. Keep
   `genex-cover` only while its frame passes §5. When none does, or Genex refused it as too dark and
   the game is dark by design, delete the demo: with none, Publish sends nothing and the owner can

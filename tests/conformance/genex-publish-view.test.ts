@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   coverAsk,
+  coverCardPublish,
   offeredTitle,
   PublishGate,
   publishGate,
@@ -14,6 +15,7 @@ import {
   GENEX_PUBLISH_PANEL,
   type GenexCoverRecord,
   GenexCoverOutcome,
+  type GenexCoverSent,
   type GenexCoverShot,
   type GenexPublishJob,
   type GenexPublishState,
@@ -108,6 +110,19 @@ test("every open game has Publish on its stage strip, whether Genex is on, off, 
   assert.equal(studioPublishButton([genex({ enabled: false, removed: true, state: "disabled" })], "game"), true);
   assert.equal(studioPublishButton([], "game"), true);
   assert.equal(studioPublishButton([], null), false, "with no game open there is nothing to publish");
+});
+
+test("the chat's Genex cover card offers Publish while Genex's own Publish is on the strip and nothing publishes", () => {
+  assert.equal(coverCardPublish([genex()], "game", state()), true);
+  assert.equal(coverCardPublish([genex()], "game", null), true, "a record not read yet hides nothing");
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job() })), false, "a publish is running");
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "unresolved" }) })), false);
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "done", phase: "done" }) })), true);
+  assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "failed", phase: "failed" }) })), true);
+  assert.equal(coverCardPublish([genex({ enabled: false, state: "disabled" })], "game", state()), false, "Genex off");
+  assert.equal(coverCardPublish([genex({ removed: true })], "game", state()), false, "Genex removed");
+  assert.equal(coverCardPublish([], "game", state()), false, "Genex missing");
+  assert.equal(coverCardPublish([genex()], null, state()), false, "no game to publish");
 });
 
 test("a running attempt shows its steps: every publish tests the draft before it goes live", () => {
@@ -260,4 +275,31 @@ test("the dialog asks for a cover only while the game has none to send and its o
     assert.equal(coverAsk(record), asks, label);
     assert.equal(publishView(record).coverAsk, asks, `${label}: the view`);
   }
+});
+
+test("the chat's cover card leaves Publish out once Genex has answered for the kept frame", () => {
+  const sent = (kind: GenexCoverOutcome, over: Partial<GenexCoverSent> = {}): GenexCoverSent => ({
+    ...last(kind),
+    sha256: shot.sha256,
+    ...over,
+  });
+  const { Applied, Outranked, KeptOwner, Unchanged, Failed, NotHosted, Rejected } = GenexCoverOutcome;
+  const rows: Array<[string, GenexCoverRecord, boolean]> = [
+    ["a kept frame never sent", cover({ shot }), true],
+    ["Genex took this frame (a publish re-shoots and sends it)", cover({ shot, last: sent(Applied) }), false],
+    ["the owner's pick outranked this frame", cover({ shot, last: sent(Outranked) }), false],
+    ["the owner's pick held, nothing uploaded", cover({ shot, last: sent(KeptOwner) }), false],
+    ["this frame again, Genex took it before", cover({ shot, last: sent(Unchanged, { settled: Applied }) }), false],
+    [
+      "a newer frame kept since the last one went",
+      cover({ shot, last: sent(Applied, { sha256: "b".repeat(64) }) }),
+      true,
+    ],
+    ["this frame did not reach Genex: the next publish tries again", cover({ shot, last: sent(Failed) }), true],
+    ["no hosted project yet: the first publish takes it", cover({ shot, last: sent(NotHosted) }), true],
+    ["Genex refused this frame", cover({ shot, last: sent(Rejected) }), true],
+    ["this frame again, refused before", cover({ shot, last: sent(Unchanged, { settled: Rejected }) }), true],
+  ];
+  for (const [label, record, offers] of rows)
+    assert.equal(coverCardPublish([genex()], "game", state({ cover: record })), offers, label);
 });
