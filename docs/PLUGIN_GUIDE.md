@@ -391,7 +391,7 @@ For multiple operating systems, declare `nativeRuntimes[].platforms` variants wi
 `platform`, `arch`, `candidates` and optional `install` pins. Unsupported pairs remain unsupported.
 Windows Local Blender uses an official pinned ZIP (`format: "zip"`), a per-job LPAC file identity
 and CPU-rendered thumbnails; macOS keeps its DMG and Seatbelt path. See
-[managed-native services](PLUGINS.md#api-3-managed-native-services) for archive and isolation limits.
+[managed-native services](plugins.md#api-3-managed-native-services) for archive and isolation limits.
 
 For a custom panel, inline the distributed `plugin-sdk/panel.js`. Studio's bundled plugin build
 replaces `<!-- STUDIO_PANEL_SDK -->` with that script; external authors must do equivalent inlining

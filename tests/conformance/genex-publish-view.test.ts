@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  coverAsk,
   offeredTitle,
   PublishGate,
   publishGate,
@@ -11,10 +12,14 @@ import {
 import {
   GENEX_PLUGIN_ID,
   GENEX_PUBLISH_PANEL,
+  type GenexCoverRecord,
+  GenexCoverOutcome,
+  type GenexCoverShot,
   type GenexPublishJob,
   type GenexPublishState,
 } from "../../src/shared/genex.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
+import { CaptureSource, StillMimeType } from "../../src/shared/preview-contract.ts";
 
 const state = (over: Partial<GenexPublishState> = {}): GenexPublishState => ({
   version: 1,
@@ -134,17 +139,17 @@ test("a live game shows its link and when it was updated", () => {
     state({
       slug: "g",
       status: "published",
-      galleryUrl: "https://genex.games/world/g",
+      galleryUrl: "https://genex.games/g",
       lastPublishAt: "2026-10-06T11:58:00Z",
       job: job({ state: "done", phase: "ready" }),
     }),
     now,
   );
-  assert.equal(live.link, "https://genex.games/world/g");
+  assert.equal(live.link, "https://genex.games/g");
   assert.equal(live.status, "Live · updated 2m ago");
   assert.equal(live.failure, null);
   assert.equal(
-    publishView(state({ slug: "g", galleryUrl: "https://genex.games/world/g" })).link,
+    publishView(state({ slug: "g", galleryUrl: "https://genex.games/g" })).link,
     null,
     "a draft has no public link",
   );
@@ -199,4 +204,60 @@ test("the name offered is the listed one, else Studio's title for the game, else
   );
   assert.equal(offeredTitle(null, undefined, "hyper-realistic-racing-demo"), "Hyper Realistic Racing Demo");
   assert.equal(offeredTitle(null, "   ", "rain_circuit"), "Rain Circuit");
+});
+
+const shot: GenexCoverShot = {
+  sha256: "a".repeat(64),
+  width: 1920,
+  height: 1080,
+  mimeType: StillMimeType.Png,
+  bytes: 1024,
+  source: CaptureSource.Page,
+  stats: { lumaMean: 0.4, lumaStdDev: 0.2, nearBlackFraction: 0.1, litFraction: 0.9 },
+  takenAt: "2026-10-09T10:00:00Z",
+};
+const cover = (over: Partial<GenexCoverRecord> = {}): GenexCoverRecord => ({
+  shot: null,
+  last: null,
+  sending: false,
+  ...over,
+});
+const last = (kind: GenexCoverOutcome) => ({ kind, at: "2026-10-09T10:05:00Z" });
+
+test("the dialog asks for a cover only while the game has none to send and its owner chose none", () => {
+  const live = { slug: "g", status: "published", lastPublishAt: "2026-10-09T10:05:00Z" } as const;
+  const rows: Array<[string, GenexPublishState, boolean]> = [
+    ["a game with no cover shot", state({ cover: cover() }), true],
+    [
+      "a published game whose last publish had no shot to send",
+      state({ ...live, cover: cover({ last: last(GenexCoverOutcome.None) }) }),
+      true,
+    ],
+    ["a cover shot kept to send", state({ cover: cover({ shot }) }), false],
+    ["a cover being sent now", state({ ...live, cover: cover({ sending: true }) }), false],
+    [
+      "the owner chose the cover on genex.games",
+      state({ ...live, cover: cover({ last: last(GenexCoverOutcome.KeptOwner) }) }),
+      false,
+    ],
+    [
+      "the owner's pick outranked a frame",
+      state({ ...live, cover: cover({ last: last(GenexCoverOutcome.Outranked) }) }),
+      false,
+    ],
+    [
+      "the same frame sent again, where the owner's pick held",
+      state({
+        ...live,
+        cover: cover({ last: { ...last(GenexCoverOutcome.Unchanged), settled: GenexCoverOutcome.KeptOwner } }),
+      }),
+      false,
+    ],
+    ["a Genex plugin that answers no cover", state(live), false],
+    ["a publish running", state({ cover: cover(), job: job() }), false],
+  ];
+  for (const [label, record, asks] of rows) {
+    assert.equal(coverAsk(record), asks, label);
+    assert.equal(publishView(record).coverAsk, asks, `${label}: the view`);
+  }
 });

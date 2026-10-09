@@ -14,6 +14,8 @@ import { writeFile } from "node:fs/promises";
 import {
   cleanGenexTitle,
   defaultGenexTitle,
+  GenexCoverOutcome,
+  type GenexCoverSent,
   GenexHostedStatus,
   GenexJobStatus,
   GenexOperation,
@@ -38,23 +40,20 @@ import {
   coverAdvice,
   coverDelivery,
   CoverOperation,
-  CoverOutcomeKind,
   coverRides,
-  type CoverSent,
   type CoverView,
   COVER_SEND_TIMEOUT_MS,
   COVER_VIEW_TIMEOUT_MS,
   decideSend,
   DELIVERY_GUIDANCE,
   freezeShot,
-  type GenexPublishView,
   INVOCATION_BUDGET_MS,
   keptOwnerRecord,
   MESSAGE as COVER_MESSAGE,
   MIN_REMAINING_FOR_SHOT_MS,
   noneRecord,
   OUTCOME_GUIDANCE,
-  ownerHolds,
+  ownerPick,
   parseCoverAnswer,
   parseCoverView,
   PROBLEM_GUIDANCE,
@@ -237,7 +236,7 @@ type ReadyDraft = NonNullable<GenexPublishState["readyDraft"]>;
 interface CoverStep {
   jobId?: string;
   controller: AbortController;
-  done: Promise<CoverSent | null>;
+  done: Promise<GenexCoverSent | null>;
 }
 
 /** How long the cover's own steps may take; tests shorten them. */
@@ -619,7 +618,7 @@ export class GenexTools {
     project: string,
     exportStage?: () => Promise<unknown>,
     camera?: CoverCamera,
-  ): Promise<GenexPublishView> {
+  ): Promise<GenexPublishState> {
     return this.#account(() =>
       this.#startPublish(project, GenexPublishKind.Draft, { exportStage, ...(camera ? { camera } : {}) }),
     );
@@ -635,7 +634,7 @@ export class GenexTools {
     exportStage: () => Promise<unknown>,
     title?: unknown,
     camera?: CoverCamera,
-  ): Promise<GenexPublishView> {
+  ): Promise<GenexPublishState> {
     return this.#account(() =>
       this.#startPublish(project, GenexPublishKind.Gallery, { exportStage, title, ...(camera ? { camera } : {}) }),
     );
@@ -657,7 +656,7 @@ export class GenexTools {
     project: string,
     kind: GenexPublishKind,
     { exportStage, title, camera }: { exportStage?: () => Promise<unknown>; title?: unknown; camera?: CoverCamera },
-  ): Promise<GenexPublishView> {
+  ): Promise<GenexPublishState> {
     const state = await this.publishStatus(project);
     if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirst);
     if (!(await this.#termsAccepted(project, state))) return state;
@@ -1008,7 +1007,7 @@ export class GenexTools {
    * Wait for the running upload and then for the cover it sends, together bounded well under the
    * host's invocation ceiling; then report, cover and all.
    */
-  async publishWait(project: string, jobId?: string, maxMs = PUBLISH_WAIT_MS): Promise<GenexPublishView> {
+  async publishWait(project: string, jobId?: string, maxMs = PUBLISH_WAIT_MS): Promise<GenexPublishState> {
     const deadline = Date.now() + Math.max(MIN_PUBLISH_WAIT_MS, Math.min(maxMs, PUBLISH_WAIT_MS));
     const live = this.#publishJobs.get(project);
     if (live && (!jobId || live.job.id === jobId)) await within(live.done, deadline - Date.now());
@@ -1019,7 +1018,7 @@ export class GenexTools {
     return this.publishView(project);
   }
   /** What a publish-status call answers: {@link publishStatus} with this game's cover. */
-  async publishView(project: string, force = false): Promise<GenexPublishView> {
+  async publishView(project: string, force = false): Promise<GenexPublishState> {
     return this.#withCover(project, await this.publishStatus(project, force));
   }
   /** The one link this action may hand to the browser, checked against Genex's own hosts. */
@@ -1046,7 +1045,7 @@ export class GenexTools {
     return state;
   }
   /** A publish state with the game's cover, and the cover lines of its own job among its warnings. */
-  async #withCover(project: string, state: GenexPublishState): Promise<GenexPublishView> {
+  async #withCover(project: string, state: GenexPublishState): Promise<GenexPublishState> {
     const dir = this.#coverDir(project);
     const [shot, last] = await Promise.all([readShot(dir), readSent(dir)]);
     const own = last?.jobId !== undefined && last.jobId === state.job?.id;
@@ -1095,11 +1094,12 @@ export class GenexTools {
     const [shot, last, pages] = await Promise.all([readShot(dir), readSent(dir), this.#pages(project)]);
     const asksGenex = Boolean(pages.slug) && Boolean(await this.#token());
     const hosted = asksGenex ? await this.#hostedCoverView(project) : null;
+    const noted = await this.#keepOwnerPick(project, dir, hosted);
     const delivery = coverDelivery(pages);
     return {
       operation: CoverOperation.Status,
       shot: shot ? { ...shot, advice: coverAdvice(shot) } : null,
-      last,
+      last: noted ?? last,
       sending: this.#coverSteps.has(project),
       hosted,
       sends: delivery,
@@ -1107,22 +1107,38 @@ export class GenexTools {
     };
   }
   /**
+   * With no shot kept, the owner's own cover that Genex reports is kept as the game's last cover
+   * answer, so nothing asks for a cover the owner chose. A running send or a kept shot records its
+   * own answer instead; an owner's pick already kept is left as it is. Null when nothing was kept.
+   */
+  async #keepOwnerPick(project: string, dir: string, view: CoverView | null): Promise<GenexCoverSent | null> {
+    const owner = ownerPick(view);
+    if (!owner || this.#coverSteps.has(project)) return null;
+    return this.#coverWrite(project, async () => {
+      const [shot, last] = await Promise.all([readShot(dir), readSent(dir)]);
+      if (shot || last?.kind === GenexCoverOutcome.KeptOwner) return null;
+      const record = keptOwnerRecord(null, owner, new Date(this.#now()).toISOString());
+      await writeSent(dir, record);
+      return record;
+    });
+  }
+  /**
    * genex__cover-set, after the user said yes: send the kept shot now through the same step a publish
    * uses. Without a hosted project it sends nothing, and it never runs beside a publish of this game.
    */
-  async coverSet(project: string): Promise<Record<string, unknown> & { kind: CoverOutcomeKind }> {
+  async coverSet(project: string): Promise<Record<string, unknown> & { kind: GenexCoverOutcome }> {
     const started = await this.#account(async () => {
       const state = await this.publishStatus(project);
       if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirst);
-      if (this.#publishJobs.has(project)) return CoverOutcomeKind.Busy;
-      if (!state.slug) return CoverOutcomeKind.NotHosted;
+      if (this.#publishJobs.has(project)) return GenexCoverOutcome.Busy;
+      if (!state.slug) return GenexCoverOutcome.NotHosted;
       if (!(await this.#termsAccepted(project, state))) throw new Error(COVER_MESSAGE.TermsFirst);
       await this.#stopCoverStep(project);
       return this.#startCoverStep(project);
     });
     // A publish that started meanwhile stopped this send: it shoots and sends its own frame.
     const record = typeof started === "string" ? null : await started.done;
-    const kind = typeof started === "string" ? started : (record?.kind ?? CoverOutcomeKind.Busy);
+    const kind = typeof started === "string" ? started : (record?.kind ?? GenexCoverOutcome.Busy);
     return { ...record, kind, guidance: OUTCOME_GUIDANCE[kind] };
   }
   /**
@@ -1196,18 +1212,21 @@ export class GenexTools {
    * the outcome written; a send stopped midway writes nothing, so the next one decides afresh. Null
    * when stopped.
    */
-  async #sendCover(project: string, signal: AbortSignal, jobId?: string): Promise<CoverSent | null> {
+  async #sendCover(project: string, signal: AbortSignal, jobId?: string): Promise<GenexCoverSent | null> {
     const dir = this.#coverDir(project);
     const { shot, last, decision, copy } = await this.#planSend(project, dir);
     const at = () => new Date(this.#now()).toISOString();
     if (!shot || !copy) {
-      const unchanged = decision.send === false && decision.kind === CoverOutcomeKind.Unchanged && last;
-      return this.#keepSent(dir, signal, unchanged ? unchangedRecord(last, at(), jobId) : noneRecord(at(), jobId));
+      const unchanged = decision.send === false && decision.kind === GenexCoverOutcome.Unchanged && last;
+      if (unchanged) return this.#keepSent(dir, signal, unchangedRecord(last, at(), jobId));
+      // Nothing to send: still ask who chose the cover, so the owner's pick is never taken for none.
+      const owner = ownerPick(await this.#hostedCoverView(project, signal));
+      return this.#keepSent(dir, signal, owner ? keptOwnerRecord(null, owner, at(), jobId) : noneRecord(at(), jobId));
     }
     try {
-      const view = await this.#hostedCoverView(project, signal);
+      const owner = ownerPick(await this.#hostedCoverView(project, signal));
       if (signal.aborted) return null;
-      if (view && ownerHolds(view)) return this.#keepSent(dir, signal, keptOwnerRecord(shot, view, at(), jobId));
+      if (owner) return this.#keepSent(dir, signal, keptOwnerRecord(shot, owner, at(), jobId));
       const answer = await this.#uploadCover(project, copy, signal);
       return this.#keepSent(dir, signal, sentRecord(answer, shot, at(), jobId));
     } finally {
@@ -1215,7 +1234,7 @@ export class GenexTools {
     }
   }
   /** Write a send's outcome, unless the send was stopped. */
-  async #keepSent(dir: string, signal: AbortSignal, record: CoverSent): Promise<CoverSent | null> {
+  async #keepSent(dir: string, signal: AbortSignal, record: GenexCoverSent): Promise<GenexCoverSent | null> {
     if (signal.aborted) return null;
     await writeSent(dir, record);
     return record;
@@ -1256,7 +1275,7 @@ export class GenexTools {
       return answer;
     } catch (error) {
       const timedOut = error instanceof GenexCliStopped && error.timedOut;
-      return { kind: CoverOutcomeKind.Failed, message: timedOut ? COVER_MESSAGE.SendTimedOut : errorMessage(error) };
+      return { kind: GenexCoverOutcome.Failed, message: timedOut ? COVER_MESSAGE.SendTimedOut : errorMessage(error) };
     }
   }
   /** Asset commands: structured output, the asset timeout, the user's own HOME. */
