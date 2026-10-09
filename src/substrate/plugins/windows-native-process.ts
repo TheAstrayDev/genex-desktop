@@ -56,7 +56,8 @@ function startHelper(script: string, spec: string, cleanupOnly = false) {
 /** A fresh trusted broker can undo flushed grants after a crashed or forcibly stopped broker. */
 async function recoverControl(script: string, control: string) {
   if (existsSync(path.join(control, "cleanup.ok"))) return;
-  if (!existsSync(path.join(control, "spec.json"))) return;
+  // Only the trusted C# broker can write this marker, before any account or ACL mutation.
+  if (!existsSync(path.join(control, "broker.ready"))) return;
   const child = startHelper(script, path.join(control, "spec.json"), true);
   let stderr = "";
   child.stderr.on("data", (data) => {
@@ -86,10 +87,12 @@ async function readOutcome(control: string) {
   if (!outcome || typeof outcome !== "object") throw new Error(MESSAGE.invalidOutcome);
   const value = outcome as Record<string, unknown>;
   const validCode = typeof value.code === "number" && Number.isInteger(value.code);
-  const validPid = typeof value.pid === "number" && Number.isInteger(value.pid) && value.pid > 0;
+  const validPid =
+    (typeof value.pid === "number" && Number.isInteger(value.pid) && value.pid > 0) ||
+    (value.pid === null && value.reason === NativeEndReason.Cancelled);
   const validReason = value.reason === NativeEndReason.Exit || value.reason === NativeEndReason.Cancelled;
   if (!validCode || !validPid || !validReason) throw new Error(MESSAGE.invalidOutcome);
-  return value as { code: number; pid: number; reason: NativeEndReason };
+  return value as { code: number; pid: number | null; reason: NativeEndReason };
 }
 
 /** The child gets system basics and its own scratch environment, with no provider credentials. */
@@ -156,6 +159,7 @@ function executeHelper(p: NativeProcessRequest, script: string, spec: string, co
     if (reason !== NativeEndReason.Exit) return;
     reason = why;
     void writeFile(path.join(control, "stop"), "stop").catch(() => {});
+    if (!existsSync(path.join(control, "broker.ready"))) void killProcessTree(child.pid);
     force = setTimeout(() => {
       void killProcessTree(child.pid);
     }, STOP_GRACE_MS);
@@ -179,19 +183,32 @@ function executeHelper(p: NativeProcessRequest, script: string, spec: string, co
     child.once("close", async (code) => {
       cleanup();
       try {
-        if (code !== 0) throw new Error(MESSAGE.helperFailed(stderr.toString("utf8")));
-        const outcome = await readOutcome(control);
-        resolve({
-          code: outcome.code,
-          signal: null,
-          stdout: stdout.toString("utf8"),
-          stderr: stderr.toString("utf8"),
-          reason: reason === NativeEndReason.Exit ? outcome.reason : reason,
-          pid: outcome.pid,
-        });
+        resolve(await closedResult(code, reason, control, stdout, stderr));
       } catch (error) {
         reject(error);
       }
     });
   });
+}
+
+/** A stop during compilation has no runtime PID or outcome; completed brokers report their outcome. */
+async function closedResult(
+  code: number | null,
+  reason: NativeEndReason,
+  control: string,
+  stdout: Buffer,
+  stderr: Buffer,
+): Promise<NativeProcessResult> {
+  const output = { stdout: stdout.toString("utf8"), stderr: stderr.toString("utf8"), signal: null };
+  if (code !== 0) {
+    if (reason === NativeEndReason.Exit) throw new Error(MESSAGE.helperFailed(output.stderr));
+    return { ...output, code: null, reason, pid: null };
+  }
+  const outcome = await readOutcome(control);
+  return {
+    ...output,
+    code: outcome.code,
+    pid: outcome.pid,
+    reason: reason === NativeEndReason.Exit ? outcome.reason : reason,
+  };
 }

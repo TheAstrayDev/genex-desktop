@@ -7,7 +7,7 @@ try {
     Add-Type -Path (Join-Path $PSScriptRoot 'windows-native.cs')
     $spec = Get-Content -LiteralPath $SpecFile -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($CleanupOnly) {
-        [GenexNative.ContainerJob]::Recover([string]$spec.profile, [string]$spec.control)
+        [GenexNative.ContainerJob]::Recover([string]$spec.profile, [string]$spec.control, [string[]](@($spec.reads) + @($spec.writes) + @($spec.denied)))
         exit 0
     }
     $environment = @{}

@@ -1,6 +1,6 @@
 /** Real Windows native jobs: isolated input/output, no network and bounded process trees. */
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
@@ -69,6 +69,111 @@ async function running(pid: number) {
   return stdout.split("\n").some((line) => line.includes(`"${pid}"`));
 }
 
+/** Pin this exact process before killing the broker: a PID can be reused in the parallel suite. */
+async function observeExit(pid: number) {
+  const powershell = path.join(
+    process.env.SystemRoot || "C:\\Windows",
+    "System32/WindowsPowerShell/v1.0/powershell.exe",
+  );
+  const child = spawn(
+    powershell,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `$ErrorActionPreference='Stop';$observed=Get-Process -Id ${pid};$null=$observed.Handle;[Console]::WriteLine('pinned');if(-not $observed.WaitForExit(5000)){throw 'Native process did not exit'};$observed.Dispose()`,
+    ],
+    { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let output = "";
+  let stderr = "";
+  let pinned = () => {};
+  const ready = new Promise<void>((resolve) => {
+    pinned = resolve;
+  });
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+    if (output.includes("pinned")) pinned();
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const exited = new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => {
+      pinned();
+      if (code === 0) resolve();
+      else reject(new Error(stderr));
+    });
+  });
+  // Register rejection immediately, even if preparation fails before the caller awaits it.
+  void exited.catch(() => {});
+  await ready;
+  assert.match(output, /pinned/, stderr);
+  return { exited };
+}
+
+async function noncanonicalFixture(folder: string, script: string) {
+  await writeFile(
+    script,
+    `param([string]$Folder)
+$ErrorActionPreference = 'Stop'
+Add-Type @'
+using System.Runtime.InteropServices;
+public static class FixtureAcl {
+  [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern bool SetFileSecurity(string path, uint info, byte[] descriptor);
+}
+
+'@
+$acl = (Get-Item -LiteralPath $Folder).GetAccessControl()
+$raw = New-Object System.Security.AccessControl.RawSecurityDescriptor($acl.GetSecurityDescriptorBinaryForm(), 0)
+$sid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-21-111-222-333-444')
+$ace = New-Object System.Security.AccessControl.CommonAce([System.Security.AccessControl.AceFlags]::Inherited, [System.Security.AccessControl.AceQualifier]::AccessAllowed, 128, $sid, $false, $null)
+$raw.DiscretionaryAcl.InsertAce(0, $ace)
+# Keep this hostile ordering independent of the fixture parent's inheritance: a private
+# Windows profile may contain only inherited ACEs, which the first insertion alone leaves canonical.
+$explicit = New-Object System.Security.AccessControl.CommonAce([System.Security.AccessControl.AceFlags]::None, [System.Security.AccessControl.AceQualifier]::AccessAllowed, 128, $sid, $false, $null)
+$raw.DiscretionaryAcl.InsertAce($raw.DiscretionaryAcl.Count, $explicit)
+$raw.SetFlags(($raw.ControlFlags -bor [System.Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -band (-bnot 0x500))
+$bytes = New-Object byte[] $raw.BinaryLength
+$raw.GetBinaryForm($bytes, 0)
+if (-not [FixtureAcl]::SetFileSecurity($Folder, 4, $bytes)) { throw 'Cannot prepare owned DACL fixture' }
+if ((Get-Item -LiteralPath $Folder).GetAccessControl().AreAccessRulesCanonical) { throw 'Fixture must be noncanonical' }
+`,
+  );
+  await exec(path.join(process.env.SystemRoot || "C:\\Windows", "System32/WindowsPowerShell/v1.0/powershell.exe"), [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    script,
+    folder,
+  ]);
+}
+
+async function securitySnapshot(files: string[], root: string) {
+  const spec = path.join(root, "acl-paths.json");
+  const script = path.join(root, "read-acls.ps1");
+  await writeFile(spec, JSON.stringify(files));
+  await writeFile(
+    script,
+    `param([string]$Spec)
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$items = Get-Content -LiteralPath $Spec -Raw -Encoding UTF8 | ConvertFrom-Json
+$records = @(foreach ($file in $items) { (Get-Item -LiteralPath $file).GetAccessControl().GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::All) })
+ConvertTo-Json -InputObject $records -Compress
+`,
+  );
+  const result = await exec(
+    path.join(process.env.SystemRoot || "C:\\Windows", "System32/WindowsPowerShell/v1.0/powershell.exe"),
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, spec],
+  );
+  return JSON.parse(result.stdout);
+}
+
 async function blenderFbxJob(code: string, stagedSource?: string) {
   assert.ok(BLENDER);
   const f = await setup();
@@ -128,6 +233,60 @@ async function blenderFbxJob(code: string, stagedSource?: string) {
 }
 
 describe("Windows native runtime", { skip: process.platform !== "win32" && "Windows AppContainer only" }, () => {
+  it("preserves a noncanonical ACL, existing descendants and foreign junction targets", async () => {
+    const f = await setup();
+    const nested = path.join(f.output, "existing");
+    const foreign = path.join(f.root, "foreign");
+    await noncanonicalFixture(f.output, path.join(f.root, "fixture-acl.ps1"));
+    await mkdir(nested);
+    await mkdir(foreign);
+    const existing = path.join(nested, "original.txt");
+    const secret = path.join(foreign, "secret.txt");
+    await writeFile(existing, "before");
+    await writeFile(secret, "foreign-secret");
+    const { symlink } = await import("node:fs/promises");
+    await symlink(foreign, path.join(f.output, "foreign-link"), "junction");
+    const paths = [f.output, nested, existing, foreign, secret];
+    const snapshot = () => Promise.all(paths.map(async (file) => (await exec("icacls.exe", [file])).stdout));
+    const before = await snapshot();
+    const descriptorBefore = await securitySnapshot(paths, f.root);
+    const result = await f.run(
+      `
+      const fs = require('node:fs');
+      fs.writeFileSync(process.argv[1], 'after');
+      fs.mkdirSync(process.argv[2]); fs.writeFileSync(process.argv[2] + '/new.txt', 'new');
+      try { fs.readFileSync(process.argv[3]); process.exit(20); } catch (error) { console.log(error.code); }
+    `,
+      [existing, path.join(f.output, "created"), secret],
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /EACCES|EPERM/);
+    assert.equal(await readFile(existing, "utf8"), "after");
+    assert.deepEqual(await snapshot(), before, "original ACE order and foreign permissions are retained");
+    assert.deepEqual(
+      await securitySnapshot(paths, f.root),
+      descriptorBefore,
+      "owner, group and DACL control flags are restored",
+    );
+    const createdAcl = (await exec("icacls.exe", [path.join(f.output, "created/new.txt")])).stdout;
+    assert.doesNotMatch(createdAcl, /S-1-15-2-/, "new descendants retain no temporary AppContainer grant");
+    const brokerFile = path.join(f.output, "broker.json");
+    const held = f
+      .run(
+        "require('node:fs').writeFileSync(process.argv[1], JSON.stringify({pid:process.pid,broker:process.ppid})); setInterval(() => {}, 1000)",
+        [brokerFile],
+      )
+      .catch((error: unknown) => error);
+    await marker(brokerFile);
+    const { pid, broker } = JSON.parse(await readFile(brokerFile, "utf8"));
+    const observer = await observeExit(pid);
+    await exec("taskkill.exe", ["/PID", String(broker), "/F"]);
+    assert.ok((await held) instanceof Error);
+    await observer.exited;
+    assert.deepEqual(await snapshot(), before, "crash recovery also preserves existing descendants");
+    assert.deepEqual(await securitySnapshot(paths, f.root), descriptorBefore);
+  });
+
   it("runs the selected executable with literal spaced arguments and captures both output streams", async () => {
     const f = await setup();
     const before = await exec("icacls.exe", [f.output]);
@@ -209,6 +368,45 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     } finally {
       stop.abort();
       assert.equal((await held).reason, "cancelled");
+    }
+  });
+
+  it("jobs sharing a noncanonical runtime queue and restore its original permissions", async () => {
+    const first = await setup();
+    const second = await setup();
+    await noncanonicalFixture(first.runtime, path.join(first.root, "fixture-acl.ps1"));
+    const before = (await exec("icacls.exe", [first.runtime])).stdout;
+    const active = path.join(first.output, "active");
+    const stop = new AbortController();
+    const held = first.run(
+      "require('node:fs').writeFileSync(process.argv[1], 'ready'); setInterval(() => {}, 1000)",
+      [active],
+      { signal: stop.signal },
+    );
+    let queued: Promise<Awaited<ReturnType<typeof first.run>>> | undefined;
+    try {
+      await marker(active);
+      queued = second.run("console.log('queued-job')", [], {
+        binary: path.join(first.runtime, "node.exe"),
+        binaryRoot: first.runtime,
+      });
+      let waiting: string | undefined;
+      for (let poll = 0; poll < MARKER_POLLS && !waiting; poll++) {
+        const control = (await readdir(second.root)).find((name) => name.startsWith(".native-control-"));
+        if (control && existsSync(path.join(second.root, control, "grants.waiting"))) waiting = control;
+        else await delay(POLL_MS);
+      }
+      assert.ok(waiting, "the second broker waits for the shared root instead of recording transient protection");
+      stop.abort();
+      assert.equal((await held).reason, "cancelled");
+      const result = await queued;
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(result.stdout, /queued-job/);
+      assert.equal((await exec("icacls.exe", [first.runtime])).stdout, before);
+    } finally {
+      stop.abort();
+      await held;
+      await queued;
     }
   });
 
@@ -368,6 +566,25 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
       assert.equal(path.dirname(control), f.root);
       await rm(control, { recursive: true, force: true });
     }
+  });
+
+  it("a startup deadline stops an unready broker without launching the runtime or leaving grants", async () => {
+    const f = await setup();
+    const before = (await exec("icacls.exe", [f.output])).stdout;
+    const sideEffect = path.join(f.output, "must-not-run.txt");
+    const started = Date.now();
+    const timed = await f.run("require('node:fs').writeFileSync(process.argv[1], 'late')", [sideEffect], {
+      timeoutMs: 1,
+    });
+    assert.equal(timed.reason, "timeout");
+    assert.equal(timed.pid, null, "no runtime was created before the deadline");
+    assert.ok(Date.now() - started < 10_000, "startup timeout also has bounded cleanup");
+    assert.equal(existsSync(sideEffect), false, "a cancelled launch cannot run late");
+    assert.equal((await exec("icacls.exe", [f.output])).stdout, before, "no temporary grants survive");
+    assert.equal(
+      (await readdir(f.root)).some((name) => name.startsWith(".native-control-")),
+      false,
+    );
   });
 
   it("a timeout is bounded and a normal exit also removes detached descendants", async () => {

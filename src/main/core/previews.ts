@@ -605,16 +605,18 @@ export class PreviewService {
   }
 
   /** `preview.load`: serve a game (or a checked worktree of it) into a preview, one load per handle at a time. */
-  async loadPreview(p: HarnessParams<"preview.load">): Promise<string> {
-    const game = (await this.#core.games.list()).find((candidate) => candidate.name === p.project);
-    if (game?.shape.kind === "unity") {
-      if (p.handle || p.root || p.candidateId) throw new Error(UNITY_EDITOR_REQUIRED);
-      await this.stopLive();
-      this.#x.servedRoots.delete(LIVE_HANDLE);
-      return `unity:${encodeURIComponent(p.project)}`;
-    }
+  loadPreview(p: HarnessParams<"preview.load">): Promise<string> {
     const handle = p.handle ?? LIVE_HANDLE;
     return serial(this.#x.previewOperations, handle, async () => {
+      // Reserve the handle before filesystem work, so a later Stop cannot overtake this load.
+      const game = (await this.#core.games.list()).find((candidate) => candidate.name === p.project);
+      if (game?.shape.kind === "unity") {
+        if (p.handle || p.root || p.candidateId) throw new Error(UNITY_EDITOR_REQUIRED);
+        // This operation already owns Live's queue; enqueueing stopLive here would wait on itself.
+        await this.#optionalPreview()?.stop?.();
+        this.#x.servedRoots.delete(LIVE_HANDLE);
+        return `unity:${encodeURIComponent(p.project)}`;
+      }
       const profiling = Boolean(p.candidateId && p.revision);
       const checkedRoot = await this.#x.assertHarnessRoot(p.project, profiling ? null : p.root);
       this.#x.profileSources.delete(handle);

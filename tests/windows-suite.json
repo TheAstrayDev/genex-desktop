@@ -109,6 +109,7 @@
   "tests/conformance/judge-rubrics.test.ts",
   "tests/conformance/known-secrets.test.ts",
   "tests/conformance/link-policy.test.ts",
+  "tests/conformance/live-stop.test.ts",
   "tests/conformance/live-tool-results.test.ts",
   "tests/conformance/loop-build-turn.test.ts",
   "tests/conformance/loop-duration.test.ts",
