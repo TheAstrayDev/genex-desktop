@@ -77,3 +77,11 @@ arguments, results and limits. [Editor tests](../src/plugins/unity/editor-packag
 exercise native behavior. JavaScript transport/setup tests and C# compilation alone do not
 prove live scene editing, Play mode, Test Runner, captures or player builds. Release acceptance
 requires an activated Editor and a disposable project through each of those operations.
+
+## License and integration authorization
+
+The bridge package is MIT; Unity Editor and its UPM dependencies retain their own terms.
+An activated Editor does not establish permission for this integration. Unity's
+[Terms of Service](https://unity.com/legal/terms-of-service) restrict agentic access
+(sections 17.2 and 26). Authorization for this direct local bridge is not established;
+confirm applicable permissions or an authorized route before live agent use.
