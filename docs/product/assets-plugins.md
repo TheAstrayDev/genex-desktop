@@ -2,18 +2,18 @@
 
 ## Assets in a game
 
-Assets groups `assets/`, `public/assets/` and native Unity `Assets/Generated/` files by source and generation, even before a
-build exists; deliveries and external changes refresh it. Cards hide metadata; animation-only GLBs fold
+Assets groups `assets/`, `public/assets/` and Unity `Assets/Generated/` files by source and generation, even before a
+build; deliveries and external changes refresh it. Cards hide metadata; animation-only GLBs fold
 into their model.
 
-Opening a file shows it with only Reveal in Finder and Close: images (click: full
+A file opens with only Reveal in Finder and Close: images (click: full
 size), audio/video, 3D models playing their clips, textures or bounded text. Unsupported
-formats and decoder failures explain themselves. Media reads are bounded; offscreen previews load lazily.
+formats and decoder failures explain themselves. Reads are bounded; offscreen previews load lazily.
 
 Chat shows game-folder files. Builds shows Loop workspace assets as thumbnails with their
-location until landing; checks and Blender passes on an asset are notes. Visual results use lazy two-column previews; sounds play in compact rows.
-Chat offers Open in Assets and bounded batches. Job completion or “seen in game” observations
-do not prove correct integration or passing checks.
+location until landing; checks and Blender passes on an asset are notes.
+Chat offers Open in Assets and bounded batches. Job completion or “seen in game”
+proves neither correct integration nor passing checks.
 
 ## Tools and setup
 
@@ -31,15 +31,18 @@ opens browser sign-in; setup survives restart and reinstall. Game spend is in th
 Enabled Genex suggests assets in planning; workers use it once the account is ready. User
 preferences win; failures and fallbacks are disclosed.
 Genex bundles its MCP with the same account: game/animation search, owned games and
-generation status. Studio’s host tools handle generation, delivery, credits and publishing,
-and run the pinned Genex CLI outside the game: `genex__cli` free; `genex__cli-paid` and
+generation status. Host tools handle generation, delivery, credits and publishing
+and run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
 `genex__package` (pinned multiplayer or player-identity package, build games) after consent.
-Publish (a host-drawn stage dialog) tests the draft before making it public.
+Publish (a host-drawn stage dialog) tests the draft, makes it public, then sends the
+game's `genex-cover` demo frame as its Genex cover (not the sidebar sphere); without one, Ask for a
+cover drafts that request in chat. Agents check it before every publish (`genex__cover`);
+consented `genex__cover-set` sends it.
 Agents read Genex’s guide and cards via `genex__skill`, never from game files.
 Plugin MCPs connect on first use; the composer shows only actionable failures.
 
 The curated catalog is served anonymously from `plugins.genex.games`; reviewed release records
-live in `genex-games/genex-plugins`. Genex and Local Blender are the initial official entries.
+live in `genex-games/genex-plugins`. Genex and Local Blender are official entries.
 Catalog installation requires native-code trust; updates preserve data and require a newer
 compatible release. See the [release procedure](../STUDIO-MARKETPLACE-RELEASE.md).
 
@@ -57,7 +60,7 @@ for a second approval. Revocation prevents future calls; remote side effects rem
 
 Removal preserves data, credentials and jobs; another source reusing a plugin's id needs
 **Replace and erase data**, and bundled ids cannot be taken. Reinstall is explicit, even for bundled plugins;
-local reinstall reviews a fresh snapshot. Updates preserve settings and jobs. Host-managed
+local reinstall reviews a fresh snapshot. Host-managed
 secrets never enter composer text.
 
 Skills lists Studio’s own (local chat, planner, director), this game’s, each provider’s global
@@ -71,6 +74,6 @@ is read-only.
 [AssetPreview](../../src/renderer/panels/AssetPreview.tsx),
 [AssetResults](../../src/renderer/chat/AssetResults.tsx) and
 [PluginsPanel](../../src/renderer/panels/PluginsPanel.tsx) own the UI.
-Details: the [plugin host contract](../plugins.md) (lifecycle, security, skills), the
+Details: the [plugin host contract](../plugins.md), the
 [Plugin guide](../PLUGIN_GUIDE.md) (authoring) and
 [Connections and context](../connections-and-context.md) (setup).

@@ -1,8 +1,9 @@
 /**
  * The Publish dialog's view of Genex's publish record: where the game is (not online, draft only,
  * public), the running attempt's steps, how the last one ended, and the one press the next step needs. What Publish asks
- * for first (Genex installed and on, then an account) and whether Studio puts Publish on the strip
- * itself are decided here too. Pure, so the dialog only draws it.
+ * for first (Genex installed and on, then an account), whether to ask the game's chat for a Genex
+ * cover, and whether Studio puts Publish on the strip itself are decided here too. Pure, so the
+ * dialog only draws it.
  */
 import {
   cleanGenexTitle,
@@ -10,6 +11,8 @@ import {
   GENEX_PLUGIN_ID,
   GENEX_PUBLISH_PANEL,
   GenexAction,
+  GenexCoverOutcome,
+  type GenexCoverSent,
   GenexHostedStatus,
   GenexPublishJobState,
   GenexPublishKind,
@@ -101,6 +104,8 @@ export interface PublishView {
   failure: { title: string; text: string; details: string } | null;
   /** The link anyone can play, once the game is public. */
   link: string | null;
+  /** The game has no Genex cover to send and its owner chose none: offer to ask its chat for one. */
+  coverAsk: boolean;
 }
 
 export const isListed = (state: GenexPublishState): boolean => state.status === GenexHostedStatus.Published;
@@ -184,6 +189,27 @@ function failureOf(outcome: PublishOutcome, state: GenexPublishState, job: Genex
   return { title: WORDS.failedTitle, text: isListed(state) ? WORDS.failedKept : WORDS.failedText, details };
 }
 
+/** Answers that mean the owner chose the game's cover on genex.games: that choice stands, so nobody asks for another. */
+const OWNER_CHOSE = new Set<GenexCoverOutcome>([GenexCoverOutcome.KeptOwner, GenexCoverOutcome.Outranked]);
+
+/** Whether the last send found the owner's own cover, then or when these bytes were first sent. */
+function ownerChose(last: GenexCoverSent | null): boolean {
+  if (!last) return false;
+  return [last.kind, last.settled].some((kind) => kind !== undefined && OWNER_CHOSE.has(kind));
+}
+
+/**
+ * Whether the dialog offers to ask the game's chat for a Genex cover: the plugin reports its cover
+ * (an older one does not), no shot is kept to send, none is being sent, no publish is running (it
+ * shoots the cover itself), and the owner chose none on genex.games.
+ */
+export function coverAsk(state: GenexPublishState): boolean {
+  const cover = state.cover;
+  if (!cover || cover.shot) return false;
+  if (cover.sending || isLive(state.job)) return false;
+  return !ownerChose(cover.last);
+}
+
 /** The dialog's view of a publish record, at `now`. */
 export function publishView(state: GenexPublishState, now = Date.now()): PublishView {
   const job = state.job;
@@ -218,6 +244,7 @@ export function publishView(state: GenexPublishState, now = Date.now()): Publish
     problems: state.terms?.accepted === false ? [WORDS.termsNote] : [],
     failure: failureOf(outcome, state, job),
     link: listed ? (state.galleryUrl ?? null) : null,
+    coverAsk: coverAsk(state),
   };
 }
 
