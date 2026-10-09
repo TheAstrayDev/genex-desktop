@@ -1,5 +1,5 @@
 import type { AudioPlaybackEvidence } from "./audio-observation.ts";
-import type { CaptureSource, StillExposure, StillMimeType } from "./preview-contract.ts";
+import { type CaptureSource, type StillExposure, StillMimeType } from "./preview-contract.ts";
 
 /** The bundled Genex plugin's id: the host's own Genex surfaces (its page, the promo) look it up by this. */
 export const GENEX_PLUGIN_ID = "genex";
@@ -295,6 +295,25 @@ export const GenexCoverOutcome = {
   Busy: "busy",
 } as const;
 export type GenexCoverOutcome = (typeof GenexCoverOutcome)[keyof typeof GenexCoverOutcome];
+
+/** The cover tool plugin.json declares (`genex__cover`): its kept shot is the card the chat shows. */
+export const GENEX_COVER_TOOL = "cover";
+
+/** What genex__cover does: photograph the genex-cover demo and keep it, or report the cover's state. */
+export const GenexCoverOperation = { Shoot: "shoot", Status: "status" } as const;
+export type GenexCoverOperation = (typeof GenexCoverOperation)[keyof typeof GenexCoverOperation];
+
+/** The folder of the Genex plugin's storage that holds one folder per game's cover, `covers/<project>/`. */
+export const GENEX_COVERS_DIR = "covers";
+
+/** The kept shot's image beside its record in `covers/<project>/`, named by its type. */
+export const GENEX_COVER_SHOT_FILE = {
+  [StillMimeType.Png]: "shot.png",
+  [StillMimeType.Jpeg]: "shot.jpg",
+} as const satisfies Record<StillMimeType, string>;
+
+/** Mirror of Genex's cover upload limit (the CLI's `COVER_MAX_BYTES`, the API's `COVER_MAX_UPLOAD_BYTES`). */
+export const GENEX_COVER_MAX_BYTES = 8 * 1024 * 1024;
 
 /** The game's Genex cover shot the plugin keeps (`covers/<project>/shot.json`), beside its image. */
 export interface GenexCoverShot {

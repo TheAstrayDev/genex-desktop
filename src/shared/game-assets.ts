@@ -125,6 +125,33 @@ export function deliveredToBuild(delivery: Pick<AssetDeliveredPayload, "workspac
   );
 }
 
+/**
+ * Where `readProjectAsset` reads its one picture: the game's own asset folders, one Genex job's
+ * saved inspection frame, or the game's kept Genex cover shot in the Genex plugin's storage. Wire
+ * values: never rename one.
+ */
+export const ProjectAssetScope = {
+  Game: "game",
+  GenexInspection: "genex-inspection",
+  GenexCover: "genex-cover",
+} as const;
+export type ProjectAssetScope = (typeof ProjectAssetScope)[keyof typeof ProjectAssetScope];
+
+/**
+ * What `readProjectAsset` is asked for. A file of the game (or of a Genex job) is named by the
+ * caller; the Genex cover shot never is: the host builds its place from the game's name alone.
+ * `maxPx` asks for a downscale.
+ */
+export type ProjectAssetRead =
+  | {
+      project: string;
+      file: string;
+      maxPx?: number;
+      scope?: typeof ProjectAssetScope.Game | typeof ProjectAssetScope.GenexInspection;
+      jobId?: string;
+    }
+  | { project: string; scope: typeof ProjectAssetScope.GenexCover; maxPx?: number };
+
 /** Which session asked for the tool. There is no `role` on a delegate request; it is derived. */
 export type PluginToolRole = "director" | "builder" | "chat";
 

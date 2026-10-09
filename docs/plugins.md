@@ -677,7 +677,12 @@ Genex:
   denied, and the workspace content filters skip `.genex` folders.
 - Core reads Genex job folders under `engine-homes/genex/projects/*/jobs` for the Assets inventory
   and provenance, resolves `@genex/` retained-asset references, and serves one saved inspection
-  frame through the `genex-inspection` scope of `readProjectAsset`.
+  frame through the `genex-inspection` scope of `readProjectAsset`. Its `genex-cover` scope serves
+  the game's kept cover shot (`readGenexCoverShot` in `main/game-assets.ts`): the host builds
+  `engine-homes/genex/covers/<project>/` from the validated game name, never from a path the
+  renderer or the plugin names, refuses a link anywhere on the way, and reads only `shot.png` or
+  `shot.jpg` (no link, at most 8 MiB, bytes of the type its name says; the newer when both are
+  there); anything else answers null. `genex-cover-shot.test.ts` holds its hostile table.
 - A game using `@genex-ai/embed-sdk` is previewed with `?genex_local_test=1`.
 - `tools[].host` (API 3, id `genex`, source `bundled`, else refused before any hook runs) names a
   program Studio runs for the tool through the registry's `hostTool` hook. `genex-cli` backs

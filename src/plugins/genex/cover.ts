@@ -15,7 +15,10 @@ import { lstat, mkdir, open, readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { SECOND_MS } from "../../shared/duration.ts";
 import {
+  GENEX_COVER_MAX_BYTES,
+  GENEX_COVER_SHOT_FILE,
   type GenexCoverFrameStats,
+  GenexCoverOperation,
   GenexCoverOutcome,
   type GenexCoverSent,
   type GenexCoverShot,
@@ -31,7 +34,7 @@ import { stripAnsi } from "./cli.ts";
 /** The demo a game stages its cover in (`config.demos`). */
 export const COVER_VIEW = "genex-cover";
 /** Mirror of Genex's cover upload limit (the CLI's `COVER_MAX_BYTES`, the API's `COVER_MAX_UPLOAD_BYTES`). */
-export const COVER_MAX_BYTES = 8 * 1024 * 1024;
+export const COVER_MAX_BYTES = GENEX_COVER_MAX_BYTES;
 /** What the host is asked for: the genex-cover demo at Genex's recommended 1920×1080, within its limit. */
 export const COVER_STILL = { demo: COVER_VIEW, width: 1920, height: 1080, maxBytes: COVER_MAX_BYTES } as const;
 /** Mirror of the host's ceiling for one backend call (`CALL_TIMEOUT_MS` in the plugin registry). */
@@ -57,7 +60,6 @@ const WIDE_TOLERANCE = 0.01;
 /** How much of the page's or the CLI's own words a record keeps. */
 const REASON_CHARS = 240;
 const AVAILABLE_MAX = 32;
-const SHOT_FILE = "shot";
 const SHOT_RECORD = "shot.json";
 const SENT_RECORD = "sent.json";
 /** A send's own copy of the shot it uploads, beside the shot: removed when the send ends. */
@@ -65,9 +67,9 @@ const SEND_COPY_PREFIX = ".send-";
 const PRIVATE_FILE = 0o600;
 const PRIVATE_DIR = 0o700;
 
-/** What genex__cover does. */
-export const CoverOperation = { Shoot: "shoot", Status: "status" } as const;
-export type CoverOperation = (typeof CoverOperation)[keyof typeof CoverOperation];
+/** What genex__cover does (`GenexCoverOperation`, which Studio's chat reads too). */
+export const CoverOperation = GenexCoverOperation;
+export type CoverOperation = GenexCoverOperation;
 
 const OUTCOME_KINDS = new Set<string>(Object.values(GenexCoverOutcome));
 /** Answers that settle a frame: sending the same bytes again would only get the same answer. */
@@ -490,9 +492,9 @@ const sentSizeLines = (kind: GenexCoverOutcome, shot: GenexCoverShot) =>
         .map((advice) => ADVICE_LINE[advice](shot))
     : [];
 
-/** One shot's image file, by its type. */
+/** One shot's image file, by its type (the names Studio's chat card reads it by, `GENEX_COVER_SHOT_FILE`). */
 export const shotPath = (dir: string, shot: Pick<GenexCoverShot, "mimeType">) =>
-  path.join(dir, `${SHOT_FILE}.${shot.mimeType === StillMimeType.Png ? "png" : "jpg"}`);
+  path.join(dir, GENEX_COVER_SHOT_FILE[shot.mimeType]);
 
 /** Whether a kept shot record is whole: every field typed as written. */
 function isShot(value: unknown): value is GenexCoverShot {
