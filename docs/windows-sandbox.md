@@ -87,6 +87,15 @@ The Squirrel installer is under `out/make/squirrel.windows/x64`.
 
 ## Residual risks
 
+Native asset jobs also accept noncanonical Windows DACLs, which .NET's rule editor refuses.
+The fallback journals temporary protection and integrity labels, pins paths without delete
+sharing, skips descendant links, and edits only each job's SID. Existing descendants are
+protected before parent edits; cleanup restores their original flags, ACE order and labels,
+including after broker death. Jobs sharing an exact grant root queue through named mutexes
+for their lifetime; independent roots can run together. Waiting remains cancellable and uses
+the job's existing deadline. Large noncanonical runtime trees require a walk; canonical paths
+retain the ordinary ACL writer.
+
 srt-win is alpha. Every srt host on the machine shares the
 `srt-sandbox` SID and so each other's grants and denies; revoking an `(RA)` grant also removes
 one another host made there (fail closed). DNS still resolves; the proxy token is on the

@@ -9,7 +9,10 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+using Microsoft.Win32.SafeHandles;
 
 namespace GenexNative {
     public sealed class Outcome {
@@ -97,6 +100,12 @@ namespace GenexNative {
         [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetTokenInformation(IntPtr token, int kind, out uint value, uint size, out uint returned);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern uint GetNamedSecurityInfo(string path, int kind, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern uint SetNamedSecurityInfo(string path, int kind, uint info, IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
+        [DllImport("ntdll.dll")] static extern int NtSetSecurityObject(SafeFileHandle handle, uint info, byte[] descriptor);
+        [DllImport("ntdll.dll")] static extern uint RtlNtStatusToDosError(int status);
+        [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+        [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int kind, out FileTag info, uint size);
+        [StructLayout(LayoutKind.Sequential)] struct FileTag { public uint Attributes, Tag; }
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool ConvertSecurityDescriptorToStringSecurityDescriptor(IntPtr descriptor, uint revision, uint info, out IntPtr text, out uint length);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string text, uint revision, out IntPtr descriptor, out uint size);
         [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetSecurityDescriptorSacl(IntPtr descriptor, out bool present, out IntPtr sacl, out bool defaulted);
@@ -134,14 +143,47 @@ namespace GenexNative {
             public FileSystemAccessRule Rule;
             public string Label;
             public bool HasLabel;
+            public bool Tree;
+            public ControlFlags? OriginalFlags;
+        }
+
+        // Shared grant roots serialize preparation, execution and restoration. A second
+        // broker must not record the first broker's temporary protection as its baseline.
+        sealed class PathLocks : IDisposable {
+            readonly List<Mutex> held = new List<Mutex>();
+            public bool Acquire(string[] paths, string control, int parentPid) {
+                var roots = new SortedSet<string>(StringComparer.Ordinal);
+                foreach (string path in paths) if (Directory.Exists(path) || File.Exists(path)) roots.Add(System.IO.Path.GetFullPath(path).TrimEnd('\\').ToUpperInvariant());
+                string user = WindowsIdentity.GetCurrent().User.Value;
+                foreach (string root in roots) {
+                    string name;
+                    using (var hash = SHA256.Create()) name = BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(user + "|" + root))).Replace("-", "");
+                    var mutex = new Mutex(false, "Global\\GenexNativeAcl-" + name);
+                    bool acquired = false;
+                    try {
+                        while (!acquired) {
+                            if (parentPid != 0 && StopRequested(control, parentPid)) return false;
+                            try { acquired = mutex.WaitOne(100); }
+                            catch (AbandonedMutexException) { acquired = true; }
+                            if (!acquired) File.WriteAllText(System.IO.Path.Combine(control, "grants.waiting"), "waiting");
+                        }
+                        held.Add(mutex);
+                    } finally { if (!acquired) mutex.Dispose(); }
+                }
+                return true;
+            }
+            public void Dispose() {
+                for (int i = held.Count - 1; i >= 0; i--) { held[i].ReleaseMutex(); held[i].Dispose(); }
+                held.Clear();
+            }
         }
 
         // The trusted host owns this journal outside the child's grants. A flushed record precedes
         // each ACL mutation, so another broker can undo a killed broker without guessing old labels.
         static void Journal(string control, Grant grant, bool deny) {
             string entry = Convert.ToBase64String(Encoding.UTF8.GetBytes(grant.Path)) + "|" +
-                (deny ? "deny" : grant.HasLabel ? "write" : "read") + "|" +
-                Convert.ToBase64String(Encoding.UTF8.GetBytes(grant.Label ?? "")) + "\n";
+                (grant.OriginalFlags.HasValue ? "flags" : grant.Rule == null ? "label" : (grant.Tree ? "tree-" : "") + (deny ? "deny" : grant.HasLabel ? "write" : "read")) + "|" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(grant.OriginalFlags.HasValue ? ((int)grant.OriginalFlags.Value).ToString() : grant.Label ?? "")) + "\n";
             using (var stream = new FileStream(System.IO.Path.Combine(control, "grants.log"), FileMode.Append, FileAccess.Write, FileShare.Read)) {
                 byte[] bytes = Encoding.UTF8.GetBytes(entry);
                 stream.Write(bytes, 0, bytes.Length);
@@ -203,12 +245,123 @@ namespace GenexNative {
                 if (descriptor != IntPtr.Zero) LocalFree(descriptor);
             }
         }
+        static void SetObjectLabel(string path, string text) {
+            IntPtr descriptor = IntPtr.Zero;
+            try {
+                uint size;
+                Check(ConvertStringSecurityDescriptorToSecurityDescriptor(String.IsNullOrEmpty(text) ? "S:" : text, 1, out descriptor, out size), "Parse object integrity label");
+                byte[] bytes = new byte[size];
+                Marshal.Copy(descriptor, bytes, 0, bytes.Length);
+                using (var pin = CreateFile(path, 0x00080080, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+                    Check(!pin.IsInvalid, "Open native label handle");
+                    int status = NtSetSecurityObject(pin, LabelInformation, bytes);
+                    if (status < 0) CheckCode(RtlNtStatusToDosError(status), "Set native object integrity label");
+                }
+            } finally { if (descriptor != IntPtr.Zero) LocalFree(descriptor); }
+        }
         static FileSystemSecurity ReadAcl(string path) {
             return Directory.Exists(path) ? (FileSystemSecurity)new DirectoryInfo(path).GetAccessControl() : new FileInfo(path).GetAccessControl();
         }
         static void WriteAcl(string path, FileSystemSecurity acl) {
             if (Directory.Exists(path)) new DirectoryInfo(path).SetAccessControl((DirectorySecurity)acl);
             else new FileInfo(path).SetAccessControl((FileSecurity)acl);
+        }
+        // Windows accepts noncanonical DACLs, but .NET's rule editor refuses them. Keep
+        // their original ACE order rather than sorting another principal's permissions.
+        static RawSecurityDescriptor ReadRawAcl(string path) {
+            IntPtr owner, group, dacl, sacl, descriptor;
+            CheckCode(GetNamedSecurityInfo(path, 1, 7, out owner, out group, out dacl, out sacl, out descriptor), "Read native path DACL");
+            try {
+                byte[] bytes = new byte[checked((int)GetSecurityDescriptorLength(descriptor))];
+                Marshal.Copy(descriptor, bytes, 0, bytes.Length);
+                return new RawSecurityDescriptor(bytes, 0);
+            } finally { LocalFree(descriptor); }
+        }
+        static RawAcl RawDacl(RawSecurityDescriptor descriptor) {
+            if (descriptor.DiscretionaryAcl == null) throw new IOException("Native sandbox cannot edit a null DACL");
+            return descriptor.DiscretionaryAcl;
+        }
+        static void WriteRawDacl(string path, RawSecurityDescriptor descriptor, RawAcl acl) {
+            descriptor.DiscretionaryAcl = acl;
+            byte[] bytes = new byte[descriptor.BinaryLength];
+            descriptor.GetBinaryForm(bytes, 0);
+            // Write the pinned object directly: Win32 inheritance helpers materialize
+            // inherited ACEs even on files. This leaves other ACEs and control bits intact.
+            using (var pin = CreateFile(path, 0x00040080, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+                Check(!pin.IsInvalid, "Open native DACL handle");
+                int status = NtSetSecurityObject(pin, 4, bytes);
+                if (status < 0) CheckCode(RtlNtStatusToDosError(status), "Set native path DACL");
+            }
+        }
+        static CommonAce RuleAce(FileSystemAccessRule rule) {
+            var flags = AceFlags.None;
+            if ((rule.InheritanceFlags & InheritanceFlags.ContainerInherit) != 0) flags |= AceFlags.ContainerInherit;
+            if ((rule.InheritanceFlags & InheritanceFlags.ObjectInherit) != 0) flags |= AceFlags.ObjectInherit;
+            return new CommonAce(flags, rule.AccessControlType == AccessControlType.Deny ? AceQualifier.AccessDenied : AceQualifier.AccessAllowed,
+                (int)rule.FileSystemRights, (SecurityIdentifier)rule.IdentityReference, false, null);
+        }
+        static IEnumerable<string> TreePaths(string path, bool leavesFirst = false) {
+            // Pin each binding and its ancestors without delete sharing. OPEN_REPARSE_POINT
+            // inspects the object itself; a child cannot redirect cleanup to a foreign tree.
+            using (var pin = CreateFile(path, 0x80, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+                Check(!pin.IsInvalid, "Pin native ACL path");
+                FileTag info;
+                Check(GetFileInformationByHandleEx(pin, 9, out info, 8), "Inspect native ACL path");
+                if ((info.Attributes & (uint)FileAttributes.ReparsePoint) != 0) yield break;
+                if (!leavesFirst) yield return path;
+                if ((info.Attributes & (uint)FileAttributes.Directory) != 0) {
+                    foreach (string child in Directory.EnumerateFileSystemEntries(path)) {
+                        foreach (string entry in TreePaths(child, leavesFirst)) yield return entry;
+                    }
+                }
+                if (leavesFirst) yield return path;
+            }
+        }
+        static FileSystemAccessRule PathRule(string path, FileSystemAccessRule rule) {
+            return new FileSystemAccessRule(rule.IdentityReference, rule.FileSystemRights,
+                Directory.Exists(path) ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit : InheritanceFlags.None,
+                PropagationFlags.None, rule.AccessControlType);
+        }
+        static void AddRule(string path, FileSystemAccessRule rule, bool tree) {
+            var acl = ReadAcl(path);
+            if (!tree) {
+                acl.AddAccessRule(rule);
+                WriteAcl(path, acl);
+                return;
+            }
+            // The named writer would normalize every old ACE and propagate that change.
+            // For this fallback only, stamp existing objects separately; new children inherit.
+            foreach (string entry in TreePaths(path)) {
+                var original = ReadRawAcl(entry);
+                var raw = RawDacl(original);
+                // A new allow must never precede an existing deny. A job-specific deny wins.
+                raw.InsertAce(rule.AccessControlType == AccessControlType.Deny ? 0 : raw.Count, RuleAce(PathRule(entry, rule)));
+                WriteRawDacl(entry, original, raw);
+            }
+        }
+        static void RemoveRules(string path, SecurityIdentifier sid, FileSystemAccessRule exact, bool tree) {
+            var acl = ReadAcl(path);
+            if (!tree && acl.AreAccessRulesCanonical) {
+                if (exact != null) acl.RemoveAccessRuleSpecific(exact);
+                else foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, false, typeof(SecurityIdentifier))) {
+                    if (sid.Equals(rule.IdentityReference)) acl.RemoveAccessRuleSpecific(rule);
+                }
+                WriteAcl(path, acl);
+                return;
+            }
+            var original = ReadRawAcl(path);
+            var raw = RawDacl(original);
+            var expected = exact == null ? null : RuleAce(exact);
+            bool changed = false;
+            for (int i = raw.Count - 1; i >= 0; i--) {
+                var ace = raw[i] as CommonAce;
+                if (ace == null || !sid.Equals(ace.SecurityIdentifier)) continue;
+                if (!tree && (ace.AceFlags & AceFlags.Inherited) != 0) continue;
+                if (expected != null && (ace.AccessMask != expected.AccessMask || ace.AceFlags != expected.AceFlags || ace.AceQualifier != expected.AceQualifier)) continue;
+                raw.RemoveAce(i);
+                changed = true;
+            }
+            if (changed) WriteRawDacl(path, original, raw);
         }
         static void GrantPath(string path, SecurityIdentifier sid, bool write, bool deny, List<Grant> grants, string control) {
             if (!Directory.Exists(path) && !File.Exists(path)) {
@@ -218,20 +371,36 @@ namespace GenexNative {
             var inherit = Directory.Exists(path) ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit : InheritanceFlags.None;
             var rights = deny ? FileSystemRights.ReadAndExecute : write ? FileSystemRights.Modify : FileSystemRights.ReadAndExecute;
             var rule = new FileSystemAccessRule(sid, rights, inherit, PropagationFlags.None, deny ? AccessControlType.Deny : AccessControlType.Allow);
-            var grant = new Grant { Path = path, Rule = rule, HasLabel = write, Label = write ? GetLabel(path) : null };
+            bool tree = !ReadAcl(path).AreAccessRulesCanonical;
+            var grant = new Grant { Path = path, Rule = rule, HasLabel = write && !tree,
+                Label = write && !tree ? GetLabel(path) : null, Tree = tree };
+            if (tree) foreach (string entry in TreePaths(path, true)) {
+                var descriptor = ReadRawAcl(entry);
+                var flags = new Grant { Path = entry, OriginalFlags = descriptor.ControlFlags };
+                Journal(control, flags, false);
+                grants.Add(flags);
+                descriptor.SetFlags(descriptor.ControlFlags | ControlFlags.DiscretionaryAclProtected);
+                WriteRawDacl(entry, descriptor, RawDacl(descriptor));
+            }
             Journal(control, grant, deny);
-            var acl = ReadAcl(path);
-            acl.AddAccessRule(rule);
-            try { WriteAcl(path, acl); }
+            // A fallback can fail halfway through a tree; retain its cleanup before stamping.
+            if (grant.Tree) grants.Add(grant);
+            try { AddRule(path, rule, grant.Tree); }
             catch (UnauthorizedAccessException) {
                 // An installed runtime may already permit restricted packages. Otherwise launch
                 // fails closed; a host that cannot edit its ACL cannot grant new access here.
                 if (!write && !deny) return;
                 throw;
             }
-            grants.Add(grant);
+            if (!grant.Tree) grants.Add(grant);
             if (write) {
-                SetLabel(path, "S:(ML;OICI;NW;;;LW)");
+                if (!tree) SetLabel(path, "S:(ML;OICI;NW;;;LW)");
+                else foreach (string entry in TreePaths(path)) {
+                    var label = new Grant { Path = entry, HasLabel = true, Label = GetLabel(entry) };
+                    Journal(control, label, false);
+                    grants.Add(label);
+                    SetObjectLabel(entry, "S:(ML;OICI;NW;;;LW)");
+                }
             }
         }
         static void Revoke(List<Grant> grants) {
@@ -240,10 +409,21 @@ namespace GenexNative {
                 try {
                     var grant = grants[i];
                     if (!Directory.Exists(grant.Path) && !File.Exists(grant.Path)) continue;
+                    if (grant.OriginalFlags.HasValue) {
+                        var descriptor = ReadRawAcl(grant.Path);
+                        descriptor.SetFlags(grant.OriginalFlags.Value);
+                        WriteRawDacl(grant.Path, descriptor, RawDacl(descriptor));
+                        continue;
+                    }
+                    if (grant.Rule == null) {
+                        SetObjectLabel(grant.Path, grant.Label);
+                        continue;
+                    }
                     if (grant.HasLabel) SetLabel(grant.Path, grant.Label);
-                    var acl = ReadAcl(grant.Path);
-                    acl.RemoveAccessRuleSpecific(grant.Rule);
-                    WriteAcl(grant.Path, acl);
+                    if (grant.Tree) foreach (string entry in TreePaths(grant.Path)) {
+                        RemoveRules(entry, (SecurityIdentifier)grant.Rule.IdentityReference, null, true);
+                    }
+                    else RemoveRules(grant.Path, (SecurityIdentifier)grant.Rule.IdentityReference, grant.Rule, false);
                 } catch (Exception e) { if (error == null) error = e; }
             }
             if (error != null) throw new IOException("Native sandbox access could not be revoked", error);
@@ -254,9 +434,10 @@ namespace GenexNative {
         }
 
         /// <summary>Undo only the SID and labels recorded by this owned native job.</summary>
-        public static void Recover(string profile, string control) {
+        public static void Recover(string profile, string control, string[] roots) {
             IntPtr sid = IntPtr.Zero;
-            try {
+            using (var locks = new PathLocks()) try {
+                locks.Acquire(roots, control, 0);
                 int result = DeriveAppContainerSidFromAppContainerName(profile, out sid);
                 if (result != 0) Marshal.ThrowExceptionForHR(result);
                 var identity = new SecurityIdentifier(sid);
@@ -270,15 +451,20 @@ namespace GenexNative {
                         if (parts.Length != 3) throw new IOException("Invalid native access recovery record");
                         string path = Encoding.UTF8.GetString(Convert.FromBase64String(parts[0]));
                         if (!Directory.Exists(path) && !File.Exists(path)) continue;
-                        if (parts[1] == "write") SetLabel(path, Encoding.UTF8.GetString(Convert.FromBase64String(parts[2])));
-                        var acl = ReadAcl(path);
-                        bool changed = false;
-                        foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, false, typeof(SecurityIdentifier))) {
-                            if (!identity.Equals(rule.IdentityReference)) continue;
-                            acl.RemoveAccessRuleSpecific(rule);
-                            changed = true;
+                        if (parts[1] == "flags") {
+                            var descriptor = ReadRawAcl(path);
+                            descriptor.SetFlags((ControlFlags)Int32.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(parts[2]))));
+                            WriteRawDacl(path, descriptor, RawDacl(descriptor));
+                            continue;
                         }
-                        if (changed) WriteAcl(path, acl);
+                        if (parts[1] == "label") {
+                            SetObjectLabel(path, Encoding.UTF8.GetString(Convert.FromBase64String(parts[2])));
+                            continue;
+                        }
+                        bool tree = parts[1].StartsWith("tree-", StringComparison.Ordinal);
+                        if (parts[1] == "write" || parts[1] == "tree-write") SetLabel(path, Encoding.UTF8.GetString(Convert.FromBase64String(parts[2])));
+                        if (tree) foreach (string entry in TreePaths(path)) RemoveRules(entry, identity, null, true);
+                        else RemoveRules(path, identity, null, false);
                     }
                 }
                 result = DeleteAppContainerProfile(profile);
@@ -299,12 +485,15 @@ namespace GenexNative {
             ProcessInfo child = new ProcessInfo();
             var inherited = new List<IntPtr>();
             var grants = new List<Grant>();
+            var locks = new PathLocks();
             ReadCapabilities allowedCapabilities = null;
             try {
                 // The host can stop an unready compiler before any grants exist.
                 // Once this marker exists, recovery must handle a partially prepared job.
                 File.WriteAllText(System.IO.Path.Combine(control, "broker.ready"), "ready");
                 if (StopRequested(control, parentPid)) return new Outcome { code = 1, pid = null, reason = "cancelled" };
+                var roots = new List<string>(); roots.AddRange(reads); roots.AddRange(writes); roots.AddRange(denied);
+                if (!locks.Acquire(roots.ToArray(), control, parentPid)) return new Outcome { code = 1, pid = null, reason = "cancelled" };
                 int result = CreateAppContainerProfile(profile, "Genex native job", "Temporary isolated native asset job", IntPtr.Zero, 0, out sid);
                 if (result != 0) Marshal.ThrowExceptionForHR(result);
                 created = true;
@@ -396,11 +585,13 @@ namespace GenexNative {
                 if (allowedCapabilities != null) allowedCapabilities.Dispose();
                 try { Revoke(grants); }
                 finally {
-                    if (sid != IntPtr.Zero) FreeSid(sid);
-                    if (created) {
-                        int cleanup = DeleteAppContainerProfile(profile);
-                        if (cleanup != 0) Marshal.ThrowExceptionForHR(cleanup);
-                    }
+                    try {
+                        if (sid != IntPtr.Zero) FreeSid(sid);
+                        if (created) {
+                            int cleanup = DeleteAppContainerProfile(profile);
+                            if (cleanup != 0) Marshal.ThrowExceptionForHR(cleanup);
+                        }
+                    } finally { locks.Dispose(); }
                 }
                 File.WriteAllText(System.IO.Path.Combine(control, "cleanup.ok"), "complete");
             }
