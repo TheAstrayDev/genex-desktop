@@ -61,7 +61,8 @@ app.whenReady().then(async()=>{
   assert.equal(none.dialog,true);
   assert.equal(none.stage,'none');
   assert.equal(none.ask,true,'a game with no cover shot is asked about');
-  assert.equal(none.askLabel,"Ask this game's chat to make its Genex cover");
+  assert.equal(none.askLabel,"Ask for a cover in this game's chat");
+  assert.ok(none.askLabel.startsWith(none.askButton),'the name a voice or a reader uses starts with the words on the button');
   report.noCover=await capture('no-cover');
   // A published game whose last publish found no shot to send: asked about too.
   const noneSent=await step('noneSent','window.coverAsk.open("noneSent")');
@@ -73,8 +74,12 @@ app.whenReady().then(async()=>{
   assert.equal(shot.dialog,true);
   assert.equal(shot.ask,false,'a kept shot is not asked for again');
   report.withCover=await capture('with-cover');
-  for(const name of ['sending','owner','older'])
+  for(const name of ['sending','older'])
    assert.equal((await step(name,'window.coverAsk.open("'+name+'")')).ask,false,name);
+  const owner=await step('owner','window.coverAsk.open("owner")');
+  assert.equal(owner.dialog,true);
+  assert.equal(owner.ask,false,'the owner chose the cover on genex.games: nothing asked over it');
+  report.ownerCover=await capture('owner-cover');
   // The press closes the dialog and leaves the ask in this game's composer, focused, unsent.
   await step('beforePress','window.coverAsk.open("none")');
   const pressed=await step('pressed','window.coverAsk.press()');
@@ -89,6 +94,14 @@ app.whenReady().then(async()=>{
   const kept=await step('draftPressed','window.coverAsk.press()');
   assert.equal(kept.prompt,PROMPT+'\\n\\nAdd rain to the track');
   assert.deepEqual(kept.sends,[]);
+  // Pressed again before sending: the ask is in the composer once, the cursor in the prompt.
+  const reopened=await step('reopened','window.coverAsk.reopen()');
+  assert.equal(reopened.ask,true);
+  const twice=await step('pressedTwice','window.coverAsk.press()');
+  assert.equal(twice.prompt,PROMPT+'\\n\\nAdd rain to the track','pressed twice, the ask is put in once');
+  assert.equal(twice.promptFocused,true);
+  assert.deepEqual(twice.sends,[]);
+  report.composerTwice=await capture('composer-pressed-twice');
   // Another game's chat never takes this game's ask.
   await step('otherChat','window.coverAsk.open("none",{chatGame:"other-game"})');
   const other=await step('otherPressed','window.coverAsk.press()');

@@ -58,7 +58,7 @@ export function useChatPanel(props: ChatPanelProps) {
   });
   const focusComposer = useCallback((): void => composerRef.current?.focus(), [composerRef]);
   const reply = useReplyAbout(chat.threadId, focusComposer);
-  useComposeInChat(chat.threadId, chat.project, composer.drafts.putBack, composerRef);
+  useComposeInChat(chat.threadId, chat.project, composer.drafts, composerRef);
   const submit = useSubmit(props, chat, composer, work, follow, reply);
   const report = useReport(props, chat, composer);
   useLaunchHandover(chat.threadId, loading, submit, composerRef);

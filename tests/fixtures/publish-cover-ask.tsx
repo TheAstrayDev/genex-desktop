@@ -45,10 +45,20 @@ const SCENARIOS: Record<string, GenexPublishState> = {
   noneSent: { ...base, ...live, cover: { shot: null, last: { kind: GenexCoverOutcome.None, at: AT }, sending: false } },
   shot: { ...base, cover: { shot, last: null, sending: false } },
   sending: { ...base, ...live, cover: { shot: null, last: null, sending: true } },
+  /** As the plugin records it when Genex says the owner chose the cover and Studio kept no shot. */
   owner: {
     ...base,
     ...live,
-    cover: { shot: null, last: { kind: GenexCoverOutcome.KeptOwner, at: AT }, sending: false },
+    cover: {
+      shot: null,
+      last: {
+        kind: GenexCoverOutcome.KeptOwner,
+        at: AT,
+        coverUrl: `https://cdn.genex.games/covers/${GAME}.webp`,
+        coverSource: "owner",
+      },
+      sending: false,
+    },
   },
   older: { ...base, ...live },
 };
@@ -138,6 +148,7 @@ function sample() {
     ask: Boolean(ask),
     askText: ask?.textContent?.trim() ?? null,
     askLabel: button?.getAttribute("aria-label") ?? null,
+    askButton: button?.textContent?.trim() ?? null,
     prompt: prompt()?.value ?? null,
     promptFocused: document.activeElement === prompt(),
     closes,
@@ -145,20 +156,36 @@ function sample() {
   };
 }
 
-/** Open the dialog over the chat of `chatGame` with the plugin answering `name`, a draft typed first. */
+/** The game whose chat is open beside the dialog. */
+let chatGame = GAME;
+
+/** Show the dialog over the open chat and wait for the plugin's record in it. */
+async function showDialog() {
+  render(chatGame, GAME);
+  for (let i = 0; i < 100 && !document.querySelector("[data-genex-publish-status]"); i++) await frame();
+  await settle();
+  return sample();
+}
+
+/** Open the dialog over a fresh chat of `chatGame` with the plugin answering `name`, a draft typed first. */
 async function open(name: string, options: { draft?: string; chatGame?: string } = {}) {
   scenario = SCENARIOS[name] ?? SCENARIOS.none;
   closes = 0;
-  const chatGame = options.chatGame ?? GAME;
+  chatGame = options.chatGame ?? GAME;
   flushSync(() => root.render(null));
   render(chatGame, null);
   await settle();
   if (options.draft) typeDraft(options.draft);
   await settle(2);
-  render(chatGame, GAME);
-  for (let i = 0; i < 100 && !document.querySelector("[data-genex-publish-status]"); i++) await frame();
-  await settle();
-  return sample();
+  return showDialog();
+}
+
+/** Open the dialog again over the same chat, its draft as the person left it. */
+async function reopen() {
+  closes = 0;
+  render(chatGame, null);
+  await settle(2);
+  return showDialog();
 }
 
 /** Press the dialog's cover ask, as a person would, and let the dialog go. */
@@ -170,4 +197,4 @@ async function press() {
   return sample();
 }
 
-Object.assign(window, { coverAsk: { open, press, sample } });
+Object.assign(window, { coverAsk: { open, reopen, press, sample } });

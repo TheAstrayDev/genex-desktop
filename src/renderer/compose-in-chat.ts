@@ -12,6 +12,7 @@ export interface ComposeInChat {
   text: string;
 }
 
+/** The window event {@link composeInChat} dispatches and the open chat listens for. */
 export const COMPOSE_IN_CHAT_EVENT = "studio:compose-in-chat";
 
 /** Leave words in a game's chat composer, unsent. */

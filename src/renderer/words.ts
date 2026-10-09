@@ -2568,7 +2568,7 @@ export const GENEX_WORDS = {
     /** While the game has no Genex cover to send: one quiet line, and the press that asks its chat for one. */
     coverNone: "No cover yet. Genex shows a real frame of your game.",
     coverAsk: "Ask for a cover",
-    coverAskLabel: "Ask this game's chat to make its Genex cover",
+    coverAskLabel: "Ask for a cover in this game's chat",
     /** What that press leaves in the game's composer, for the person to send. */
     coverPrompt: "Make this game's Genex cover.",
     failedTitle: "It didn't go online this time",
