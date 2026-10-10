@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, realpath } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import path from "node:path";
 import { test } from "node:test";
@@ -111,7 +111,7 @@ test("the approved create-project action creates source and installs its Editor 
   };
   assert.equal(result.created, true);
   assert.equal(result.installed, true);
-  assert.equal(result.projectRoot, root);
+  assert.equal(result.projectRoot, await realpath(root));
   const manifest = JSON.parse(await readFile(path.join(root, "Packages/manifest.json"), "utf8"));
   assert.equal(manifest.dependencies["com.genex.unity-bridge"], "file:com.genex.unity-bridge");
   assert.equal(fixture.calls.length, 0);
@@ -123,10 +123,10 @@ test("a Unity game uses its own directory while a linked project uses the explic
   try {
     const fixture = pluginHost(linked.root);
     const own = (await unityTool("status", {}, fixture.context(game.root))) as { projectRoot: string };
-    assert.equal(own.projectRoot, game.root);
+    assert.equal(own.projectRoot, await realpath(game.root));
     const unrelated = await tmpDir("unity-unrelated-game-");
     const fallback = (await unityTool("status", {}, fixture.context(unrelated))) as { projectRoot: string };
-    assert.equal(fallback.projectRoot, linked.root);
+    assert.equal(fallback.projectRoot, await realpath(linked.root));
     assert.equal(game.requests.length, 1);
     assert.equal(linked.requests.length, 1);
   } finally {

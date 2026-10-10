@@ -108,6 +108,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Native plugin fixture contracts
+        run: node scripts/test.mjs tests/conformance/blender.test.ts tests/conformance/unity-plugin.test.ts
       - name: Full fixture regression, rigs, build and Electron acceptance
         run: npm run verify
   fast:
