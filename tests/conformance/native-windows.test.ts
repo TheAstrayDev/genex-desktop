@@ -221,7 +221,10 @@ public static class AclSnapshot {
       GetFileSecurity(path, information, null, 0, out needed);
       var raw = new byte[checked((int)needed)];
       if (!GetFileSecurity(path, information, raw, needed, out needed)) throw new Win32Exception(Marshal.GetLastWin32Error());
-      return new RawSecurityDescriptor(raw, 0).GetSddlForm(AccessControlSections.All);
+      var physical = new RawSecurityDescriptor(raw, 0);
+      var aclBytes = new byte[physical.DiscretionaryAcl.BinaryLength];
+      physical.DiscretionaryAcl.GetBinaryForm(aclBytes, 0);
+      return ((int)physical.ControlFlags).ToString() + "|" + Convert.ToBase64String(aclBytes) + "|" + physical.GetSddlForm(AccessControlSections.All);
     }
     IntPtr owner, group, dacl, sacl, descriptor;
     uint status = GetNamedSecurityInfo(path, 1, information, out owner, out group, out dacl, out sacl, out descriptor);
@@ -407,7 +410,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     const { symlink } = await import("node:fs/promises");
     await symlink(foreign, path.join(f.output, "foreign-link"), "junction");
     const paths = [f.output, nested, existing, foreign, secret];
-    const snapshot = () => Promise.all(paths.map(async (file) => (await exec("icacls.exe", [file])).stdout));
+    const snapshot = () => securitySnapshot(paths, f.root);
     const before = await snapshot();
     const descriptorBefore = await securitySnapshot(paths, f.root);
     const result = await f.run(
@@ -452,7 +455,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
   it("runs the selected executable with literal spaced arguments and captures both output streams", async () => {
     const f = await setup();
     const descriptorBefore = await securitySnapshot([f.output], f.root);
-    const before = await exec("icacls.exe", [f.output]);
+    const before = descriptorBefore;
     const result = await f.run("console.log(process.argv[1]); console.error('stderr-ready')", [
       "a space & literal $value",
     ]);
@@ -460,13 +463,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     assert.match(result.stdout, /a space & literal \$value/);
     assert.match(result.stderr, /stderr-ready/);
     const descriptorAfter = await securitySnapshot([f.output], f.root);
-    if (descriptorBefore[0] !== descriptorAfter[0])
-      console.info("Native physical ACL:", JSON.stringify({ before: descriptorBefore, after: descriptorAfter }));
-    assert.equal(
-      (await exec("icacls.exe", [f.output])).stdout,
-      before.stdout,
-      "job grants and integrity label are revoked",
-    );
+    assert.deepEqual(descriptorAfter, before, "job grants are revoked and physical ACE/control flags are exact");
     await writeFile(path.join(f.output, "after.txt"), "host-writable");
     assert.equal(await readFile(path.join(f.output, "after.txt"), "utf8"), "host-writable");
   });
@@ -597,7 +594,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
 
   it("failure to start the executable revokes grants and never retries outside the sandbox", async () => {
     const f = await setup();
-    const before = await exec("icacls.exe", [f.output]);
+    const before = await securitySnapshot([f.output], f.root);
     await assert.rejects(
       f.run("console.log('unexpected')", [], {
         binary: path.join(f.runtime, "missing.exe"),
@@ -605,18 +602,18 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
       }),
       /Start AppContainer native runtime/,
     );
-    assert.equal((await exec("icacls.exe", [f.output])).stdout, before.stdout);
+    assert.deepEqual(await securitySnapshot([f.output], f.root), before);
     assert.equal((await f.run("console.log('next-job')")).code, 0, "failure leaves the next isolated job usable");
   });
 
   it("cancellation kills a detached descendant and restores folder permissions", async () => {
     const f = await setup();
-    const before = await exec("icacls.exe", [f.output]);
+    const before = await securitySnapshot([f.output], f.root);
     const pidFile = path.join(f.output, "child.pid");
     const stop = new AbortController();
     const held = f.run(
       `
-      const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore', windowsHide: true });
+      const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'inherit', windowsHide: true });
       require('node:fs').writeFileSync(process.argv[1], String(child.pid));
       setInterval(() => {}, 1000);
     `,
@@ -634,7 +631,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
       // Query the pinned process immediately after completion: tasklist can show a dead process
       // until its handles close, or a newly reused PID in a parallel suite.
       await observer.assertExited();
-      assert.equal((await exec("icacls.exe", [f.output])).stdout, before.stdout);
+      assert.deepEqual(await securitySnapshot([f.output], f.root), before);
     } finally {
       stop.abort();
       await held;
@@ -645,7 +642,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
   it("a forcibly killed broker restores its exact folder grants and integrity labels", async () => {
     const f = await setup();
     const folders = [f.runtime, f.input, f.output, f.scratch];
-    const before = await Promise.all(folders.map(async (folder) => (await exec("icacls.exe", [folder])).stdout));
+    const before = await securitySnapshot(folders, f.root);
     const pidFile = path.join(f.output, "broker.json");
     const held = f
       .run(
@@ -664,7 +661,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     await exec("taskkill.exe", ["/PID", String(broker), "/F"]);
     assert.ok((await held) instanceof Error, "a killed broker cannot report a successful native job");
     assert.equal(await running(pid), false, "kill-on-close stops its native process");
-    const after = await Promise.all(folders.map(async (folder) => (await exec("icacls.exe", [folder])).stdout));
+    const after = await securitySnapshot(folders, f.root);
     assert.deepEqual(after, before, "abnormal broker exit restores each granted directory");
     assert.equal(
       (await readdir(f.root)).some((name) => name.startsWith(".native-control-")),
@@ -703,7 +700,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
 
   it("failed broker recovery stays bounded and retains its owned journal for repair", async () => {
     const f = await setup();
-    const before = (await exec("icacls.exe", [f.output])).stdout;
+    const before = await securitySnapshot([f.output], f.root);
     const pidFile = path.join(f.output, "broker.json");
     const held = f
       .run(
@@ -747,8 +744,8 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
         ],
         { env: windowsBaseEnv(process.env), timeout: 15_000 },
       );
-      assert.equal(
-        (await exec("icacls.exe", [f.output])).stdout,
+      assert.deepEqual(
+        await securitySnapshot([f.output], f.root),
         before,
         "owned failure fixture restores its permissions",
       );
@@ -782,30 +779,22 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     const timed = await f.run("setInterval(() => {}, 1000)", [], { timeoutMs: 3000 });
     assert.equal(timed.reason, "timeout");
     assert.ok(Date.now() - started < 10_000, "timeout includes bounded sandbox cleanup");
-    const spawnReport = path.join(f.output, "spawn-probe.json");
+    const stdioReport = path.join(f.output, "stdio-probe.json");
     const result = await f.run(
       `
-      const spawn = require('node:child_process').spawn;
-      let child;
-      try {
-        child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore', windowsHide: true });
-      } catch (error) {
-        const probes = [];
-        for (const detached of [false, true]) for (const stdio of ['inherit', 'pipe', 'ignore']) {
-          try {
-            const probe = spawn(process.execPath, ['-e', ''], { detached, stdio, windowsHide: true });
-            probes.push({ detached, stdio, pid: probe.pid }); probe.unref();
-            probe.stdin?.end(); probe.stdout?.resume(); probe.stderr?.resume();
-          } catch (failure) { probes.push({ detached, stdio, code: failure.code }); }
-        }
-        require('node:fs').writeFileSync(process.argv[1], JSON.stringify({ nativeChildSpawn: probes }));
-        throw error;
+      const fs = require('node:fs');
+      const probe = {};
+      for (const mode of ['r', 'w']) {
+        try { fs.closeSync(fs.openSync('NUL', mode)); probe[mode] = 'opened'; }
+        catch (error) { probe[mode] = error.code; }
       }
+      fs.writeFileSync(process.argv[1], JSON.stringify(probe));
+      const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'inherit', windowsHide: true });
       console.log(child.pid); child.unref();
     `,
-      [spawnReport],
+      [stdioReport],
     );
-    if (existsSync(spawnReport)) console.info("Native child spawn:", await readFile(spawnReport, "utf8"));
+    if (existsSync(stdioReport)) console.info("Native NUL access:", await readFile(stdioReport, "utf8"));
     assert.equal(result.code, 0, result.stderr);
     const pid = Number(result.stdout.trim());
     assert.ok(pid > 0, result.stdout);
