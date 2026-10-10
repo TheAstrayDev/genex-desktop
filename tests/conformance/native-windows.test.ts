@@ -266,6 +266,40 @@ async function blenderFbxJob(code: string, stagedSource?: string) {
 }
 
 describe("Windows native runtime", { skip: process.platform !== "win32" && "Windows AppContainer only" }, () => {
+  it("the trusted PowerShell broker starts with Windows basics and no interactive input", async () => {
+    const powershell = path.join(
+      process.env.SystemRoot || "C:\\Windows",
+      "System32/WindowsPowerShell/v1.0/powershell.exe",
+    );
+    for (const input of ["ignore", "pipe"] as const) {
+      const child = spawn(
+        powershell,
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "[Console]::WriteLine('broker-booted')"],
+        {
+          env: windowsBaseEnv(process.env),
+          windowsHide: true,
+          stdio: [input, "pipe", "pipe"],
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      child.stdin?.end();
+      let stdout = "";
+      let stderr = "";
+      child.stdout?.on("data", (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr?.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      const code = await new Promise<number | null>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("close", resolve);
+      });
+      assert.equal(code, 0, `${input}: ${stderr}`);
+      assert.equal(stdout.trim(), "broker-booted", input);
+    }
+  });
+
   it("preserves a noncanonical ACL, existing descendants and foreign junction targets", async () => {
     const f = await setup();
     const nested = path.join(f.output, "existing");

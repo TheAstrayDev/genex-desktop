@@ -1,10 +1,14 @@
 # The trusted host compiles its own launcher with Windows' built-in .NET runtime.
 # The native child receives no PowerShell script or compiler access from this directory.
 param([Parameter(Mandatory=$true)][string]$SpecFile, [switch]$CleanupOnly)
+$control = [System.IO.Path]::GetDirectoryName($SpecFile)
+[System.IO.File]::WriteAllText([System.IO.Path]::Combine($control, 'bootstrap.entered'), 'entered')
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 try {
+    [System.IO.File]::WriteAllText([System.IO.Path]::Combine($control, 'compiler.entered'), 'entered')
     Add-Type -Path (Join-Path $PSScriptRoot 'windows-native.cs')
+    [System.IO.File]::WriteAllText([System.IO.Path]::Combine($control, 'compiler.ready'), 'ready')
     $spec = Get-Content -LiteralPath $SpecFile -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($CleanupOnly) {
         [GenexNative.ContainerJob]::Recover([string]$spec.profile, [string]$spec.control, [string[]](@($spec.reads) + @($spec.writes) + @($spec.denied)))
