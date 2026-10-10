@@ -70,9 +70,15 @@ jobs:
         run: node scripts/test.mjs tests/conformance/seed-upgrade.test.ts tests/conformance/child-env.test.ts tests/conformance/words.test.ts tests/conformance/check-grammar.test.ts
       - name: Change base
         env:
-          STUDIO_TEST_BASE: ${{ github.event.pull_request.base.sha || inputs.base || github.event.before }}
+          STUDIO_TEST_BASE: ${{ github.event.pull_request.base.sha || inputs.base || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
         run: |
-          if [ -z "$STUDIO_TEST_BASE" ] || ! git cat-file -e "$STUDIO_TEST_BASE^{commit}" 2>/dev/null; then
+          if [ -n "$STUDIO_TEST_BASE" ] && ! git cat-file -e "$STUDIO_TEST_BASE^{commit}" 2>/dev/null; then
+            # A fork may not contain the latest upstream commit. Never silently replace an
+            # explicit comparison base with HEAD^ and report an incomplete affected gate.
+            git fetch --no-tags origin "$STUDIO_TEST_BASE"
+            git cat-file -e "$STUDIO_TEST_BASE^{commit}"
+          fi
+          if [ -z "$STUDIO_TEST_BASE" ]; then
             if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
               STUDIO_TEST_BASE=$(git rev-parse HEAD^)
             else

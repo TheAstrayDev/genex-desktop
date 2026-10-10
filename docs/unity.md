@@ -3,6 +3,16 @@
 The bundled Unity plugin connects Genex to a local Unity 6 source project. It is a new
 implementation; the retired integration in `archive/unity/` remains historical source.
 
+## Integration status
+
+This direct bridge has not completed licensed live Editor acceptance or established permission
+for agentic access under [Unity's Terms of Service](https://unity.com/legal/terms-of-service),
+sections 17.2 and 26. Resolve that authorization before agent use. The bridge's MIT license and
+an activated Editor do not establish it. Unity documents an
+[official CLI/Pipeline route](https://docs.unity.com/en-us/unity-cli/use-unity-cli); this bridge
+does not yet use that route. Release review must also address applicable
+[Unity Core Standards](https://unity.com/core-standards) and package distribution requirements.
+
 ## Open or create a project
 
 Install and activate Unity 6 through Unity Hub, including the build modules you need. Open
