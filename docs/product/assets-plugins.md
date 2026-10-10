@@ -20,10 +20,11 @@ proves neither correct integration nor passing checks.
 The prompt bar's Add menu holds reference attachments, plugin and MCP switches, Connect and
 Manage. Enabled, connected, signed in and permitted are different states.
 
-Plugins shows Plugins/Skills, search, details, installed plugins, added MCP servers, Marketplace
-and the guide. Icons come from plugin `icon` or MCP `serverInfo.icons`, falling back to initials.
-Marketplace shows Coming soon until the catalog adds entries. Install from GitHub pins the latest
-release or newest default-branch commit. Browser games build, preview and export without plugins.
+Plugins opens a page with Plugins/Skills, search, rows and details. Plugins and MCP
+servers show their own pictures ([Icons](../plugins.md#icons)) or an initial. The
+list shows installed plugins (Genex routes game dev tools), your servers, the
+Marketplace (Coming soon until the catalog has something new) and the plugin guide. Install from GitHub pins a pasted link's latest release
+(else the default branch's newest commit). Browser games build, preview and export without plugins.
 The host draws Genex's app-wide page (shared balance, the tools it routes) and Local Blender's
 runtime card. Unity source projects use the bundled [Unity Editor workspace](../unity.md),
 including bridge setup, native tools and player builds. Connect, unapproved, reuses a saved account or
@@ -37,7 +38,7 @@ and run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` an
 Publish (a host-drawn stage dialog) tests the draft, makes it public, then sends the
 game's `genex-cover` demo frame as its Genex cover (not the sidebar sphere); without one, Ask for a
 cover drafts that request in chat. Agents check it before every publish (`genex__cover`);
-consented `genex__cover-set` sends it.
+consented `genex__cover-set` sends it. Chat shows the latest kept shot with Publish.
 Agents read Genex’s guide and cards via `genex__skill`, never from game files.
 Plugin MCPs connect on first use; the composer shows only actionable failures.
 
@@ -55,7 +56,7 @@ Confirmation tools ask in chat ([questions](chat.md#questions-and-plans)); routi
 progress has no answer controls.
 
 Connector tools ask before each call unless Settings holds an exact tool grant. Server hints
-cannot grant authority. Plugin upload staging shows the complete included/excluded file list
+cannot grant authority. Plugin upload staging lists every included/excluded file
 for a second approval. Revocation prevents future calls; remote side effects remain.
 
 Removal preserves data, credentials and jobs; another source reusing a plugin's id needs
@@ -74,6 +75,6 @@ is read-only.
 [AssetPreview](../../src/renderer/panels/AssetPreview.tsx),
 [AssetResults](../../src/renderer/chat/AssetResults.tsx) and
 [PluginsPanel](../../src/renderer/panels/PluginsPanel.tsx) own the UI.
-Details: the [plugin host contract](../plugins.md), the
-[Plugin guide](../PLUGIN_GUIDE.md) (authoring) and
+Details: [plugin host contract](../plugins.md),
+[Plugin guide](../PLUGIN_GUIDE.md) (authoring),
 [Connections and context](../connections-and-context.md) (setup).

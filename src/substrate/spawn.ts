@@ -269,6 +269,8 @@ interface LaunchPlan {
   cwd: string;
   /** Windows: gives the grant session back and removes the env file once the process is gone. */
   release?: () => void;
+  /** Windows: srt-win does not pass stdin on, so a run's input reaches the command only through its stdin file. */
+  stdinInFile?: boolean;
 }
 
 /** Collect a child's stdout and stderr as text, each clipped at `maxChars`. */
@@ -740,7 +742,7 @@ export class ProcessSandbox {
         release();
         void removeFiles();
       };
-      return { file, args, env: wrapped.env, sandboxed: true, cwd, release: done };
+      return { file, args, env: wrapped.env, sandboxed: true, cwd, release: done, stdinInFile: true };
     } catch (err) {
       release();
       await removeFiles();
@@ -901,7 +903,10 @@ export class ProcessSandbox {
         });
       });
 
-      if (request.stdin !== undefined) child.stdin.end(request.stdin);
+      // The prelude swaps a Windows command's stdin for its file: input sent down the pipe as well
+      // would race the swap and fail with EPIPE once the command's end of the pipe is closed.
+      const piped = plan.stdinInFile ? undefined : request.stdin;
+      if (piped !== undefined) child.stdin.end(piped);
       else child.stdin.end();
     });
   }

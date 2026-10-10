@@ -14,6 +14,7 @@ import { writeFile } from "node:fs/promises";
 import {
   cleanGenexTitle,
   defaultGenexTitle,
+  GENEX_COVERS_DIR,
   GenexCoverOutcome,
   type GenexCoverSent,
   GenexHostedStatus,
@@ -1036,7 +1037,7 @@ export class GenexTools {
   /** Where a game's cover lives in this plugin's storage; never the game folder. */
   #coverDir(project: string): string {
     if (!PROJECT_NAME.test(project)) throw new Error(PUBLISH_MESSAGE.InvalidProject);
-    return path.join(this.root, "covers", project);
+    return path.join(this.root, GENEX_COVERS_DIR, project);
   }
   /** What Studio knows of a game's pages, read only: its own record and the CLI's hosted identity. */
   async #pages(project: string): Promise<GenexPublishState> {

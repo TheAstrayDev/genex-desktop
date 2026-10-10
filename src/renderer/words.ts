@@ -2572,6 +2572,10 @@ export const GENEX_WORDS = {
     coverAskLabel: "Ask for a cover in this game's chat",
     /** What that press leaves in the game's composer, for the person to send. */
     coverPrompt: "Make this game's Genex cover.",
+    /** The chat's card for the cover a builder kept: its caption, its picture's name, and Publish, which opens this dialog. */
+    coverCard: "Genex cover",
+    coverCardAlt: "This game's Genex cover",
+    coverCardPublishLabel: "Publish this game",
     failedTitle: "It didn't go online this time",
     failedText: "Your game is safe and nothing changed. Check your internet connection and try again.",
     failedKept: "Your game is safe, and players still get the version they had. Try again in a moment.",

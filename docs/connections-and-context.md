@@ -472,7 +472,9 @@ send or a status check, a shot kept or not; a refused, rate-limited, failed or s
 warning in `genex__publish-status`. Nothing is read from or written to the game folder for it.
 While the plugin reports no shot to send and no cover the owner chose, Studio's own Publish dialog
 offers Ask for a cover, which leaves the request in the game's chat composer, unsent
-([plugins](plugins.md#first-party-privileges)).
+([plugins](plugins.md#first-party-privileges)). The thread's latest kept shot shows in the chat as
+a Genex cover card whose Publish opens that dialog; since Genex 1.6.3 the guidance tells the builder
+to shoot the winner last and then say one line, never how to publish.
 
 ## Credentials
 
