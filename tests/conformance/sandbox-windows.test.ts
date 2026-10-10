@@ -24,6 +24,7 @@ import { HarnessInbox } from "../../src/substrate/harness-inbox.ts";
 import { SandboxLaunchCode, SandboxLaunchError } from "../../src/substrate/sandbox-unavailable.ts";
 import { ProcessSandbox, killChild } from "../../src/substrate/spawn.ts";
 import { removeTree, tmpDir } from "../helpers/tmp.ts";
+import { observeExit } from "../helpers/windows-process.ts";
 
 /** Why this machine cannot run the suite, or false when it can. */
 function skipReason(): string | false {
@@ -380,17 +381,29 @@ async function beatsReach(file: string, count: number): Promise<number> {
 
 describe("Windows sandbox: kill", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, () => {
   /** A Node process in the workspace that appends a line to `name` five times a second. */
-  const heartbeat = (name: string) => `node -e 'setInterval(()=>require("fs").appendFileSync("${name}", "b\\n"),200)'`;
+  const heartbeat = (name: string) =>
+    `node -e 'const fs=require("fs");fs.writeFileSync("${name}.pid",String(process.pid));setInterval(()=>fs.appendFileSync("${name}", "b\\n"),200)'`;
 
   it("a timeout ends the whole tree", async () => {
     const file = path.join(workspace, "timeout.hb");
     const run = inside(`${heartbeat("timeout.hb")} & wait`, { timeoutMs: 6_000 });
-    assert.ok((await beatsReach(file, 3)) >= 3, "the heartbeat started");
-    const result = await run;
-    assert.equal(result.timedOut, true);
-    const atKill = await beats(file);
-    await sleep(KILL_SETTLE_MS);
-    assert.equal(await beats(file), atKill, "nothing keeps beating after the kill");
+    let observed: Awaited<ReturnType<typeof observeExit>> | undefined;
+    try {
+      assert.ok((await beatsReach(file, 3)) >= 3, "the heartbeat started");
+      const pid = Number(await readFile(`${file}.pid`, "utf8"));
+      observed = await observeExit(pid, { immediate: true });
+      const result = await run;
+      assert.equal(result.timedOut, true);
+      // Broker pipe closure is not the child process's exit notification. Check the pinned
+      // process immediately, before taking the file snapshot used to detect further writes.
+      await observed.assertExited();
+      const atKill = await beats(file);
+      await sleep(KILL_SETTLE_MS);
+      assert.equal(await beats(file), atKill, "nothing keeps beating after the kill");
+    } finally {
+      await run;
+      await observed?.assertExited();
+    }
   });
 
   it("killing a long-lived process ends its children", async () => {

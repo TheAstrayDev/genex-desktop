@@ -19,6 +19,7 @@ import {
   frontRenderPath,
 } from "../../src/plugins/blender/wrapper.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+import { observeExit } from "../helpers/windows-process.ts";
 
 const exec = promisify(execFile);
 const MARKER_POLLS = 500;
@@ -98,60 +99,6 @@ async function marker(file: string) {
 async function running(pid: number) {
   const { stdout } = await exec("tasklist.exe", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"]);
   return stdout.split("\n").some((line) => line.includes(`"${pid}"`));
-}
-
-/** Pin this exact process before killing the broker: a PID can be reused in the parallel suite. */
-async function observeExit(pid: number, { immediate = false } = {}) {
-  const powershell = path.join(
-    process.env.SystemRoot || "C:\\Windows",
-    "System32/WindowsPowerShell/v1.0/powershell.exe",
-  );
-  const child = spawn(
-    powershell,
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      `$ErrorActionPreference='Stop';$observed=Get-Process -Id ${pid};$null=$observed.Handle;[Console]::WriteLine('pinned');${immediate ? "$null=[Console]::ReadLine();if(-not $observed.HasExited){throw 'Native process is still running after cancellation completed'}" : "if(-not $observed.WaitForExit(5000)){throw 'Native process did not exit'}"};$observed.Dispose()`,
-    ],
-    { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
-  );
-  let output = "";
-  let stderr = "";
-  let pinned = () => {};
-  const ready = new Promise<void>((resolve) => {
-    pinned = resolve;
-  });
-  child.stdout.on("data", (chunk) => {
-    output += chunk;
-    if (output.includes("pinned")) pinned();
-  });
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk;
-  });
-  const exited = new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code) => {
-      pinned();
-      if (code === 0) resolve();
-      else reject(new Error(stderr));
-    });
-  });
-  // Register rejection immediately, even if preparation fails before the caller awaits it.
-  void exited.catch(() => {});
-  await ready;
-  assert.match(output, /pinned/, stderr);
-  let checked = false;
-  return {
-    exited,
-    assertExited: () => {
-      if (immediate && !checked) {
-        checked = true;
-        child.stdin.end("check\n");
-      }
-      return exited;
-    },
-  };
 }
 
 async function noncanonicalFixture(folder: string, script: string) {
