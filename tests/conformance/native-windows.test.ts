@@ -42,20 +42,43 @@ async function setup() {
   await Promise.all([runtime, input, output, scratch].map((folder) => mkdir(folder)));
   const binary = path.join(runtime, "node.exe");
   await copyFile(process.execPath, binary);
-  const run = (code: string, args: string[] = [], patch: Partial<NativeProcessRequest> = {}) =>
-    runProcess({
-      binary,
-      args: ["-e", code, ...args],
-      cwd: input,
-      scratch,
-      reads: [runtime, input],
-      writes: [output],
-      denyRead: [],
-      signal: new AbortController().signal,
-      timeoutMs: 30_000,
-      maxOutputBytes: 4096,
-      ...patch,
-    });
+  const run = async (code: string, args: string[] = [], patch: Partial<NativeProcessRequest> = {}) => {
+    const progress = new Set<string>();
+    // Keep only trusted broker filenames, never specification/credential contents. If a hosted
+    // runner stalls, distinguish compilation, ACL preparation and execution before cleanup.
+    let observing = Promise.resolve();
+    const probe = setInterval(() => {
+      observing = observing
+        .then(async () => {
+          for (const name of await readdir(root)) {
+            if (!name.startsWith(".native-control-")) continue;
+            for (const file of await readdir(path.join(root, name)).catch(() => [])) progress.add(file);
+          }
+        })
+        .catch(() => {});
+    }, 100);
+    try {
+      const result = await runProcess({
+        binary,
+        args: ["-e", code, ...args],
+        cwd: input,
+        scratch,
+        reads: [runtime, input],
+        writes: [output],
+        denyRead: [],
+        signal: new AbortController().signal,
+        timeoutMs: 30_000,
+        maxOutputBytes: 4096,
+        ...patch,
+      });
+      if (result.reason === "timeout")
+        console.error("Native broker timed out:", JSON.stringify({ ...result, progress: [...progress].sort() }));
+      return result;
+    } finally {
+      clearInterval(probe);
+      await observing;
+    }
+  };
   return { root, runtime, input, output, scratch, run };
 }
 

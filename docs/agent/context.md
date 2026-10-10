@@ -1,8 +1,7 @@
 # Genex: product overview
 
-Genex is an Electron app for making local games with AI: describe a change and review its
-result. Projects can be opened, edited and exported. Unity 6 uses native Editor tools;
-browser-scored Auto/Loop remains browser-only ([Unity](../unity.md)).
+Genex is an Electron app for creating, editing and exporting games with AI. Unity 6 uses
+native Editor tools; Auto/Loop remains browser-only ([Unity](../unity.md)).
 
 ## What the app contains
 
@@ -30,9 +29,8 @@ must survive application changes.
 | [Assets and plugins](../product/assets-plugins.md) | Media, asset previews, tools, plugin setup and permissions |
 | [Studio and learning](../product/studio-learning.md) | Studio chat, Activity, instruction proposals and rollback |
 
-Start here, then read only the relevant page and follow its technical links only when the task
-needs them. Product pages describe visible behavior; references describe mechanisms. Code and
-tests resolve discrepancies.
+Read the relevant page and technical links as needed. Product pages describe visible behavior;
+references describe mechanisms. Code and tests resolve discrepancies.
 
 ## For the developer
 

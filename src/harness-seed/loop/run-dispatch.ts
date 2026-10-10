@@ -136,6 +136,12 @@ function runClose(): RunClose {
  */
 async function afterClosedRuns(studio: Studio, action: RunStart): Promise<{ stopped: boolean }> {
   let conflict = conflictOf(studio, action);
+  const resumesStoppingRun =
+    action.resume === true && conflict?.run.runId === action.run.runId && conflict.stopped === true;
+  // A paused journal/event precedes the runner returning and marking its reservation done.
+  // The person's explicit Resume waits for that same stopped run, rather than racing its close.
+  if (conflict && resumesStoppingRun) await (conflict.closed ?? conflict.settled);
+  conflict = conflictOf(studio, action);
   while (conflict?.done) {
     const stoppedBefore = conflict.stopped === true;
     await conflict.settled;
