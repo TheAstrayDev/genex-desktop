@@ -1,9 +1,10 @@
 name: Check
-# Two jobs. `gate` (Linux, a few cents) runs on every PR and push: architecture, typecheck, lint
+# Three jobs. `gate` (Linux, a few cents) runs on every PR and push: architecture, typecheck, lint
 # test style, baseline contracts, affected behavior tests and, when a change reaches it, the
 # harness gate (npm run verify:harness). `fast` (macOS) runs non-rig tests,
 # only where paid runners belong: PRs into main (dev -> main is opened by hand), pushes to main
-# and manual runs. A skipped job bills nothing. The rig suites run from rig.yml. This workflow
+# and manual runs. An opt-in manual `full` runs npm run verify, including rigs and Electron
+# fixtures. A skipped job bills nothing. The labelled rig gate also runs from rig.yml. This workflow
 # never listens to label events, so a label can never replace a code-event run with a skipped one.
 # No secrets; pull_request runs with the fork's read-only token.
 on:

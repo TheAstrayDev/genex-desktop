@@ -610,14 +610,16 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     const f = await setup();
     const before = await securitySnapshot([f.output], f.root);
     const pidFile = path.join(f.output, "child.pid");
+    const entered = path.join(f.output, "root-entered");
     const stop = new AbortController();
     const held = f.run(
       `
+      require('node:fs').writeFileSync(process.argv[2], String(process.pid));
       const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'inherit', windowsHide: true });
       require('node:fs').writeFileSync(process.argv[1], String(child.pid));
       setInterval(() => {}, 1000);
     `,
-      [pidFile],
+      [pidFile, entered],
       { signal: stop.signal },
     );
     let observer: Awaited<ReturnType<typeof observeExit>> | undefined;
@@ -632,6 +634,20 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
       // until its handles close, or a newly reused PID in a parallel suite.
       await observer.assertExited();
       assert.deepEqual(await securitySnapshot([f.output], f.root), before);
+    } catch (error) {
+      stop.abort();
+      const result = await held;
+      console.info(
+        "Native cancellation preparation:",
+        JSON.stringify({
+          entered: existsSync(entered),
+          code: result.code,
+          reason: result.reason,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        }),
+      );
+      throw error;
     } finally {
       stop.abort();
       await held;
