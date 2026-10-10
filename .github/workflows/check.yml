@@ -27,6 +27,11 @@ on:
         description: Also run full fixture regression on macOS (npm run verify; billed runner)
         type: boolean
         default: false
+      full_mode:
+        description: All stages, or resume Electron acceptance after a recorded Node/rig pass
+        type: choice
+        options: [all, acceptance]
+        default: all
 permissions:
   contents: read
 concurrency:
@@ -115,9 +120,21 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Native plugin fixture contracts
+        if: inputs.full_mode != 'acceptance'
         run: node scripts/test.mjs tests/conformance/blender.test.ts tests/conformance/unity-plugin.test.ts
       - name: Full fixture regression, rigs, build and Electron acceptance
+        if: inputs.full_mode != 'acceptance'
         run: npm run verify
+      # This continuation reports only acceptance. It never substitutes for a Node/rig pass;
+      # callers must link the prior run and show that its tested inputs remain unchanged.
+      - name: Resume build and Electron acceptance (Node/rig suite not run)
+        if: inputs.full_mode == 'acceptance'
+        run: |
+          npm run build
+          node tests/e2e/run-electron-e2e.mjs
+          node tests/e2e/run-build-smoke.mjs
+          node tests/e2e/run-shapes-e2e.mjs
+          npm run test:agentic-readiness
   fast:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.fast) ||
