@@ -100,8 +100,6 @@ namespace GenexNative {
         [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetTokenInformation(IntPtr token, int kind, out uint value, uint size, out uint returned);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern uint GetNamedSecurityInfo(string path, int kind, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode)] static extern uint SetNamedSecurityInfo(string path, int kind, uint info, IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
-        [DllImport("ntdll.dll")] static extern int NtSetSecurityObject(SafeFileHandle handle, uint info, byte[] descriptor);
-        [DllImport("ntdll.dll")] static extern uint RtlNtStatusToDosError(int status);
         [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool GetFileSecurity(string path, uint info, byte[] descriptor, uint length, out uint needed);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool SetFileSecurity(string path, uint info, byte[] descriptor);
@@ -256,8 +254,10 @@ namespace GenexNative {
                 Marshal.Copy(descriptor, bytes, 0, bytes.Length);
                 using (var pin = CreateFile(path, 0x00080080, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
                     Check(!pin.IsInvalid, "Open native label handle");
-                    int status = NtSetSecurityObject(pin, LabelInformation, bytes);
-                    if (status < 0) CheckCode(RtlNtStatusToDosError(status), "Set native object integrity label");
+                    FileTag tag;
+                    Check(GetFileInformationByHandleEx(pin, 9, out tag, 8), "Inspect native label handle");
+                    if ((tag.Attributes & (uint)FileAttributes.ReparsePoint) != 0) throw new IOException("Native label path became a reparse point");
+                    Check(SetFileSecurity(path, LabelInformation, bytes), "Set native object integrity label");
                 }
             } finally { if (descriptor != IntPtr.Zero) LocalFree(descriptor); }
         }

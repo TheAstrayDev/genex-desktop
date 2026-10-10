@@ -29,7 +29,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: check-${{ github.event.pull_request.number || github.ref }}
+  # A fork's push gate must not cancel an explicitly requested full regression during repairs.
+  group: check-${{ github.event.repository.fork && github.event_name == 'push' && 'fork-push-' || '' }}${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   gate:

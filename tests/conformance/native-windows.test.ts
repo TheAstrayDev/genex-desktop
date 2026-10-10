@@ -451,6 +451,7 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
 
   it("runs the selected executable with literal spaced arguments and captures both output streams", async () => {
     const f = await setup();
+    const descriptorBefore = await securitySnapshot([f.output], f.root);
     const before = await exec("icacls.exe", [f.output]);
     const result = await f.run("console.log(process.argv[1]); console.error('stderr-ready')", [
       "a space & literal $value",
@@ -458,6 +459,9 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stdout, /a space & literal \$value/);
     assert.match(result.stderr, /stderr-ready/);
+    const descriptorAfter = await securitySnapshot([f.output], f.root);
+    if (descriptorBefore[0] !== descriptorAfter[0])
+      console.info("Native physical ACL:", JSON.stringify({ before: descriptorBefore, after: descriptorAfter }));
     assert.equal(
       (await exec("icacls.exe", [f.output])).stdout,
       before.stdout,
@@ -778,7 +782,9 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     const timed = await f.run("setInterval(() => {}, 1000)", [], { timeoutMs: 3000 });
     assert.equal(timed.reason, "timeout");
     assert.ok(Date.now() - started < 10_000, "timeout includes bounded sandbox cleanup");
-    const result = await f.run(`
+    const spawnReport = path.join(f.output, "spawn-probe.json");
+    const result = await f.run(
+      `
       const spawn = require('node:child_process').spawn;
       let child;
       try {
@@ -787,15 +793,19 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
         const probes = [];
         for (const detached of [false, true]) for (const stdio of ['inherit', 'pipe', 'ignore']) {
           try {
-            const probe = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached, stdio, windowsHide: true });
-            probes.push({ detached, stdio, pid: probe.pid }); probe.kill();
+            const probe = spawn(process.execPath, ['-e', ''], { detached, stdio, windowsHide: true });
+            probes.push({ detached, stdio, pid: probe.pid }); probe.unref();
+            probe.stdin?.end(); probe.stdout?.resume(); probe.stderr?.resume();
           } catch (failure) { probes.push({ detached, stdio, code: failure.code }); }
         }
-        console.error(JSON.stringify({ nativeChildSpawn: probes }));
+        require('node:fs').writeFileSync(process.argv[1], JSON.stringify({ nativeChildSpawn: probes }));
         throw error;
       }
       console.log(child.pid); child.unref();
-    `);
+    `,
+      [spawnReport],
+    );
+    if (existsSync(spawnReport)) console.info("Native child spawn:", await readFile(spawnReport, "utf8"));
     assert.equal(result.code, 0, result.stderr);
     const pid = Number(result.stdout.trim());
     assert.ok(pid > 0, result.stdout);
