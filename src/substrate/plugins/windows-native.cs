@@ -103,6 +103,8 @@ namespace GenexNative {
         [DllImport("ntdll.dll")] static extern int NtSetSecurityObject(SafeFileHandle handle, uint info, byte[] descriptor);
         [DllImport("ntdll.dll")] static extern uint RtlNtStatusToDosError(int status);
         [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
+        [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool GetFileSecurity(string path, uint info, byte[] descriptor, uint length, out uint needed);
+        [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool SetFileSecurity(string path, uint info, byte[] descriptor);
         [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int kind, out FileTag info, uint size);
         [StructLayout(LayoutKind.Sequential)] struct FileTag { public uint Attributes, Tag; }
@@ -268,13 +270,12 @@ namespace GenexNative {
         }
         // Preserve the original ACE order and control bits, including canonical legacy DACLs.
         static RawSecurityDescriptor ReadRawAcl(string path) {
-            IntPtr owner, group, dacl, sacl, descriptor;
-            CheckCode(GetNamedSecurityInfo(path, 1, 7, out owner, out group, out dacl, out sacl, out descriptor), "Read native path DACL");
-            try {
-                byte[] bytes = new byte[checked((int)GetSecurityDescriptorLength(descriptor))];
-                Marshal.Copy(descriptor, bytes, 0, bytes.Length);
-                return new RawSecurityDescriptor(bytes, 0);
-            } finally { LocalFree(descriptor); }
+            uint needed;
+            GetFileSecurity(path, 7, null, 0, out needed);
+            if (needed == 0) Check(false, "Size native path DACL");
+            byte[] bytes = new byte[checked((int)needed)];
+            Check(GetFileSecurity(path, 7, bytes, needed, out needed), "Read native path DACL");
+            return new RawSecurityDescriptor(bytes, 0);
         }
         static RawAcl RawDacl(RawSecurityDescriptor descriptor) {
             if (descriptor.DiscretionaryAcl == null) throw new IOException("Native sandbox cannot edit a null DACL");
@@ -284,12 +285,14 @@ namespace GenexNative {
             descriptor.DiscretionaryAcl = acl;
             byte[] bytes = new byte[descriptor.BinaryLength];
             descriptor.GetBinaryForm(bytes, 0);
-            // Write the pinned object directly: Win32 inheritance helpers materialize
-            // inherited ACEs even on files. This leaves other ACEs and control bits intact.
+            // Pin the binding and reject reparse points. The legacy writer preserves the
+            // physical ACE flags; named/NT inheritance helpers can materialize old entries.
             using (var pin = CreateFile(path, 0x00040080, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
                 Check(!pin.IsInvalid, "Open native DACL handle");
-                int status = NtSetSecurityObject(pin, 4, bytes);
-                if (status < 0) CheckCode(RtlNtStatusToDosError(status), "Set native path DACL");
+                FileTag tag;
+                Check(GetFileInformationByHandleEx(pin, 9, out tag, 8), "Inspect native DACL handle");
+                if ((tag.Attributes & (uint)FileAttributes.ReparsePoint) != 0) throw new IOException("Native DACL path became a reparse point");
+                Check(SetFileSecurity(path, 4, bytes), "Set native path DACL");
             }
         }
         static CommonAce RuleAce(FileSystemAccessRule rule) {

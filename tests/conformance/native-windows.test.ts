@@ -212,8 +212,17 @@ public static class AclSnapshot {
   [DllImport("advapi32.dll", CharSet=CharSet.Unicode)]
   static extern uint GetNamedSecurityInfo(string path, int kind, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
   [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
+  [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern bool GetFileSecurity(string path, uint info, byte[] descriptor, uint length, out uint needed);
   [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr value);
   public static string Read(string path, uint information) {
+    if (information == 7) {
+      uint needed;
+      GetFileSecurity(path, information, null, 0, out needed);
+      var raw = new byte[checked((int)needed)];
+      if (!GetFileSecurity(path, information, raw, needed, out needed)) throw new Win32Exception(Marshal.GetLastWin32Error());
+      return new RawSecurityDescriptor(raw, 0).GetSddlForm(AccessControlSections.All);
+    }
     IntPtr owner, group, dacl, sacl, descriptor;
     uint status = GetNamedSecurityInfo(path, 1, information, out owner, out group, out dacl, out sacl, out descriptor);
     if (status != 0) throw new Win32Exception((int)status);
@@ -252,17 +261,28 @@ using Microsoft.Win32.SafeHandles;
 public static class ExplicitFixtureAcl {
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
   public static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
-  [DllImport("ntdll.dll")]
-  public static extern int NtSetSecurityObject(SafeFileHandle handle, uint info, byte[] descriptor);
+  [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern bool SetFileSecurity(string path, uint info, byte[] descriptor);
+  [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern bool GetFileSecurity(string path, uint info, byte[] descriptor, uint size, out uint needed);
   public static void Prepare(string path) {
-    FileSystemSecurity acl = Directory.Exists(path) ? (FileSystemSecurity)new DirectoryInfo(path).GetAccessControl() : new FileInfo(path).GetAccessControl();
-    var raw = new RawSecurityDescriptor(acl.GetSecurityDescriptorBinaryForm(), 0);
+    uint needed;
+    GetFileSecurity(path, 7, null, 0, out needed);
+    var original = new byte[needed];
+    if (!GetFileSecurity(path, 7, original, needed, out needed)) throw new IOException("Cannot read owned DACL fixture");
+    var raw = new RawSecurityDescriptor(original, 0);
+    for (int i = 0; i < raw.DiscretionaryAcl.Count; i++) raw.DiscretionaryAcl[i].AceFlags &= ~AceFlags.Inherited;
     raw.SetFlags(raw.ControlFlags & ~(ControlFlags.DiscretionaryAclProtected | ControlFlags.DiscretionaryAclAutoInherited | ControlFlags.DiscretionaryAclAutoInheritRequired));
     var bytes = new byte[raw.BinaryLength];
     raw.GetBinaryForm(bytes, 0);
     using (var pin = CreateFile(path, 0x00040080, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
-      if (pin.IsInvalid || NtSetSecurityObject(pin, 4, bytes) < 0) throw new IOException("Cannot prepare explicit DACL fixture");
+      if (pin.IsInvalid || !SetFileSecurity(path, 4, bytes)) throw new IOException("Cannot prepare explicit DACL fixture");
     }
+    var physical = new byte[needed];
+    if (!GetFileSecurity(path, 7, physical, needed, out needed)) throw new IOException("Cannot check owned DACL fixture");
+    var checkedAcl = new RawSecurityDescriptor(physical, 0);
+    for (int i = 0; i < checkedAcl.DiscretionaryAcl.Count; i++)
+      if ((checkedAcl.DiscretionaryAcl[i].AceFlags & AceFlags.Inherited) != 0) throw new IOException("Fixture must contain explicit ACEs");
   }
 }
 '@
@@ -759,7 +779,21 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     assert.equal(timed.reason, "timeout");
     assert.ok(Date.now() - started < 10_000, "timeout includes bounded sandbox cleanup");
     const result = await f.run(`
-      const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore', windowsHide: true });
+      const spawn = require('node:child_process').spawn;
+      let child;
+      try {
+        child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore', windowsHide: true });
+      } catch (error) {
+        const probes = [];
+        for (const detached of [false, true]) for (const stdio of ['inherit', 'pipe', 'ignore']) {
+          try {
+            const probe = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached, stdio, windowsHide: true });
+            probes.push({ detached, stdio, pid: probe.pid }); probe.kill();
+          } catch (failure) { probes.push({ detached, stdio, code: failure.code }); }
+        }
+        console.error(JSON.stringify({ nativeChildSpawn: probes }));
+        throw error;
+      }
       console.log(child.pid); child.unref();
     `);
     assert.equal(result.code, 0, result.stderr);
