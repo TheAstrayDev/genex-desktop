@@ -266,8 +266,7 @@ namespace GenexNative {
             if (Directory.Exists(path)) new DirectoryInfo(path).SetAccessControl((DirectorySecurity)acl);
             else new FileInfo(path).SetAccessControl((FileSecurity)acl);
         }
-        // Windows accepts noncanonical DACLs, but .NET's rule editor refuses them. Keep
-        // their original ACE order rather than sorting another principal's permissions.
+        // Preserve the original ACE order and control bits, including canonical legacy DACLs.
         static RawSecurityDescriptor ReadRawAcl(string path) {
             IntPtr owner, group, dacl, sacl, descriptor;
             CheckCode(GetNamedSecurityInfo(path, 1, 7, out owner, out group, out dacl, out sacl, out descriptor), "Read native path DACL");
@@ -322,15 +321,9 @@ namespace GenexNative {
                 Directory.Exists(path) ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit : InheritanceFlags.None,
                 PropagationFlags.None, rule.AccessControlType);
         }
-        static void AddRule(string path, FileSystemAccessRule rule, bool tree) {
-            var acl = ReadAcl(path);
-            if (!tree) {
-                acl.AddAccessRule(rule);
-                WriteAcl(path, acl);
-                return;
-            }
-            // The named writer would normalize every old ACE and propagate that change.
-            // For this fallback only, stamp existing objects separately; new children inherit.
+        static void AddRule(string path, FileSystemAccessRule rule) {
+            // Named writers normalize old ACEs and propagate that change. Stamp existing
+            // objects separately; new children inherit the temporary grant from their parent.
             foreach (string entry in TreePaths(path)) {
                 var original = ReadRawAcl(entry);
                 var raw = RawDacl(original);
@@ -371,10 +364,10 @@ namespace GenexNative {
             var inherit = Directory.Exists(path) ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit : InheritanceFlags.None;
             var rights = deny ? FileSystemRights.ReadAndExecute : write ? FileSystemRights.Modify : FileSystemRights.ReadAndExecute;
             var rule = new FileSystemAccessRule(sid, rights, inherit, PropagationFlags.None, deny ? AccessControlType.Deny : AccessControlType.Allow);
-            bool tree = !ReadAcl(path).AreAccessRulesCanonical;
-            var grant = new Grant { Path = path, Rule = rule, HasLabel = write && !tree,
-                Label = write && !tree ? GetLabel(path) : null, Tree = tree };
-            if (tree) foreach (string entry in TreePaths(path, true)) {
+            // Named ACL writers convert even canonical legacy DACLs to automatic inheritance.
+            // Use the pinned per-object path for every tree so cleanup preserves old control bits.
+            var grant = new Grant { Path = path, Rule = rule, Tree = true };
+            foreach (string entry in TreePaths(path, true)) {
                 var descriptor = ReadRawAcl(entry);
                 var flags = new Grant { Path = entry, OriginalFlags = descriptor.ControlFlags };
                 Journal(control, flags, false);
@@ -383,19 +376,17 @@ namespace GenexNative {
                 WriteRawDacl(entry, descriptor, RawDacl(descriptor));
             }
             Journal(control, grant, deny);
-            // A fallback can fail halfway through a tree; retain its cleanup before stamping.
-            if (grant.Tree) grants.Add(grant);
-            try { AddRule(path, rule, grant.Tree); }
+            // A tree can fail halfway through; retain its cleanup before stamping.
+            grants.Add(grant);
+            try { AddRule(path, rule); }
             catch (UnauthorizedAccessException) {
                 // An installed runtime may already permit restricted packages. Otherwise launch
                 // fails closed; a host that cannot edit its ACL cannot grant new access here.
                 if (!write && !deny) return;
                 throw;
             }
-            if (!grant.Tree) grants.Add(grant);
             if (write) {
-                if (!tree) SetLabel(path, "S:(ML;OICI;NW;;;LW)");
-                else foreach (string entry in TreePaths(path)) {
+                foreach (string entry in TreePaths(path)) {
                     var label = new Grant { Path = entry, HasLabel = true, Label = GetLabel(entry) };
                     Journal(control, label, false);
                     grants.Add(label);

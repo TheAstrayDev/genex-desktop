@@ -23,6 +23,7 @@ import { tmpDir } from "../helpers/tmp.ts";
 const exec = promisify(execFile);
 const MARKER_POLLS = 500;
 const POLL_MS = 20;
+const PROGRESS_REPORT_MS = 5000;
 const BLENDER = process.env.STUDIO_TEST_BLENDER;
 const FBX_HEADER = Buffer.from("Kaydara FBX Binary  \0\x1a\0", "ascii");
 // An owned acceptance bundle beside dist/main resolves the helper from shipped resources.
@@ -43,7 +44,8 @@ async function setup() {
   const binary = path.join(runtime, "node.exe");
   await copyFile(process.execPath, binary);
   const run = async (code: string, args: string[] = [], patch: Partial<NativeProcessRequest> = {}) => {
-    const progress = new Set<string>();
+    const started = performance.now();
+    const progress = new Map<string, number>();
     // Keep only trusted broker filenames, never specification/credential contents. If a hosted
     // runner stalls, distinguish compilation, ACL preparation and execution before cleanup.
     let observing = Promise.resolve();
@@ -52,7 +54,9 @@ async function setup() {
         .then(async () => {
           for (const name of await readdir(root)) {
             if (!name.startsWith(".native-control-")) continue;
-            for (const file of await readdir(path.join(root, name)).catch(() => [])) progress.add(file);
+            for (const file of await readdir(path.join(root, name)).catch(() => [])) {
+              if (!progress.has(file)) progress.set(file, Math.round(performance.now() - started));
+            }
           }
         })
         .catch(() => {});
@@ -71,8 +75,12 @@ async function setup() {
         maxOutputBytes: 4096,
         ...patch,
       });
-      if (result.reason === "timeout")
-        console.error("Native broker timed out:", JSON.stringify({ ...result, progress: [...progress].sort() }));
+      const elapsedMs = Math.round(performance.now() - started);
+      if (result.reason === "timeout" || elapsedMs > PROGRESS_REPORT_MS)
+        console.info(
+          "Native broker progress:",
+          JSON.stringify({ elapsedMs, reason: result.reason, progress: Object.fromEntries(progress) }),
+        );
       return result;
     } finally {
       clearInterval(probe);
@@ -195,8 +203,30 @@ async function securitySnapshot(files: string[], root: string) {
     `param([string]$Spec)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+Add-Type @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+public static class AclSnapshot {
+  [DllImport("advapi32.dll", CharSet=CharSet.Unicode)]
+  static extern uint GetNamedSecurityInfo(string path, int kind, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
+  [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
+  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr value);
+  public static string Read(string path) {
+    IntPtr owner, group, dacl, sacl, descriptor;
+    uint status = GetNamedSecurityInfo(path, 1, 7, out owner, out group, out dacl, out sacl, out descriptor);
+    if (status != 0) throw new Win32Exception((int)status);
+    try {
+      var bytes = new byte[checked((int)GetSecurityDescriptorLength(descriptor))];
+      Marshal.Copy(descriptor, bytes, 0, bytes.Length);
+      return new RawSecurityDescriptor(bytes, 0).GetSddlForm(AccessControlSections.All);
+    } finally { LocalFree(descriptor); }
+  }
+}
+'@
 $items = Get-Content -LiteralPath $Spec -Raw -Encoding UTF8 | ConvertFrom-Json
-$records = @(foreach ($file in $items) { (Get-Item -LiteralPath $file).GetAccessControl().GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::All) })
+$records = @(foreach ($file in $items) { [AclSnapshot]::Read($file) })
 ConvertTo-Json -InputObject $records -Compress
 `,
   );
@@ -205,6 +235,49 @@ ConvertTo-Json -InputObject $records -Compress
     ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, spec],
   );
   return JSON.parse(result.stdout);
+}
+
+/** A legacy canonical DACL must keep its control flags when the broker adds file grants. */
+async function legacyAclFixture(folder: string, script: string) {
+  await writeFile(
+    script,
+    `param([string]$Folder)
+$ErrorActionPreference = 'Stop'
+Add-Type @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using Microsoft.Win32.SafeHandles;
+public static class ExplicitFixtureAcl {
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+  [DllImport("ntdll.dll")]
+  public static extern int NtSetSecurityObject(SafeFileHandle handle, uint info, byte[] descriptor);
+  public static void Prepare(string path) {
+    FileSystemSecurity acl = Directory.Exists(path) ? (FileSystemSecurity)new DirectoryInfo(path).GetAccessControl() : new FileInfo(path).GetAccessControl();
+    var raw = new RawSecurityDescriptor(acl.GetSecurityDescriptorBinaryForm(), 0);
+    raw.SetFlags(raw.ControlFlags & ~(ControlFlags.DiscretionaryAclProtected | ControlFlags.DiscretionaryAclAutoInherited | ControlFlags.DiscretionaryAclAutoInheritRequired));
+    var bytes = new byte[raw.BinaryLength];
+    raw.GetBinaryForm(bytes, 0);
+    using (var pin = CreateFile(path, 0x00040080, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+      if (pin.IsInvalid || NtSetSecurityObject(pin, 4, bytes) < 0) throw new IOException("Cannot prepare explicit DACL fixture");
+    }
+  }
+}
+'@
+[ExplicitFixtureAcl]::Prepare($Folder)
+`,
+  );
+  await exec(path.join(process.env.SystemRoot || "C:\\Windows", "System32/WindowsPowerShell/v1.0/powershell.exe"), [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    script,
+    folder,
+  ]);
 }
 
 async function blenderFbxJob(code: string, stagedSource?: string) {
@@ -370,6 +443,25 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     );
     await writeFile(path.join(f.output, "after.txt"), "host-writable");
     assert.equal(await readFile(path.join(f.output, "after.txt"), "utf8"), "host-writable");
+  });
+
+  it("preserves legacy canonical DACL flags on existing folders and files", async () => {
+    const f = await setup();
+    const nested = path.join(f.output, "existing");
+    await mkdir(nested);
+    const existing = path.join(nested, "original.txt");
+    await writeFile(existing, "before");
+    const paths = [f.output, nested, existing];
+    for (const file of paths) await legacyAclFixture(file, path.join(f.root, "legacy-acl.ps1"));
+    const before = await securitySnapshot(paths, f.root);
+    assert.ok(
+      before.every((sddl: string) => !sddl.includes("D:AI")),
+      "the fixture uses the legacy inheritance model",
+    );
+    const result = await f.run("require('node:fs').writeFileSync(process.argv[1], 'after')", [existing]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(await readFile(existing, "utf8"), "after");
+    assert.deepEqual(await securitySnapshot(paths, f.root), before, "ACE flags and DACL control bits are exact");
   });
 
   it("reads staged inputs, writes declared outputs, and refuses foreign reads, writes and network", async () => {

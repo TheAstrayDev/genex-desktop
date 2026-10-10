@@ -781,7 +781,9 @@ only registry-read capability and grants to the runtime, staged inputs, declared
 and scratch folder. Overlapping jobs do not share file grants. A kill-on-close Job Object stops
 all descendants on exit, timeout or cancel; the trusted broker removes its grants and profile
 before returning. Flushed host-owned recovery records precede each ACL change; after a broker
-crash, a fresh broker restores only that job's SID grants and original integrity labels. A failed
+crash, a fresh broker restores only that job's SID grants and original integrity labels. Pinned
+per-object grants preserve existing ACE order and DACL control flags, including canonical legacy
+permissions; cleanup skips junction targets. A failed
 recovery retains those records and reports their location. A failed sandbox launch never falls
 back to an unrestricted process. An
 externally installed runtime whose ACL the current user cannot grant may be unusable; the
