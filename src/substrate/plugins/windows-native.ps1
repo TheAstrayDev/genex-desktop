@@ -4,7 +4,12 @@ param([Parameter(Mandatory=$true)][string]$SpecFile, [switch]$CleanupOnly)
 $control = [System.IO.Path]::GetDirectoryName($SpecFile)
 [System.IO.File]::WriteAllText([System.IO.Path]::Combine($control, 'bootstrap.entered'), 'entered')
 $ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+# Automatic command discovery scans the host's module folders and can stall a cold broker.
+# Load only the Windows modules used here, by their built-in paths; no user module is searched.
+$PSModuleAutoLoadingPreference = 'None'
+Import-Module -Name ([System.IO.Path]::Combine($PSHOME, 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'))
+Import-Module -Name ([System.IO.Path]::Combine($PSHOME, 'Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1'))
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {
     [System.IO.File]::WriteAllText([System.IO.Path]::Combine($control, 'compiler.entered'), 'entered')
     Add-Type -Path (Join-Path $PSScriptRoot 'windows-native.cs')

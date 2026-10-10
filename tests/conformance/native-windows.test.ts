@@ -194,13 +194,13 @@ if ((Get-Item -LiteralPath $Folder).GetAccessControl().AreAccessRulesCanonical) 
   ]);
 }
 
-async function securitySnapshot(files: string[], root: string) {
+async function securitySnapshot(files: string[], root: string, information = 7) {
   const spec = path.join(root, "acl-paths.json");
   const script = path.join(root, "read-acls.ps1");
   await writeFile(spec, JSON.stringify(files));
   await writeFile(
     script,
-    `param([string]$Spec)
+    `param([string]$Spec, [uint32]$Information)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type @'
@@ -213,9 +213,9 @@ public static class AclSnapshot {
   static extern uint GetNamedSecurityInfo(string path, int kind, uint info, out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
   [DllImport("advapi32.dll")] static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
   [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr value);
-  public static string Read(string path) {
+  public static string Read(string path, uint information) {
     IntPtr owner, group, dacl, sacl, descriptor;
-    uint status = GetNamedSecurityInfo(path, 1, 7, out owner, out group, out dacl, out sacl, out descriptor);
+    uint status = GetNamedSecurityInfo(path, 1, information, out owner, out group, out dacl, out sacl, out descriptor);
     if (status != 0) throw new Win32Exception((int)status);
     try {
       var bytes = new byte[checked((int)GetSecurityDescriptorLength(descriptor))];
@@ -226,13 +226,13 @@ public static class AclSnapshot {
 }
 '@
 $items = Get-Content -LiteralPath $Spec -Raw -Encoding UTF8 | ConvertFrom-Json
-$records = @(foreach ($file in $items) { [AclSnapshot]::Read($file) })
+$records = @(foreach ($file in $items) { [AclSnapshot]::Read($file, $Information) })
 ConvertTo-Json -InputObject $records -Compress
 `,
   );
   const result = await exec(
     path.join(process.env.SystemRoot || "C:\\Windows", "System32/WindowsPowerShell/v1.0/powershell.exe"),
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, spec],
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, spec, String(information)],
   );
   return JSON.parse(result.stdout);
 }
@@ -410,6 +410,8 @@ describe("Windows native runtime", { skip: process.platform !== "win32" && "Wind
     );
     const createdAcl = (await exec("icacls.exe", [path.join(f.output, "created/new.txt")])).stdout;
     assert.doesNotMatch(createdAcl, /S-1-15-2-/, "new descendants retain no temporary AppContainer grant");
+    const createdLabel = await securitySnapshot([path.join(f.output, "created/new.txt")], f.root, 16);
+    assert.doesNotMatch(createdLabel[0], /;;;LW\)/, "new descendants retain no temporary low integrity label");
     const brokerFile = path.join(f.output, "broker.json");
     const held = f
       .run(
