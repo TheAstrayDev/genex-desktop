@@ -40,6 +40,59 @@ exports work with no enabled plugins.
   `clip` (video, poster, `motion`) or `clipProblem` with a still's codes.
 - Plugin tool parameters are scalar (`string` / `number` / `boolean` properties); API 3 also accepts `type: "object"`, optionally with `acceptJsonString` for a migrated scalar (`toolParameter` in `src/substrate/plugins/manifest.ts`; see the plugin guide's structured arguments). External MCP tools retain their full nested schemas.
 
+## UI customization (panel feature version 1)
+
+An API 3 plugin may declare `ui.customization`. Installation and capability-expanding updates
+show that it can change Studio's appearance, navigation layout and decorative widgets. This is a **panel-only**
+API: it does not expose a backend host service or a harness call.
+
+Check `context.features?.uiCustomization === 1` before using it; older hosts omit this field.
+`studioPlugin.call('customization.read')` reads only the calling plugin's saved profile (or null).
+`call('customization.set', undefined, profile)` atomically replaces it, and
+`call('customization.reset')` deletes it. The panel cannot supply another plugin's id. Both
+the bridge and registry require an enabled, installed plugin with the capability.
+
+The version 1 profile has optional `mode`, `light`, `dark`, `geometry`, `fonts`, `surfaces`, `layout`
+and `widgets` sections. The SDK declares their types. Light and dark colors accept every native
+semantic palette role, as six-digit hex values. Mode is `system`, `light` or `dark`; when omitted,
+the person's mode remains in charge. Geometry accepts `textSize` (12–18 px),
+`buttonRadius` (0–24 px) and `cardRadius` (0–32 px). Fonts select the existing Studio/system,
+content and code font options; they cannot load a font URL. Omitted records and arrays normalize
+to empty values. Unknown fields, unsupported versions and out-of-range values reject the whole write.
+
+Host anchors are `app`, `sidebar`, `workspace`, `newChat`, `profile` (the local Genex account card)
+and `navigation`. Surfaces accept a solid color, a 2–4-color gradient or glow, or an embedded PNG/JPEG/WebP
+data URI. Each image is at most 1,400,000 characters; a profile holds at most 2,800,000 image
+characters in total. `animated: true` pans the background over 24 seconds; this host animation
+stops under reduced motion. A New Chat override unmounts the ordinary canvas painter.
+
+Each layout entry selects an anchor, 1–12 `columns` and 0–48 px `gap`. Navigation additionally
+positions `newGame`, `plugins`, `harness` and `settings` in the grid, with optional 24–160 px
+button heights. Visual placement preserves the native actions and DOM keyboard order. It does
+not relocate dialogs, native game views or controls inside another plugin's isolated frame.
+Widgets use that anchor's grid (12 columns by default, 24 rows). A profile holds at most 12
+uniquely named text, clock, weather, image or plugin-panel widgets. Positions are 1-based `column`/`row` with
+`columnSpan`/`rowSpan`; defaults are 1/1/3/6. Labels are at most 80 characters, text at most 240.
+Weather displays the plugin's supplied text, without a host request for weather or location.
+An image widget requires `image` as an embedded raster data URI. A banner background reserves
+160 px on the account card; an image widget spanning its grid can supply banner content there.
+This is local presentation; nothing is uploaded to the account or public profile.
+A `panel` widget must name this plugin's declared settings panel via `panel`. It uses the existing
+opaque frame, SDK bridge and trusted action approval flow, with no active project. This lets a
+plugin supply interactive UI without executing its scripts in the host renderer.
+
+The host applies one enabled provider over the ordinary appearance without overwriting it.
+The first plugin id in lexical order wins. Reset, disable, removal or capability withdrawal
+removes its stylesheet and widgets, then shows the next eligible provider or ordinary appearance.
+Unchanged profile refreshes keep the same style node; clocks tick once per minute and native
+animations need no JavaScript frame loop. The app's palette preview still takes precedence.
+Profiles survive restart and same-identity updates/reinstalls; replacing an identity erases its
+profile. Disabled or removed plugins cannot read or write through this API. Invalid stored
+profiles are ignored. A failed save leaves the saved profile unchanged. Successful writes emit
+the existing plugin settings-change notification. No CSS strings, selectors, executable markup,
+host DOM, filesystem paths or account information cross the API. A customization plugin supplies
+its own editor; Studio adds no customization settings screen.
+
 ## Package and distribution
 
 A prebuilt directory contains `plugin.json`, a backend ES module and self-contained HTML panels.

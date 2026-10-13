@@ -88,6 +88,7 @@ export type PluginScalar = string | number | boolean;
 
 /** Host services a manifest may declare. `export` is API 2. */
 export type PluginCapability =
+  | "ui.customization"
   | "settings"
   | "project.read"
   | "project.write"
@@ -829,8 +830,108 @@ export interface PluginActivation {
 /** The backend module's single export. */
 export type Activate = (host: PluginHost) => PluginActivation | Promise<PluginActivation>;
 
+/** Host-owned anchors available to customization plugins. */
+export type CustomizationSlot = "app" | "sidebar" | "workspace" | "newChat" | "profile" | "navigation";
+/** Semantic palette roles shared by Studio's light and dark themes. */
+export type CustomizationColorRole =
+  | "background"
+  | "foreground"
+  | "sidebar"
+  | "surface"
+  | "popover"
+  | "field"
+  | "hover"
+  | "muted"
+  | "border"
+  | "controlBorder"
+  | "accent"
+  | "success"
+  | "warning"
+  | "danger"
+  | "accentFill"
+  | "accentHover"
+  | "accentText"
+  | "icon"
+  | "iconSelected"
+  | "logo"
+  | "logoShade"
+  | "graph"
+  | "art"
+  | "artPaper"
+  | "artMark"
+  | "artButton"
+  | "controlFill"
+  | "promptChipFill"
+  | "controlHover"
+  | "controlText"
+  | "controlTextHover"
+  | "chipHover"
+  | "sidebarSelected"
+  | "sidebarHover"
+  | "well"
+  | "thumb"
+  | "meterTrack"
+  | "meterFill"
+  | "meterHigh"
+  | "meterFull"
+  | "promptEdge"
+  | "viewSwitch"
+  | "wireArt"
+  | "hatch"
+  | "hatchGround"
+  | "settingsTab";
+/** One bounded position within a 12-column, 24-row host grid. */
+export interface CustomizationPlacement {
+  column?: number;
+  row?: number;
+  columnSpan?: number;
+  rowSpan?: number;
+}
+/** Embedded raster data or host-generated colors, never a remote URL or CSS string. */
+export type CustomizationBackground =
+  | { kind: "solid"; color: string }
+  | { kind: "gradient"; colors: string[]; angle?: number; animated?: boolean }
+  | { kind: "glow"; colors: string[]; animated?: boolean }
+  | { kind: "image"; data: string; animated?: boolean };
+/** Built-in displays are read-only; custom panels retain the ordinary isolated SDK and action approvals. */
+export interface CustomizationWidget extends CustomizationPlacement {
+  id: string;
+  target: CustomizationSlot;
+  kind: "text" | "clock" | "weather" | "image" | "panel";
+  label?: string;
+  text?: string;
+  image?: string;
+  /** This plugin's declared settings panel; it remains opaque and uses the ordinary SDK bridge. */
+  panel?: string;
+}
+/** Version 1 host appearance and composition, applied while the declaring plugin is enabled. */
+export interface PluginCustomization {
+  version: 1;
+  mode?: "system" | "light" | "dark";
+  light?: Partial<Record<CustomizationColorRole, string>>;
+  dark?: Partial<Record<CustomizationColorRole, string>>;
+  geometry?: { textSize?: number; buttonRadius?: number; cardRadius?: number };
+  fonts?: {
+    uiFont?: "studio" | "system";
+    contentFont?: "inherit" | "system" | "serif" | "mono";
+    codeFont?: "geist" | "system";
+  };
+  surfaces?: Partial<Record<CustomizationSlot, CustomizationBackground>>;
+  layout?: {
+    target: CustomizationSlot;
+    columns?: number;
+    gap?: number;
+    items?: Partial<
+      Record<"newGame" | "plugins" | "harness" | "settings", CustomizationPlacement & { height?: number }>
+    >;
+  }[];
+  widgets?: CustomizationWidget[];
+}
+
 /** What `studioPlugin.call('context')` answers inside a panel frame. */
 export interface PluginPanelContext {
+  /** Absent on older hosts. Feature discovery is separate from the general SDK version. */
+  features?: { uiCustomization?: 1 };
   project: string | null;
   apiVersion: PluginApiVersion;
   theme: {
@@ -886,6 +987,10 @@ export interface StudioPluginUi {
  * preload: there is no `window.studio`, no `require` and no direct IPC.
  */
 export interface StudioPluginPanel {
+  /** Requires ui.customization. Reads or changes only this panel's plugin profile. */
+  call(method: "customization.read"): Promise<PluginCustomization | null>;
+  call(method: "customization.set", name: undefined, args: PluginCustomization): Promise<void>;
+  call(method: "customization.reset"): Promise<void>;
   /** Host context changed; re-read status. No secrets are included in notifications. */
   onContextChanged(callback: () => void): () => void;
   call(method: "context"): Promise<PluginPanelContext>;

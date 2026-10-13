@@ -6,7 +6,8 @@
  */
 import type { CSSProperties, JSX, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAppearance } from "../appearance/store.ts";
+import { useAppearance, usePluginAppearance } from "../appearance/store.ts";
+import { CustomizationSlot } from "../../shared/plugin-customization-layout.ts";
 import { Scheme } from "../appearance/themes.ts";
 import { drawBackdrop } from "./draw.ts";
 import { colorLightness } from "./field.ts";
@@ -279,7 +280,7 @@ function useSettledValue<T>(value: T, ms: number): T {
  * follows a slider as it moves, except beneath Settings, where the preview follows and home
  * redraws once the slider settles.
  */
-export function HomeBackground(): JSX.Element | null {
+function NativeHomeBackground(): JSX.Element | null {
   const settle = useBackdropPreviewShown() ? HOME_SETTLE_MS : 0;
   const settings = useSettledValue(useBackdrop(), settle);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -299,4 +300,9 @@ export function HomeBackground(): JSX.Element | null {
       <BackdropCanvas settings={settings} drawing={drawing} canvas={canvas} className="home-backdrop" />
     </div>
   );
+}
+/** A plugin background replaces the native painter instead of leaving its canvas running underneath. */
+export function HomeBackground(): JSX.Element | null {
+  const customization = usePluginAppearance();
+  return customization?.surfaces[CustomizationSlot.NewChat] ? null : <NativeHomeBackground />;
 }

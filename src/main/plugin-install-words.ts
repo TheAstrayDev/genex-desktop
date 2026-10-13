@@ -78,6 +78,8 @@ const CAPABILITY_WORDS: ReadonlyMap<string, string> = new Map(
     [PluginCapability.Export]: "export your games",
     [PluginCapability.NativeRuntime]: "install and run the apps it names, such as Blender",
     [PluginCapability.GameEngine]: "make games of its engine's kind and link them to its projects",
+    [PluginCapability.UiCustomization]:
+      "change Studio's appearance, navigation layout and decorative widgets while enabled",
   } satisfies Record<PluginCapability, string>),
 );
 

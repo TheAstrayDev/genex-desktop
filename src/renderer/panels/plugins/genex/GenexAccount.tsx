@@ -3,6 +3,7 @@
  * with its credits) and only the action that state needs. It replaces the plugin's own frame on
  * the Genex page, so it speaks in the app's type, colours and buttons.
  */
+import { CustomizationSlot } from "../../../../shared/plugin-customization-layout.ts";
 import type { JSX, ReactNode } from "react";
 import { GenexAction } from "../../../../shared/genex.ts";
 import { CreditsShard } from "../../../play/CreditsShard.tsx";
@@ -28,6 +29,7 @@ const NUMBER = new Intl.NumberFormat();
 function Card({ kind, children }: { kind: GenexAccountKind; children: ReactNode }): JSX.Element {
   return (
     <section className="genex-account" data-genex-account={kind} aria-live="polite" aria-label="Genex account">
+      <div data-customization-slot={CustomizationSlot.Profile} />
       {children}
     </section>
   );

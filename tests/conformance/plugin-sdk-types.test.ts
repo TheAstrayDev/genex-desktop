@@ -116,6 +116,19 @@ test("a backend written against the SDK declaration compiles clean", (t) => {
       export async function boot(): Promise<string | null> {
         const context: PluginPanelContext = await window.studioPlugin.call('context');
         await window.studioPlugin.call('settings');
+        if (context.features?.uiCustomization === 1) {
+          await window.studioPlugin.call('customization.set', undefined, {
+            version: 1, dark: { accent: '#123456', iconSelected: '#abcdef' }, geometry: { textSize: 16 },
+            fonts: { uiFont: 'system' },
+            surfaces: { newChat: { kind: 'gradient', colors: ['#123456', '#abcdef'], animated: true } },
+            layout: [{ target: 'navigation', columns: 2, items: { settings: { columnSpan: 2, height: 48 } } }],
+            widgets: [{ id: 'time', target: 'newChat', kind: 'clock' }],
+          });
+          const profile = await window.studioPlugin.call('customization.read');
+          const version: 1 | undefined = profile?.version;
+          void version;
+          await window.studioPlugin.call('customization.reset');
+        }
         await window.studioPlugin.call('action', 'hello', {});
         const chosen: string | null = await window.studioPlugin.chooseFile({ title: 'Choose a project', extensions: ['uproject'] });
         window.studioPlugin.ui?.status('Status', 'ready');
