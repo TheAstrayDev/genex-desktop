@@ -343,7 +343,8 @@ A panel is served into an opaque-origin sandboxed frame with
 ### Customizing Studio from a plugin
 
 Declare `apiVersion: 3` and the `ui.customization` capability. Check feature discovery first;
-this is additive to API 3 and is absent from older hosts. From your panel:
+this is additive to API 3 and is absent from older hosts. A plugin may offer a readable theme
+and a small panel in the one host-owned New Chat slot. For a panel declared as `activity`:
 
 ```js
 const context = await studioPlugin.call('context');
@@ -352,26 +353,22 @@ if (context.features?.uiCustomization !== 1) {
 }
 await studioPlugin.call('customization.set', undefined, {
   version: 1,
-  dark: { background: '#102030', foreground: '#f5f5f5', accent: '#798fff' },
-  geometry: { textSize: 15, buttonRadius: 10, cardRadius: 16 },
-  fonts: { uiFont: 'system' },
-  surfaces: {
-    newChat: { kind: 'gradient', colors: ['#102030', '#263655'], animated: true },
-    profile: { kind: 'gradient', colors: ['#20304f', '#402030'] },
-  },
-  layout: [{ target: 'navigation', columns: 2, items: {
-    settings: { column: 1, row: 3, columnSpan: 2, height: 48 },
-  } }],
-  widgets: [{ id: 'clock', kind: 'clock', target: 'newChat', label: 'Local time' }],
+  newChat: { panel: 'activity', height: 160 },
 });
 ```
 
-`customization.read` reads your own saved profile; `customization.reset` removes it.
-The host validates, persists and applies the profile throughout its native appearance system.
-Disable or reset removes the plugin layer without changing the user's ordinary saved appearance.
-See [UI customization](plugins.md#ui-customization-panel-feature-version-1) for bounds and
-lifecycle rules. Your plugin provides its own editor. No executable CSS or host DOM is exposed,
-and this API does not modify another plugin's isolated frame or a game's native view.
+Add `theme: { name, light, dark, fonts, geometry }` to offer a theme. Both palettes must supply
+all 14 core roles and pass the host's contrast floor. People select it in Settings → Appearance;
+offering it never changes their selected theme or light/dark mode. The source is labelled as a
+plugin and has a Turn off control. Fonts use the existing local choices; geometry sets only
+button and card radii. The panel sits in a clipped, labelled box under the composer.
+
+`customization.read` reads your own saved profile; `customization.reset` withdraws both offers.
+Profiles live in `data/<id>/customization.json`, independently of the install identity, so saving
+an offer leaves open approval prompts valid. Disable or reset removes host effects without
+overwriting the person's built-in appearance. See [UI customization](plugins.md#ui-customization-panel-feature-version-1)
+for exact bounds and lifecycle rules. Your plugin provides its own editor. No executable CSS,
+host DOM, navigation rearrangement, background replacement or usage-file access is exposed.
 
 ## 4. Consent and confirmation
 

@@ -116,13 +116,14 @@ test("a backend written against the SDK declaration compiles clean", (t) => {
       export async function boot(): Promise<string | null> {
         const context: PluginPanelContext = await window.studioPlugin.call('context');
         await window.studioPlugin.call('settings');
+        const palette = { background: '#111111', foreground: '#ffffff', surface: '#161616', sidebar: '#121212',
+          popover: '#171717', field: '#181818', hover: '#222222', muted: '#cccccc', border: '#888888',
+          controlBorder: '#999999', accent: '#aabbff', success: '#88ddaa', warning: '#ffdd88', danger: '#ffaaaa' };
         if (context.features?.uiCustomization === 1) {
           await window.studioPlugin.call('customization.set', undefined, {
-            version: 1, dark: { accent: '#123456', iconSelected: '#abcdef' }, geometry: { textSize: 16 },
-            fonts: { uiFont: 'system' },
-            surfaces: { newChat: { kind: 'gradient', colors: ['#123456', '#abcdef'], animated: true } },
-            layout: [{ target: 'navigation', columns: 2, items: { settings: { columnSpan: 2, height: 48 } } }],
-            widgets: [{ id: 'time', target: 'newChat', kind: 'clock' }],
+            version: 1,
+            theme: { name: 'Readable theme', light: palette, dark: palette, fonts: { uiFont: 'system' }, geometry: { buttonRadius: 8 } },
+            newChat: { panel: 'summary', height: 160 },
           });
           const profile = await window.studioPlugin.call('customization.read');
           const version: 1 | undefined = profile?.version;
@@ -335,4 +336,22 @@ test("an undeclared host method and a non-scalar tool argument are compile error
     filesBesideStill.some((d) => d.file?.fileName.endsWith("files.ts")),
     "a still observes no files",
   );
+});
+
+test("the panel SDK rejects fields removed from customization feature 1", (t) => {
+  for (const [name, value] of Object.entries({
+    mode: "{version:1,mode:'dark'}",
+    surfaces: "{version:1,surfaces:{}}",
+    layout: "{version:1,layout:[]}",
+    widgets: "{version:1,widgets:[]}",
+  })) {
+    const file = `${name}.ts`;
+    const diagnostics = compile(t, {
+      [file]: `export const offer = () => window.studioPlugin.call('customization.set', undefined, ${value});`,
+    });
+    assert.ok(
+      diagnostics.some((d) => d.file?.fileName.endsWith(file)),
+      `${name} must not type-check`,
+    );
+  }
 });

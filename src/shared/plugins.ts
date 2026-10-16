@@ -1,7 +1,7 @@
 import type { PluginToolAsset } from "./asset-making.ts";
 import type { EngineCatalog, EngineDeclaration, EngineId, GameEngine } from "./game-engine.ts";
 import type { RuntimeInstallPhase } from "./model-install.ts";
-import { PLUGIN_CUSTOMIZATION_CAPABILITY, type PluginCustomization } from "./plugin-customization.ts";
+import type { PluginCustomization } from "./plugin-customization.ts";
 import type { ObserveContext, PluginObserver } from "./observers.ts";
 import type { HookContext, PluginHook, PluginLock } from "./plugin-hooks.ts";
 import { ENGINE_FACT, type FactRule, type GameKind, scopeReaches } from "./project-facts.ts";
@@ -107,7 +107,7 @@ export const PluginCapability = {
   Export: "export",
   NativeRuntime: "native-runtime",
   GameEngine: "game-engine",
-  UiCustomization: PLUGIN_CUSTOMIZATION_CAPABILITY,
+  UiCustomization: "ui.customization",
 } as const;
 export type PluginCapability = (typeof PluginCapability)[keyof typeof PluginCapability];
 
@@ -667,7 +667,7 @@ export interface PluginScan {
   skillDigests?: Record<string, string>;
 }
 export interface PluginInfo {
-  /** Host-owned customization data, applied only while enabled and permitted. */
+  /** Validated theme and New Chat panel offers. Themes apply only when selected by the person. */
   customization?: PluginCustomization;
   manifest: PluginManifest;
   source: PluginSourceKind;

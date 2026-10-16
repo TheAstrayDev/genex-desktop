@@ -7,7 +7,7 @@
  * Planner starts writing (`launch.ts` holds the steps). Once the game's own chat has the message,
  * home fades away over it, so the swap underneath is never seen.
  */
-import { CustomizationSlot } from "../../shared/plugin-customization-layout.ts";
+import { NewChatPluginSlot } from "../appearance/NewChatPluginSlot.tsx";
 import type { JSX } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { GameLocation } from "../../shared/game-project.ts";
@@ -151,7 +151,7 @@ function HomeScreen({
       />
     );
   return (
-    <section data-home="" data-customization-slot={CustomizationSlot.NewChat} aria-label="Home" className="home-layer">
+    <section data-home="" aria-label="Home" className="home-layer">
       {/* Only home at rest has it: the first message's transition fades it out with the rest. */}
       <HomeBackground />
       <div className="home-header titlebar-drag">
@@ -182,6 +182,7 @@ function HomeScreen({
               {MESSAGE.suggest}
             </button>
           </div>
+          <NewChatPluginSlot />
         </div>
       </div>
     </section>

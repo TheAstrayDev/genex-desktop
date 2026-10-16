@@ -830,14 +830,12 @@ export interface PluginActivation {
 /** The backend module's single export. */
 export type Activate = (host: PluginHost) => PluginActivation | Promise<PluginActivation>;
 
-/** Host-owned anchors available to customization plugins. */
-export type CustomizationSlot = "app" | "sidebar" | "workspace" | "newChat" | "profile" | "navigation";
-/** Semantic palette roles shared by Studio's light and dark themes. */
+/** Native palette roles; every theme supplies all roles in both schemes as #RRGGBB. */
 export type CustomizationColorRole =
   | "background"
   | "foreground"
-  | "sidebar"
   | "surface"
+  | "sidebar"
   | "popover"
   | "field"
   | "hover"
@@ -847,85 +845,25 @@ export type CustomizationColorRole =
   | "accent"
   | "success"
   | "warning"
-  | "danger"
-  | "accentFill"
-  | "accentHover"
-  | "accentText"
-  | "icon"
-  | "iconSelected"
-  | "logo"
-  | "logoShade"
-  | "graph"
-  | "art"
-  | "artPaper"
-  | "artMark"
-  | "artButton"
-  | "controlFill"
-  | "promptChipFill"
-  | "controlHover"
-  | "controlText"
-  | "controlTextHover"
-  | "chipHover"
-  | "sidebarSelected"
-  | "sidebarHover"
-  | "well"
-  | "thumb"
-  | "meterTrack"
-  | "meterFill"
-  | "meterHigh"
-  | "meterFull"
-  | "promptEdge"
-  | "viewSwitch"
-  | "wireArt"
-  | "hatch"
-  | "hatchGround"
-  | "settingsTab";
-/** One bounded position within a 12-column, 24-row host grid. */
-export interface CustomizationPlacement {
-  column?: number;
-  row?: number;
-  columnSpan?: number;
-  rowSpan?: number;
-}
-/** Embedded raster data or host-generated colors, never a remote URL or CSS string. */
-export type CustomizationBackground =
-  | { kind: "solid"; color: string }
-  | { kind: "gradient"; colors: string[]; angle?: number; animated?: boolean }
-  | { kind: "glow"; colors: string[]; animated?: boolean }
-  | { kind: "image"; data: string; animated?: boolean };
-/** Built-in displays are read-only; custom panels retain the ordinary isolated SDK and action approvals. */
-export interface CustomizationWidget extends CustomizationPlacement {
-  id: string;
-  target: CustomizationSlot;
-  kind: "text" | "clock" | "weather" | "image" | "panel";
-  label?: string;
-  text?: string;
-  image?: string;
-  /** This plugin's declared settings panel; it remains opaque and uses the ordinary SDK bridge. */
-  panel?: string;
-}
-/** Version 1 host appearance and composition, applied while the declaring plugin is enabled. */
-export interface PluginCustomization {
-  version: 1;
-  mode?: "system" | "light" | "dark";
-  light?: Partial<Record<CustomizationColorRole, string>>;
-  dark?: Partial<Record<CustomizationColorRole, string>>;
-  geometry?: { textSize?: number; buttonRadius?: number; cardRadius?: number };
+  | "danger";
+/** One theme offer, selected by the person in Settings > Appearance. No light/dark override. */
+export interface PluginTheme {
+  name: string;
+  light: Record<CustomizationColorRole, string>;
+  dark: Record<CustomizationColorRole, string>;
+  geometry?: { buttonRadius?: number; cardRadius?: number };
   fonts?: {
     uiFont?: "studio" | "system";
     contentFont?: "inherit" | "system" | "serif" | "mono";
     codeFont?: "geist" | "system";
   };
-  surfaces?: Partial<Record<CustomizationSlot, CustomizationBackground>>;
-  layout?: {
-    target: CustomizationSlot;
-    columns?: number;
-    gap?: number;
-    items?: Partial<
-      Record<"newGame" | "plugins" | "harness" | "settings", CustomizationPlacement & { height?: number }>
-    >;
-  }[];
-  widgets?: CustomizationWidget[];
+}
+/** Version 1: one readable theme and one declared settings panel in the New Chat slot. */
+export interface PluginCustomization {
+  version: 1;
+  theme?: PluginTheme;
+  /** Content height 96–240px; the host owns its labelled box and position. */
+  newChat?: { panel: string; height: number };
 }
 
 /** What `studioPlugin.call('context')` answers inside a panel frame. */

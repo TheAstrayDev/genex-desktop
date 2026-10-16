@@ -10,7 +10,7 @@ import {
 import { paintAppearance, savedAppearance } from "./paint.ts";
 import { STORAGE_KEYS, writeText } from "../storage.ts";
 import { DARK_SCHEME_QUERY } from "../ui/media-queries.ts";
-import type { PluginCustomization } from "../../shared/plugin-customization.ts";
+import type { PluginTheme } from "../../shared/plugin-customization.ts";
 import { customizedAppearance } from "./plugin-customization.ts";
 
 export const APPEARANCE_KEY = STORAGE_KEYS.appearance;
@@ -22,24 +22,34 @@ let transitionFrame = 0;
 /** A palette shown in place of the saved appearance: the developer colour tweaker's live preview. */
 export type PalettePreview = { scheme: Scheme; palette: Palette; contrast: number };
 let preview: PalettePreview | null = null;
-let customization: PluginCustomization | null = null;
+let pluginThemes: { id: string; theme: PluginTheme }[] = [];
+const activePluginTheme = () => pluginThemes.find((entry) => entry.id === current.pluginTheme)?.theme ?? null;
 /** The theme variables set last: one a later palette leaves out (an unset icon colour) is removed. */
 let applied: ReadonlySet<string> = new Set<string>();
 /** The scheme on screen: the preview's while one is shown, else the saved mode's. */
-const shownScheme = (): Scheme =>
-  preview?.scheme ?? resolveScheme(customization?.mode ?? current.mode, media?.matches ?? false);
+const shownScheme = (): Scheme => preview?.scheme ?? resolveScheme(current.mode, media?.matches ?? false);
 export function applyAppearance(): void {
+  const theme = activePluginTheme();
+  const radius = theme?.geometry;
+  for (const [key, value] of [
+    ["--radius-button", radius?.buttonRadius],
+    ["--radius-control", radius?.buttonRadius],
+    ["--radius-card", radius?.cardRadius],
+  ] as const) {
+    if (value === undefined) document.documentElement.style.removeProperty(key);
+    else document.documentElement.style.setProperty(key, `${value}px`);
+  }
   applied = paintAppearance(
     document.documentElement,
-    customizedAppearance(current, customization),
+    customizedAppearance(current, theme),
     shownScheme(),
     preview,
     applied,
   );
 }
 /** Set the host-owned plugin layer without overwriting the person's saved appearance. */
-export function setPluginCustomization(profile: PluginCustomization | null): void {
-  customization = profile;
+export function setPluginThemes(offers: { id: string; theme: PluginTheme }[]): void {
+  pluginThemes = offers;
   refresh();
 }
 function notify(): void {
@@ -95,10 +105,6 @@ export function subscribeAppearance(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
-}
-/** Native backdrop work stops while the customization provider owns that surface. */
-export function usePluginAppearance(): PluginCustomization | null {
-  return useSyncExternalStore(subscribeAppearance, () => customization);
 }
 const subscribe = subscribeAppearance;
 export function useAppearance() {

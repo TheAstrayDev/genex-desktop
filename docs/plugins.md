@@ -42,56 +42,61 @@ exports work with no enabled plugins.
 
 ## UI customization (panel feature version 1)
 
-An API 3 plugin may declare `ui.customization`. Installation and capability-expanding updates
-show that it can change Studio's appearance, navigation layout and decorative widgets. This is a **panel-only**
-API: it does not expose a backend host service or a harness call.
+An API 3 plugin may declare `ui.customization` to **offer a theme and one small New Chat panel**.
+Installation and capability-expanding updates disclose this permission. This is a panel-only API;
+there is no backend host service or harness call. Check `context.features?.uiCustomization === 1`
+before using it; older hosts omit the field.
 
-Check `context.features?.uiCustomization === 1` before using it; older hosts omit this field.
-`studioPlugin.call('customization.read')` reads only the calling plugin's saved profile (or null).
+`studioPlugin.call('customization.read')` reads only the calling plugin's profile (or null).
 `call('customization.set', undefined, profile)` atomically replaces it, and
-`call('customization.reset')` deletes it. The panel cannot supply another plugin's id. Both
-the bridge and registry require an enabled, installed plugin with the capability.
+`call('customization.reset')` withdraws both offers. Neither call accepts a plugin id. The bridge
+and registry require an enabled, installed plugin with the capability.
 
-The version 1 profile has optional `mode`, `light`, `dark`, `geometry`, `fonts`, `surfaces`, `layout`
-and `widgets` sections. The SDK declares their types. Light and dark colors accept every native
-semantic palette role, as six-digit hex values. Mode is `system`, `light` or `dark`; when omitted,
-the person's mode remains in charge. Geometry accepts `textSize` (12–18 px),
-`buttonRadius` (0–24 px) and `cardRadius` (0–32 px). Fonts select the existing Studio/system,
-content and code font options; they cannot load a font URL. Omitted records and arrays normalize
-to empty values. Unknown fields, unsupported versions and out-of-range values reject the whole write.
+The version 1 profile has only `version: 1`, optional `theme` and optional `newChat`:
 
-Host anchors are `app`, `sidebar`, `workspace`, `newChat`, `profile` (the local Genex account card)
-and `navigation`. Surfaces accept a solid color, a 2–4-color gradient or glow, or an embedded PNG/JPEG/WebP
-data URI. Each image is at most 1,400,000 characters; a profile holds at most 2,800,000 image
-characters in total. `animated: true` pans the background over 24 seconds; this host animation
-stops under reduced motion. A New Chat override unmounts the ordinary canvas painter.
+| Section | Data |
+| --- | --- |
+| `theme` | `name` (1–64 characters), complete `light` and `dark` palettes, optional `fonts` and `geometry` |
+| Palettes | All 14 core `CustomizationColorRole` values from the SDK, as `#RRGGBB`; no detail roles or CSS |
+| Fonts | Existing `uiFont` (studio/system), `contentFont` (inherit/system/serif/mono), `codeFont` (geist/system) |
+| Geometry | `buttonRadius` (0–24 px), `cardRadius` (0–32 px); text size stays with Genex |
+| `newChat` | `panel`: this plugin's declared settings panel id; `height`: integer content height 96–240 px |
 
-Each layout entry selects an anchor, 1–12 `columns` and 0–48 px `gap`. Navigation additionally
-positions `newGame`, `plugins`, `harness` and `settings` in the grid, with optional 24–160 px
-button heights. Visual placement preserves the native actions and DOM keyboard order. It does
-not relocate dialogs, native game views or controls inside another plugin's isolated frame.
-Widgets use that anchor's grid (12 columns by default, 24 rows). A profile holds at most 12
-uniquely named text, clock, weather, image or plugin-panel widgets. Positions are 1-based `column`/`row` with
-`columnSpan`/`rowSpan`; defaults are 1/1/3/6. Labels are at most 80 characters, text at most 240.
-Weather displays the plugin's supplied text, without a host request for weather or location.
-An image widget requires `image` as an embedded raster data URI. A banner background reserves
-160 px on the account card; an image widget spanning its grid can supply banner content there.
-This is local presentation; nothing is uploaded to the account or public profile.
-A `panel` widget must name this plugin's declared settings panel via `panel`. It uses the existing
-opaque frame, SDK bridge and trusted action approval flow, with no active project. This lets a
-plugin supply interactive UI without executing its scripts in the host renderer.
+Both palettes must pass WCAG contrast validation before any write: foreground, muted, accent,
+success, warning and danger need at least **4.5:1** against background, surface, sidebar, popover,
+field and hover; control borders need **3:1** against those surfaces. Genex derives detail colours
+through its ordinary painter and uses the theme's designed contrast, rather than inherited preset
+overrides. Missing roles, low contrast, unknown fields and unsupported versions reject the whole write.
 
-The host applies one enabled provider over the ordinary appearance without overwriting it.
-The first plugin id in lexical order wins. Reset, disable, removal or capability withdrawal
-removes its stylesheet and widgets, then shows the next eligible provider or ordinary appearance.
-Unchanged profile refreshes keep the same style node; clocks tick once per minute and native
-animations need no JavaScript frame loop. The app's palette preview still takes precedence.
-Profiles survive restart and same-identity updates/reinstalls; replacing an identity erases its
-profile. Disabled or removed plugins cannot read or write through this API. Invalid stored
-profiles are ignored. A failed save leaves the saved profile unchanged. Successful writes emit
-the existing plugin settings-change notification. No CSS strings, selectors, executable markup,
-host DOM, filesystem paths or account information cross the API. A customization plugin supplies
-its own editor; Studio adds no customization settings screen.
+Offering a theme does not activate it. People choose it in **Settings → Appearance → Theme source**,
+which identifies the plugin and publisher. **Turn off plugin theme** restores the saved built-in
+appearance. Light/dark/system remains the person's choice. Built-in palette and font editing resumes
+when the plugin theme is off. Disabled, removed or unavailable plugins fall back to built-in
+appearance; re-enabling restores an explicitly selected offer. The colour tweaker's preview still
+wins. The saved built-in palettes and fonts are never overwritten by the plugin.
+
+The single New Chat slot sits below the composer in normal flow. Its host-owned box labels the
+plugin and panel, clips oversized content and cannot cover or move other UI. If several enabled
+plugins offer panels, the first plugin id in lexical order occupies the one slot. The panel retains
+its opaque frame, SDK bridge and trusted action approval flow, with no active project. For example:
+
+```js
+await studioPlugin.call('customization.set', undefined, {
+  version: 1,
+  newChat: { panel: 'activity', height: 160 },
+});
+```
+
+Profiles live in `data/<id>/customization.json`, separate from install records and settings.
+Saving never replaces the install identity or invalidates open approval prompts. Profiles survive
+restart and same-identity updates; replacing a publisher erases its data. Reads are bounded to
+16 KiB and refuse links; malformed stored profiles are ignored. Failed saves leave the prior offer
+intact. Changes use the existing plugin settings-change notification. Reset, disable, removal and
+permission withdrawal remove host effects. No images travel in plugin lists.
+
+Navigation layout, app overlays, arbitrary placement, forced mode, background replacement, images,
+CSS, selectors, host DOM and account data are outside this API. It grants no access to usage records;
+a usage plugin needs a separate read-only host API rather than reading Genex's private files.
 
 ## Package and distribution
 

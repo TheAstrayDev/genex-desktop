@@ -65,7 +65,7 @@ import {
   type PluginToolbarItem,
   PluginToolAudience,
 } from "../../shared/plugins.ts";
-import { atomicWriteJson } from "../fsx.ts";
+import { atomicWriteJson, ensureDirBelow, readRegularFile } from "../fsx.ts";
 import { parsePluginCustomization, type PluginCustomization } from "../../shared/plugin-customization.ts";
 import {
   canonicalManifest,
@@ -88,8 +88,9 @@ import { PluginCallCutOff, type PluginInvocation, PluginProcess } from "./proces
 import { MAX_ARTIFACT_BYTES, packageCopyFilter, unpackEnvelope } from "./pack.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 
+const CUSTOMIZATION_MAX_BYTES = 16 * 1024;
+
 interface Installed {
-  customization?: PluginCustomization;
   rememberAccount?: boolean;
   directory: string;
   manifest: PluginManifest;
@@ -186,7 +187,7 @@ const accountActionsOf = (manifest: PluginManifest): AccountActions => manifest.
 
 const MESSAGE = {
   CustomizationRequired: "UI customization capability required",
-  CustomizationPanel: "A customization widget must name this plugin's declared settings panel",
+  CustomizationPanel: "A New Chat panel must name this plugin's declared settings panel",
   IdentityMismatch: "Plugin identity mismatch",
   OutsideStorage: "Plugin directory is outside Studio storage",
   PackageMissing: "This plugin's package is missing; remove the plugin and install it again",
@@ -620,6 +621,7 @@ export class PluginConsentDeclined extends Error {
 }
 export class PluginRegistry {
   #installed = new Map<string, Installed>();
+  #customizations = new Map<string, PluginCustomization>();
   #seedManifests = new Map<string, PluginManifest>();
   #unlisted = new Map<string, Unlisted>();
   /** Where each bundled seed lives, by plugin id: its picture outlives an installed copy made before it had one. */
@@ -875,13 +877,8 @@ export class PluginRegistry {
   /** One saved install record, checked again; a record that fails is kept disabled with its error. */
   async #loadInstalled(id: string, p: Installed) {
     const record = { ...p };
-    if (record.customization !== undefined) {
-      try {
-        record.customization = parsePluginCustomization(record.customization);
-      } catch {
-        delete record.customization;
-      }
-    }
+    // The earlier, unshipped draft stored this in install records. Never expose it.
+    delete (record as Installed & { customization?: unknown }).customization;
     try {
       const manifest = validateManifest(p.manifest);
       if (id !== manifest.id) throw new Error(MESSAGE.IdentityMismatch);
@@ -919,7 +916,6 @@ export class PluginRegistry {
       this.#lostSeedCopies.delete(manifest.id);
       this.#installed.set(manifest.id, {
         rememberAccount: lost?.rememberAccount,
-        customization: lost?.customization,
         directory: installed,
         manifest,
         source: PluginSourceKind.Bundled,
@@ -956,6 +952,7 @@ export class PluginRegistry {
     for (const [id, p] of Object.entries(await this.#readRecords("installed.json"))) await this.#loadInstalled(id, p);
     await this.#installSeeds();
     await this.#applyPending();
+    for (const [id, p] of this.#installed) await this.#loadCustomization(id, p);
     await atomicWriteJson(path.join(this.root, "pending.json"), {});
     await this.#save();
     await this.#sweep();
@@ -1066,6 +1063,7 @@ export class PluginRegistry {
     if (typeof storage === "string" && path.isAbsolute(storage) && path.basename(storage) === id)
       await rm(storage, { recursive: true, force: true });
     await rm(path.join(this.root, "data", id), { recursive: true, force: true });
+    this.#customizations.delete(id);
   }
   /** Failed, running, waiting to start, or stopped. */
   #health(id: string, p: Installed): PluginHealth {
@@ -1083,7 +1081,7 @@ export class PluginRegistry {
     const installed = [...this.#installed].map(
       ([id, p]): PluginInfo => ({
         manifest: p.manifest,
-        ...(p.customization ? { customization: parsePluginCustomization(p.customization) } : {}),
+        ...this.#listedCustomization(id, p),
         source: p.source,
         enabled: p.enabled,
         removed: p.removed,
@@ -1614,7 +1612,6 @@ export class PluginRegistry {
         : await this.scan?.(destination, manifest).catch(() => undefined));
     const p: Installed = {
       rememberAccount: replacing ? undefined : previous?.rememberAccount,
-      customization: replacing ? undefined : previous?.customization,
       directory: destination,
       manifest,
       source,
@@ -2309,31 +2306,52 @@ export class PluginRegistry {
     await this.#mcpSync(id);
     this.#fire({ id, reason: PluginChangeReason.Settings });
   }
+  #checkedCustomization(p: Installed, value: unknown): PluginCustomization {
+    const profile = parsePluginCustomization(value);
+    const panel = profile.newChat?.panel;
+    if (panel && !p.manifest.panels.some((entry) => entry.id === panel && entry.placement === "settings"))
+      throw new Error(MESSAGE.CustomizationPanel);
+    return profile;
+  }
+  async #loadCustomization(id: string, p: Installed): Promise<void> {
+    const eligible = isPluginId(id) && !this.#errors.has(id) && hasCapability(p, PluginCapability.UiCustomization);
+    if (!eligible) return;
+    try {
+      const dir = await ensureDirBelow(this.root, ["data", id]);
+      const bytes = await readRegularFile(path.join(dir, "customization.json"), CUSTOMIZATION_MAX_BYTES);
+      this.#customizations.set(id, this.#checkedCustomization(p, JSON.parse(bytes.toString("utf8"))));
+    } catch {
+      // A missing or invalid offer must not prevent listing or enabling the plugin.
+      this.#customizations.delete(id);
+    }
+  }
+  #listedCustomization(id: string, p: Installed): Pick<PluginInfo, "customization"> {
+    const profile = this.#customizations.get(id);
+    if (!profile) return {};
+    const eligible = !this.#errors.has(id) && hasCapability(p, PluginCapability.UiCustomization);
+    if (!eligible) return {};
+    try {
+      return { customization: this.#checkedCustomization(p, profile) };
+    } catch {
+      return {};
+    }
+  }
   /** Read only this enabled, permitted plugin's profile; callers receive an independent copy. */
   customization(id: string): PluginCustomization | null {
     const p = this.#active(id);
     if (!hasCapability(p, PluginCapability.UiCustomization)) throw new Error(MESSAGE.CustomizationRequired);
-    return p.customization ? parsePluginCustomization(p.customization) : null;
+    return this.#listedCustomization(id, p).customization ?? null;
   }
-  /** Replace an owned profile after validation and durable save. Null removes only this plugin's profile. */
+  /** Save separately from the install identity: open tool approvals must remain valid. */
   async setCustomization(id: string, value: unknown): Promise<void> {
     await this.#serial(async () => {
       const p = this.#active(id);
       if (!hasCapability(p, PluginCapability.UiCustomization)) throw new Error(MESSAGE.CustomizationRequired);
-      const next = { ...p };
-      if (value === null) delete next.customization;
-      else next.customization = parsePluginCustomization(value);
-      for (const widget of next.customization?.widgets ?? []) {
-        if (
-          widget.panel &&
-          !p.manifest.panels.some((panel) => panel.id === widget.panel && panel.placement === "settings")
-        )
-          throw new Error(MESSAGE.CustomizationPanel);
-      }
-      const records = new Map(this.#installed);
-      records.set(id, next);
-      await atomicWriteJson(path.join(this.root, "installed.json"), Object.fromEntries(records));
-      this.#installed.set(id, next);
+      const next = value === null ? null : this.#checkedCustomization(p, value);
+      const dir = await ensureDirBelow(this.root, ["data", id]);
+      await atomicWriteJson(path.join(dir, "customization.json"), next);
+      if (next) this.#customizations.set(id, next);
+      else this.#customizations.delete(id);
       this.#fire({ id, reason: PluginChangeReason.Settings });
     });
   }

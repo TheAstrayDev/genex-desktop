@@ -6,58 +6,47 @@ import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { readFile, writeFile, rename, mkdir, rmdir } from "node:fs/promises";
 import path from "node:path";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
-import { PluginCapability, PluginSourceKind } from "../../src/shared/plugins.ts";
-import { customizationOwner, PLUGIN_COLOR_ROLES } from "../../src/shared/plugin-customization.ts";
-import { ALL_ROLES, DEFAULT_APPEARANCE, paletteFor, Scheme } from "../../src/renderer/appearance/themes.ts";
+import { PluginCapability, PluginSourceKind, type PluginInfo } from "../../src/shared/plugins.ts";
+import { customizationProviders, PLUGIN_COLOR_ROLES } from "../../src/shared/plugin-customization.ts";
+import { COLOR_ROLES, DEFAULT_APPEARANCE, paletteFor, Scheme } from "../../src/renderer/appearance/themes.ts";
+import { pluginTheme } from "../helpers/plugin-theme.ts";
 import { customizedAppearance } from "../../src/renderer/appearance/plugin-customization.ts";
 
-test("all native palette roles are customizable without modifying the user's saved appearance", () => {
-  assert.deepEqual([...PLUGIN_COLOR_ROLES].sort(), [...ALL_ROLES].sort());
+test("native core palettes compose without modifying the person's mode or saved appearance", () => {
+  assert.deepEqual([...PLUGIN_COLOR_ROLES].sort(), [...COLOR_ROLES].sort());
   const base = structuredClone(DEFAULT_APPEARANCE);
   const before = structuredClone(base);
-  const profile = parsePluginCustomization({
-    version: 1,
-    dark: { background: "#102030", iconSelected: "#abcdef" },
-    fonts: { uiFont: "system" },
-  });
-  const painted = customizedAppearance(base, profile);
-  assert.equal(paletteFor(painted, Scheme.Dark).background, "#102030");
-  assert.equal(paletteFor(painted, Scheme.Dark).iconSelected, "#abcdef");
+  const profile = parsePluginCustomization({ version: 1, theme: pluginTheme() });
+  const painted = customizedAppearance(base, profile.theme ?? null);
+  assert.equal(paletteFor(painted, Scheme.Dark).background, "#111111");
   assert.equal(painted.uiFont, "system");
+  assert.equal(painted.mode, base.mode);
   assert.deepEqual(base, before);
   assert.equal(customizedAppearance(base, null), base);
 });
-
-test("provider selection is deterministic and excludes disabled, removed and unpermitted plugins", () => {
+test("provider offers exclude disabled, removed and unpermitted plugins", () => {
   const provider = (id: string) => ({
-    manifest: { id, capabilities: [PluginCapability.UiCustomization] },
+    manifest: { id, capabilities: [PluginCapability.UiCustomization] } as PluginInfo["manifest"],
     enabled: true,
     removed: false,
     customization: parsePluginCustomization({ version: 1 }),
   });
   const a = provider("a"),
     b = provider("b");
-  assert.equal(customizationOwner([b, a])?.manifest.id, "a");
+  assert.deepEqual(
+    customizationProviders([b, a]).map((p) => p.manifest.id),
+    ["b", "a"],
+  );
   for (const excluded of [
     { ...a, enabled: false },
     { ...a, removed: true },
     { ...a, unlisted: true },
     { ...a, manifest: { ...a.manifest, capabilities: [] } },
   ])
-    assert.equal(customizationOwner([excluded, b])?.manifest.id, "b");
-});
-
-test("a complete profile accepts host surfaces, native navigation placement and declarative widgets", () => {
-  const profile = parsePluginCustomization({
-    version: 1,
-    dark: { success: "#123456", iconSelected: "#abcdef" },
-    surfaces: { newChat: { kind: "gradient", colors: ["#112233", "#445566"], animated: true } },
-    layout: [{ target: "navigation", columns: 2, items: { settings: { column: 2, height: 48 } } }],
-    widgets: [{ id: "time", kind: "clock", target: "newChat" }],
-  });
-  assert.equal(profile.surfaces.newChat?.kind, "gradient");
-  assert.equal(profile.layout[0].items.settings?.height, 48);
-  assert.equal(profile.widgets[0].columnSpan, 3);
+    assert.deepEqual(
+      customizationProviders([excluded, b]).map((p) => p.manifest.id),
+      ["b"],
+    );
 });
 
 for (const composition of [
@@ -121,22 +110,9 @@ test("only API 3 manifests can request UI customization", async () => {
   }
 });
 
-test("a versioned profile accepts semantic colors and bounded geometry", () => {
-  const profile = {
-    version: 1,
-    dark: { background: "#102030", foreground: "#ffffff" },
-    geometry: { textSize: 16, buttonRadius: 8 },
-  };
-  assert.deepEqual(parsePluginCustomization(profile), {
-    version: 1,
-    light: {},
-    dark: profile.dark,
-    geometry: profile.geometry,
-    fonts: {},
-    surfaces: {},
-    layout: [],
-    widgets: [],
-  });
+test("a versioned profile accepts a complete theme and bounded geometry", () => {
+  const profile = { version: 1, theme: pluginTheme() };
+  assert.deepEqual(parsePluginCustomization(profile), profile);
 });
 
 for (const profile of [
@@ -169,7 +145,7 @@ test("profiles are gated, durable, isolated and retained only across updates of 
       m.capabilities.push("ui.customization");
     });
     await installLocalOn(f.registry, directory);
-    const profile = { version: 1, dark: { background: "#102030" } };
+    const profile = { version: 1, theme: pluginTheme() };
     await assert.rejects(f.registry.setCustomization("example", profile), /customization/);
     await f.registry.setCustomization("theme", profile);
     const panel = f.registry
@@ -180,23 +156,23 @@ test("profiles are gated, durable, isolated and retained only across updates of 
     await assert.rejects(
       f.registry.setCustomization("theme", {
         version: 1,
-        widgets: [{ id: "panel", target: "newChat", kind: "panel", panel: "undeclared" }],
+        newChat: { panel: "undeclared", height: 160 },
       }),
       /declared settings panel/,
     );
-    assert.equal(f.registry.customization("theme")?.dark.background, "#102030");
+    assert.equal(f.registry.customization("theme")?.theme?.dark.background, "#111111");
     await f.registry.setCustomization("theme", {
       ...profile,
-      widgets: [{ id: "panel", target: "newChat", kind: "panel", panel: panel.id }],
+      newChat: { panel: panel.id, height: 160 },
     });
-    assert.equal(f.registry.customization("theme")?.widgets[0].panel, panel.id);
+    assert.equal(f.registry.customization("theme")?.newChat?.panel, panel.id);
     await f.registry.setCustomization("theme", profile);
     assert.deepEqual(f.registry.customization("theme"), parsePluginCustomization(profile));
     const read = f.registry.customization("theme");
-    if (read) read.dark.background = "#ffffff";
-    assert.equal(f.registry.customization("theme")?.dark.background, "#102030");
+    if (read?.theme) read.theme.dark.background = "#ffffff";
+    assert.equal(f.registry.customization("theme")?.theme?.dark.background, "#111111");
     await assert.rejects(f.registry.setCustomization("theme", { version: 1, geometry: { textSize: 50 } }));
-    assert.equal(f.registry.customization("theme")?.dark.background, "#102030");
+    assert.equal(f.registry.customization("theme")?.theme?.dark.background, "#111111");
     const reloaded = new PluginRegistry(f.registry.root, f.seeds, f.registry.bootstrap, f.registry.service);
     try {
       await reloaded.init();
@@ -205,7 +181,7 @@ test("profiles are gated, durable, isolated and retained only across updates of 
       assert.throws(() => reloaded.customization("theme"));
       await assert.rejects(reloaded.setCustomization("theme", profile));
       await reloaded.setEnabled("theme", true);
-      assert.equal(reloaded.customization("theme")?.dark.background, "#102030");
+      assert.equal(reloaded.customization("theme")?.theme?.dark.background, "#111111");
       await reloaded.setCustomization("theme", null);
       assert.equal(reloaded.customization("theme"), null);
     } finally {
@@ -218,7 +194,7 @@ test("profiles are gated, durable, isolated and retained only across updates of 
       m.capabilities.push("ui.customization");
     });
     await installLocalOn(f.registry, update);
-    assert.equal(f.registry.customization("theme")?.dark.background, "#102030");
+    assert.equal(f.registry.customization("theme")?.theme?.dark.background, "#111111");
     await f.registry.remove("theme");
     assert.throws(() => f.registry.customization("theme"));
     await assert.rejects(f.registry.setCustomization("theme", profile));
@@ -236,14 +212,14 @@ test("a failed durable save leaves the prior in-memory profile intact", async ()
       m.capabilities.push(PluginCapability.UiCustomization);
     });
     await installLocalOn(f.registry, directory);
-    await f.registry.setCustomization("theme", { version: 1, dark: { accent: "#123456" } });
-    const file = path.join(f.registry.root, "installed.json"),
-      backup = path.join(f.registry.root, "installed-backup.json");
+    await f.registry.setCustomization("theme", { version: 1, theme: pluginTheme() });
+    const file = path.join(f.registry.root, "data", "theme", "customization.json"),
+      backup = `${file}.backup`;
     await rename(file, backup);
     await mkdir(file);
     try {
-      await assert.rejects(f.registry.setCustomization("theme", { version: 1, dark: { accent: "#abcdef" } }));
-      assert.equal(f.registry.customization("theme")?.dark.accent, "#123456");
+      await assert.rejects(f.registry.setCustomization("theme", { version: 1 }));
+      assert.equal(f.registry.customization("theme")?.theme?.dark.accent, "#aabbff");
     } finally {
       await rmdir(file);
       await rename(backup, file);
@@ -286,11 +262,11 @@ test("a replaced publisher cannot inherit another plugin's customization profile
     const a = await make("a", "Publisher A"),
       b = await make("b", "Publisher B");
     await installLocalOn(f.registry, a);
-    await f.registry.setCustomization("theme", { version: 1, dark: { accent: "#123456" } });
+    await f.registry.setCustomization("theme", { version: 1, theme: pluginTheme() });
     const manifest = validateManifest(JSON.parse(await readFile(path.join(b, "plugin.json"), "utf8")));
     const origin = { kind: PluginSourceKind.Local, directory: b };
     await assert.rejects(f.registry.installLocal(b, PluginSourceKind.Local, manifest.capabilities, origin));
-    assert.equal(f.registry.customization("theme")?.dark.accent, "#123456");
+    assert.equal(f.registry.customization("theme")?.theme?.dark.accent, "#aabbff");
     f.registry.authorizeReplacement(manifest, origin);
     await installLocalOn(f.registry, b, manifest.capabilities, origin);
     assert.equal(f.registry.customization("theme"), null);

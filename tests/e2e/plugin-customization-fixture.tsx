@@ -2,9 +2,10 @@
 import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { PluginCustomizationHost } from "../../src/renderer/appearance/PluginCustomizationHost.tsx";
-import { initializeAppearance } from "../../src/renderer/appearance/store.ts";
+import { initializeAppearance, updateAppearance, useAppearance } from "../../src/renderer/appearance/store.ts";
 import { PluginPanelHost } from "../../src/renderer/panels/PluginPanelHost.tsx";
-import { GenexAccount } from "../../src/renderer/panels/plugins/genex/GenexAccount.tsx";
+import { AppearanceSection } from "../../src/renderer/panels/AppearanceSection.tsx";
+import { NewChatPluginSlot } from "../../src/renderer/appearance/NewChatPluginSlot.tsx";
 import { Button } from "../../src/renderer/ui/Button.tsx";
 import { studio } from "../../src/renderer/state/studio.ts";
 import { parsePluginCustomization, type PluginCustomization } from "../../src/shared/plugin-customization.ts";
@@ -13,7 +14,7 @@ import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
 let saved: PluginCustomization | null = null;
 let enabled = true;
-let showAccount = true;
+let showAppearance = false;
 const plugin = (): PluginInfo => ({
   manifest: {
     apiVersion: 3,
@@ -60,44 +61,37 @@ initializeAppearance();
 await studio().plugins.refresh();
 function Fixture() {
   const [, update] = useState(0);
+  const { appearance, update: change } = useAppearance();
   redraw = () => update((previous) => previous + 1);
   return (
-    <div data-customization-slot="app" style={{ padding: 24 }}>
-      <nav data-customization-slot="navigation" style={{ width: 320 }}>
-        <Button id="native-control" data-customization-item="newGame" variant="default">
-          New game
-        </Button>
-        <Button id="plugins-control" data-customization-item="plugins">
-          Plugins
-        </Button>
-        <Button id="settings-control" data-customization-item="settings">
-          Settings
-        </Button>
+    <div style={{ padding: 24, maxWidth: 900, margin: "auto", height: "100vh", overflowY: "auto" }}>
+      <nav style={{ display: "flex", gap: 8 }}>
+        <Button id="native-control">New game</Button>
+        <Button>Plugins</Button>
+        <Button>Settings</Button>
       </nav>
-      <section
-        data-customization-slot="newChat"
+      <div
         id="new-chat"
-        style={{ position: "relative", height: 180, margin: "24px 0", borderRadius: 16 }}
-      />
-      {showAccount ? (
-        <GenexAccount
-          live={{
-            status: null,
-            error: "",
-            running: null,
-            act: async () => {},
-            refresh: async () => {},
-            review: null,
-            closeReview: () => {},
-          }}
-        />
-      ) : null}
+        style={{ margin: "24px 0", padding: 16, border: "1px solid var(--border)", background: "var(--field)" }}
+      >
+        <label htmlFor="native-prompt">What do you want to make?</label>
+        <textarea id="native-prompt" style={{ display: "block", width: "100%", height: 70 }} />
+      </div>
+      <NewChatPluginSlot />
+      <Button id="choose-theme" onClick={() => change((prev) => ({ ...prev, pluginTheme: "theme" }))}>
+        Choose offered theme
+      </Button>
+      <Button id="set-light" onClick={() => change((prev) => ({ ...prev, mode: "light" }))}>
+        Light
+      </Button>
+      <p id="chosen-theme">{appearance.pluginTheme ?? "built-in"}</p>
       <PluginPanelHost
         plugin={plugin()}
         document={{ url: "studio-plugin://theme/editor", title: "Test plugin", html: "" }}
         project={null}
-        className="w-full h-[220px] border border-line"
+        className="w-full h-[170px] border border-line"
       />
+      {showAppearance && <AppearanceSection />}
       <PluginCustomizationHost />
     </div>
   );
@@ -107,10 +101,12 @@ if (!root) throw new Error("Missing fixture root");
 createRoot(root).render(<Fixture />);
 Object.assign(window, {
   customizationFixture: {
-    account: (next: boolean) => {
-      showAccount = next;
+    appearance: (next: boolean) => {
+      showAppearance = next;
       redraw();
     },
+    mode: (mode: "light" | "dark") => updateAppearance((prev) => ({ ...prev, mode })),
+    select: (id: string | undefined) => updateAppearance((prev) => ({ ...prev, pluginTheme: id })),
     enable: async (next: boolean) => {
       enabled = next;
       await studio().plugins.refresh();

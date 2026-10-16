@@ -43,7 +43,7 @@ Genex and Local Blender as official; its installs require native-code trust
 Installation names publishers and capabilities; new capabilities need confirmation.
 Agents can [suggest or write plugins](projects-engines.md#plugins-on-or-off), never install,
 enable or approve them. Native code is not sandboxed.
-[Customization](../plugins.md#ui-customization-panel-feature-version-1) applies while enabled.
+[Customization](../plugins.md#ui-customization-panel-feature-version-1) offers selectable themes and one labelled New Chat panel.
 
 Connector tools ask before each call unless Settings holds an exact grant (a plugin's read-only
 tools never ask, its others not in Auto); server hints grant nothing. Plugin uploads show every

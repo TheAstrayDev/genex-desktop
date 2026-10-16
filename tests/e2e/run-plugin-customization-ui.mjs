@@ -3,12 +3,13 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pluginTheme } from "../helpers/plugin-theme.ts";
 import { build } from "esbuild";
 import { fixtureElectronArgs, fixtureElectronEnv, resolveElectron } from "../../scripts/electron-runtime.mjs";
 import { removeTree } from "../helpers/tmp.ts";
 const RUN_TIMEOUT_MS = 30_000;
 const root = process.cwd(),
-  out = path.join(root, ".studio-dev/customization-ui");
+  out = path.join(root, ".studio-dev/evidence/plugin-customization-ui");
 await mkdir(out, { recursive: true });
 await rm(path.join(out, "report.json"), { force: true });
 const profile = await mkdtemp(path.join(os.tmpdir(), "genex-customization-ui-"));
@@ -26,51 +27,14 @@ await writeFile(
   `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="${path.join(root, "dist/renderer/theme.css")}"><div id="root"></div><script type="module" src="fixture.js"></script>`,
 );
 const sdk = await readFile(path.join(root, "src/plugin-sdk/panel.js"), "utf8");
-const theme = {
-  version: 1,
-  mode: "dark",
-  fonts: { uiFont: "system", contentFont: "serif", codeFont: "system" },
-  light: { background: "#102030", foreground: "#f5f5f5", accent: "#798fff" },
-  dark: { background: "#102030", foreground: "#f5f5f5", accent: "#798fff" },
-  geometry: { textSize: 16, buttonRadius: 4, cardRadius: 20 },
-  surfaces: {
-    newChat: { kind: "gradient", colors: ["#112233", "#334455"], animated: true },
-    profile: { kind: "gradient", colors: ["#223355", "#553322"] },
-  },
-  layout: [
-    {
-      target: "navigation",
-      columns: 2,
-      gap: 12,
-      items: {
-        newGame: { column: 1, row: 1 },
-        plugins: { column: 2, row: 1 },
-        settings: { column: 1, row: 2, columnSpan: 2, height: 48 },
-      },
-    },
-  ],
-  widgets: [
-    { id: "clock", kind: "clock", target: "newChat", label: "Local time", columnSpan: 4, rowSpan: 16 },
-    {
-      id: "weather",
-      kind: "weather",
-      target: "newChat",
-      label: "Weather",
-      text: "Cloudy, 18 °C",
-      column: 5,
-      columnSpan: 4,
-      rowSpan: 16,
-    },
-    { id: "custom", kind: "panel", target: "newChat", panel: "widget", column: 9, columnSpan: 4, rowSpan: 16 },
-  ],
-};
+const theme = { version: 1, theme: pluginTheme(), newChat: { panel: "widget", height: 160 } };
 const panel = `<!doctype html><meta charset="utf-8"><style>body{background:#15181c;color:#eee;font:14px system-ui;padding:20px}button{font:inherit;padding:10px;margin:6px;cursor:pointer}</style><h2>Disposable SDK test</h2><button id="apply">Apply</button><button id="reset">Reset</button><button id="invalid">Invalid</button><pre id="result"></pre><script>${sdk}</script><script>
 const show=async(fn)=>{try{await fn();result.textContent='ok'}catch(e){result.textContent=e.message}};
 document.querySelector('#apply').onclick=()=>show(()=>studioPlugin.call('customization.set',undefined,${JSON.stringify(theme)}));
 document.querySelector('#reset').onclick=()=>show(()=>studioPlugin.call('customization.reset'));
 document.querySelector('#invalid').onclick=()=>show(()=>studioPlugin.call('customization.set',undefined,{version:1,css:'body{display:none}'}));
 </script>`;
-const widgetPanel = `<!doctype html><meta charset="utf-8"><style>body{margin:8px;font:14px system-ui;background:#15181c;color:#eee}</style><div>Custom plugin UI</div><script>${sdk}</script>`;
+const widgetPanel = `<!doctype html><meta charset="utf-8"><style>body{margin:8px;height:5000px;font:14px system-ui;background:#15181c;color:#eee}</style><div>Custom plugin UI</div><script>${sdk}</script>`;
 await writeFile(
   path.join(out, "check.cjs"),
   String.raw`
@@ -92,50 +56,61 @@ await until(()=>js('!!document.querySelector("#native-control")'));
 let frame;await until(async()=>{frame=wc.mainFrame.frames.find(f=>f.url.startsWith('studio-plugin:'));return !!frame});
 await until(()=>frame.executeJavaScript('!!window.studioPlugin'));
 check('opaque panel has no preload or Node',await frame.executeJavaScript('!window.studio && !window.require && !window.process && self.origin === "null"'));
-check('feature discovery',await frame.executeJavaScript("studioPlugin.call('context').then(c=>c.features.uiCustomization===1)"));
-const ordinary=await js('getComputedStyle(document.documentElement).getPropertyValue("--background")'),saved=await js('localStorage.getItem("studio.appearance.v1")');
+check('feature discovery preserves native surface context',await frame.executeJavaScript("studioPlugin.call('context').then(c=>c.features.uiCustomization===1 && !!c.surface)"));
+const ordinary=await js('getComputedStyle(document.documentElement).getPropertyValue("--background")');
+const saved=await js('localStorage.getItem("studio.appearance.v1")');
 const radius=await js('getComputedStyle(document.querySelector("#native-control")).borderRadius');
 await frame.executeJavaScript('document.querySelector("#apply").click()');
-await until(()=>js('getComputedStyle(document.documentElement).getPropertyValue("--background")==="#102030"'));
-check('native controls use font size and radius',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius==="4px" && getComputedStyle(document.querySelector("#native-control")).fontSize==="16px"'));
-check('mode and native font choices apply',await js('document.documentElement.dataset.theme==="dark" && getComputedStyle(document.documentElement).getPropertyValue("--font-family-content").includes("Georgia")'));
-check('native navigation uses the requested grid and button height',await js('getComputedStyle(document.querySelector("[data-customization-slot=navigation]")).display==="grid" && getComputedStyle(document.querySelector("#settings-control")).height==="48px" && getComputedStyle(document.querySelector("#settings-control")).gridColumnEnd==="span 2"'));
-check('new chat has an animated gradient',await js('getComputedStyle(document.querySelector("#new-chat")).backgroundImage.includes("linear-gradient") && getComputedStyle(document.querySelector("#new-chat")).animationName==="studio-customization-background"'));
-check('account card has a banner',await js('getComputedStyle(document.querySelector("[data-customization-slot=profile]")).backgroundImage.includes("linear-gradient") && document.querySelector("[data-customization-slot=profile]").getBoundingClientRect().height>=160'));
-await until(()=>js('!!document.querySelector("[data-customization-widget=clock] time")'));
-check('clock and plugin-supplied weather occupy grid slots',await js('!!document.querySelector("[data-customization-widget=clock] time") && document.querySelector("[data-customization-widget=weather]").textContent.includes("18 °C")'));
-let widget;await until(async()=>{widget=wc.mainFrame.frames.find(f=>f.url.endsWith('/widget'));return !!widget});
-check('custom widget retains opaque isolation and its own SDK bridge',await widget.executeJavaScript("!window.studio && !window.require && self.origin==='null' && !!window.studioPlugin") && await widget.executeJavaScript("studioPlugin.call('customization.read').then(p=>p.version===1 && p.widgets.some(w=>w.id==='custom'))"));
-check('ordinary preference is unchanged',await js('localStorage.getItem("studio.appearance.v1")')===saved);
-await js('window.testSheet=document.querySelector("style[data-plugin-customization]")');await js('customizationFixture.refresh()');
-check('unchanged refresh preserves the style node',await js('testSheet===document.querySelector("style[data-plugin-customization]")'));
-await frame.executeJavaScript('document.querySelector("#invalid").click()');await until(()=>frame.executeJavaScript('document.querySelector("#result").textContent.includes("Invalid")'));
-check('invalid profile has no effect',await js('getComputedStyle(document.documentElement).getPropertyValue("--background")==="#102030"'));
-wc.debugger.attach('1.3');await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
-check('background animation respects reduced motion',await js('getComputedStyle(document.querySelector("#new-chat")).animationName==="none"'));
-await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[]});
-await js('document.querySelector("#native-control").focus()');wc.sendInputEvent({type:'keyDown',keyCode:'Tab'});wc.sendInputEvent({type:'keyUp',keyCode:'Tab'});await sleep(25);
-check('native navigation remains keyboard accessible',await js('document.activeElement.id==="plugins-control"'));
-fs.writeFileSync(${JSON.stringify(path.join(out, "customized.png"))},(await wc.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
-const raster=await js('(()=>{const c=document.createElement("canvas");c.width=2;c.height=2;c.getContext("2d").fillRect(0,0,2,2);return c.toDataURL("image/png")})()');
-const pictureProfile=${JSON.stringify(theme)};pictureProfile.surfaces.newChat={kind:'image',data:raster,animated:true};pictureProfile.widgets.push({id:'banner-picture',kind:'image',target:'profile',image:raster,columnSpan:12,rowSpan:24});
-await frame.executeJavaScript("studioPlugin.call('customization.set',undefined,"+JSON.stringify(pictureProfile)+")");
-await until(()=>js('!!document.querySelector("[data-customization-widget=banner-picture] img") && document.querySelector("[data-customization-widget=banner-picture] img").naturalWidth===2'));
-check('embedded image backgrounds and banners render without external requests',await js('getComputedStyle(document.querySelector("#new-chat")).backgroundImage.includes("data:image/png")'));
-await js('customizationFixture.account(false)');await until(()=>js('!document.querySelector("[data-customization-slot=profile]")'));
-await js('customizationFixture.account(true)');await until(()=>js('document.querySelector("[data-customization-widget=banner-picture] img")?.naturalWidth===2'));
-check('widgets follow account-anchor unmount and remount',true);
-pictureProfile.surfaces.newChat={kind:'glow',colors:['#3344ff','#ff3388'],animated:true};await frame.executeJavaScript("studioPlugin.call('customization.set',undefined,"+JSON.stringify(pictureProfile)+")");
-await until(()=>js('getComputedStyle(document.querySelector("#new-chat")).backgroundImage.includes("radial-gradient")'));
-check('glow background applies through generated host CSS',true);
-await js('customizationFixture.enable(false)');await until(async()=>await js('getComputedStyle(document.documentElement).getPropertyValue("--background")')===ordinary);
-check('disable removes widgets, banner, grid and stylesheet',await js('!document.querySelector("[data-customization-widget]") && !document.querySelector("style[data-plugin-customization]") && getComputedStyle(document.querySelector("[data-customization-slot=profile]")).backgroundImage==="none"'));
-await frame.executeJavaScript('document.querySelector("#apply").click()');await until(()=>frame.executeJavaScript('document.querySelector("#result").textContent.includes("capability")'));
-check('disabled panel cannot edit',await js('getComputedStyle(document.documentElement).getPropertyValue("--background")')===ordinary);
-await js('customizationFixture.enable(true)');await until(()=>js('getComputedStyle(document.documentElement).getPropertyValue("--background")==="#102030"'));
-check('re-enable restores the saved profile',true);
-await frame.executeJavaScript('document.querySelector("#reset").click()');await until(async()=>await js('getComputedStyle(document.documentElement).getPropertyValue("--background")')===ordinary);
-check('reset restores native geometry and clears the profile',await js('customizationFixture.profile()===null && !document.querySelector("[data-customization-widget]")') && await js('getComputedStyle(document.querySelector("#native-control")).borderRadius')===radius);
+await until(()=>js('!!document.querySelector("[data-new-chat-plugin]")'));
+check('offering a theme does not select it or change saved appearance',await js('getComputedStyle(document.documentElement).getPropertyValue("--background")')===ordinary && await js('localStorage.getItem("studio.appearance.v1")')===saved);
+check('one host label identifies the plugin and its panel',await js('document.querySelectorAll("[data-new-chat-plugin]").length===1 && document.querySelector(".new-chat-plugin-source").textContent.includes("Plugin: Fixture theme") && document.querySelector(".new-chat-plugin-source").textContent.includes("Fixture widget")'));
+let widget; await until(async()=>{widget=wc.mainFrame.frames.find(f=>f.url.endsWith('/widget'));return !!widget});
+await widget.executeJavaScript('parent.postMessage({type:"studio-plugin-size",height:5000},"*")');
+await until(()=>js('document.querySelector(".new-chat-plugin-content iframe")?.style.height==="4000px"'));
+check('large plugin content remains clipped below the prompt',await js('(()=>{const box=document.querySelector("[data-new-chat-plugin]"),content=box.querySelector(".new-chat-plugin-content"),prompt=document.querySelector("#new-chat");return box.getBoundingClientRect().top>=prompt.getBoundingClientRect().bottom && content.getBoundingClientRect().height===160 && getComputedStyle(content).contain.includes("paint") && getComputedStyle(box).position!=="absolute"})()'));
+await js('customizationFixture.appearance(true)');
+await until(()=>js('!!document.querySelector("[data-plugin-theme-choice]")'));
+await js('document.querySelector("[data-plugin-theme-choice] button").dispatchEvent(new PointerEvent("pointerdown",{bubbles:true,button:0,pointerType:"mouse"}))');
+await until(()=>js('!!Array.from(document.querySelectorAll("[role=menuitemradio]")).find(e=>e.textContent.includes("Test theme"))'));
+check('Appearance lists a theme with plugin name and publisher',await js('Array.from(document.querySelectorAll("[role=menuitemradio]")).some(e=>e.textContent.includes("Plugin: Fixture theme by Fixture"))'));
+await js('Array.from(document.querySelectorAll("[role=menuitemradio]")).find(e=>e.textContent.includes("Test theme")).click()');
+await until(()=>js('document.querySelector("#chosen-theme").textContent==="theme"'));
+check('selection is saved in ordinary appearance',await js('JSON.parse(localStorage.getItem("studio.appearance.v1")).pluginTheme==="theme"'));
+await js('document.querySelector("#set-light").click()');
+await until(()=>js('document.documentElement.dataset.theme==="light" && getComputedStyle(document.documentElement).getPropertyValue("--background")==="#ffffff"'));
+check('light mode stays the persons choice',true);
+await js('customizationFixture.mode("dark")');
+await until(()=>js('document.documentElement.dataset.theme==="dark" && getComputedStyle(document.documentElement).getPropertyValue("--background")==="#111111"'));
+check('native radii and fonts apply to the selected theme',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius==="4px" && getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").includes("Segoe UI")'));
+check('Appearance identifies the active plugin and offers turn off',await js('!!Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme") && document.querySelector("[data-plugin-theme-choice] [role=status]").textContent.includes("Plugin theme active")'));
+await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+fs.writeFileSync(${JSON.stringify(path.join(out, "selected.png"))},(await wc.capturePage()).toPNG());
+await js('document.querySelector("[data-plugin-theme-choice]").scrollIntoView({block:"center"})');
+await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+fs.writeFileSync(${JSON.stringify(path.join(out, "appearance.png"))},(await wc.capturePage()).toPNG());
+await js('Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme").click()');
+await until(()=>js('document.querySelector("#chosen-theme").textContent==="built-in"'));
+check('turn off restores geometry while leaving the panel',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius')===radius && await js('!!document.querySelector("[data-new-chat-plugin]") && !JSON.parse(localStorage.getItem("studio.appearance.v1")).pluginTheme'));
+await js('customizationFixture.select("theme")');
+await frame.executeJavaScript('document.querySelector("#invalid").click()');
+await until(()=>frame.executeJavaScript('document.querySelector("#result").textContent.includes("Invalid")'));
+check('rejected write leaves the prior profile intact',await js('customizationFixture.profile().theme.name==="Test theme"'));
+await js('customizationFixture.enable(false)');
+await until(()=>js('!document.querySelector("[data-new-chat-plugin]")'));
+check('disable restores native geometry and shows unavailable theme notice',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius')===radius && await js('document.querySelector("[data-plugin-theme-choice] [role=status]").textContent.includes("unavailable")'));
+await frame.executeJavaScript('document.querySelector("#apply").click()');
+await until(()=>frame.executeJavaScript('document.querySelector("#result").textContent.includes("capability")'));
+check('disabled panel cannot write',true);
+await js('customizationFixture.enable(true)');
+await until(()=>js('getComputedStyle(document.documentElement).getPropertyValue("--background")==="#111111"'));
+check('reenabling restores the explicitly chosen theme and panel',await js('!!document.querySelector("[data-new-chat-plugin]")'));
+win.setContentSize(420,800);
+await js('document.querySelector("[data-new-chat-plugin]").scrollIntoView({block:"start"})');
+await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+check('the small slot fits a narrow window without horizontal scrolling',await js('(()=>{const e=document.querySelector("[data-new-chat-plugin]"),r=e.getBoundingClientRect();return r.width<=innerWidth && r.left>=0 && r.right<=innerWidth && getComputedStyle(document.querySelector(".new-chat-plugin-source span")).textOverflow==="ellipsis"})()'));
+await frame.executeJavaScript('document.querySelector("#reset").click()');
+await until(()=>js('customizationFixture.profile()===null && !document.querySelector("[data-new-chat-plugin]")'));
+check('reset restores native geometry',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius')===radius);
 check('no renderer errors',errors.length===0);
 }catch(error){checks.push({name:'runner completed',ok:false,error:String(error.stack)});}
 fs.writeFileSync(${JSON.stringify(path.join(out, "report.json"))},JSON.stringify({checks,errors,provider:'fixture',electron:process.versions.electron},null,2));win.destroy();app.exit(checks.some(c=>!c.ok)?1:0);
