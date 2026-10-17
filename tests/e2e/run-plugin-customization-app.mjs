@@ -80,6 +80,14 @@ try {
   // Owned studio:dev readiness already budgets 60s; Playwright's default 30s can expire during sandbox startup.
   const page = await app.firstWindow({ timeout: 60000 });
   page.setDefaultTimeout(15000);
+  await page.locator('[data-onboarding-action="next"]').click();
+  await page
+    .locator('[data-onboarding-action="skip"], [data-onboarding-action="start"]')
+    .filter({ visible: true })
+    .first()
+    .click();
+  await page.getByRole("dialog", { name: "Welcome to Genex", exact: true }).waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "New game", exact: true }).click();
   await page.locator("[data-home] .home-title").waitFor({ state: "visible" });
   const geometry = () =>
     page.locator("[data-home]").evaluate((home) => ({
