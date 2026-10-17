@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { _electron as electron } from "playwright";
 import { allocateProfile } from "../../scripts/studio-dev/ownership.mjs";
@@ -72,7 +73,12 @@ try {
     env: liveLaunchEnv(process.env),
     timeout: 60000,
   });
-  const page = await app.firstWindow();
+  const stdout = createWriteStream(path.join(out, "app-stdout.log"));
+  const stderr = createWriteStream(path.join(out, "app-stderr.log"));
+  app.process().stdout?.pipe(stdout);
+  app.process().stderr?.pipe(stderr);
+  // Owned studio:dev readiness already budgets 60s; Playwright's default 30s can expire during sandbox startup.
+  const page = await app.firstWindow({ timeout: 60000 });
   page.setDefaultTimeout(15000);
   await page.locator("[data-home] .home-title").waitFor({ state: "visible" });
   const geometry = () =>
