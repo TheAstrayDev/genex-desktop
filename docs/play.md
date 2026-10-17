@@ -89,7 +89,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 `src/renderer/play/`, `src/renderer/state/play.ts` and `people.ts`, `src/renderer/avatars/`,
 `src/main/play/`, `src/main/core/genex-account.ts`; selectors in the
-[feature map](agent/feature-map.md). Fixtures: `STUDIO_FIXTURE_GENEX_ACCOUNT=1|new|quiet|fresh|nickname`
+[feature map](agent/feature-map.md). Fixtures: `STUDIO_FIXTURE_GENEX_ACCOUNT=1|new|quiet|fresh|nickname|terms`
 signs a fixture launch in (`new` and `nickname` have not chosen a nickname; a few names, such as
 `rab`, read as taken), `ended` gives it a refused one. Tests: `tests/conformance/play-*`,
 `genex-account`, `app-account-plugin`.

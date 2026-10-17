@@ -12,6 +12,7 @@
  */
 
 import type { CallMaking, MakingJob } from "./asset-making.ts";
+import type { GenexBlocked } from "./genex.ts";
 import type { CallCutOff } from "./plugins.ts";
 
 export type AssetKind = "image" | "model" | "audio" | "video" | "other";
@@ -197,6 +198,8 @@ export interface PluginToolFinishedPayload extends PluginToolStartedPayload {
   version?: string;
   /** Set when the call was cut off: its outcome is unknown. */
   cutOff?: CallCutOff;
+  /** Set when the job went no further than asking the person for something first (Genex's terms). */
+  blocked?: GenexBlocked;
 }
 
 /** How the app shows a file: the viewer it opens in, or none (unknown files stay metadata). */

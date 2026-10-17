@@ -1,4 +1,4 @@
-/** Mount a plugin's declared panel inside the New Chat box, retaining its ordinary isolation and approval flow. */
+/** Mount a plugin's declared panel inside the New Chat box without file pickers or action approvals. */
 import { useEffect, useState } from "react";
 import type { PluginPanelDocument } from "../../shared/plugins.ts";
 import { usePlugins } from "../state/hooks.ts";
@@ -28,5 +28,13 @@ export function CustomizationPanel({ id, panel }: { id: string; panel: string })
   if (failed) return <p>{MESSAGE.Failed}</p>;
   const allowed = plugin?.manifest.panels.some((entry) => entry.id === panel && entry.placement === "settings");
   if (!plugin || !document || !allowed) return null;
-  return <PluginPanelHost plugin={plugin} document={document} project={null} className="h-full w-full border-0" />;
+  return (
+    <PluginPanelHost
+      plugin={plugin}
+      document={document}
+      project={null}
+      allowPrompts={false}
+      className="h-full w-full border-0"
+    />
+  );
 }

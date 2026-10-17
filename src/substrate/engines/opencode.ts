@@ -940,6 +940,7 @@ async function gitMetadata(cwd: string): Promise<string[]> {
   const dirs: string[] = [];
   for (const flag of ["--absolute-git-dir", "--git-common-dir"]) {
     const answer = await promisify(execFile)("git", ["-C", cwd, "rev-parse", flag], {
+      windowsHide: true,
       timeout: GIT_PROBE_TIMEOUT_MS,
     }).catch(() => null);
     if (answer)

@@ -24,6 +24,7 @@ import {
 } from "../ui/dropdown-menu.tsx";
 import { NotificationsMenu } from "./NotificationsMenu.tsx";
 import { SidebarPluginUpdates } from "./SidebarPluginUpdates.tsx";
+import { GenexTermsLine } from "./plugins/genex/GenexTermsLine.tsx";
 import type { PluginUpdate } from "../state/plugins.ts";
 import type { Notice } from "../notifications.ts";
 import type { LaunchInSidebar } from "../state/launch.ts";
@@ -36,7 +37,7 @@ import { usePeopleSync } from "../play/use-people-sync.ts";
 import { PlayRecent } from "../play/PlayRecent.tsx";
 import { PlaySwitch } from "../play/PlaySwitch.tsx";
 import { SidebarFriends } from "../play/SidebarFriends.tsx";
-import { usePlay, useShallow } from "../state/hooks.ts";
+import { usePeople, usePlay, useShallow } from "../state/hooks.ts";
 import { PlayPage } from "../state/play.ts";
 import { besideRemix, remixCovers, remixShare } from "../play/remix-model.ts";
 import { remixTitle } from "../../shared/play.ts";
@@ -266,8 +267,8 @@ function LaunchRow({ title }: { title: string | null }): JSX.Element {
 }
 
 /**
- * What waits to be installed, over the foot of the game list: the plugin updates line above the
- * app's own Relaunch to update or Download.
+ * What waits for the person, over the foot of the game list: Genex's updated terms to review, the
+ * plugin updates line, then the app's own Relaunch to update or Download.
  */
 function SidebarFooter({
   update,
@@ -280,9 +281,11 @@ function SidebarFooter({
   onOpenPlugin,
 }: Props): JSX.Element | null {
   const pluginsWait = pluginUpdates.length > 0 || updatingPlugins;
-  if (!update && !pluginsWait) return null;
+  const genexTerms = usePeople((s) => s.genexTermsPending);
+  if (!update && !pluginsWait && !genexTerms) return null;
   return (
     <div className="sidebar-footer">
+      <GenexTermsLine />
       {pluginsWait && (
         <SidebarPluginUpdates
           updates={pluginUpdates}

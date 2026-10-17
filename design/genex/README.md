@@ -573,8 +573,13 @@ A node at work, the lead's included, is its agent's screen: the newest frame wit
 cursor, and a status that is the action in plain words with its age ("Pressing Space · 3s"; a step
 being checked keeps "Being checked · …"). Its card shows that frame live and What it did, the
 window's last frames with the newest as Now. No strip of screens sits above the stage.
-The reviewers are an eye gate on the edge into what they looked at; one 52px status line ("Building ·
-9 of 30 min" and a 2px progress rule) replaces per-card chips and per-node status boxes. A selected node opens in place: the camera glides to it at 160%, the graph dims to
+The reviewers are an eye gate on the edge into what they looked at; one 40px bar of the chat's
+builds replaces per-card chips and per-node status boxes: a tab each, oldest on the left, on one
+quiet track with the open tab raised (surface fill, a ring halfway from `line` to `line-strong`) and wider. A tab is what was
+asked, ellipsized, after a bare ✓ once done, a muted dot while paused, or the status line's orb
+while it works, then its clock at 12px in the chat's shimmer. No "Building", budget or progress
+rule; the open build's status line ("Building · 9 of 30 min · 2 parts working") is its tooltip and
+what a screen reader hears. A selected node opens in place: the camera glides to it at 160%, the graph dims to
 40% and stays clickable, and one card (max 560px, centred, scrolling inside) carries the detail —
 never a side panel. Replies go through the chat composer, so the app keeps one input. Semantic zoom
 trades words for pictures below 60% and adds the asked sentence from 135%.
@@ -795,6 +800,15 @@ submission: Add's row turns it on, and while it is on a bulb icon button follows
 1×16px hairline, turns it off, and the prompt reads "Describe what to plan…"; active build
 follow-ups retain the existing plan. No standalone Keep going button is needed.
 
+Files dragged anywhere over a chat (or home) land in its prompt bar, any kind: a picture goes on
+the board as a picture, any other file as a 44px chip with its name and goes with the message as a
+link to where it is. While files are held, the prompt bar's edge turns 1.5px dashed, its contents
+fade under the composer colour at 88% and one 14px line says what a drop does ("Drop to add 2
+pictures", "Drop to add 3 files") in the accent, in orange only past the limits (12 pictures, 12
+files); the chat above does not change. What a drop left out stays above the board as one orange
+line with a filled Choose files and a filled close button. A person's message shows each file it
+carries as a small chip with the file's own name.
+
 Composer panels share one density: 6px insets, 32px rows with 6px/10px padding, 12px medium
 group labels and a 17px radius (row 11 + inset 6). Everything opens on click, never on hover.
 Add spans the full composer width 8px above the writing surface: Images, then **Plan mode** (a
@@ -881,7 +895,10 @@ rows, menu and row glyphs) use `text-icon`/`text-icon-strong`, the palette's `ic
 sidebar's search and bell stay in the muted grey. The wordmark takes the palette's `logo` (`--logo`)
 when set; its gradient runs through `logoShade` (`--logo-2`), and a shade equal to the logo draws it
 solid (`--logo-fade`). Its sidebar width is `--logo-width`. The selected Settings tab's text reads `settingsTab` (`--settings-tab`). The prompt bar's edge reads `promptEdge`
-(`--prompt-edge`), and its composer menus draw that same single edge (`--prompt-bar-edge`, no ring). The Live/Assets switch's current view reads `viewSwitch` (`--switch-fill`) and the
+(`--prompt-edge`). Every floating menu (composer menus, dropdowns, popovers) draws one edge, `--menu-edge`
+(utility `border-menu-edge`, no ring): the prompt bar's edge on a light theme, the control edge on a dark
+one, whose menu fill would swallow the prompt bar's. A box inside a menu (a plan's limits, a mention card)
+has the `line-soft` edge. The Live/Assets switch's current view reads `viewSwitch` (`--switch-fill`) and the
 empty-state wire art `wireArt` (`--wire-art`); the stage's hatch draws `hatch` stripes
 (`--hatch-stripe`) over `hatchGround` (`--hatch-ground`), else the text's faint `--stripe` over the canvas.
 Chips, tabs and hover states read `controlFill`, `controlHover`, `controlText` and

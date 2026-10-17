@@ -38,7 +38,7 @@ function rig(
   answers: (call: Call) => GalleryAnswer,
   options: { token?: string | undefined; upload?: number; web?: string } = {},
 ) {
-  const token = "token" in options ? options.token : TOKEN;
+  let token = "token" in options ? options.token : TOKEN;
   const calls: Call[] = [];
   const refused: string[] = [];
   const uploads: Array<{ url: string; bytes: number; type: string }> = [];
@@ -59,7 +59,16 @@ function rig(
     refused: (value) => refused.push(value),
     web: options.web ?? PLAY_ORIGIN.web,
   });
-  return { people, calls, uploads, refused, advance: (ms: number) => (clock += ms) };
+  return {
+    people,
+    calls,
+    uploads,
+    refused,
+    advance: (ms: number) => (clock += ms),
+    signIn: (value: string | undefined) => {
+      token = value;
+    },
+  };
 }
 
 /** The account as `/api/me` and the public profile answer it. */
@@ -353,6 +362,22 @@ describe("profiles", () => {
     assert.deepEqual(
       (await people.profile("u1")).friends?.map((f) => [f.id, f.games, f.mutual]),
       [["u5", 1, false]],
+    );
+  });
+
+  it("never shows one viewer's read of a profile to the next one signed in", async () => {
+    const { people, calls, signIn } = rig(api);
+    await people.profile("u2");
+    signIn("token-of-someone-else");
+    await people.profile("u2");
+    const reads = calls.filter((c) => c.route === PeopleRoute.user("u2")).map((c) => c.token);
+    assert.deepEqual(reads, [TOKEN, "token-of-someone-else"], "the profile is read again for the new viewer");
+    signIn(undefined);
+    await people.profile("u2");
+    assert.equal(
+      calls.filter((c) => c.route === PeopleRoute.user("u2")).at(-1)?.token,
+      undefined,
+      "and once signed out",
     );
   });
 

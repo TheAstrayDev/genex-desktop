@@ -4,8 +4,8 @@
 
 The sidebar holds Search, Notifications, Send feedback
 ([what it sends](../../PRIVACY.md#send-feedback)), the Play/Create switch, New game, Plugins,
-Harness, Settings, Games, Friends and, once updates wait, **plugin updates** and **Relaunch to
-update** (Linux: **Download**); lists scroll. Pinned games lead, then recent activity. Every launch
+Harness, Settings, Games, Friends and, once they wait, **Genex terms updated**,
+**plugin updates** and **Relaunch to update** (Linux: **Download**); lists scroll. Pinned games lead, then recent activity. Every launch
 opens **home** (also the wordmark): one composer over an optional picture. A game opens its
 conversation beside the stage (Live, Builds once planned, Assets); Harness opens its conversation
 and Activity; Plugins fills the workspace.
@@ -36,9 +36,9 @@ commands to copy, Retry.
 - **Home's first message** starts a game the model names, where the chip says
   ([its kind](projects-engines.md)). Duplicates never overwrite; a greeting stays **Untitled game** until an idea. **New game**, the Games **+** and Command-N open home.
 - **Settings → Games** moves new games to an empty folder (default `~/AI Games`);
-  **Storage** frees older builds, keeping paused and latest.
-- **Settings → Privacy**: Share build metrics (off by default), See what would be sent and
-  Delete what I shared ([PRIVACY](../../PRIVACY.md)).
+  **Storage** frees older builds, keeping paused and latest finished.
+- **Settings → Privacy**: Share build metrics (off by default), its preview and delete, and
+  policy links ([PRIVACY](../../PRIVACY.md)).
 - Home's **Open a folder…** inspects before writing (Claude settings and hooks trusted unless
   switched off); only a web folder gets starter files.
 - A game's menu offers Rename (same folder), Pin/Unpin, Change image and Delete, which
@@ -54,7 +54,7 @@ A game's folder owns its identity. Commits and checkpoints skip engine scratch (
 merges. Snapshots and links use raw bytes, Git hooks and filters off; LFS pointers stay
 pointers. Unsent text survives loading; hidden workspaces ignore keys.
 
-The live game is a native view overlays occlude; desktop captures can't prove it.
+The live game is a native view; while an overlay covers it, the stage holds its frame.
 
 ## Where to work
 

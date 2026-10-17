@@ -8,7 +8,8 @@
  * games it has when a read fails, counts only multiplayer games, and opening a game shows its cover
  * at once, leads Recent (remembered in storage) and turns to Failed when main refuses it. The window's
  * drag regions give way while the viewer's native views may cover it, and the guest card's Sign in
- * waits in the store until the shell has run it once.
+ * waits in the store until the shell has run it once. A cover the window has shown starts shown
+ * when Play draws it again, remembering the most recent covers only.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -16,6 +17,7 @@ import {
   BAR_AT_TOP,
   barAfterScroll,
   countedSlugs,
+  createShownCovers,
   dismissPlayPromo,
   EMPTY_FEED,
   type FeedState,
@@ -1125,5 +1127,28 @@ describe("the sidebar's account plate", () => {
     assert.equal(shown({ account: GenexAccountStatus.SignedIn, me: who }), PlateState.SignedIn);
     assert.equal(shown({ account: GenexAccountStatus.SignedIn, me: who }, false), PlateState.Offline);
     assert.equal(shown({ account: GenexAccountStatus.SignedIn }), PlateState.Hidden, "signed in, not read yet");
+  });
+});
+
+describe("Play covers shown before", () => {
+  const url = (n: number) => `https://cdn.genex.technology/covers/${n}.webp`;
+
+  it("a cover starts shown only once the window has shown it", () => {
+    const covers = createShownCovers(4);
+    assert.equal(covers.has(url(1)), false);
+    covers.add(url(1));
+    assert.equal(covers.has(url(1)), true);
+    assert.equal(covers.has(url(2)), false);
+  });
+
+  it("keeps only the most recently shown covers, a cover shown again counting as new", () => {
+    const covers = createShownCovers(3);
+    for (const n of [1, 2, 3]) covers.add(url(n));
+    covers.add(url(1));
+    covers.add(url(4));
+    assert.deepEqual(
+      [1, 2, 3, 4].map((n) => covers.has(url(n))),
+      [true, false, true, true],
+    );
   });
 });

@@ -60,6 +60,10 @@ check('feature discovery preserves native surface context',await frame.executeJa
 const ordinary=await js('getComputedStyle(document.documentElement).getPropertyValue("--background")');
 const saved=await js('localStorage.getItem("studio.appearance.v1")');
 const radius=await js('getComputedStyle(document.querySelector("#native-control")).borderRadius');
+await js('customizationFixture.appearance(true)');
+await until(()=>js('!!document.querySelector("[data-appearance]")'));
+check('no theme source choice without an offered theme',await js('!document.querySelector("[data-plugin-theme-choice]") && !!document.querySelector(".appearance-native-editors")'));
+await js('customizationFixture.appearance(false)');
 await frame.executeJavaScript('document.querySelector("#apply").click()');
 await until(()=>js('!!document.querySelector("[data-new-chat-plugin]")'));
 check('offering a theme does not select it or change saved appearance',await js('getComputedStyle(document.documentElement).getPropertyValue("--background")')===ordinary && await js('localStorage.getItem("studio.appearance.v1")')===saved);
@@ -83,6 +87,7 @@ await js('customizationFixture.mode("dark")');
 await until(()=>js('document.documentElement.dataset.theme==="dark" && getComputedStyle(document.documentElement).getPropertyValue("--background")==="#111111"'));
 check('native radii and fonts apply to the selected theme',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius==="4px" && getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").includes("Segoe UI")'));
 check('Appearance identifies the active plugin and offers turn off',await js('!!Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme") && document.querySelector("[data-plugin-theme-choice] [role=status]").textContent.includes("Plugin theme active")'));
+check('active plugin hides built-in editors and provides a filled turn off button',await js('!document.querySelector(".appearance-native-editors") && getComputedStyle(Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme")).backgroundColor!=="rgba(0, 0, 0, 0)"'));
 await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
 fs.writeFileSync(${JSON.stringify(path.join(out, "selected.png"))},(await wc.capturePage()).toPNG());
 await js('document.querySelector("[data-plugin-theme-choice]").scrollIntoView({block:"center"})');
@@ -91,6 +96,7 @@ fs.writeFileSync(${JSON.stringify(path.join(out, "appearance.png"))},(await wc.c
 await js('Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme").click()');
 await until(()=>js('document.querySelector("#chosen-theme").textContent==="built-in"'));
 check('turn off restores geometry while leaving the panel',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius')===radius && await js('!!document.querySelector("[data-new-chat-plugin]") && !JSON.parse(localStorage.getItem("studio.appearance.v1")).pluginTheme'));
+check('turn off restores built-in editors',await js('!!document.querySelector(".appearance-native-editors")'));
 await js('customizationFixture.select("theme")');
 await frame.executeJavaScript('document.querySelector("#invalid").click()');
 await until(()=>frame.executeJavaScript('document.querySelector("#result").textContent.includes("Invalid")'));

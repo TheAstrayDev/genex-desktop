@@ -250,11 +250,13 @@ function Banner({
   );
 }
 
-/** The link anyone can play, with Copy and Open. */
+/** The link anyone can play, labelled beside the globe, with Copy and Open. */
 function LinkField({ link, onOpen, opening }: { link: string; onOpen: () => void; opening: boolean }): JSX.Element {
   const [copied, copy] = useCopy();
   return (
-    <div className="genex-publish-link-field">
+    <div className="genex-publish-link-field" data-public>
+      <Icon name="globe" size={15} />
+      <span className="genex-publish-link-label">{WORDS.publicLink}</span>
       <span title={link}>{link.replace(/^https?:\/\//, "")}</span>
       <Button aria-label={WORDS.copyLinkLabel} onClick={() => copy(link)}>
         <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green" : undefined} />
@@ -264,6 +266,36 @@ function LinkField({ link, onOpen, opening }: { link: string; onOpen: () => void
         {WORDS.openGame}
         <Icon name="arrow-up-right" size={14} />
       </Button>
+    </div>
+  );
+}
+
+/**
+ * The tested draft players do not have yet, read-only with Copy, and one line under it: who can play
+ * it, and for a multiplayer game how to be a second player alone. Display only: Publish is untouched.
+ */
+function TestLinkField({
+  link,
+  listed,
+  multiplayer,
+}: {
+  link: string;
+  listed: boolean;
+  multiplayer: boolean;
+}): JSX.Element {
+  const [copied, copy] = useCopy();
+  const note = listed ? WORDS.testChanges : WORDS.testBefore;
+  return (
+    <div className="genex-publish-test">
+      <div className="genex-publish-link-field" data-test>
+        <span className="genex-publish-link-label">{WORDS.testLink}</span>
+        <span title={link}>{link.replace(/^https?:\/\//, "")}</span>
+        <Button aria-label={WORDS.copyTestLinkLabel} onClick={() => copy(link)}>
+          <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green" : undefined} />
+          {copied ? WORDS.copied : WORDS.copyLink}
+        </Button>
+      </div>
+      <p className="genex-publish-hint">{multiplayer ? `${note} ${WORDS.testSecondPlayer}` : note}</p>
     </div>
   );
 }
@@ -724,7 +756,6 @@ function PublishBody({
         ))}
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
-        {view.link && !publishing && <LinkField link={view.link} onOpen={open} opening={opening} />}
         {(!celebrate || renamed) && (
           <Presses
             view={view}
@@ -735,9 +766,40 @@ function PublishBody({
             label={celebrate ? WORDS.saveName : undefined}
           />
         )}
-        <Hint view={view} publishing={publishing} making={Boolean(cover.making)} record={record} name={name} />
+        {!publishing && <Links view={view} project={project} onOpen={open} opening={opening} />}
+        <Hint
+          testShown={Boolean(view.testLink) && !publishing}
+          view={view}
+          publishing={publishing}
+          making={Boolean(cover.making)}
+          record={record}
+          name={name}
+        />
       </div>
     </div>
+  );
+}
+
+/** The public link, then the tested draft players do not have yet: shown together, under the presses. */
+function Links({
+  view,
+  project,
+  onOpen,
+  opening,
+}: {
+  view: PublishView;
+  project: string;
+  onOpen: () => void;
+  opening: boolean;
+}): JSX.Element {
+  const multiplayer = useLibrary((s) => s.games.find((g) => g.name === project)?.multiplayer === true);
+  return (
+    <>
+      {view.link && <LinkField link={view.link} onOpen={onOpen} opening={opening} />}
+      {view.testLink && (
+        <TestLinkField link={view.testLink} listed={view.stage === PublishStage.Public} multiplayer={multiplayer} />
+      )}
+    </>
   );
 }
 
@@ -748,7 +810,10 @@ function Hint({
   making,
   record,
   name,
+  testShown = false,
 }: {
+  /** The test link's own line stands in for the default intro, so the two never both show. */
+  testShown?: boolean;
   view: PublishView;
   publishing: boolean;
   /** Another cover is on its way: the line says where it shows. */
@@ -770,7 +835,7 @@ function Hint({
     );
   if (publishing) return <p className="genex-publish-hint">{WORDS.keepsGoing}</p>;
   if (making) return <p className="genex-publish-hint">{WORDS.coverMakingSoon}</p>;
-  if (view.stage === PublishStage.Public || view.failure) return null;
+  if (view.stage === PublishStage.Public || view.failure || testShown) return null;
   return <p className="genex-publish-hint">{WORDS.intro}</p>;
 }
 

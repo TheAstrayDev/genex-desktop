@@ -1,27 +1,27 @@
 {
-  "cliVersion": "1.36.8",
-  "skillMdVersion": "1.36.8",
+  "cliVersion": "1.36.9",
+  "skillMdVersion": "1.36.9",
   "url": "https://genex.games/SKILL.md",
   "files": {
     "genex/SKILL.md": {
       "source": "https://genex.games/SKILL.md",
-      "sha256": "470c834d94e0a70348322c4097b2bdfd2f60ffd484e7852ebb116c0f81fe9344",
+      "sha256": "574d8254b3c98a5396ce75b27f42d6752e9e8b33d1f4caf1fc85256260144e2d",
       "bytes": 9928
     },
     "genex-threejs-multiplayer/SKILL.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/SKILL.md",
-      "sha256": "73106d16e0ee4723eaf1bacf3bd6c00dbcc27ef19946cf960c301dffef5db5d3",
-      "bytes": 72568
+      "sha256": "64fc5498203e6d99244781f39237ddc22b83d5fb70932c23cec2d07eb553b7a7",
+      "bytes": 74258
     },
     "genex-threejs-multiplayer/references/genex-netcode-feel-checklist.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/references/genex-netcode-feel-checklist.md",
-      "sha256": "23a80859dd33355a19741f61c5b976aad54a3e245ee75b82f91c4352f5b6378c",
-      "bytes": 3922
+      "sha256": "fef1d599b0db469ff33f96ce0fd130bdab84f5af1952642664b538e22aeed880",
+      "bytes": 4035
     },
     "genex-threejs-multiplayer/references/genre-recipes.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/references/genre-recipes.md",
-      "sha256": "d53659090dafc5c750421885c63063b3f24f244092b7e9b39b87c1cb82c467e7",
-      "bytes": 19548
+      "sha256": "ea59f8b30d3e6b8d89a026625854f5d05f7973d6d704d183461fe3bab73ccd9d",
+      "bytes": 19563
     },
     "genex-threejs-multiplayer/references/host-physics.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/references/host-physics.md",
@@ -35,8 +35,8 @@
     },
     "genex-threejs-embed-auth/SKILL.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-threejs-embed-auth/SKILL.md",
-      "sha256": "a6daba6afb81989956f926d0e5fa8ed23797b52e142aa4a71112be976b707848",
-      "bytes": 28041
+      "sha256": "fecb950fd6dfcb576ea6e80410d644d189fb965701a4091b28c825ad0e27f810",
+      "bytes": 28077
     },
     "genex-threejs-embed-auth/references/shells.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-threejs-embed-auth/references/shells.md",

@@ -364,6 +364,8 @@ plugin and has a Turn off control. Fonts use the existing local choices; geometr
 button and card radii. The panel sits in a clipped, labelled box under the composer.
 
 `customization.read` reads your own saved profile; `customization.reset` withdraws both offers.
+The automatically loaded New Chat panel cannot call actions or open a file picker; put those
+operations in your ordinary plugin panel. Its height does not move the title or composer.
 Profiles live in `data/<id>/customization.json`, independently of the install identity, so saving
 an offer leaves open approval prompts valid. Disable or reset removes host effects without
 overwriting the person's built-in appearance. See [UI customization](plugins.md#ui-customization-panel-feature-version-1)
@@ -682,7 +684,8 @@ or replace Studio's full installer validation, user consent, licensing review or
 ### Panel context notifications
 
 `studioPlugin.onContextChanged(callback)` returns an unsubscribe function. The host notifies
-the mounted plugin panel when its plugin changes; notifications carry no credentials. Re-read
+the mounted plugin panel when its plugin or the selected game changes; notifications carry no
+credentials. A request asked before a game change is still answered, for the game it was asked in. Re-read
 status through declared actions, coalesce refreshes and ignore stale in-flight responses.
 Declared Connect/Unlock actions can omit an extra confirmation: the UI gesture begins account
 setup, while OS/browser authorization remains intact. Disconnect and publish still require confirmation.

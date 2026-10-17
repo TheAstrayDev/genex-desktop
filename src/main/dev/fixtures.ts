@@ -33,6 +33,7 @@ import { NOTIFICATIONS_START_MS, notificationArrivals, seedNotificationGames } f
 import { announceOpenLoopWait, seedOpenLoops, seedOpenProjects } from "./fixture-open-projects.ts";
 import { seedStillsGame } from "./fixture-stills.ts";
 import { seedRobloxGame } from "./fixture-roblox.ts";
+import { seedGenexTerms } from "./fixture-genex-terms.ts";
 import { seedUnrealGame } from "./fixture-unreal.ts";
 import { seedUnrealChat } from "./fixture-unreal-chat.ts";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -143,7 +144,12 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   if (id === FixtureName.ChatWorkers) return seedChatWorkers(core, game.project.name, threadId);
   if (id === FixtureName.Sidebar) return seedSidebar(core, game.project.name);
   // The rest seed a fresh profile only; a reused one keeps what it has.
-  if (existing) return;
+  if (!existing) return seedFreshFixture(game);
+}
+
+/** The seed of a fixture that seeds only a fresh profile. */
+async function seedFreshFixture(game: FixtureGame): Promise<void> {
+  const { core, id, threadId } = game;
   if (id === FixtureName.StudioActivity) return seedStudioActivity(core, threadId);
   if (id === FixtureName.Notifications) return seedNotificationGames(core);
   if (isChatFixture(id)) return seedChatHistory(core, game.project, threadId);
@@ -153,6 +159,7 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   if (id === FixtureName.OpenProjects) return seedOpenProjects(core, game.project.name, threadId);
   if (id === FixtureName.UnrealChat) return seedUnrealChat(core, game.project, threadId);
   if (id === FixtureName.RobloxGame) return seedRobloxGame(core, game.project, threadId);
+  if (id === FixtureName.GenexTerms) return seedGenexTerms(core, game.project.name, threadId);
 }
 
 async function seedGraphOnce(game: FixtureGame): Promise<void> {

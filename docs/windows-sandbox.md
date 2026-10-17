@@ -5,8 +5,10 @@ share, is in [architecture](agent/architecture.md#processes-and-trust-boundaries
 
 [`src/substrate/windows-sandbox.ts`](../src/substrate/windows-sandbox.ts)
 drives sandbox-runtime's srt-win backend (vendored `srt-win.exe` from `app.asar.unpacked`):
-commands run as the local `srt-sandbox` user under Git Bash (no Git for Windows opens the setup
-screen on `git-missing`). What differs from macOS:
+commands run as the local `srt-sandbox` user under Git Bash. The host runs git itself too, so the
+core checks for Git for Windows before anything else at startup (`ensureHostGit`, which also puts
+its `cmd` folder on PATH for a Retry after installing Git); none opens the setup screen on
+`git-missing`. What differs from macOS:
 
 - Grants are NTFS ACL entries set at `initialize()` for the whole process. One
   `WindowsSandboxSession` holds the union of every `ProcessSandbox`'s roots. A folder opened later,

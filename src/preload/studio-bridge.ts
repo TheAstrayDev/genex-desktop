@@ -27,11 +27,22 @@ export interface BridgeIpc {
   ): unknown;
 }
 
+/** The part of Electron's `webUtils` the bridge uses: where a dropped or pasted file is on disk. */
+export interface BridgeFiles {
+  getPathForFile(file: File): string;
+}
+
+/** A bridge built without `webUtils` (a test of its IPC) knows no file's place. */
+const NO_FILES: BridgeFiles = { getPathForFile: () => "" };
+
+/** Calls the preload answers itself, asking main nothing. */
+export const PRELOAD_LOCAL_CALLS = ["pathOfFile"] as const;
+
 /** A channel whose payload is `undefined` is called with no payload argument. */
 type PayloadArgs<C extends StudioInvokeChannel> =
   StudioInvokePayload<C> extends undefined ? [] : [payload: StudioInvokePayload<C>];
 
-export function createStudioBridge(ipc: BridgeIpc): StudioApi {
+export function createStudioBridge(ipc: BridgeIpc, files: BridgeFiles = NO_FILES): StudioApi {
   async function invoke<C extends StudioInvokeChannel>(
     channel: C,
     ...args: PayloadArgs<C>
@@ -52,6 +63,14 @@ export function createStudioBridge(ipc: BridgeIpc): StudioApi {
   const bridge: BridgeCalls = { ipc, invoke, subscribe };
   return {
     performanceMark: (mark) => invoke("studio:performance.mark", mark),
+    // A file that is only data has no place: Electron throws for some, "" for others.
+    pathOfFile: (file) => {
+      try {
+        return files.getPathForFile(file);
+      } catch {
+        return "";
+      }
+    },
     ...threadCalls(bridge),
     ...gameCalls(bridge),
     ...runCalls(bridge),
@@ -379,5 +398,6 @@ function previewCalls(bridge: BridgeCalls) {
     liveBehind: (project) => invoke("studio:live.behind", { project }),
     previewState: () => invoke("studio:preview.state"),
     previewLive: () => invoke("studio:preview.live"),
+    previewCoverStill: () => invoke("studio:preview.cover-still"),
   } satisfies Partial<StudioApi>;
 }

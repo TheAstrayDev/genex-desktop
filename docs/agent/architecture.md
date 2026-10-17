@@ -370,6 +370,8 @@ holds the registered engines, builds the `EngineDescriptor` list the UI reads (`
 answers fallbacks: a rate limit falls back only to a direct engine; context overflow and auth fall
 back to nothing. `StudioCore.init` registers the engines and sets the preferred order: local first
 (it cannot be rate limited), then the subscriptions.
+[`main/engine-boot.ts`](../../src/main/engine-boot.ts) answers the bootstrap with the last
+launch's checked engines while this launch checks.
 
 **Provider table.** [`src/shared/providers.ts`](../../src/shared/providers.ts) `PROVIDERS` is the one
 table of provider identity: id, the label a person says, whether it is a subscription, its login
@@ -396,8 +398,8 @@ spawner for it, `claudeLaunchOptions`) and stops with its whole tree (`taskkill 
 [`src/substrate/process-tree.ts`](../../src/substrate/process-tree.ts)). Studio or game-local
 dependencies and packaged binaries are excluded. A persisted override that is not ready yields to a
 ready automatic installation, an explicit executable never. Diagnostics share a 15-second
-cache; sessions skip it but reuse the login PATH and unchanged binaries' probe answers until
-Recheck. Running processes keep theirs. `main/index.ts` configures protected `engine-homes/coding-clis.json`, which no
+cache; sessions skip it but reuse the login PATH and unchanged binaries' probe answers (kept
+across launches) until Recheck. Running processes keep theirs. `main/index.ts` configures protected `engine-homes/coding-clis.json`, which no
 renderer or agent channel can write. Descriptors carry `account` (login source, variable, what
 signing out leaves, CLI state and version). Fixture and smoke sessions search no paths or standard
 locations (`configureCodingClis`), so status checks never run a machine-installed provider or report
@@ -943,7 +945,7 @@ not in the caller's workspace.
 
 **Genex cover** (`cover.ts`): the game's `genex-cover` demo, shot with `observe`'s `still` into the
 plugin's `covers/<project>/`, sent by `genex cover --json` after a recorded publish (the next one
-aborts it) or by `genex__cover-set`.
+aborts it), with the kept `genex-clip` clip after it, or by `genex__cover-set` (the picture only).
 
 **Plugin skills.** A manifest skill is inline text or (API 3) a package `.md` file with a summary
 (`PluginSkill`, `shared/plugins.ts`). `PluginRegistry.snapshot()` reads tools, guidance and the

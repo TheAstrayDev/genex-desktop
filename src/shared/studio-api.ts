@@ -596,6 +596,8 @@ export interface StudioApi {
   /** What waits for this game's Live Reload and the build Live shows, as `live.behind` says it: read on mount. */
   liveBehind(project: string): Promise<LiveBehindEvent>;
   previewState(): Promise<unknown>;
+  /** The Live game as it looks now (a JPEG data URL), taken before a dialog covers it; null when there is none. */
+  previewCoverStill(): Promise<string | null>;
   /** Whose page Live holds, whether it is still navigating, and whether its requests have settled. */
   previewLive(): Promise<{
     project: string | null;
@@ -664,6 +666,11 @@ export interface StudioApi {
   openChatFile(threadId: string, ref: ChatFileRef): Promise<{ open: ChatFileOpenOutside; problem?: string }>;
   /** The images sent with a chat message. */
   messageImages(threadId: string, messageId: string): Promise<ReferenceFrame[]>;
+  /**
+   * Where a file the person dropped or pasted is on this computer, so a message can link it; ""
+   * for one that is only data (a pasted screenshot). Answered by the preload, never by main.
+   */
+  pathOfFile(file: File): string;
   /**
    * The native folder dialog. It answers *which folder* only — nothing is written by picking, and
    * the answer goes straight back to `inspectFolder`/`adoptFolder`; the renderer shows the folder

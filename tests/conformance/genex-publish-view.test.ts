@@ -19,6 +19,7 @@ import {
   publishReport,
   publishSteps,
   publishView,
+  testLinkOf,
   stripEntries,
   studioPublishButton,
 } from "../../src/renderer/panels/plugins/genex/genex-publish-view.ts";
@@ -54,14 +55,14 @@ const job = (over: Partial<GenexPublishJob> = {}): GenexPublishJob => ({
 test("the dialog names where the game is and offers one press from there", () => {
   const none = publishView(state());
   assert.equal(none.stage, "none");
-  assert.equal(none.primary.label, "Publish");
+  assert.equal(none.primary.label, "Publish to the web");
   assert.equal(none.primary.ariaLabel, "Publish this game on Genex", "the smoke selector stays");
   assert.equal(none.canPublish, true);
   assert.ok(!("secondary" in none), "a draft is no second button beside Publish");
 
   const draft = publishView(state({ slug: "my-game", status: "draft", draftUrl: "https://x/draft" }));
   assert.equal(draft.stage, "draft");
-  assert.equal(draft.primary.label, "Publish");
+  assert.equal(draft.primary.label, "Publish to the web");
 
   const live = publishView(state({ slug: "my-game", status: "published", galleryUrl: "https://x/g" }));
   assert.equal(live.stage, "public");
@@ -498,4 +499,56 @@ test("the chat's cover card leaves Publish out once Genex has answered for the k
   ];
   for (const [label, record, offers] of rows)
     assert.equal(coverCardPublish([genex()], "game", state({ cover: record })), offers, label);
+});
+
+test("the test link shows only while it holds a build players do not have", () => {
+  const ready = {
+    revision: "r2",
+    url: "https://preview--g.genex.technology/",
+    digest: "d",
+    verifiedAt: "2026-10-06T12:10:00Z",
+  };
+  // Before the first publish: any tested draft is worth a link.
+  assert.equal(publishView(state({ slug: "g", status: "draft", readyDraft: ready })).testLink, ready.url);
+  assert.equal(publishView(state({ slug: "g", status: "draft" })).testLink, null, "no tested draft, no link");
+  // Live, and the draft was tested after the last publish: the changes are worth a link.
+  const live = {
+    slug: "g",
+    status: "published" as const,
+    galleryUrl: "https://genex.games/g",
+    lastPublishAt: "2026-10-06T12:00:00Z",
+  };
+  assert.equal(
+    publishView(state({ ...live, readyDraft: ready, job: job({ kind: "draft", state: "done", phase: "ready" }) }))
+      .testLink,
+    ready.url,
+  );
+  // A publish tests its own draft before it goes live, then stamps lastPublishAt: no second link.
+  const sameBuild = { ...ready, verifiedAt: "2026-10-06T11:59:00Z" };
+  assert.equal(publishView(state({ ...live, readyDraft: sameBuild })).testLink, null);
+  // A publish Genex settled later (verified after the stamp) still is the live build when the revisions match.
+  assert.equal(
+    testLinkOf(
+      state({ ...live, readyDraft: ready, job: job({ state: "done", phase: "ready", expectedStagingRevision: "r2" }) }),
+      true,
+    ),
+    null,
+  );
+  // A later attempt that uploaded and then failed its test: the address now serves that untested build.
+  const failedLater = job({ kind: "draft", state: "failed", phase: "ready", uploadedAt: "2026-10-06T12:20:00Z" });
+  assert.equal(publishView(state({ slug: "g", status: "draft", readyDraft: ready, job: failedLater })).testLink, null);
+  assert.equal(
+    publishView(
+      state({
+        slug: "g",
+        status: "draft",
+        readyDraft: ready,
+        job: { ...failedLater, uploadedAt: "2026-10-06T12:05:00Z" },
+      }),
+    ).testLink,
+    ready.url,
+    "a failure that uploaded before the tested draft leaves the tested draft in place",
+  );
+  // While an attempt runs, the window shows its progress, not links.
+  assert.equal(publishView(state({ slug: "g", status: "draft", readyDraft: ready, job: job() })).testLink, null);
 });

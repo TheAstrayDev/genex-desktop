@@ -9,7 +9,7 @@
  * Nothing here refuses a message. A tag that can't be attached is named to the agent with the
  * reason, shown in the chat, and the message still goes.
  */
-import { mkdir, readdir, rename, rm } from "node:fs/promises";
+import { lstat, readdir, realpath, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   MentionKind,
@@ -21,8 +21,7 @@ import {
   PROMPT_MENTION_MAX,
 } from "../../shared/prompt-mention.ts";
 import { isPlaySlug } from "../../shared/play.ts";
-import { atomicWriteText } from "../../substrate/fsx.ts";
-import { toPosixRelative } from "../../substrate/paths.ts";
+import { createFileInDir, ensureDirBelow } from "../../substrate/fsx.ts";
 import { mentionContext, mentionLine } from "./mention-prompts.ts";
 
 /** One asset module's largest size; genex.games' asset checks hold a module to the same. */
@@ -33,6 +32,10 @@ export const REFS_DIR = ".studio/refs";
 const ASSETS_DIR = "src/assets";
 /** The line the asset library's own Copy code button puts on a module. */
 const ASSET_HEADER = "// From the Genex asset library - free MIT Three.js assets: https://genex.games/assets\n\n";
+/** Why a copy was dropped before it took its place. */
+const MESSAGE = {
+  linkPlanted: "A link took the place of the copy's folder.",
+} as const;
 /** A module's file name as the library writes them. */
 const MODULE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*\.(ts|js|mjs)$/;
 
@@ -147,22 +150,34 @@ async function reference(
   const world = await sources.world(slug);
   const own = world.authorId !== null && world.authorId === (await sources.me().catch(() => null));
   if (!(world.remixable || own) || !world.cloneUrl) return { outcome: miss(ref, MentionMiss.NotTakeable) };
-  const refs = path.join(target.gameDir, REFS_DIR);
-  const dest = path.join(refs, slug);
+  // The game's agents can write `.studio`: every folder on the way must be a folder, not a link.
+  const refs = await ensureDirBelow(target.gameDir, REFS_DIR.split("/")).catch(() => null);
+  const dest = refs ? path.join(refs, slug) : null;
+  if (!(refs && dest && (await replaceable(dest)))) return { outcome: miss(ref, MentionMiss.NotDownloaded) };
   const fresh = path.join(refs, `.${slug}-${Date.now().toString(36)}`);
-  await mkdir(refs, { recursive: true });
   try {
     await sources.clone(world.cloneUrl, fresh);
     // A reference is read, never committed to: the author's history stays theirs.
     await rm(path.join(fresh, ".git"), { recursive: true, force: true });
+    if (!(await stillFolder(refs)) || !(await replaceable(dest))) throw new Error(MESSAGE.linkPlanted);
     await rm(dest, { recursive: true, force: true });
     await rename(fresh, dest);
   } catch {
-    await rm(fresh, { recursive: true, force: true });
+    if (await stillFolder(refs)) await rm(fresh, { recursive: true, force: true });
     return { outcome: miss(ref, MentionMiss.NotDownloaded) };
   }
-  const relative = toPosixRelative(path.relative(target.gameDir, dest));
-  return { outcome: { ...tagOf(ref), result: MentionResult.Copied, path: relative } };
+  return { outcome: { ...tagOf(ref), result: MentionResult.Copied, path: `${REFS_DIR}/${slug}` } };
+}
+
+/** Whether `dest` may be replaced by a fresh copy: nothing is there yet, or a folder of its own (no link). */
+async function replaceable(dest: string): Promise<boolean> {
+  const info = await lstat(dest).catch(() => null);
+  return info === null || info.isDirectory();
+}
+
+/** Whether `dir`, a real folder {@link ensureDirBelow} answered, still resolves to itself. */
+async function stillFolder(dir: string): Promise<boolean> {
+  return (await realpath(dir).catch(() => null)) === dir;
 }
 
 /** An asset's module, written into the game under a name no file has yet. */
@@ -170,10 +185,11 @@ async function asset(ref: MentionRef, slug: string, target: MentionTarget, sourc
   if (!target.webGame) return { outcome: miss(ref, MentionMiss.NotWebGame) };
   const found = assetModule(await sources.assetManifest(slug));
   if (!found) return { outcome: miss(ref, MentionMiss.NotDownloaded) };
-  const dir = path.join(target.gameDir, ASSETS_DIR);
-  await mkdir(dir, { recursive: true });
+  const dir = await ensureDirBelow(target.gameDir, ASSETS_DIR.split("/")).catch(() => null);
+  if (!dir) return { outcome: miss(ref, MentionMiss.NotDownloaded) };
   const name = await freeName(dir, found.filename);
-  await atomicWriteText(path.join(dir, name), ASSET_HEADER + found.code);
+  // Never through a link at that name, nor into a folder swapped for one after the check.
+  await createFileInDir(dir, name, ASSET_HEADER + found.code);
   return {
     outcome: { ...tagOf(ref), result: MentionResult.Added, path: `${ASSETS_DIR}/${name}` },
     ...(found.usage ? { usage: found.usage } : {}),

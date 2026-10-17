@@ -4,7 +4,7 @@
  * anything that can't be attached is named without writing anything.
  */
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import {
@@ -69,6 +69,11 @@ function sources(over: Partial<MentionSources> = {}): MentionSources & { clones:
     assetManifest: async () => manifest(),
     ...over,
   };
+}
+
+/** Every name under `dir`, recursively, sorted. */
+async function listing(dir: string): Promise<string[]> {
+  return (await readdir(dir, { recursive: true })).sort();
 }
 
 const ref = (over: Partial<MentionRef> & { handle: string }): MentionRef => ({
@@ -195,6 +200,41 @@ describe("resolving @ tags", () => {
         (files) => assert.deepEqual(files, [], item.name),
         () => {},
       );
+    }
+  });
+
+  it("never makes, removes or writes anything through a link planted in the game folder", async () => {
+    const cases: { name: string; link: string; to: string; ref: MentionRef }[] = [
+      { name: "refs folder is a link", link: ".studio/refs", to: "", ref: ref({ handle: "space-race" }) },
+      { name: ".studio is a link", link: ".studio", to: "", ref: ref({ handle: "space-race" }) },
+      {
+        name: "the copy's folder is a link",
+        link: ".studio/refs/space-race",
+        to: "space-race",
+        ref: ref({ handle: "space-race" }),
+      },
+      {
+        name: "assets folder is a link",
+        link: "src/assets",
+        to: "",
+        ref: ref({ handle: "stone-fireplace", kind: MentionKind.Asset }),
+      },
+      { name: "src is a link", link: "src", to: "", ref: ref({ handle: "stone-fireplace", kind: MentionKind.Asset }) },
+    ];
+    for (const item of cases) {
+      const { root, target } = await game();
+      const outside = path.join(root, "AI Games");
+      await mkdir(path.join(outside, "space-race"), { recursive: true });
+      await writeFile(path.join(outside, "space-race", "keep.ts"), "theirs");
+      const before = await listing(outside);
+      const link = path.join(target.gameDir, item.link);
+      await mkdir(path.dirname(link), { recursive: true });
+      await symlink(path.join(outside, item.to), link);
+      const tags = await resolveMentions([item.ref], target, sources());
+      assert.equal(tags.outcomes[0]?.result, MentionResult.Unavailable, item.name);
+      assert.equal(tags.outcomes[0]?.miss, MentionMiss.NotDownloaded, item.name);
+      assert.deepEqual(await listing(outside), before, `${item.name}: nothing outside the game changed`);
+      assert.equal(await readFile(path.join(outside, "space-race", "keep.ts"), "utf8"), "theirs", item.name);
     }
   });
 

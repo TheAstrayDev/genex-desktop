@@ -346,7 +346,7 @@ test("the synthetic skill tool exists only for a plugin with file skills and nam
 test("the Genex game packages are exact pins", () => {
   assert.deepEqual(Object.keys(GENEX_GAME_PACKAGES).sort(), ["@genex-ai/embed-sdk", "@genex-ai/multiplayer"]);
   for (const version of Object.values(GENEX_GAME_PACKAGES)) assert.match(version, /^\d+\.\d+\.\d+$/);
-  assert.match(GENEX_GAME_PACKAGES["@genex-ai/multiplayer"], /^0\.16\.\d+$/, "the multiplayer card asks for ^0.16.0");
+  assert.match(GENEX_GAME_PACKAGES["@genex-ai/multiplayer"], /^0\.17\.\d+$/, "the multiplayer card asks for ^0.17.0");
 });
 
 // ── The registry serves file skills ─────────────────────────────────────────────────────────────

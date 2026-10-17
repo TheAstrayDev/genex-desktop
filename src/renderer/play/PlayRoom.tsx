@@ -34,8 +34,11 @@ const ONLINE_POLL_MS = 20 * SECOND_MS;
 const SEARCH_DEBOUNCE_MS = 200;
 /** How many card shapes stand in for a tab on its way. */
 const PLACEHOLDERS = 8;
-/** How far below the fold the next page starts loading. */
-const LOAD_AHEAD = "900px";
+/**
+ * How far below the fold the next page starts loading: two of the scroller's own heights, time
+ * for the page and its covers to arrive before a quick scroll reaches them.
+ */
+const LOAD_AHEAD = "200%";
 
 /** The tabs on the header's line; arrow keys, Home and End move between them. */
 function CategoryTabs({
@@ -205,7 +208,7 @@ function useGridColumns(grid: RefObject<HTMLDivElement | null>, on: boolean): nu
     const element = grid.current;
     if (!on || !element) return;
     const measure = () => setColumns(gridColumns(getComputedStyle(element).gridTemplateColumns));
-    measure();
+    // The observer's first call measures once the grid is laid out, never forcing a layout mid-commit.
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();

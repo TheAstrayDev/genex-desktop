@@ -71,6 +71,8 @@ export function registerPreviewIpc(
     );
     return true;
   });
+  // The game as it looks now, for the stage to hold while a dialog covers the view.
+  handle("studio:preview.cover-still", async () => (await preview()?.coverStill()) ?? null);
   handle("studio:preview.stop", async () => {
     await core.stopLive();
     return true;

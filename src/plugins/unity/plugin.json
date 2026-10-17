@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unity",
-  "version": "0.5.1",
+  "version": "0.5.3",
   "name": "Unity",
   "publisher": "Genex",
   "description": "Agents build your game in the Unity editor on this computer, through Unity's Pipeline package: Genex makes or sets up the game's Unity project and opens it in your Unity 6. The project lives in the game's own folder. Unity is a trademark or registered trademark of Unity Technologies or its affiliates.",
@@ -145,7 +145,7 @@
     {
       "name": "editor-activity",
       "audience": "harness",
-      "description": "For Genex only: whether the person is using this game's Unity editor (it plays a game the agent did not start) and how many open scenes have unsaved work; the editor lock's probe.",
+      "description": "For Genex only: whether the person is using this game's Unity editor (it plays a game the agent did not start, and agents may not use Unity while the person plays) and how many open scenes have unsaved work; the editor lock's probe.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -294,6 +294,9 @@
       "confirmation": "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost."
     },
     { "name": "get-unity", "label": "Get Unity", "native": true },
+    { "name": "agents", "label": "Whether agents may use Unity while you play" },
+    { "name": "agents-go-ahead", "label": "Let agents use Unity while you play" },
+    { "name": "agents-wait", "label": "Have agents wait while you play" },
     { "name": "steps", "label": "Unity setup" },
     { "name": "get-hub", "label": "Get Unity Hub", "native": true },
     { "name": "open-hub", "label": "Open Unity Hub", "native": true },

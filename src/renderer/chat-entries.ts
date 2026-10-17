@@ -143,6 +143,8 @@ export const EntryAction = {
   Judge: "judge",
   /** A rewind put game files back (`conversation_rewound`): one line, with Bring back newer version while offered. */
   Rewound: "rewound",
+  /** An agent went ahead of the person in an app a plugin's lock guards (`agent_went_ahead`): one line, with that plugin's settings. */
+  WentAhead: "went-ahead",
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
@@ -234,6 +236,8 @@ export type Entry =
       appAccess?: AppLookAccessKind[];
       /** action "judge": what the judge established, in the words of a build's checks list. */
       judge?: ChatJudgeResultPayload;
+      /** action "went-ahead": the plugin whose settings the line opens, and the app it names. */
+      wentAhead?: { pluginId: string; label: string };
     }
   /**
    * The morning: what the run amounts to, in one card. It replaces the line that read
@@ -1395,6 +1399,23 @@ function narrateAppAccess(chat: ChatDraft, event: EventEnvelope): void {
   });
 }
 
+/** An agent went ahead of the person: one line naming the app, with its plugin's settings; a partial record draws nothing. */
+function narrateWentAhead(chat: ChatDraft, event: EventEnvelope): void {
+  const payload = customPayload(event.data, CustomEvent.AgentWentAhead);
+  const pluginId = typeof payload?.pluginId === "string" ? payload.pluginId : "";
+  const label = typeof payload?.label === "string" ? payload.label.trim() : "";
+  if (!pluginId || !label) return;
+  closeGroup(chat);
+  chat.entries.push({
+    id: event.id,
+    kind: EntryKind.Action,
+    tag: SystemTag.Ask,
+    action: EntryAction.WentAhead,
+    text: TRANSCRIPT_WORDS.wentAhead(label),
+    wentAhead: { pluginId, label },
+  });
+}
+
 /** A blind judge's play for the chat's own session: one line; an old or partial record draws nothing. */
 function narrateChatJudge(chat: ChatDraft, event: EventEnvelope): void {
   const judge = readChatJudgeResult(customPayload(event.data, CustomEvent.ChatJudgeResult));
@@ -1561,6 +1582,7 @@ function narratePluginCall(chat: ChatDraft, event: EventEnvelope): void {
   row.failed = row.state === ToolState.Failed;
   row.detail = [{ text }, ...(raw.result ? [{ text: String(raw.result) }] : [])];
   if (payload.making) row.making = { ids: makingIds(payload) };
+  if ("blocked" in payload && payload.blocked) row.blocked = payload.blocked;
   if (row.state === ToolState.Succeeded && keptGenexCover(payload)) holdCoverCard(chat, event, payload);
 }
 
@@ -2091,6 +2113,7 @@ const NARRATORS: readonly Narrator[] = [
   narrateFinishCheck,
   narrateRunFinishSettled,
   narrateAppAccess,
+  narrateWentAhead,
   narrateChatJudge,
   narratePluginSuggested,
   narrateImprovement,

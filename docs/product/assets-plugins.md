@@ -24,6 +24,7 @@ Community plugins and the plugin guide, with
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
 unapproved, reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
 Game spend is in the usage panel, prices in Genex's Credits tab. Enabled Genex suggests assets in planning.
+Generations wait for unaccepted terms (Review: sidebar, chat).
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
 host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
@@ -43,7 +44,7 @@ Genex and Local Blender as official; its installs require native-code trust
 Installation names publishers and capabilities; new capabilities need confirmation.
 Agents can [suggest or write plugins](projects-engines.md#plugins-on-or-off), never install,
 enable or approve them. Native code is not sandboxed.
-[Customization](../plugins.md#ui-customization-panel-feature-version-1) offers selectable themes and one labelled New Chat panel.
+[Customization](../plugins.md#ui-customization-panel-feature-version-1) offers themes and New Chat panels.
 
 Connector tools ask before each call unless Settings holds an exact grant (a plugin's read-only
 tools never ask, its others not in Auto); server hints grant nothing. Plugin uploads show every

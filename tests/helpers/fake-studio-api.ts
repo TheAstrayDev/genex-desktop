@@ -207,6 +207,7 @@ const METHODS = [
   "liveBehind",
   "previewState",
   "previewLive",
+  "previewCoverStill",
   "buildProblem",
   "installPackages",
   "startRun",
@@ -232,6 +233,7 @@ const METHODS = [
   "resolveChatFiles",
   "openChatFile",
   "messageImages",
+  "pathOfFile",
   "rewindPreview",
   "rewindChat",
   "undoRewind",
@@ -388,6 +390,8 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onCodexLogin: ((listener: (state: CodexLogin) => void) => subscribe(sets.onCodexLogin, listener)) as never,
     onRunSummary: ((project: string, runId: string, listener: (summary: RunSummary) => void) =>
       subscribe(sets.onRunSummary, { project, runId, listener })) as never,
+    // Answered by the preload, not main: synchronous, and no file of a test has a place on disk.
+    pathOfFile: (() => "") as never,
   };
   const api = {} as Record<StudioMethod, (...args: unknown[]) => unknown>;
   for (const method of METHODS) {

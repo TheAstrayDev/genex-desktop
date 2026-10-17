@@ -1450,7 +1450,7 @@ export const COMPUTER_CONTROL_SETTING_WORDS = {
   section: "Computer control",
   label: "Let agents control your computer",
   detail:
-    "An agent can ask to see your screen, then click and type in the apps you allow. Each chat session asks you first, and ⌃⌥⌘Esc stops it. macOS only.",
+    "With this on, an agent can click and type in the apps you allow. Each chat session asks you first, and ⌃⌥⌘Esc stops it. Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex. macOS only.",
 } as const;
 
 export function resumedWords(parts: number): string {
@@ -1598,14 +1598,19 @@ const SCREEN_NOW_MS = 2 * SECOND_MS;
 
 /** A minute, in the seconds a running clock shows. */
 const SECONDS_PER_MINUTE = MINUTE_MS / SECOND_MS;
+/**
+ * Between a clock's two parts: a no-break space. The status clock's figures are tabular, and the
+ * house font's tabular set widens a plain space to a figure's width; this one keeps a word space's.
+ */
+const CLOCK_SPACE = "\u00a0";
 
 /** "42s", "3m 5s", "2h 10m": a running clock, as short as the time allows, and nothing under a second. */
 export function clockWords(ms: number): string {
   const seconds = Math.floor(ms / SECOND_MS);
   if (ms < SECOND_MS) return "";
   if (ms < MINUTE_MS) return `${seconds}s`;
-  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m ${seconds % SECONDS_PER_MINUTE}s`;
-  return `${Math.floor(ms / HOUR_MS)}h ${Math.floor((ms % HOUR_MS) / MINUTE_MS)}m`;
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m${CLOCK_SPACE}${seconds % SECONDS_PER_MINUTE}s`;
+  return `${Math.floor(ms / HOUR_MS)}h${CLOCK_SPACE}${Math.floor((ms % HOUR_MS) / MINUTE_MS)}m`;
 }
 
 /** How long ago a screen's frame came: "now", "3s", "2m" on a node, "3s ago" where there is room. */
@@ -1687,6 +1692,10 @@ export const TRANSCRIPT_WORDS = {
       : `Undone. ${game ?? "This game"} is a web game again.`,
   engineUndo: "Undo",
   engineUndoTitle: "Take this back: the game builds where it did before",
+  /** An agent went ahead of the person in an app a plugin's lock guards (`agent_went_ahead`): said once. */
+  wentAhead: (app: string) => `An agent used ${app} while you were playing.`,
+  wentAheadSettings: (app: string) => `${app} settings`,
+  wentAheadSettingsTitle: (app: string) => `Choose whether agents may use ${app} while you play`,
   rewound: (files: number) => `The chat went back, and ${files} game ${files === 1 ? "file" : "files"} with it.`,
   rewindUndo: "Bring back newer version",
   rewindUndoTitle: "Put the game files back as they were before this rewind; the chat stays rewound",
@@ -1844,7 +1853,7 @@ export const WORKER_LINE_WORDS = {
 export const BUILD_CHECKLIST_WORDS = {
   added: "Added",
   working: "Working",
-  workingFor: (minutes: number) => `Working · about ${minutes} min`,
+  workingFor: (minutes: number) => `Working · ~${minutes} min`,
   workingRound: (round: number) => `Working · round ${round}`,
   waiting: "Waiting to start",
   notAdded: "Not added",
@@ -1960,6 +1969,12 @@ export const FINISH_CHECK_WORDS = {
 } as const;
 
 /** A build in the stage's history, by what it was and the day it started; never a number or a count. */
+/** The Builds bar's tabs, one for each of the chat's builds. */
+export const BUILD_TABS_WORDS = {
+  /** The track's name for a screen reader. */
+  tabs: "Builds",
+} as const;
+
 export const BUILD_HISTORY_WORDS = {
   thisTurn: "This chat turn",
   thisLoop: "This Loop",
@@ -2366,6 +2381,14 @@ export const UPDATE_WORDS = {
 } as const;
 
 /** The sidebar's plugin updates line and its list, while installed plugins have newer versions waiting (`state/plugins.ts`). */
+/** Genex's updated terms waiting for the person, in the sidebar and under a Genex call in the chat. */
+export const GENEX_TERMS_WORDS = {
+  line: "Genex terms updated",
+  /** Opens genex.games' terms page in the browser. */
+  review: "Review",
+  reviewLabel: "Review Genex terms on genex.games",
+} as const;
+
 export const PLUGIN_UPDATE_WORDS = {
   /** The line's name for what waits: it opens the list. */
   count: (count: number) => (count === 1 ? "1 plugin update" : `${count} plugin updates`),
@@ -3034,6 +3057,28 @@ export const CHAT_WORDS = {
   moreWaiting: (count: number) => `${count} more waiting`,
 } as const;
 
+/** "1 picture", "2 pictures", or with `files` "1 file", "2 files". */
+const counted = (count: number, files: boolean): string =>
+  `${count} ${files ? "file" : "picture"}${count === 1 ? "" : "s"}`;
+
+/**
+ * The prompt bar's line while files are dragged over the chat, and the note a drop leaves. `files`
+ * says whether what is counted includes files that are not pictures.
+ */
+export const COMPOSER_DROP_WORDS = {
+  dropToAdd: (count: number, files: boolean) => `Drop to add ${counted(count, files)}`,
+  full: (max: number, files: boolean) => `${max} ${files ? "files" : "pictures"} at most`,
+  someStayOut: (room: number, out: number, files: boolean) => `Room for ${counted(room, files)}, ${out} will stay out`,
+  overLimit: (count: number, max: number, files: boolean) => `${counted(count, files)} left out, ${max} at most`,
+  couldNotAdd: (name: string) => `${name} couldn’t be added`,
+  couldNotAddMany: (count: number) => `${count} files couldn’t be added`,
+  filesLeftOut: (count: number) => `${count} files didn’t go in`,
+  chooseFiles: "Choose files",
+  dismiss: "Dismiss",
+  /** A file on the board: its chip's remove button. */
+  remove: (name: string) => `Remove ${name}`,
+} as const;
+
 // ── the system file manager ───────────────────────────────────────────────────────────────
 
 /** What a button that shows a file in the system's file manager says, and its failure. */
@@ -3657,6 +3702,8 @@ export const GENEX_WORDS = {
     chipLiveUndated: "Live",
     chipFailed: "Didn't publish",
     publish: "Publish",
+    /** The main press before the game is public: what Publish does, in a word more. */
+    publishToWeb: "Publish to the web",
     publishing: "Publishing…",
     updatePublic: "Publish update",
     tryAgain: "Try again",
@@ -3666,6 +3713,15 @@ export const GENEX_WORDS = {
     copyLink: "Copy",
     copyLinkLabel: "Copy the game's link",
     copied: "Copied",
+    /** The public link's label in the dialog, beside the globe. */
+    publicLink: "Public:",
+    /** The tested draft, while players do not have it yet: its label, its Copy, and the line under it. */
+    testLink: "Test link:",
+    copyTestLinkLabel: "Copy the test link",
+    testBefore: "Friends can play it before you publish.",
+    testChanges: "Try your changes before you update.",
+    /** Added for a multiplayer game: a second identity is all testing alone needs. */
+    testSecondPlayer: "Open it in a private window to join as another player.",
     /** Under the busy button: closing the dialog does not stop it. */
     keepsGoing: "You can close this. It keeps going.",
     /** Under the busy button, once the test runs longer than usual. */
@@ -3824,6 +3880,11 @@ export const PRIVACY_WORDS = {
   deletePartial: (count: number) =>
     `Deleted ${plural(count, "row")}, but Genex couldn’t finish. Try again later to remove the rest.`,
   deleteNotSent: "Nothing was ever sent from this launch.",
+  /** The quiet line of links under the rows; each opens in the browser. */
+  links: {
+    policy: "Privacy Policy",
+    terms: "Terms of Service",
+  },
 } as const;
 
 /** What a finished Delete what I shared says; a stop after earlier ids' rows were removed says how many. */

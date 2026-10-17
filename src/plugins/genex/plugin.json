@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.10.12",
+  "version": "1.10.14",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -181,7 +181,7 @@
     {
       "name": "genex-threejs-multiplayer",
       "engines": ["web"],
-      "summary": "Realtime multiplayer for Three.js games with @genex-ai/multiplayer: movement sync, shared objects, host authority, matchmaking. MANDATORY before networking code. Works only on the published Genex draft; Studio's preview stays single-player.",
+      "summary": "Realtime multiplayer for Three.js games with @genex-ai/multiplayer: movement sync, shared objects, host authority, matchmaking. MANDATORY before networking code. Test it on the Genex draft link with two different players; Studio's preview stays single-player.",
       "file": "skills/genex-threejs-multiplayer/SKILL.md",
       "references": [
         "skills/genex-threejs-multiplayer/references/realtime-patterns.md",
@@ -311,6 +311,10 @@
     {
       "name": "terms",
       "label": "Review Genex terms"
+    },
+    {
+      "name": "terms-status",
+      "label": "Genex terms"
     },
     {
       "name": "publish-status",

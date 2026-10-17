@@ -55,7 +55,7 @@ export const GENEX = {
 does not apply: Studio pins its Genex packages. Other commands map onto Studio tools as the
 `genex` skill describes (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-embed-auth/SKILL.md v1.36.8 sha256 a6daba6afb81989956f926d0e5fa8ed23797b52e142aa4a71112be976b707848 -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-embed-auth/SKILL.md v1.36.9 sha256 fecb950fd6dfcb576ea6e80410d644d189fb965701a4091b28c825ad0e27f810 -->
 ---
 name: genex-threejs-embed-auth
 description: Wire up player identity AND durable game state for a Genex game via @genex-ai/embed-sdk. Load this UNCONDITIONALLY for every game, multiplayer or not, BEFORE writing any boot code — every player gets an identity (signed-in account or guest); per-player saves, shared world state, and leaderboards are one-line SDK calls; multiplayer requires the SDK's token either way. Also holds the shells table: what a game may do on its Genex page, in the app and on its own link.
@@ -527,8 +527,9 @@ Rules:
   `[::1]` — not https, not a LAN IP), the page is not inside an iframe, and
   `@genex-ai/embed-sdk` is 0.5.0+ (older: apply the pending platform update).
 - **Multiplayer `connect()` fails in local test mode** — by design: no relay
-  credential exists there. Validate multiplayer on the hosted draft (the
-  owner's session) or the published game, and say plainly when it wasn't.
+  credential exists there. Validate multiplayer on the preview link (it plays in
+  rooms of its own; a normal and a private window are two players), and say
+  plainly when it wasn't.
 - **Multiplayer join rejected with 401** — the join ran before
   `waitForPlayer()` resolved, without `auth: () => getColyseusAuth()`, or with a
   stale cached token on reconnect (read it fresh each call).

@@ -5,7 +5,8 @@
  * with no socket and no Genex account. A launch is signed out unless it asks for a fixture account
  * (`STUDIO_FIXTURE_GENEX_ACCOUNT=1`, or `new`, `quiet` or `fresh` for a new account with no games and
  * nobody yet, with games nobody played this week, or with one game two days old, `nickname` for the
- * full account before it chose its nickname, or `ended` for a sign-in genex.games no longer takes);
+ * full account before it chose its nickname, `ended` for a sign-in genex.games no longer takes, or
+ * `terms` for the full account with Genex's updated terms still to accept);
  * then every call carries that account's token. A new account and the nickname account have not
  * chosen their nicknames, so the welcome asks. State lives for the launch: adding a friend,
  * renaming the account, choosing an avatar or a nickname shows at once and is gone at the next launch.
@@ -22,6 +23,7 @@ import {
   shownAsTaken,
 } from "../../shared/handle.ts";
 import { PLAY_ORIGIN } from "../../shared/play.ts";
+import { FixtureName } from "./fixture-kit.ts";
 import type { GalleryAnswer } from "../play/gallery.ts";
 import { HandleError, PeopleRoute } from "../play/people.ts";
 import {
@@ -46,6 +48,8 @@ export const FixtureAccount = {
   Nickname: "nickname",
   /** Signed in earlier, but genex.games no longer takes the token: every call of the account is a 401. */
   Ended: "ended",
+  /** The full account with Genex's updated terms still to accept: the sidebar offers Review. */
+  Terms: "terms",
 } as const;
 export type FixtureAccount = (typeof FixtureAccount)[keyof typeof FixtureAccount];
 
@@ -64,6 +68,15 @@ export function fixtureAccountOf(token: string | undefined): FixtureAccount | nu
 /** Whether a value names a fixture account. */
 export const isFixtureAccount = (value: unknown): value is FixtureAccount =>
   typeof value === "string" && (Object.values(FixtureAccount) as string[]).includes(value);
+
+/**
+ * The fixture account a launch signs in as: the one `STUDIO_FIXTURE_GENEX_ACCOUNT` names, else the
+ * genex-terms fixture's own, else none.
+ */
+export function launchFixtureAccount(named: unknown, fixture: string | null | undefined): FixtureAccount | null {
+  if (isFixtureAccount(named)) return named;
+  return fixture === FixtureName.GenexTerms ? FixtureAccount.Terms : null;
+}
 
 /** A fixture person as the API serves one. */
 interface FixturePerson {

@@ -678,6 +678,7 @@ function PluginThemeChoice() {
   const offers = customizationProviders(plugins).filter((p) => p.customization?.theme);
   const selected = offers.find((p) => p.manifest.id === appearance.pluginTheme);
   const available = Boolean(selected);
+  if (offers.length === 0 && !appearance.pluginTheme) return null;
   const options = offers.map((p) => ({
     value: p.manifest.id,
     label: PLUGIN_THEME_MESSAGE.Offer(
@@ -693,19 +694,21 @@ function PluginThemeChoice() {
     : PLUGIN_THEME_MESSAGE.Inactive;
   return (
     <section data-plugin-theme-choice>
-      <SettingRow label={PLUGIN_THEME_MESSAGE.Label}>
-        <Choice
-          label={PLUGIN_THEME_MESSAGE.Label}
-          value={appearance.pluginTheme ?? ""}
-          options={[{ value: "", label: PLUGIN_THEME_MESSAGE.BuiltIn }, ...options]}
-          onChange={(id) => update((prev) => ({ ...prev, pluginTheme: id || undefined }))}
-        />
-      </SettingRow>
+      {offers.length > 0 && (
+        <SettingRow label={PLUGIN_THEME_MESSAGE.Label}>
+          <Choice
+            label={PLUGIN_THEME_MESSAGE.Label}
+            value={appearance.pluginTheme ?? ""}
+            options={[{ value: "", label: PLUGIN_THEME_MESSAGE.BuiltIn }, ...options]}
+            onChange={(id) => update((prev) => ({ ...prev, pluginTheme: id || undefined }))}
+          />
+        </SettingRow>
+      )}
       <p className="appearance-hint" role="status">
         {appearance.pluginTheme && !available ? PLUGIN_THEME_MESSAGE.Missing : hint}
       </p>
       {appearance.pluginTheme && (
-        <Button variant="ghost" onClick={() => update((prev) => ({ ...prev, pluginTheme: undefined }))}>
+        <Button variant="outline" onClick={() => update((prev) => ({ ...prev, pluginTheme: undefined }))}>
           {PLUGIN_THEME_MESSAGE.Off}
         </Button>
       )}
@@ -714,6 +717,10 @@ function PluginThemeChoice() {
 }
 export function AppearanceSection() {
   const { appearance, scheme, error, update } = useAppearance();
+  const plugins = usePlugins((state) => state.list);
+  const pluginThemeActive = customizationProviders(plugins).some(
+    (plugin) => plugin.manifest.id === appearance.pluginTheme && Boolean(plugin.customization?.theme),
+  );
   const light = paletteFor(appearance, Scheme.Light);
   const dark = paletteFor(appearance, Scheme.Dark);
   return (
@@ -733,11 +740,13 @@ export function AppearanceSection() {
       </p>
       <PluginThemeChoice />
       <HomeBackdropSection />
-      <fieldset disabled={Boolean(appearance.pluginTheme)} className="appearance-native-editors">
-        <ThemeEditor scheme={Scheme.Light} />
-        <ThemeEditor scheme={Scheme.Dark} />
-        <TypographySection />
-      </fieldset>
+      {!pluginThemeActive && (
+        <fieldset className="appearance-native-editors">
+          <ThemeEditor scheme={Scheme.Light} />
+          <ThemeEditor scheme={Scheme.Dark} />
+          <TypographySection />
+        </fieldset>
+      )}
       {error && (
         <p role="alert" className="appearance-error">
           {error}

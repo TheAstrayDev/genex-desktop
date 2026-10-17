@@ -2,14 +2,14 @@
 
 ## What the user sees
 
-One conversation per game. User messages are right-aligned bubbles, images above; long
+One conversation per game. User messages are right-aligned bubbles, images above or alone; long
 ones fold with Show more. Any existing file the chat names is a link: game Markdown and
-images open beside it, others in their app (programs only shown). Only the prompt bar sends;
-a pasted image adds the picture, not its filename. @ tags (max 5): local games read-only,
+images open beside it, others in their app (programs only shown). Only the prompt bar sends.
+Dropped files go in: pictures as pictures, others as links. @ tags (max 5): local games read-only,
 Genex ones in `.studio/refs/`, assets `src/assets/`.
 
-Chat work shows a short status and elapsed time; waiting is static. A running build is one card,
-parts counted; it opens to their checklist and Open in Builds. Run workers get no lines.
+Chat work shows its status and elapsed time; waiting is static. A running build is one card,
+parts counted, open on their checklist and Open in Builds. Run workers get no lines.
 
 Neighboring tools group under **Worked on N steps** (or **Worked in Unreal**);
 failures stay visible. Play views and assets sit under their work. Build updates use a short

@@ -32,11 +32,13 @@ import {
   statusLine,
 } from "../run-steps.ts";
 import type { AgentScreenFrame } from "../../shared/agent-screen.ts";
+import { RunState } from "../../shared/run-state.ts";
+import type { HistoryEntry } from "../build-progress.ts";
 import { leadFrameOf } from "../state/agent-screens.ts";
 import { useAgentScreens } from "../state/hooks.ts";
 import { GraphSelection, isPartSelection, partOf, partSelection } from "./inspector/selection.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
-import { BuildStatus, type EarlierBuild, PlayButton, ZoomPill } from "./run-graph/chrome.tsx";
+import { BuildStatus, type BuildTabs, PlayButton, ZoomPill } from "./run-graph/chrome.tsx";
 import { GateButton, GateTip, gateWords } from "./run-graph/gates.tsx";
 import {
   AssetsTile,
@@ -48,7 +50,7 @@ import {
   StartNode,
   StepNode,
 } from "./run-graph/nodes.tsx";
-import { runProgress, useBuildsModel, useNow, useRunStills } from "./run-graph/use-builds-model.ts";
+import { useBuildsModel, useNow, useRunStills } from "./run-graph/use-builds-model.ts";
 import { GLIDE_MS, useGraphCamera } from "./run-graph/use-graph-camera.ts";
 import { Inspector, Lightbox, type LightItem, type Reply } from "./RunInspector.tsx";
 import { type ReferenceFrame, useReferenceFrames } from "./run-stills.ts";
@@ -65,8 +67,8 @@ interface Props {
   onShowAsset?: (jobId: string) => void;
   /** Follow up in chat: the composer takes a chip naming the node; null when there is no chat to reply in. */
   onReply: ((reply: Reply) => void) | null;
-  /** Set while an earlier build is shown: its name, and the way back to the latest one. */
-  earlier?: EarlierBuild | null;
+  /** The chat's builds, as the bar's tabs, and the one on show. */
+  tabs?: BuildTabs | null;
   /** The stage's toast channel: this panel's own Play/Make it live refuse for ordinary reasons. */
   onNotice: Notify;
 }
@@ -276,7 +278,7 @@ export const RunGraph = memo(function RunGraph({
   graph: suppliedGraph,
   project,
   onReply,
-  earlier = null,
+  tabs = null,
   onNotice,
   onShowLive,
   onShowAsset,
@@ -316,7 +318,7 @@ export const RunGraph = memo(function RunGraph({
         {!model.loaded && <OutcomePending />}
         <BuildStatusClock
           model={model}
-          earlier={earlier}
+          tabs={tabs}
           action={
             hasBuild ? (
               <PlayButton quiet={graph.active} label={graph.active ? "Play latest" : "Play"} onPlay={play} />
@@ -711,22 +713,38 @@ const GraphNodes = memo(function GraphNodes({
   );
 });
 
-/** Only elapsed-time text ticks; the graph's nodes and camera stay untouched. */
+/** Opening the only build there is does nothing. */
+const STAY = (): void => {};
+
+/** The bar's tabs: the chat's builds, or, before its history names any, the graph on show as the one. */
+function barTabs(tabs: BuildTabs | null, graph: RunGraphModel, goal: string): BuildTabs {
+  if (tabs?.builds.length) return tabs;
+  const only: HistoryEntry = {
+    runId: graph.runId,
+    rounds: 0,
+    state: graph.active ? RunState.Running : RunState.Finished,
+    startedAt: null,
+    ask: goal,
+    since: null,
+  };
+  return { builds: [only], open: graph.runId, onOpen: tabs?.onOpen ?? STAY };
+}
+
+/** Only the status words and the tabs' clocks tick; the graph's nodes and camera stay untouched. */
 function BuildStatusClock({
   model,
-  earlier,
+  tabs,
   action,
 }: {
   model: BuildsModel;
-  earlier: EarlierBuild | null;
+  tabs: BuildTabs | null;
   action: ReactNode;
 }): JSX.Element {
   const now = useNow(model.graph.active);
   return (
     <BuildStatus
       status={statusLine(model.graph, model.outcome, model.rows, now)}
-      earlier={earlier}
-      progress={earlier ? null : runProgress(model, now)}
+      tabs={barTabs(tabs, model.graph, model.run.goal)}
       action={action}
     />
   );

@@ -14769,6 +14769,23 @@ describe("a worker whose model provider went away", () => {
     await refundProviderAttempt(loopRun as never, unjudged as never, {});
     assert.equal(goals.entries[0]!.attempts, 1, "a worker the provider did not end keeps its count");
   });
+  it("PC4. the paused clock measures the wait on the loop's own clock, not the wall clock", async () => {
+    const { sleepOnPausedClock } = await import("../../src/harness-seed/loop/facet/paused-clock.ts");
+    let now = PT0;
+    const moved: number[] = [];
+    const loop = {
+      now: () => now,
+      deadline: PT0 + 5 * MIN,
+      deadlineCeiling: () => PT0 + 2 * 60 * MIN,
+      onDeadline: (deadline: number) => void moved.push(deadline),
+      sleepFor: async (ms: number) => {
+        now += ms;
+      },
+    };
+    await sleepOnPausedClock(loop, 20 * MIN);
+    assert.equal(loop.deadline, PT0 + 25 * MIN, "the 20 minutes the loop's clock waited are given back");
+    assert.deepEqual(moved, [PT0 + 25 * MIN]);
+  });
 });
 
 describe("a worker's budget, in rounds of this game", () => {

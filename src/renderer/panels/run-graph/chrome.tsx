@@ -1,72 +1,148 @@
-/** The Builds tab's status bar, its Play button, and the zoom pill in the canvas corner. */
-import type { JSX, ReactNode } from "react";
-import { useState } from "react";
+/** The Builds tab's bar of the chat's builds, its Play button, and the zoom pill in the canvas corner. */
+import type { JSX, KeyboardEvent, ReactNode } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { RunState } from "../../../shared/run-state.ts";
+import { type HistoryEntry, historyLabel, isNewestBuild } from "../../build-progress.ts";
 import type { statusLine } from "../../run-steps.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/icons.tsx";
-import { TONE, WORKING_PULSE } from "../inspector/tone.tsx";
+import { Elapsed } from "../../ui/LoadingState.tsx";
+import { isRovingKey, RovingAxis, rovingTarget } from "../../ui/roving-focus.ts";
+import { StatusOrb } from "../../ui/StatusOrb.tsx";
+import { BUILD_TABS_WORDS as WORDS } from "../../words.ts";
 
-/** An earlier build on show: its name, and the way back to the latest one. */
-export interface EarlierBuild {
-  label: string;
-  onLatest: () => void;
+/** The chat's builds as the bar's tabs: which one is on show, and the way to show another. */
+export interface BuildTabs {
+  /** Oldest first, as `buildHistory` reads them. */
+  builds: readonly HistoryEntry[];
+  /** The build on show: its key in the history. */
+  open: string | null;
+  onOpen: (runId: string) => void;
+}
+
+/** A tab's name: what the person asked for it, else what the history calls it ("This Loop"). */
+function tabName(builds: readonly HistoryEntry[], build: HistoryEntry): string {
+  return build.ask || historyLabel(build, { newest: isNewestBuild(builds, build) });
+}
+
+/** How a build stands, before its name: the status line's loader while it works, a bare ✓ once done, a dot while paused. */
+function TabMark({ state }: { state: string }): JSX.Element {
+  if (state === RunState.Running) return <StatusOrb />;
+  if (state === RunState.Finished) return <Icon name="check" size={12} strokeWidth={2.6} className="shrink-0" />;
+  return <span aria-hidden="true" className="build-tab-dot" />;
+}
+
+/** Arrow keys, Home and End move along the tabs and open the tab they land on. */
+function moveTab(
+  event: KeyboardEvent<HTMLButtonElement>,
+  builds: readonly HistoryEntry[],
+  index: number,
+  onOpen: (runId: string) => void,
+): void {
+  if (!isRovingKey(event.key, RovingAxis.Horizontal)) return;
+  event.preventDefault();
+  const next = rovingTarget(event.key, index, builds.length, RovingAxis.Horizontal) ?? index;
+  const target = builds[next];
+  if (target) onOpen(target.runId);
+  const tabs = event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+  tabs?.[next]?.focus();
+}
+
+/** One build's tab: its mark, its name, and while it works its clock, shimmering as the chat's does. */
+function BuildTab({
+  build,
+  name,
+  open,
+  title,
+  onOpen,
+  onKeyDown,
+}: {
+  build: HistoryEntry;
+  name: string;
+  open: boolean;
+  title: string;
+  onOpen: (runId: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={open}
+      tabIndex={open ? 0 : -1}
+      data-build-tab={build.runId}
+      title={title}
+      onClick={() => onOpen(build.runId)}
+      onKeyDown={onKeyDown}
+      className="build-tab"
+    >
+      <TabMark state={build.state} />
+      <span className="min-w-0 truncate">{name}</span>
+      {build.state === RunState.Running && build.since !== null ? (
+        <span className="build-tab-clock chat-status-shimmer">
+          <Elapsed since={build.since} />
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/** The tabs on one track; the open one is kept in view when the row outgrows the bar. */
+function BuildTabTrack({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.Element {
+  const { builds, open, onOpen } = tabs;
+  const track = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const row = track.current;
+    const tab = row?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!row || !tab) return;
+    const end = tab.offsetLeft + tab.offsetWidth;
+    if (tab.offsetLeft < row.scrollLeft) row.scrollLeft = tab.offsetLeft;
+    else if (end > row.scrollLeft + row.clientWidth) row.scrollLeft = end - row.clientWidth;
+  }, [open, builds.length]);
+  return (
+    <div ref={track} role="tablist" aria-label={WORDS.tabs} className="build-tabs surface-glass">
+      {builds.map((build, index) => {
+        const name = tabName(builds, build);
+        const isOpen = build.runId === open;
+        return (
+          <BuildTab
+            key={build.runId}
+            build={build}
+            name={name}
+            open={isOpen}
+            title={isOpen ? `${name}\n${said}` : name}
+            onOpen={onOpen}
+            onKeyDown={(event) => moveTab(event, builds, index, onOpen)}
+          />
+        );
+      })}
+    </div>
+  );
 }
 
 /**
- * The run in one line: a dot in its tone, the strong words and the rest — after the name of an
- * earlier build when one is shown, with Show latest beside it. Along its bottom edge, how much of
- * the time it was given a live run has used.
+ * The bar over the graph: the chat's builds as tabs on one track, the newest on the right, and
+ * Play. The open build's status ("Building · 9 of 30 min · 2 parts working") is its tab's tooltip
+ * and what a screen reader hears; a working build's tab shows only the loader and its clock.
  */
 export function BuildStatus({
   status,
-  earlier,
-  progress,
+  tabs,
   action,
 }: {
   status: ReturnType<typeof statusLine>;
-  earlier: EarlierBuild | null;
-  progress: number | null;
+  tabs: BuildTabs;
   action: ReactNode;
 }): JSX.Element {
-  const live = status.tone === "live";
-  const shown = earlier ? `${earlier.label} · ` : "";
+  const said = status.rest ? `${status.strong} · ${status.rest}` : status.strong;
   return (
-    <div
-      data-testid="build-status"
-      className="relative flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pr-3 pl-4"
-    >
-      {/* How much of the time it was given the run has used — the same fact as "9 of 30 min". */}
-      {progress !== null ? (
-        <span
-          aria-hidden="true"
-          data-build-progress
-          className="absolute bottom-[-1px] left-0 h-0.5 rounded-r-full bg-accent transition-[width] duration-500"
-          style={{ width: `${progress * 100}%` }}
-        />
-      ) : null}
-      <span
-        aria-hidden="true"
-        className="size-2 shrink-0 rounded-full"
-        style={{
-          background: status.tone === "live" ? "var(--accent)" : TONE[status.tone],
-          animation: live ? WORKING_PULSE : undefined,
-        }}
-      />
-      <p
-        className="min-w-0 flex-1 truncate text-chat-sub text-ink"
-        title={`${shown}${status.strong} · ${status.rest}`}
-        role="status"
-      >
-        {earlier ? <span className="text-ink-3">{shown}</span> : null}
-        <strong className="font-semibold">{status.strong}</strong>
-        {status.rest ? <span className="text-ink-3"> · {status.rest}</span> : null}
-      </p>
-      {earlier ? (
-        <Button variant="ghost" onClick={earlier.onLatest}>
-          Show latest
-        </Button>
-      ) : null}
+    <div data-testid="build-status" className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2">
+      <BuildTabTrack tabs={tabs} said={said} />
+      <span className="min-w-0 flex-1" />
       {action}
+      <p role="status" className="sr-only">
+        {said}
+      </p>
     </div>
   );
 }

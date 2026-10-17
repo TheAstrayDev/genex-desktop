@@ -64,6 +64,7 @@ Templates (one per request; `--request FILE` also works):
 {"method":"key","params":{"surface":"desktop","key":"Enter","code":"Enter"}}
 {"method":"select","params":{"selector":"select[aria-label=\"Build history\"]","value":"<runId from snapshot>"}}
 {"method":"scroll","params":{"surface":"desktop","deltaX":0,"deltaY":600,"selector":"[data-chat-scroll]"}}
+{"method":"file.drag","params":{"selector":"[data-promptbar] textarea[aria-label=\"Prompt\"]","stage":"drop","file":"picture"}}
 {"method":"game.input","params":{"actions":[{"type":"tap","keys":["ArrowRight"]},{"type":"wait","ms":300}]}}
 {"method":"game.state","params":{}}
 ```

@@ -18,12 +18,13 @@ import {
   PERSON_FIRST_ASK_MS,
   PERSON_FIRST_FRESH_MS,
   PERSON_FIRST_POLL_MS,
+  PERSON_REFUSAL_STANDS_MS,
   runHolders,
   workerHolder,
 } from "../../src/main/core/plugin-locks.ts";
 import { PluginToolService } from "../../src/main/core/plugin-tools.ts";
 import { WRITERS_LET_GO_MS } from "../../src/main/core/recovery.ts";
-import { CustomEvent, customEventData } from "../../src/shared/custom-events.ts";
+import { CustomEvent, customEvent, customEventData } from "../../src/shared/custom-events.ts";
 import { EventKind, SnapshotScope } from "../../src/shared/event-log.ts";
 import { HostMethod, harnessParamsProblem } from "../../src/shared/harness-api.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
@@ -852,6 +853,59 @@ describe("LockService", () => {
     assert.ok(agent.error instanceof LockRefused);
   });
 
+  it("a call right after one refused for the person asks once, briefly, instead of waiting it all again", async () => {
+    const { locks, clock, asked } = service([{ personActive: true }]);
+    const first = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "a" }));
+    await settle();
+    await clock.advance(AGENT_LOCK_WAIT_MS);
+    assert.ok(first.error instanceof LockRefused);
+    const next = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "b" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.ok(next.error instanceof LockRefused, "refused after one short ask");
+    assert.equal((next.error as LockRefused).code, LockRefusal.PersonFirst);
+    const before = asked.length;
+    await clock.advance(PERSON_REFUSAL_STANDS_MS);
+    const later = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "c" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.equal(later.error, null, "long after the refusal, a call waits its whole wait again");
+    assert.ok(asked.length > before);
+  });
+
+  it("a refusal for the person stands only while the person is still at it", async () => {
+    const { locks, clock } = service([{ personActive: true }, { personActive: false }]);
+    const first = track(locks.hold([bench], { binding: binding(), waitMs: PERSON_FIRST_POLL_MS, holder: "a" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_POLL_MS);
+    assert.ok(first.error instanceof LockRefused);
+    const next = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "b" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.ok(granted(next), "the person stopped: granted at once");
+  });
+
+  it("a probe that lets an agent go ahead of the person tells the chat the call answers to, once per answer", async () => {
+    const clock = manualClock();
+    const ahead: Array<{ project: string; threadId?: string; label: string; plugin: string }> = [];
+    const answers = [{ personActive: false, wentAhead: true }, { personActive: false }];
+    let asked = 0;
+    const locks = new LockService({
+      probe: async () => answers[Math.min(asked++, answers.length - 1)],
+      now: clock.now,
+      sleep: clock.sleep,
+      onWentAhead: (notice) => ahead.push(notice),
+    });
+    const first = await locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "a" });
+    first();
+    await clock.advance(PERSON_FIRST_FRESH_MS);
+    const second = await locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "b" });
+    second();
+    assert.deepEqual(ahead, [{ project: "garden", threadId: "t1", label: "Bench", plugin: "tl" }]);
+    assert.equal(await locks.unsaved([bench], binding()), null, "a read of what is unsaved tells nothing");
+    assert.equal(ahead.length, 1);
+  });
+
   it("names a worker by the run or the chat it works for", () => {
     assert.notEqual(
       workerHolder({ threadId: "t1", runId: null, id: "w1" }),
@@ -1054,6 +1108,20 @@ describe("locks in a real core", () => {
     assert.deepEqual(await second, { painted: true });
     assert.deepEqual(await paintLog(), ["start", "end", "start", "end"]);
     assert.deepEqual(lite.core.locks.holders(), [], "both let go");
+  });
+
+  it("an agent's call the plugin lets go ahead of the person runs, and its chat is told once in a line of its own", async () => {
+    await reset();
+    await person({ personActive: false, wentAhead: true });
+    const painted = invoke(`${PLUGIN_ID}__paint`);
+    await linesAtLeast(1);
+    await writeFile(path.join(dir, "release"), "");
+    assert.deepEqual(await painted, { painted: true });
+    const told = (await lite.core.store.listEvents(threadId)).flatMap((event) => {
+      const payload = customEvent(event, CustomEvent.AgentWentAhead);
+      return payload ? [payload] : [];
+    });
+    assert.deepEqual(told, [{ project: PROJECT, pluginId: PLUGIN_ID, label: "Bench" }]);
   });
 
   it("an agent's call waits while the person is busy, and answers the lock's words past the wait", async () => {

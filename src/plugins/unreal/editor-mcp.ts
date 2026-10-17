@@ -658,10 +658,23 @@ type Forwarding = {
   timeoutMs: number;
 };
 
-/** Marks the agent's own play once the editor took its start, and clears the mark once it took its stop. */
-async function markPlay(marker: AgentPlayMarker, step: PlayStep | undefined, failed: boolean): Promise<void> {
-  if (failed || step === undefined) return;
-  await (step === PlayStep.Start ? marker.started() : marker.stopped());
+/**
+ * Marks the agent's own play before the editor gets its start: the editor lock may ask whose play it
+ * is before Unreal begins it. The answer gives back the mark there was, for a start that didn't take.
+ */
+async function markStart(marker: AgentPlayMarker, step: PlayStep | undefined): Promise<() => Promise<void>> {
+  return step === PlayStep.Start ? marker.started() : async () => {};
+}
+
+/** Clears the mark once the editor took the agent's stop, and gives back the one before a start it refused. */
+async function settlePlay(
+  marker: AgentPlayMarker,
+  step: PlayStep | undefined,
+  failed: boolean,
+  giveBack: () => Promise<void>,
+): Promise<void> {
+  if (step === PlayStep.Start && failed) await giveBack();
+  if (step === PlayStep.Stop && !failed) await marker.stopped();
 }
 
 /** The pictures a capture tool's answer promised (see editor-captures.ts); nothing for any other call. */
@@ -688,17 +701,21 @@ async function forward(session: EditorSession, params: CallParams, how: Forwardi
   } catch (error) {
     return errorResult(MESSAGE.NotCompleted(errorMessage(error)));
   }
+  const giveBack = await markStart(how.agentPlay, step);
   let result: CallResult;
   try {
     result = await session.call(params, how.timeoutMs);
   } catch (error) {
     // A JSON-RPC error is the editor's own answer: it is still there, and the call did not complete.
-    if (editorAnswered(error)) return errorResult(MESSAGE.NotCompleted(errorMessage(error)));
+    if (editorAnswered(error)) {
+      await settlePlay(how.agentPlay, step, true, giveBack);
+      return errorResult(MESSAGE.NotCompleted(errorMessage(error)));
+    }
     return errorResult(MESSAGE.CallFailed(errorMessage(error)), editorWentAway(error, signal));
   }
   try {
     await how.keeper.after(session, step, Boolean(result.isError));
-    await markPlay(how.agentPlay, step, Boolean(result.isError));
+    await settlePlay(how.agentPlay, step, Boolean(result.isError), giveBack);
     const content = Array.isArray(result.content) ? (result.content as Part[]) : [];
     const captured = result.isError ? [] : await capturedParts(params, content, how.project, how.clock, signal);
     const named = [...liftImages(content), ...captured, { type: "text", text: MESSAGE.Answered(how.project.name) }];

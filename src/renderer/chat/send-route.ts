@@ -83,7 +83,10 @@ function pendingSend(
   };
 }
 
-/** Send as a note to the build the chat replies about, when it does; true when it went. */
+/**
+ * Send as a note to the build the chat replies about, when it does; true when it went. A note
+ * carries words only, so pictures sent with none go to the chat instead.
+ */
 export async function sentAsNote(
   reply: ReplyingAbout,
   threadId: string | undefined,
@@ -93,6 +96,7 @@ export async function sentAsNote(
 ): Promise<boolean> {
   const { about } = reply;
   if (!about || about.threadId !== threadId) return false;
+  if (!text.trim()) return false;
   await sendNote(about, text, onNotice);
   reply.drop(about.threadId);
   follow.jumpToLatest();

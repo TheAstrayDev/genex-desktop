@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { WebContents } from "electron";
 import { errorMessage } from "../../shared/errors.ts";
+import { fileDragEvents, writeDragSample } from "./file-drag.ts";
 import { type InspectParams, inspectScript } from "./inspect-dom.ts";
 import { DevErrorCode, DevError, DevMethod, type Operation } from "./protocol.ts";
 
@@ -95,6 +96,14 @@ export class DesktopControl {
     await this.cdp(wc, "Input.dispatchKeyEvent", { ...p, type: "keyDown", ...(text ? { text } : {}) });
     await this.cdp(wc, "Input.dispatchKeyEvent", { ...p, type: "keyUp" });
     return { dispatched: true };
+  }
+  /** Drag the control's sample file from outside the window onto a target, as the Finder would. */
+  async fileDrag(wc: WebContents, params: ActionOf<typeof DevMethod.FileDrag>["params"], dir: string) {
+    const point = await this.inspect(wc, { selector: params.selector, scope: params.scope });
+    const sample = await writeDragSample(dir, params.file);
+    for (const event of fileDragEvents(params.stage, point, sample.file))
+      await this.cdp(wc, "Input.dispatchDragEvent", event);
+    return { dispatched: true, x: point.x, y: point.y, stage: params.stage, mimeType: sample.mimeType };
   }
   async action(wc: WebContents, op: Operation) {
     switch (op.method) {

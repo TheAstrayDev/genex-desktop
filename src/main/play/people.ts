@@ -526,6 +526,8 @@ export function playPeople(given: PeopleDeps) {
   const local = deps.localImages === true;
   const account = accountCalls(deps);
   const profiles = new Map<string, { at: number; profile: Omit<PlayProfile, "status"> }>();
+  /** Whose reads `profiles` keeps: an answer may differ for the viewer, so a new sign-in starts empty. */
+  let viewer: string | undefined;
 
   /** The viewer's relationship with `id`: Self, the API's status, or None while signed out. */
   const statusOf = async (id: string): Promise<FriendStatus> => {
@@ -540,10 +542,16 @@ export function playPeople(given: PeopleDeps) {
   /** Anyone's public profile and games, kept a minute, with the viewer's relationship read fresh. */
   const profile = async (id: string): Promise<PlayProfile> => {
     if (!isAccountId(id)) throw new Error(MESSAGE.BadAccount);
+    const current = await token();
+    if (current !== viewer) {
+      profiles.clear();
+      viewer = current;
+    }
     const kept = profiles.get(id);
     const fresh = kept && now() - kept.at < PROFILE_TTL_MS ? kept.profile : null;
     const read = fresh ?? (await readProfile(id));
-    if (!fresh) profiles.set(id, { at: now(), profile: read });
+    // A sign-in that changed during the read keeps nothing of it.
+    if (!fresh && viewer === current) profiles.set(id, { at: now(), profile: read });
     return { ...read, status: await statusOf(id) };
   };
 

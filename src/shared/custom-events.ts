@@ -27,6 +27,7 @@ import type { EngineLinkedPayload, EngineLinkUndonePayload, EngineStepsPayload }
 import type { RunSpec } from "./protocol.ts";
 import type { PluginSuggestedPayload } from "./project-tools.ts";
 import type { AppLookAccessPayload, JobEndedPayload, JobStartedPayload } from "./jobs.ts";
+import type { AgentWentAheadPayload } from "./plugin-hooks.ts";
 import type { ChatJudgeResultPayload } from "./chat-judge.ts";
 import type { WorkerFinishedPayload, WorkerStartedPayload } from "./workers.ts";
 import type { ObserverCapturePayload } from "./observers.ts";
@@ -66,6 +67,8 @@ export const CustomEvent = {
   JobEnded: "job_ended",
   /** Genex cannot see app windows yet: the macOS access the person must allow (shared/jobs.ts); written by the host only. */
   AppLookAccess: "app_look_access",
+  /** An agent went ahead of the person in what a plugin's lock guards, said once (shared/plugin-hooks.ts); written by the host only. */
+  AgentWentAhead: "agent_went_ahead",
   /** A blind judge played the game for the chat's own session (shared/chat-judge.ts); written by the host only. */
   ChatJudgeResult: "chat_judge_result",
   // the unattended run and its lead
@@ -709,6 +712,7 @@ export interface CustomEventMap {
   job_started: Partial<JobStartedPayload>;
   job_ended: Partial<JobEndedPayload>;
   app_look_access: Partial<AppLookAccessPayload>;
+  agent_went_ahead: Partial<AgentWentAheadPayload>;
   chat_judge_result: Partial<ChatJudgeResultPayload>;
   worker_started: WorkerStartedPayload;
   worker_finished: WorkerFinishedPayload;

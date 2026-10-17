@@ -470,7 +470,8 @@ export class ConversationService {
 
   /**
    * Folders and stills the message names: a folder may become the thread's game, still folders
-   * become read roots the thread remembers, and still files travel with the message.
+   * and the folders of other named files become read roots the thread remembers, and still files
+   * travel with the message.
    */
   async #namedPaths(
     text: string,
@@ -486,7 +487,9 @@ export class ConversationService {
     if (!project) return { extraReads: [], stills: frames };
     const record = await this.#core.store.getRecord(target.threadId).catch(() => null);
     const meta = (record?.metadata ?? {}) as { extraReads?: string[] };
-    const extraReads = [...new Set([...(meta.extraReads ?? []), ...named.stillRoots, ...taggedRoots])];
+    const extraReads = [
+      ...new Set([...(meta.extraReads ?? []), ...named.stillRoots, ...named.fileRoots, ...taggedRoots]),
+    ];
     this.#x.delegation.addReadRoots(project, extraReads);
     // updateThread merges: only the key this changes, so a stale copy never overwrites others.
     if (record && extraReads.length) await this.#core.store.updateThread(target.threadId, { metadata: { extraReads } });

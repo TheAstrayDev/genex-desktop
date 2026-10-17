@@ -247,4 +247,10 @@ export interface DelegateResult {
   compacted?: boolean;
   /** A playtest's or judge's computer trace: where it was written, and whether its goal was verified. */
   trace?: ComputerTraceSummary;
+  /**
+   * Genex tool calls the session made after its turn ended (a background task woke it), which no
+   * answer could reach: by the name the agent called it by, without the server's prefix, and its
+   * arguments as JSON.
+   */
+  cutAfterTurn?: Array<{ tool: string; args: string }>;
 }

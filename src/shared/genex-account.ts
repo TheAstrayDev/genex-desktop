@@ -21,4 +21,6 @@ export interface GenexAccountView {
   status: GenexAccountStatus;
   /** While signing in from the app: the code the browser shows, so the person knows it is this Mac's. */
   code?: string;
+  /** Signed in, with Genex's updated terms still to accept on genex.games: the sidebar offers Review. */
+  termsPending?: true;
 }

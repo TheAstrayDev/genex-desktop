@@ -70,7 +70,8 @@ export function useSubmit(
     }
     const key = sendKey(model, extras);
     if (!key && !extras?.autopilot) return;
-    const heldRun = heldPlanRun();
+    // The held plan's inbox takes words only: pictures alone go to the chat.
+    const heldRun = text.trim() ? heldPlanRun() : null;
     const clientId = showSend({ chat, work }, text, extras, heldRun);
     startSend(key, preserveDraft);
     try {

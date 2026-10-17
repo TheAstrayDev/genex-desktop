@@ -10,6 +10,7 @@ import {
   type GenexJob,
   GenexJobStatus,
   GenexOperation,
+  GenexPluginEvent,
   GenexPublishJobState,
   GenexPublishKind,
   type GenexPublishState,
@@ -159,6 +160,14 @@ async function assetTool(genex: GenexTools, project: string, directory: string, 
       ctx.signal,
       false,
       ctx.threadId,
+      {
+        // While the generation waits on Genex's terms, the app reads the account again and offers Review.
+        termsPending: (pending) =>
+          ctx.host(PluginService.EventsEmit, { kind: GenexPluginEvent.Terms, pending }).then(
+            () => {},
+            () => {},
+          ),
+      },
     )) as Record<string, unknown>;
     await ctx.host(PluginService.EventsEmit, {
       operation: args.operation,
@@ -257,6 +266,7 @@ const ACTIONS: Record<string, Action> = {
     const status = await genex.status(ctx.project);
     return { verifyUrl: status.legal?.acceptUrl };
   },
+  [GenexAction.TermsStatus]: (genex) => genex.termsStatus(),
   [GenexAction.Disconnect]: (genex) => genex.disconnect(),
   [GenexAction.CancelConnect]: (genex, _args, ctx) => {
     genex.cancelConnect();

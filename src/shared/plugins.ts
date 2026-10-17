@@ -166,13 +166,15 @@ export const PluginCallBlocker = {
 export type PluginCallBlocker = (typeof PluginCallBlocker)[keyof typeof PluginCallBlocker];
 /**
  * Why a plugin or connector call ended before its answer, so whether it took effect is unknown:
- * the harness that made it ended, its plugin's backend ended, or the app it drives went away (an
- * editor crash). Written in call records: never rename a value.
+ * the harness that made it ended, its plugin's backend ended, the app it drives went away (an
+ * editor crash), or the session made it after its turn had ended, when no answer could reach it.
+ * Written in call records: never rename a value.
  */
 export const CallCutOff = {
   HarnessEnded: "harness-ended",
   PluginEnded: "plugin-ended",
   AppLost: "app-lost",
+  TurnEnded: "turn-ended",
 } as const;
 export type CallCutOff = (typeof CallCutOff)[keyof typeof CallCutOff];
 /**

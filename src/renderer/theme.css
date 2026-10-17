@@ -85,6 +85,7 @@
   --line: var(--border);
   --line-strong: #29292b;
   --line-soft: var(--line-strong);
+  --menu-edge: var(--line-strong);
   --field: #1b1c1d;
   --stripe: color-mix(in oklab, #dee0e2 4%, transparent);
   --stripe-bg: var(--background);
@@ -185,6 +186,7 @@
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-line-soft: var(--line-soft);
+  --color-menu-edge: var(--menu-edge);
   --color-field: var(--field);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
@@ -880,6 +882,98 @@
   .composer-panel:focus-within {
     border-color: var(--prompt-edge, color-mix(in oklab, var(--border) 85%, transparent));
   }
+  /* Files held over the chat: the prompt bar's edge turns dashed, its contents fade, one line says
+     what a drop does. Blue while pictures go in, orange when none can. */
+  .composer-drop-veil {
+    --drop-ink: color-mix(in oklab, var(--accent-ink) 78%, var(--ink));
+    position: absolute;
+    inset: -1px;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    padding: 0 16px;
+    border: 1.5px dashed var(--accent);
+    border-radius: inherit;
+    background: color-mix(in oklab, var(--composer) 88%, transparent);
+    color: var(--drop-ink);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    pointer-events: none;
+    animation: composer-drop-in var(--duration-quick) var(--ease-smooth-out);
+  }
+  .composer-drop-veil[data-tone="refuses"] {
+    --drop-ink: color-mix(in oklab, var(--orange) 72%, var(--ink));
+    border-color: var(--orange);
+  }
+  /* A file going with the next message as a link: its name on a chip as tall as a picture's tile. */
+  .composer-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 180px;
+    height: 44px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--field);
+    color: var(--ink-2);
+    font-size: 12px;
+  }
+  /* What a drop left off the board, in orange, with its action. */
+  .composer-left-out {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 2px 6px;
+    padding: 6px 6px 6px 10px;
+    border-radius: 12px;
+    background: var(--orange-tint);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 50%, transparent);
+    color: color-mix(in oklab, var(--orange) 72%, var(--ink));
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .composer-left-out-action {
+    flex-shrink: 0;
+    height: 24px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--orange) 34%, transparent);
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .composer-left-out-action:hover {
+    background: color-mix(in srgb, var(--orange) 46%, transparent);
+  }
+  .composer-left-out-dismiss {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--field);
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .composer-left-out-dismiss:hover {
+    background: var(--control-hover, var(--hover));
+  }
+  @keyframes composer-drop-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .composer-drop-veil {
+      animation: none;
+    }
+  }
   .composer-control {
     min-height: 32px;
     border-radius: 999px;
@@ -1227,15 +1321,32 @@
   padding-inline-start: 80px;
 }
 .home-body {
-  display: flex;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  justify-items: center;
   gap: 24px;
   overflow-y: auto;
   padding: 0 48px 96px;
+}
+.home-primary {
+  grid-row: 2;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+.home-plugin-slot {
+  grid-row: 3;
+  align-self: start;
+  width: 100%;
+  max-width: 680px;
+  min-width: 0;
+}
+.home-plugin-slot .new-chat-plugin {
+  margin-top: 0;
 }
 .home-title {
   margin: 0;
@@ -1955,8 +2066,9 @@ button.chat-header-title:hover {
   background: linear-gradient(transparent, var(--sidebar));
   pointer-events: none;
 }
-/* What waits to be installed, at the foot of the list: the plugin updates line while plugin releases
- * wait, Relaunch to update while a downloaded version does. */
+/* What waits for the person, at the foot of the list: Genex's updated terms while they wait to be
+ * accepted, the plugin updates line while plugin releases wait, Relaunch to update while a downloaded
+ * version does. */
 .sidebar-footer {
   display: flex;
   flex-direction: column;
@@ -2177,6 +2289,38 @@ button.chat-header-title:hover {
 }
 .sidebar-plugin-updates[aria-busy="true"] .gi .a-spin {
   animation: gi-spin 1.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+/* Genex's updated terms (`panels/plugins/genex/GenexTermsLine.tsx`): the plugin updates line's dress,
+ * a page icon and the words, then Review. In the chat it is as wide as its words. */
+.genex-terms-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding-inline: 4px;
+  border-radius: var(--radius-control);
+  background: var(--field);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+.genex-terms-line-label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding-inline: 5px 4px;
+}
+.genex-terms-line-label .gi {
+  color: color-mix(in oklab, var(--accent-primary) 55%, var(--ink));
+}
+.chat-genex-terms {
+  width: fit-content;
+  max-width: 100%;
+}
+.chat-genex-terms .genex-terms-line-label {
+  padding-inline-end: 8px;
 }
 /* Install what is ticked, on the line and in its list: the accent as a soft tint, its label a
  * lighter blue on dark and a deeper one on light. */
@@ -3902,6 +4046,26 @@ button.chat-header-title:hover {
   color: var(--ink);
   text-decoration-color: currentColor;
 }
+/* A file a person's message carries, written out in full: a chip with its own name. */
+.file-link.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 7px;
+  background: var(--surface);
+  text-decoration-line: none;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.file-link.file-chip:hover {
+  background: var(--control-hover, var(--hover));
+}
+.file-link.file-chip svg {
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
 /* Studio has one reading size, one small size and a title; technical code keeps its family. */
 .studio-view {
   font-family: var(--font-family-content);
@@ -3998,6 +4162,11 @@ button.chat-header-title:hover {
   /* Opening and closing collapse the half gap it keeps, not the stack's whole gap. */
   --presence-gap: 0.5rem;
   margin-block-start: -8px;
+}
+/* A running build's card is a box, not a line: it stands well clear of the reply above it (24px from
+   the reply's last line), so it never reads as part of the message. */
+.chat-work-build {
+  padding-block-start: 14px;
 }
 .chat-user-content[data-collapsed] {
   max-height: 154px;
@@ -5293,23 +5462,27 @@ a:focus-visible {
   position: relative;
   z-index: 1;
 }
-/* Open in Builds, at the foot of the Building card's parts: a quiet link above the card's own toggle. */
+/* Open in Builds, at the foot of the Building card's parts: a small filled button (`pill-quiet`)
+ * above the card's own toggle. */
 .build-checklist-open {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-self: flex-start;
   align-items: center;
   gap: 4px;
-  padding: 2px 0;
+  margin-top: 4px;
+  padding: 3px 8px 3px 10px;
   border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--ink-3);
-  font-family: inherit;
+  border-radius: var(--radius-control);
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.2px;
   cursor: pointer;
-  transition: color var(--duration-quick);
-}
-.build-checklist-open:is(:hover, :focus-visible) {
-  color: var(--ink);
+  transition:
+    background-color var(--duration-quick),
+    color var(--duration-quick);
 }
 .build-checklist-open:focus-visible {
   outline: 2px solid var(--accent);
@@ -5319,6 +5492,82 @@ a:focus-visible {
   .build-card,
   .build-card-open svg,
   .build-checklist-open {
+    transition: none;
+  }
+}
+
+/* The Builds bar's tabs (run-graph/chrome.tsx): the chat's builds on one quiet track, the open one
+ * raised on it with a soft edge, as the stage strip's switch holds its views. The row scrolls on its own, without a
+ * bar, once it outgrows the bar; the open tab is wider, so its name reads. */
+.build-tabs {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.build-tabs::-webkit-scrollbar {
+  display: none;
+}
+.build-tab {
+  display: inline-flex;
+  min-width: 72px;
+  max-width: 220px;
+  height: 26px;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--color-control-text);
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-quick),
+    color var(--duration-quick),
+    box-shadow var(--duration-quick);
+}
+.build-tab:hover {
+  background: var(--control-hover, var(--hover));
+  color: var(--color-control-text-hover);
+}
+.build-tab[aria-selected="true"] {
+  max-width: 320px;
+  background: var(--surface);
+  color: var(--ink);
+  /* Halfway between the card's quiet edge and a control's: there, without standing out. */
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--line-strong) 50%, var(--line));
+}
+.build-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* A working build's clock: the chat's shimmer, a size under the name. */
+.build-tab-clock {
+  flex: none;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.build-tab-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .build-tab {
     transition: none;
   }
 }
@@ -6136,9 +6385,8 @@ a:focus-visible {
   --picker-well: var(--well, color-mix(in oklab, var(--canvas) 75%, var(--popover)));
   /* A preset's own menu shadow replaces the popover's shadow-lg. */
   --tw-shadow: var(--panel-shadow, 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1));
-  /* The prompt bar's own edge, and only it: the popover's hairline ring would draw a second line. */
-  border: 1px solid var(--prompt-bar-edge);
-  --tw-ring-shadow: 0 0 #0000;
+  /* Every menu's one edge: the prompt bar's in light, the control edge in dark. */
+  border: 1px solid var(--menu-edge);
   border-radius: calc(var(--radius-control) + 6px);
   font-family: var(--font-family-sans);
   font-weight: 400;
@@ -6398,7 +6646,7 @@ a:focus-visible {
 .mention-skeleton-card {
   aspect-ratio: 16 / 9;
   border-radius: 12px;
-  border: 1px solid var(--control-quiet-edge);
+  border: 1px solid var(--line-soft);
 }
 @media (prefers-reduced-motion: reduce) {
   .mention-skeleton-label,
@@ -6451,13 +6699,13 @@ a:focus-visible {
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid var(--control-quiet-edge);
+  border: 1px solid var(--line-soft);
   background: #1a1b1e;
   cursor: pointer;
   transition: border-color 0.12s;
 }
 .mention-card:hover {
-  border-color: color-mix(in oklab, var(--accent-primary) 50%, var(--control-quiet-edge));
+  border-color: color-mix(in oklab, var(--accent-primary) 50%, var(--line-soft));
 }
 .mention-card[data-highlighted] {
   border-color: var(--accent-primary);
@@ -6977,11 +7225,12 @@ a:focus-visible {
   font-weight: 500;
   color: var(--ink);
 }
-/* Each plan, and Genex, is its own outlined block: the panel reads as a stack of accounts. */
+/* Each plan, and Genex, is its own outlined block: the panel reads as a stack of accounts. A box
+   inside a menu, so its edge is the soft one. */
 .usage-plan {
   margin: 6px 4px 0;
   padding: 6px 12px 4px;
-  border: 1px solid var(--line-strong, var(--line));
+  border: 1px solid var(--line-soft);
   border-radius: 12px;
 }
 .usage-plan:last-child {
@@ -7434,7 +7683,4 @@ p.usage-divider {
   padding: 0;
   margin: 0;
   min-width: 0;
-}
-.appearance-native-editors:disabled {
-  opacity: 0.65;
 }

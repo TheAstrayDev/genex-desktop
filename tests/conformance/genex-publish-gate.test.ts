@@ -285,7 +285,7 @@ describe("publishing tests the build before players get it", () => {
     if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
     const fx = await genexFixture();
     try {
-      await fx.publish("Racing Demo", { dependencies: { "@genex-ai/multiplayer": "0.16.1" } });
+      await fx.publish("Racing Demo", { dependencies: { "@genex-ai/multiplayer": "0.17.0" } });
       const plain = await fx.publish(undefined, null);
       assert.equal(plain.job?.state, "done", plain.job?.error);
       assert.equal(fx.seen.deploys[1]?.embedSdkVersion, STUDIO_SDK);
@@ -390,8 +390,8 @@ describe("what a game's package.json tells Genex", () => {
       ["sign-in", { dependencies: { "@genex-ai/embed-sdk": "0.30.0", three: "1" } }, SIGN_IN_GAME],
       [
         "dev dependency",
-        { devDependencies: { "@genex-ai/multiplayer": "^0.16.1" } },
-        { dependencies: { "@genex-ai/multiplayer": "^0.16.1" } },
+        { devDependencies: { "@genex-ai/multiplayer": "^0.17.0" } },
+        { dependencies: { "@genex-ai/multiplayer": "^0.17.0" } },
       ],
       ["a path, not a version", { dependencies: { "@genex-ai/embed-sdk": "file:../../etc" } }, undefined],
       ["a URL, not a version", { dependencies: { "@genex-ai/embed-sdk": "https://x.invalid/sdk.tgz" } }, undefined],
@@ -485,7 +485,7 @@ describe("what a game's package.json tells Genex", () => {
   });
 
   it("connects a template game that maps Studio's multiplayer, and leaves a game with its own SDK alone", () => {
-    assert.equal(bringsOwnSdk({ dependencies: { "@genex-ai/multiplayer": "0.16.1" } }), false);
+    assert.equal(bringsOwnSdk({ dependencies: { "@genex-ai/multiplayer": "0.17.0" } }), false);
     assert.equal(bringsOwnSdk({ dependencies: { "@genex-ai/embed-sdk": "0.30.0" } }), true);
     assert.equal(bringsOwnSdk(undefined), false);
   });

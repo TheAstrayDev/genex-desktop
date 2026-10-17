@@ -66,6 +66,7 @@ export const DevMethod = {
   Scroll: "scroll",
   GameInput: "game.input",
   GraphDrag: "graph.drag",
+  FileDrag: "file.drag",
   WindowResize: "window.resize",
   FixtureGraph: "fixture.graph",
   GameState: "game.state",
@@ -82,6 +83,14 @@ export const DevMethod = {
   Stop: "stop",
 } as const;
 export type DevMethod = (typeof DevMethod)[keyof typeof DevMethod];
+
+/** How far `file.drag` takes a file dragged onto the window: hovering, let go, or taken away. */
+export const DevDragStage = { Over: "over", Drop: "drop", Leave: "leave" } as const;
+export type DevDragStage = (typeof DevDragStage)[keyof typeof DevDragStage];
+
+/** The control's own sample files `file.drag` drags: a picture, or a file the composer cannot take. */
+export const DevDragFile = { Picture: "picture", Text: "text" } as const;
+export type DevDragFile = (typeof DevDragFile)[keyof typeof DevDragFile];
 
 /** Fixed synthetic graph stimuli, available only in the large graph fixture. */
 export const GraphFixtureAction = {
@@ -160,6 +169,11 @@ export const operationSchema = z.discriminatedUnion("method", [
         (a) => a.reduce((n, x) => n + ("ms" in x ? (x.ms ?? 0) : 0), 0) <= 15000,
         "combined input duration exceeds 15 seconds",
       ),
+  }),
+  operation(DevMethod.FileDrag, {
+    ...target,
+    stage: z.enum(DevDragStage),
+    file: z.enum(DevDragFile).default(DevDragFile.Picture),
   }),
   operation(DevMethod.GraphDrag, {
     durationMs: z.number().int().min(GRAPH_DRAG_MIN_MS).max(GRAPH_DRAG_MAX_MS),

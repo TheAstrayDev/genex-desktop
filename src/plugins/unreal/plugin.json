@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.17.1",
+  "version": "0.17.3",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
@@ -621,7 +621,10 @@
       "name": "ray-tracing-off",
       "label": "Turn off ray tracing",
       "confirmation": "Turn off hardware ray tracing in this Unreal project: Genex sets r.RayTracing=False in its Config/DefaultEngine.ini. On a Mac, Unreal 5.8 can crash while it renders a ray-traced game behind another app. Lumen keeps lighting the level in software, and you can turn ray tracing back on in Project Settings."
-    }
+    },
+    { "name": "agents", "label": "Whether agents may use Unreal while you play" },
+    { "name": "agents-go-ahead", "label": "Let agents use Unreal while you play" },
+    { "name": "agents-wait", "label": "Have agents wait while you play" }
   ],
   "toolbar": [
     {

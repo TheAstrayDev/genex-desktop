@@ -99,8 +99,9 @@ function DropdownMenuContent({
           // against this box.
           // bg-popover, NOT bg-background: a menu is a floating surface and
           // owes the page a step of contrast (see the token's note in
-          // globals.css). It used to be the page colour exactly.
-          "relative z-[230] min-w-[10rem] overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-lg",
+          // globals.css). It used to be the page colour exactly. Its edge is
+          // every menu's one edge (`--menu-edge`), which a dark theme brightens.
+          "relative z-[230] min-w-[10rem] overflow-hidden rounded-xl border border-menu-edge bg-popover p-1 shadow-lg",
           className,
         )}
         {...props}

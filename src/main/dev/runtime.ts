@@ -331,6 +331,8 @@ async function perform(rt: Runtime, op: Operation) {
       return resizeWindow(rt, op.params);
     case DevMethod.Capture:
       return captureSurface(rt, op.params);
+    case DevMethod.FileDrag:
+      return rt.control.fileDrag(surfaceContents(rt, DevSurface.Desktop), op.params, dragSampleDir());
     case DevMethod.Logs:
       return readLogs(rt, op.params);
     case DevMethod.CpuStart:
@@ -353,6 +355,9 @@ async function perform(rt: Runtime, op: Operation) {
     }
   }
 }
+
+/** The launch's own folder for the files `file.drag` drags, inside its app data. */
+const dragSampleDir = (): string => path.join(app.getPath("userData"), "dev-drag");
 
 /** Refuse to act on a harness that is not ready, under a sign-in sheet, or on a stale build. */
 function assertActionable(rt: Runtime, op: Operation): void {

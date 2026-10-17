@@ -205,6 +205,8 @@ const FIXTURE_SAFE = [
   "studio:preview.load",
   "studio:preview.screens",
   "studio:preview.bounds",
+  // A picture of the app's own game view for its own stage: nothing outside the app is reached.
+  "studio:preview.cover-still",
   "studio:preview.sound",
   "studio:preview.reload",
   "studio:preview.stop",

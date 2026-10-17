@@ -16,6 +16,8 @@ export const GenexAction = {
   Unlock: "unlock",
   Connect: "connect",
   Terms: "terms",
+  /** Whether the signed-in account still has Genex's updated terms to accept: `{ pending }`. */
+  TermsStatus: "terms-status",
   Disconnect: "disconnect",
   CancelConnect: "cancel-connect",
   Approve: "approve",
@@ -40,6 +42,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
   GenexAction.Unlock,
   GenexAction.Connect,
   GenexAction.Terms,
+  GenexAction.TermsStatus,
   GenexAction.Disconnect,
   GenexAction.CancelConnect,
   GenexAction.PublishStatus,
@@ -57,7 +60,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
  * a package; the version always comes from here. Multiplayer's card asks for `^0.16.0`.
  */
 export const GENEX_GAME_PACKAGES = {
-  "@genex-ai/multiplayer": "0.16.1",
+  "@genex-ai/multiplayer": "0.17.0",
   "@genex-ai/embed-sdk": "0.33.0",
 } as const;
 /** A Genex SDK package a game may add. */
@@ -278,6 +281,20 @@ export const GenexUseVerification = {
 } as const;
 export type GenexUseVerification = (typeof GenexUseVerification)[keyof typeof GenexUseVerification];
 
+/** Why Genex took a job no further than asking: the person has something to do first. Wire values. */
+export const GenexBlocked = {
+  /** Genex's terms changed and the account has not accepted them yet. */
+  Terms: "terms",
+} as const;
+export type GenexBlocked = (typeof GenexBlocked)[keyof typeof GenexBlocked];
+
+/** What the Genex plugin announces to the app while a call runs (`events.emit`), by `kind`. Wire values. */
+export const GenexPluginEvent = {
+  /** The account's terms changed state: `{ kind, pending }`, so the app reads the account again. */
+  Terms: "terms",
+} as const;
+export type GenexPluginEvent = (typeof GenexPluginEvent)[keyof typeof GenexPluginEvent];
+
 export interface GenexJob {
   id: string;
   project: string;
@@ -293,6 +310,8 @@ export interface GenexJob {
   creditsRefunded?: number;
   files: string[];
   error?: string;
+  /** Set when the job went no further than asking the person for something first. */
+  blocked?: GenexBlocked;
   creditsQuoted?: number;
   createdAt: string;
   use?: {

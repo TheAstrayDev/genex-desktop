@@ -1,4 +1,5 @@
 import { mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { agentsSetting, setAgentsSetting } from "../../substrate/engine-agents.ts";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -163,6 +164,9 @@ const UnrealAction = {
   StageStatus: "stage-status",
   RayTracingOff: "ray-tracing-off",
   Skip: "skip",
+  Agents: "agents",
+  AgentsGoAhead: "agents-go-ahead",
+  AgentsWait: "agents-wait",
 } as const;
 type UnrealAction = (typeof UnrealAction)[keyof typeof UnrealAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(UnrealAction));
@@ -1383,6 +1387,11 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
     [UnrealAction.StageStatus]: (_args, context) => stageStatus(deps, context, scanned),
     [UnrealAction.RayTracingOff]: async (args, context) =>
       rayTracingOff(projectArg(args), await setupOptions(deps, context)),
+    [UnrealAction.Agents]: async (_args, context) => agentsSetting((await setupOptions(deps, context)).storage),
+    [UnrealAction.AgentsGoAhead]: async (_args, context) =>
+      setAgentsSetting((await setupOptions(deps, context)).storage, true),
+    [UnrealAction.AgentsWait]: async (_args, context) =>
+      setAgentsSetting((await setupOptions(deps, context)).storage, false),
   };
   const loop = loopTools(deps);
   const tools: Record<UnrealTool, ToolHandler> = {

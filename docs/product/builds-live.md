@@ -18,8 +18,8 @@ Live. Files and images opened from chat get closable tabs.
 ## The two views
 
 **Live** plays the browser game in a native view; unwatched previews pause. The strip
-holds Live/Builds/Assets, Play/Stop, Reload, the sound switch (⌥⌘M; only a shown Live is heard),
-Full screen (hold Esc), plugin actions, Multiplayer and Publish. Stop halts it until Play
+holds Live/Builds/Assets, Reload, Play/Stop and Sound (⌥⌘M; heard when shown) once the
+game has content, Full screen (hold Esc), plugin actions, Multiplayer, Publish. Stop halts it until Play
 or Reload. An empty scaffold shows “Ready for your first idea”, or
 “Building your game” with Watch progress, then Play latest; the first healthy build shows itself.
 Otherwise only the user changes Live (opening a game, Reload, Play, Make live, a chat request while
@@ -34,11 +34,10 @@ works. Tries at one step fold into one node; what reached the build forms the li
 hangs below. Tries a pause cut off show Paused until added. An eye marks (and opens) the reviewers'
 notes. A new build is “Checking it starts…” until it runs. A working node shows its agent's
 screen and action; a selected one opens as a card. **Follow up in chat** notes the next message to its build.
-Chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
+Its tabs, one per build of the chat, and chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
 below), then the finish check tinted Checking, Not yet (reasons, round of 3), Done or Stopped, a chat
 line each round. In place, save points form one line showing each change; workers hang off
-it, solid under the save point taking their work, else ghosts. A chat message's
-workers get a graph while newest.
+it, solid under the save point taking their work, else ghosts.
 
 Agents test in hidden windows, never Live; blind judges play when screenshots can't decide;
 chat frames never certify a build. A finished worker, passing checks, integration and Live's

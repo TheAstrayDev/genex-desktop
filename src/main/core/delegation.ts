@@ -74,9 +74,15 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { chatTurnOf, openDoor, recordSteerDelivered, settleDoor, type SteerDoor } from "./chat-steer.ts";
 import type { LeadAnswers, LeadSession, PersonSession } from "./chat-permissions.ts";
 import type { ActiveDelegation } from "./internals.ts";
-import { PluginCapability, type PluginAppliedSet, type PluginInfo, type PluginTool } from "../../shared/plugins.ts";
+import {
+  CallCutOff,
+  PluginCapability,
+  type PluginAppliedSet,
+  type PluginInfo,
+  type PluginTool,
+} from "../../shared/plugins.ts";
 import type { PluginRegistry, PluginSnapshot } from "../../substrate/plugins/registry.ts";
-import { type CutOffCall, clearCutOffs, peekCutOffs } from "./cut-off-calls.ts";
+import { type CutOffCall, clearCutOffs, noteCutOff, peekCutOffs } from "./cut-off-calls.ts";
 import { clearUnsaved, peekUnsaved, type UnsavedFile } from "./unsaved-files.ts";
 import {
   addedNotice,
@@ -2972,6 +2978,10 @@ export class DelegationService {
       clearCutOffs(this.#x.cutOffCalls, p.threadId, tools.cutOffs);
       clearUnsaved(this.#x.unsavedFiles, p.threadId, tools.unsaved);
     }
+    // Calls it made once a background task woke it past its turn's end: the CLI refused them in the
+    // person's words, so the next session hears they were Genex's and are not done.
+    for (const call of result.cutAfterTurn ?? [])
+      noteCutOff(this.#x.cutOffCalls, p.threadId, { ...call, reason: CallCutOff.TurnEnded });
     const resumable = threadId && sessionId && (isChatsOwnSession(p) || session.chatLead);
     if (resumable) {
       await this.rememberContractor(threadId, {

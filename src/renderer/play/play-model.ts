@@ -1,7 +1,7 @@
 /**
  * Play's decisions, pure: which tabs a shelf shows, how a tab's pages add up, how counts read, which games are Recent, when
  * the sidebar's Genex card shows, what the account plate at the sidebar's foot shows, what the viewer's cover says, which header
- * button wears a note, and when the window's drag regions give way to the viewer's native views. `PlayRoom.tsx`, `PlayRecent.tsx`,
+ * button wears a note, when the window's drag regions give way to the viewer's native views, and which covers were shown before. `PlayRoom.tsx`, `PlayRecent.tsx`,
  * `PlayPromo.tsx`, `ProfilePlate.tsx`, `PlayViewerLayer.tsx` and `App.tsx` draw what these decide.
  */
 import { GenexAccountStatus } from "../../shared/genex-account.ts";
@@ -187,6 +187,30 @@ export function barAfterScroll(before: BarScroll, top: number, barHeight: number
   const moved = top - before.top;
   if (Math.abs(moved) < BAR_SCROLL_SLACK) return before;
   return { top, hidden: moved > 0 };
+}
+
+/** How many cover addresses a window remembers as shown. */
+export const SHOWN_COVERS_MAX = 500;
+
+/** The covers a window has shown, newest last: one Play draws again needs no fade in. */
+export interface ShownCovers {
+  has(url: string): boolean;
+  add(url: string): void;
+}
+
+/** A window's memory of the covers it has shown, keeping the `max` most recent. */
+export function createShownCovers(max: number = SHOWN_COVERS_MAX): ShownCovers {
+  const shown = new Set<string>();
+  return {
+    has: (url) => shown.has(url),
+    add(url) {
+      shown.delete(url);
+      shown.add(url);
+      if (shown.size <= max) return;
+      const oldest = shown.values().next().value;
+      if (oldest !== undefined) shown.delete(oldest);
+    },
+  };
 }
 
 /** The games with players counted now; a game whose count did not change stays the same object. */

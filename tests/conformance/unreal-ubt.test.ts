@@ -432,18 +432,29 @@ function gated(output: string) {
 /** Lets queued promise callbacks run. */
 const settle = () => sleep(5);
 
+/**
+ * Waits until `count` compiles have started (2 s at most), then a moment more so one that should
+ * not start would show. A fixed pause alone raced a busy CI runner: the check ran before the
+ * second compile started, and the gated compiles it never released held the run to its deadline.
+ */
+async function startedCount(gate: { started: string[] }, count: number): Promise<void> {
+  const end = Date.now() + 2000;
+  while (gate.started.length < count && Date.now() < end) await sleep(5);
+  await settle();
+}
+
 describe("at most two compiles at once", () => {
   it("queues the rest in order and starts each when a slot frees", async () => {
     assert.equal(MAX_PARALLEL_COMPILES, 2);
     const gate = gated(await fixture("builder-inc.log"));
     const compiles = ["A", "B", "C", "D"].map((module) => compileEditor(options({ module, run: gate.run })));
-    await settle();
+    await startedCount(gate, 2);
     assert.deepEqual(gate.started, ["AEditor", "BEditor"]);
     gate.release("B");
-    await settle();
+    await startedCount(gate, 3);
     assert.deepEqual(gate.started, ["AEditor", "BEditor", "CEditor"]);
     gate.release("A");
-    await settle();
+    await startedCount(gate, 4);
     assert.deepEqual(gate.started, ["AEditor", "BEditor", "CEditor", "DEditor"]);
     gate.release("C");
     gate.release("D");
@@ -458,13 +469,13 @@ describe("at most two compiles at once", () => {
     const b = compileEditor(options({ module: "B", run: gate.run }));
     const c = compileEditor(options({ module: "C", run: gate.run, signal: stop.signal }));
     const d = compileEditor(options({ module: "D", run: gate.run }));
-    await settle();
+    await startedCount(gate, 2);
     stop.abort();
     const stopped = await c;
     assert.equal(stopped.ok, false);
     assert.equal(stopped.failure, CompileFailure.Aborted);
     gate.release("A");
-    await settle();
+    await startedCount(gate, 3);
     assert.deepEqual(gate.started, ["AEditor", "BEditor", "DEditor"]);
     gate.release("B");
     gate.release("D");
@@ -477,12 +488,12 @@ describe("at most two compiles at once", () => {
     const a = compileEditor(options({ module: "A", run: gate.run, signal: stop.signal }));
     const b = compileEditor(options({ module: "B", run: gate.run }));
     const c = compileEditor(options({ module: "C", run: gate.run }));
-    await settle();
+    await startedCount(gate, 2);
     stop.abort();
     const stopped = await a;
     assert.equal(stopped.failure, CompileFailure.Aborted);
     assert.equal(gate.signals.get("AEditor")?.aborted, true);
-    await settle();
+    await startedCount(gate, 3);
     assert.deepEqual(gate.started, ["AEditor", "BEditor", "CEditor"]);
     gate.release("B");
     gate.release("C");
@@ -504,11 +515,11 @@ describe("a stop at the edges of a compile", () => {
     const b = compileEditor(options({ module: "B", run: gate.run }));
     const c = compileEditor(options({ module: "C", run: gate.run, signal: stop.signal }));
     const d = compileEditor(options({ module: "D", run: gate.run }));
-    await settle();
+    await startedCount(gate, 2);
     gate.release("A");
     const stopped = await c;
     assert.equal(stopped.failure, CompileFailure.Aborted);
-    await settle();
+    await startedCount(gate, 3);
     assert.deepEqual(gate.started, ["AEditor", "BEditor", "DEditor"], "C never spawned; D got its slot");
     gate.release("B");
     gate.release("D");

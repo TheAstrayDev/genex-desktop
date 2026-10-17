@@ -72,8 +72,11 @@ Retain the candidate's checksums, inventory, notices and signed-asset verificati
 regression, terminal and gallery checks. Build-only dispatches use the `candidate` environment
 and receive no signing secrets. Draft upload requires verified macOS signing plus the macOS and
 Linux packaged smokes. Windows is built and tested every release, cannot hold the draft back, and
-joins it only once it is signed and its job passed (`distributionPlatforms` in `scripts/release-policy.mjs`); unsigned candidates, including
-unsigned Windows packages, remain Actions artifacts. Each packaged platform
+joins it once its job passed (`windowsShips` in `scripts/release-policy.mjs`): signed when
+SignPath signs it, otherwise unsigned as a preview while `WINDOWS_SHIPS_UNSIGNED` is on. Release
+notes that ship an unsigned Windows build say so and how to open it (SmartScreen: More info, then
+Run anyway); set the flag off once Windows is signed. Unsigned build-only candidates remain
+Actions artifacts. Each packaged platform
 also exercises its terminal; Windows checks
 the installer/uninstaller and a scripted packaged chat turn. Apps and DMGs both
 need notarization/stapling. Platform provenance records the source and lock digest alongside

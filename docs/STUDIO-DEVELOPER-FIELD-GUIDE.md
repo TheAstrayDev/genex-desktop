@@ -2,7 +2,9 @@
 
 Run commands from the repository root with Node 24 (`nvm use` reads `.nvmrc`). First-time setup
 is in [CONTRIBUTING](../CONTRIBUTING.md#set-up). `package.json` and the lockfile own current
-dependencies; install them with `npm ci` once, not before every restart or check.
+dependencies; install them with `npm run deps` once, not before every restart or check. On macOS
+it gives each worktree a copy-on-write clone of one install per lockfile, kept in the main
+checkout's `.studio-dev/deps` (the newest two); elsewhere it runs `npm ci`.
 
 ## Run an owned development profile
 
@@ -63,6 +65,8 @@ for account-connected checks. Preserve active user work; inspect ownership/statu
 
 The controller builds immutable output under `.studio-dev/builds/<id>` and returns actual
 readiness and profile/build/source/runtime identity. Rebuilding does not update a running app.
+Each start removes the builds no profile's `launch.json` or `attempt.json` names, once they are an
+hour old.
 Use the controller to stop owned sessions; a PID alone is not authority to signal a process.
 `clean --profile <name>` removes only stopped recognized disposable state. Retained live
 profiles, evidence and normal games are not disposable fixture cleanup.
@@ -349,9 +353,9 @@ finish-check (four Loops written after the start, one per finish check look: Don
 the Builds history, Not yet after one no, and the newest Checking),
 paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
 Paused, one Added after the resume, one Left out by the lead's stop),
-building-card (a Loop still going, written after the start, for the chat's Building card and its
-parts: two added, one working with its time left, one restarted on one row, one waiting;
-`[data-build-toggle]` opens `[data-build-checklist]`),
+building-card (a 4h Loop still going after a finished one, written after the start, for the chat's
+Building card and its parts: two added, one working with its time left, one restarted on one row,
+one waiting; `[data-build-checklist]` open, `[data-build-toggle]` closes it; Builds has two tabs),
 stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
 renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
 Mountain pass, a Blender game with no run, whose Live says where pictures come from),
@@ -407,7 +411,8 @@ Send with `npm run studio:dev -- ui --profile ag-933 --request /tmp/request.json
 and `runs --profile P` are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
 walks the full loop.
 The request union/runtime validator is src/main/dev/protocol.ts. Operations are status,
-snapshot (desktop, scope/limit), click (selector/scope), type (plus text/replace), key
+snapshot (desktop, scope/limit; its `play` part counts Play's cards, the covers on screen still
+blank and the clips playing), click (selector/scope), type (plus text/replace), key
 (surface/key/code/modifiers), select (selector/scope/value), scroll (surface/deltas/target),
 game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,
@@ -416,7 +421,8 @@ commit counters through release; `window.resize` takes bounded width/height delt
 duration, resizes the studio window step by step with a game in Live, and returns how far the
 game view trailed its slot right after each change and before the next ([performance](performance.md));
 `fixture.graph` takes `other-project-frames` or `append-round`
-only in `large-build-graph`. Traces accept `toplevel` for renderer task durations.
+only in `large-build-graph`. `file.drag` (target, `stage` over/drop/leave, `file` picture/text)
+drags the control's own sample file onto it; it takes no path. Traces accept `toplevel` for renderer task durations.
 No arbitrary eval, PID, webContents ID or output path is accepted.
 Scoped DOM inspection resolves one visible enabled non-occluded target. A modal dialog or menu
 that has just opened takes pointer input one render later, so an input sent at once can be
@@ -545,6 +551,11 @@ take one, the arrows pick a recent frame, Another cover sends its request throug
 the banner says one is coming until a new frame arrives, and a kept clip plays behind its switch
 (screenshots in `.studio-dev/evidence/`). A fixture
 profile cannot show this dialog's body, since its Genex account is never connected.
+`run-publish-test-link-ui.mjs` renders the same dialog for its test link: it shows under "Publish
+to the web" for a tested draft before the first publish and under the labelled public link while
+live changes wait, never when the draft is the live build; its line names a second player only for
+a multiplayer game; no row is wider than the main press; and each main press still makes exactly
+one `genexPublish` call (screenshots in `.studio-dev/evidence/`).
 `run-chat-cover-card-ui.mjs` renders the production ChatPanel beside the production stage strip:
 the thread's latest kept `genex__cover` shot is one Genex cover card once its turn has ended (none
 mid-turn, the turn's work one group), read through the `genex-cover` scope, whose Publish opens

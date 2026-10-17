@@ -163,6 +163,11 @@ const SCHEME = "game";
 const STOPPED_PAGE = "data:text/html;charset=utf-8,";
 /** The pause before the one compositor retry a failed capture gets. */
 const COMPOSITOR_RETRY_MS = 250;
+/** How long a dialog waits for the stage's cover frame before the game view leaves without one. */
+const COVER_STILL_WAIT_MS = 150;
+/** The cover frame's longest side and JPEG quality: a picture under a dialog, not evidence. */
+const COVER_STILL_MAX_PX = 1600;
+const COVER_STILL_QUALITY = 80;
 /** The longest a capture waits for the page to present two frames. */
 const FRAME_WAIT_MS = 400;
 /** The longest the Live stage's readiness probe waits for the page to answer. */
@@ -777,6 +782,30 @@ export class GamePreview {
       wc.once("did-finish-load", done);
       wc.once("did-fail-load", done);
     });
+  }
+
+  /**
+   * The frame the stage holds while a dialog or popover takes the view's rectangle away
+   * (`native-bounds.ts`): the compositor's picture of the game as it is now, taken before the
+   * view leaves, so the stage shows the game under the dialog rather than an empty slot. Null
+   * when no view is on screen or the frame is not back in time; it never holds a dialog long.
+   */
+  async coverStill(): Promise<string | null> {
+    const view = this.#view;
+    const bounds = this.#requestedBounds;
+    if (!view || view.webContents.isDestroyed() || this.#fill || !bounds?.width || !bounds.height) return null;
+    const image = await Promise.race([
+      view.webContents.capturePage().catch(() => null),
+      sleep(COVER_STILL_WAIT_MS).then(() => null),
+    ]);
+    if (!image || image.isEmpty()) return null;
+    const size = image.getSize();
+    const scale = Math.min(1, COVER_STILL_MAX_PX / Math.max(size.width, size.height));
+    const shown =
+      scale < 1
+        ? image.resize({ width: Math.round(size.width * scale), height: Math.round(size.height * scale) })
+        : image;
+    return `data:image/jpeg;base64,${shown.toJPEG(COVER_STILL_QUALITY).toString("base64")}`;
   }
 
   /** JPEG because these go straight into a vision model's context. */

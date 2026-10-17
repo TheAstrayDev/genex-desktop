@@ -214,9 +214,13 @@ describe("the building-card dev fixture", () => {
         [BUILD_CHECKLIST_WORDS.together, PartMark.Next],
       ],
     );
-    assert.match(String(list?.rows[2]?.status), /^Working · about 2[45] min$/);
+    assert.match(String(list?.rows[2]?.status), /^Working · ~2[45] min$/);
     assert.equal(list?.rows[3]?.status, BUILD_CHECKLIST_WORDS.workingRound(1), "the restart's own first round");
     assert.equal(checklistCaption(list!, false), "2 of 5 parts added · 2 working");
-    assert.equal(log.filter((e) => e.data.type === "messages").length, 1, "seeding again writes nothing");
+    assert.equal(
+      log.filter((e) => e.data.type === "messages").length,
+      2,
+      "the earlier Loop's ask and this one's; seeding again writes nothing",
+    );
   });
 });

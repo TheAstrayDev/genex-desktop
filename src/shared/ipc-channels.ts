@@ -220,6 +220,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:live.behind": "liveBehind",
   "studio:preview.state": "previewState",
   "studio:preview.live": "previewLive",
+  "studio:preview.cover-still": "previewCoverStill",
   "studio:build.problem": "buildProblem",
   "studio:packages.install": "installPackages",
   "studio:run.start": "startRun",
@@ -454,6 +455,7 @@ export interface StudioInvokePayloads {
   "studio:live.behind": { project: string };
   "studio:preview.state": undefined;
   "studio:preview.live": undefined;
+  "studio:preview.cover-still": undefined;
   "studio:build.problem": { project: string };
   "studio:packages.install": { project: string; scripts?: boolean };
   "studio:run.start": Arg<"startRun", 0>;

@@ -24,12 +24,21 @@ export interface GenexAccountPort {
   disconnect(): Promise<void>;
   /** A sign-in this account started has finished: what the account rides on may turn on for it. */
   signedIn(): Promise<void>;
+  /** Whether the signed-in account still has Genex's updated terms to accept; a port that cannot tell has none. */
+  termsPending?(): Promise<boolean>;
 }
 
 export interface GenexAccountDeps {
   port: GenexAccountPort;
   /** Open the page that finishes a sign-in in the person's browser. */
   openSignIn(url: string): Promise<void>;
+}
+
+/** A signed-in account, with Genex's updated terms when they still wait for the person. */
+async function signedInView(port: GenexAccountPort): Promise<GenexAccountView> {
+  // An unanswered question about the terms is no reason to stop anyone: it reads as none pending.
+  const termsPending = (await port.termsPending?.().catch(() => false)) === true;
+  return { status: GenexAccountStatus.SignedIn, ...(termsPending ? { termsPending: true } : {}) };
 }
 
 /** The app's Genex account over `deps`. */
@@ -56,7 +65,7 @@ export function createGenexAccount(deps: GenexAccountDeps) {
     if (awaiting && signedIn) await port.signedIn();
     awaiting = false;
     if (!token) return { status: GenexAccountStatus.SignedOut };
-    return { status: signedIn ? GenexAccountStatus.SignedIn : GenexAccountStatus.Ended };
+    return signedIn ? signedInView(port) : { status: GenexAccountStatus.Ended };
   };
 
   /** Sign in in the browser; a refused token is forgotten first, or the sign-in would reuse it. */
@@ -145,5 +154,15 @@ export function pluginAccountPort(plugins: AccountRegistry): GenexAccountPort {
     signedIn: async () => {
       await plugins.enableForSignIn(GENEX_PLUGIN_ID);
     },
+    termsPending: async () => {
+      if (!installed()) return false;
+      const answer: unknown = await plugins.action(GENEX_PLUGIN_ID, GenexAction.TermsStatus, {});
+      return isTermsAnswer(answer) && answer.pending === true;
+    },
   };
+}
+
+/** The Genex plugin's `terms-status` answer. */
+function isTermsAnswer(answer: unknown): answer is { pending: unknown } {
+  return typeof answer === "object" && answer !== null && "pending" in answer;
 }

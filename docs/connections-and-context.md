@@ -260,8 +260,10 @@ values become secrets and unsupported fields are reported. The command is one li
 shell without expansion (`shared/command-line.ts`) and saved as an argument array, quoted back
 when edited. The id comes from the name (`github`, `github-2`) and never changes after saving.
 A URL saves as streamable HTTP and falls back to SSE when the server refuses it; an existing SSE
-server stays SSE. A URL server signs in through the browser when it asks, unless an
-Authorization header is given. Studio resolves its launch environment through the user's
+server stays SSE. Switching between On this Mac and From a URL drops the secret rows, so an
+environment variable is never sent as a header (or the other way). A URL server signs in through
+the browser when it asks, unless it has a header (every header is a key); a switch that cannot be
+saved is that Connect's failure. Studio resolves its launch environment through the user's
 login-shell PATH. A changed launch command requires renewed user trust.
 Connect completes setup in one Studio flow. A connected row shows its tool count;
 Connect is offered for recovery, not as an extra required step after a successful connection.
@@ -521,7 +523,9 @@ The sign-in flow states that generated assets use Genex credits. Required servic
 belong to Genex's authorization flow. Disable/remove the plugin or disconnect to stop access.
 Legacy paid-tools settings and saved local allowance files are not deleted, but no longer gate
 Studio's asset tools. The existing API credit balance, quotes and service admission remain
-binding; Studio does not buy credits or enable automatic top-ups.
+binding; Studio does not buy credits or enable automatic top-ups. A generation's wait for unaccepted
+terms comes out of its CLI's own time, so the CLI stops (and its answer is recorded) inside the
+host's 190 s ceiling for the call; with under 30 s left after the wait nothing is submitted.
 
 Studio sets the pinned CLI's documented `GENEX_ASSET_BUDGET_CAP=0` in its host-owned launch
 environment. This disables only the extra CLI project allowance. Source inspection and pinned-CLI
@@ -593,8 +597,9 @@ once declined; none of this for a game whose owner keeps its code untouched), an
 storage and answers its preview and exposure numbers, or reports the kept shot, the last send and
 the cover Genex holds with who chose it. A publish, and a draft until the game is first public,
 shoots the demo again after exporting and sends the frame once the upload is recorded, through the
-pinned CLI's `genex cover --json` in Studio's publish copy; `genex__cover-set` sends it now after a
-consent card. Bytes Genex already answered for, and a cover the owner picked on genex.games, are
+pinned CLI's `genex cover --json` in Studio's publish copy, with the kept clip behind it;
+`genex__cover-set` sends the picture alone now after a consent card (the clip goes only with a
+publish). Bytes Genex already answered for, and a cover the owner picked on genex.games, are
 never uploaded again; the owner's pick is recorded (`kept_owner`) whenever Genex reports it, at a
 send or a status check, a shot kept or not; a refused, rate-limited, failed or silent send leaves the publish done with a
 warning in `genex__publish-status`. Nothing is read from or written to the game folder for it.

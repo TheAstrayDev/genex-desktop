@@ -14,7 +14,7 @@ import { Icon } from "../ui/icons.tsx";
 import { PLAY_WORDS } from "../words.ts";
 import { claimHoverClip, releaseHoverClip } from "./clip-playback.ts";
 import { CoverClip } from "./CoverClip.tsx";
-import { formatCount } from "./play-model.ts";
+import { createShownCovers, formatCount } from "./play-model.ts";
 
 const WORDS = PLAY_WORDS;
 
@@ -22,9 +22,19 @@ const WORDS = PLAY_WORDS;
 const CoverState = { Loading: "loading", Shown: "shown", Failed: "failed" } as const;
 type CoverState = (typeof CoverState)[keyof typeof CoverState];
 
-/** The cover: the picture fades in once decoded; a missing or broken one leaves the plain tile. */
+/** The covers this window has shown: Play opened again draws them at once rather than fading them in. */
+const SHOWN_COVERS = createShownCovers();
+
+/** Whether `src` was shown before in this window. */
+const shownBefore = (src: string | null): boolean => src !== null && SHOWN_COVERS.has(src);
+
+/**
+ * The cover: the picture fades in once loaded, or shows at once when this window has shown it
+ * before; a missing or broken one leaves the plain tile. It loads as soon as its card is made, not
+ * when it nears the screen, so a page's covers are there before they are scrolled to.
+ */
 function Cover({ src, onShown }: { src: string | null; onShown: () => void }): JSX.Element | null {
-  const [state, setState] = useState<CoverState>(CoverState.Loading);
+  const [state, setState] = useState<CoverState>(() => (shownBefore(src) ? CoverState.Shown : CoverState.Loading));
   if (!src || state === CoverState.Failed) return null;
   return (
     <img
@@ -32,10 +42,10 @@ function Cover({ src, onShown }: { src: string | null; onShown: () => void }): J
       src={src}
       alt=""
       draggable={false}
-      loading="lazy"
       decoding="async"
       data-shown={state === CoverState.Shown || undefined}
       onLoad={() => {
+        SHOWN_COVERS.add(src);
         setState(CoverState.Shown);
         onShown();
       }}
@@ -78,7 +88,7 @@ function MarqueeTitle({ title }: { title: string }): JSX.Element {
     const text = element?.firstElementChild;
     if (!element || !(text instanceof HTMLElement)) return;
     const measure = () => setOverflow(Math.max(0, text.scrollWidth - element.clientWidth));
-    measure();
+    // The observer's first call measures once the title is laid out, never forcing a layout mid-commit.
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
@@ -134,7 +144,7 @@ export const PlayCard = memo(function PlayCard({
 }): JSX.Element {
   const clipKey = useId();
   const cover = useRef<HTMLButtonElement>(null);
-  const [coverShown, setCoverShown] = useState(false);
+  const [coverShown, setCoverShown] = useState(() => shownBefore(game.coverUrl));
   const clip = game.clipUrl;
   // The pointer or focus on the cover asks for its clip; the store decides when it loads.
   const hover = clip ? () => claimHoverClip(clipKey) : undefined;

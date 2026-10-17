@@ -116,19 +116,17 @@ function durableEntry(send: PendingSend, match: Matching): string | null {
 
 /**
  * Main routed it to plan review after all: its request shows in the plan, not as a bubble. Only
- * a plan this send asked for counts (its request ends with the send's words).
+ * a plan this send asked for counts (its request ends with the send's words, or has none when the
+ * send was pictures alone).
  */
 function wentToPlanReview(send: PendingSend, events: readonly EventEnvelope[]): boolean {
   const text = send.text.trim();
   return events.some((event) => {
     if (!newerThan(event, send.after)) return false;
     const review = customPayload(event.data, CustomEvent.PlanReview);
-    return (
-      review?.state === PlanReviewState.Generating &&
-      String(review.text ?? "")
-        .trim()
-        .endsWith(text)
-    );
+    if (review?.state !== PlanReviewState.Generating) return false;
+    const request = String(review.text ?? "").trim();
+    return text ? request.endsWith(text) : request === "";
   });
 }
 

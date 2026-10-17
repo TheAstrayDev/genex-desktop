@@ -1,6 +1,7 @@
 /** Genex web trace geometry; completed activity stays static and details mount on demand. */
 import { memo, useState, type JSX } from "react";
 import { type ChatFileLink, wholeFileName } from "../../shared/chat-files.ts";
+import type { GenexBlocked } from "../../shared/genex.ts";
 import { useChatFileNames, useChatFiles } from "../chat-files.ts";
 import { RowShots } from "../chat/ConnectorShots.tsx";
 import { TOOL_ACTIVITY_WORDS, type ToolIcon } from "../words.ts";
@@ -34,6 +35,8 @@ export interface ToolChipRow {
    * the game's inventory, the call's own first, then the job and generation it answered with.
    */
   making?: { ids: string[] };
+  /** The call went no further than asking the person for something first (Genex's terms). */
+  blocked?: GenexBlocked;
 }
 const icons: Record<ToolIcon, IconName> = {
   think: "harness",

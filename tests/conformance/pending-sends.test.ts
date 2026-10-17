@@ -109,6 +109,23 @@ test("an acknowledged send that became a plan, or never arrived, stops showing",
   );
 });
 
+test("pictures sent with no words keep their bubble until their own row arrives", () => {
+  const frames = [{ label: "sketch", mimeType: "image/png", data: "AAAA" }];
+  const pictures = send("c1", "", { frames });
+  // Another chat's plan, or a plan with words, is not this send's: it keeps showing.
+  const plan = custom(3, "plan_review", { id: "p", state: "generating", text: "Plan a racing game" });
+  assert.deepEqual(
+    reconcile([pictures], [plan]).shown.map((s) => s.clientId),
+    ["c1"],
+  );
+  // Only an empty row is its own when no queue recorded it; a row with words is someone else's.
+  assert.deepEqual(
+    reconcile([pictures], [user(3, "Add a boss")]).shown.map((s) => s.clientId),
+    ["c1"],
+  );
+  assert.deepEqual([...reconcile([pictures], [user(3, "Add a boss"), user(4, "")]).adopted], [["c1", "000004-0:user"]]);
+});
+
 test("a message waits below current work, and joins the conversation in an idle chat", () => {
   const idle = messageQueueState([]);
   assert.equal(sendPlacement(false, idle), "transcript");

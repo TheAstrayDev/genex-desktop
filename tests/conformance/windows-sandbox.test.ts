@@ -31,6 +31,7 @@ import {
   WindowsSandboxSession,
   ancestorDirs,
   ancestorGrants,
+  ensureHostGit,
   findGitBash,
   gitRootFromExecPath,
   gitRootFromRegistry,
@@ -481,6 +482,31 @@ describe("Git Bash and srt-win", () => {
     for (const [label, lookup, expected] of table) {
       const bash = await findGitBash(lookup);
       assert.equal(bash === null ? null : bash.replaceAll("/", "\\"), expected, label);
+    }
+  });
+
+  it("puts Git for Windows' cmd folder on PATH for the host's own git, or reports it missing", async () => {
+    const regOut = "    InstallPath    REG_SZ    C:\\Git\r\n";
+    const fail = async () => {
+      throw new Error("not found");
+    };
+    const viaRegistry = { registry: async () => regOut, execPath: fail, exists: () => true };
+    const table: Array<[string, Parameters<typeof ensureHostGit>[0], string, boolean, string]> = [
+      [
+        "no Git for Windows",
+        { registry: fail, execPath: fail, exists: () => true },
+        "C:\\Windows",
+        false,
+        "C:\\Windows",
+      ],
+      ["installed, not on PATH", viaRegistry, "C:\\Windows", true, "C:\\Git\\cmd;C:\\Windows"],
+      ["already on PATH", viaRegistry, "C:\\Windows;c:\\git\\CMD", true, "C:\\Windows;c:\\git\\CMD"],
+      ["empty PATH", viaRegistry, "", true, "C:\\Git\\cmd"],
+    ];
+    for (const [label, lookup, before, found, after] of table) {
+      const env: NodeJS.ProcessEnv = { PATH: before };
+      assert.equal(await ensureHostGit(lookup, env), found, label);
+      assert.equal(env.PATH, after, label);
     }
   });
 

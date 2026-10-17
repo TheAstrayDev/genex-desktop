@@ -80,6 +80,8 @@ export interface PeopleState {
   account: GenexAccountStatus | null;
   /** While a sign-in waits in the browser: the code the browser shows. */
   signInCode: string | null;
+  /** Signed in with Genex's updated terms still to accept: the sidebar and the chat offer Review. */
+  genexTermsPending: boolean;
   /** The account whose sign-in genex.games ended: the plate shows it dimmed, to sign in again. */
   ended: PlayMe | null;
   /** The balance as last read, or null before it was. */
@@ -101,6 +103,7 @@ export const initialPeople = (): PeopleState => ({
   meKnown: false,
   account: null,
   signInCode: null,
+  genexTermsPending: false,
   ended: null,
   credits: null,
   friends: null,
@@ -144,7 +147,7 @@ export function accountRead(
   me: PlayMe | null | undefined,
 ): PeopleState {
   if (!view) return state.meKnown ? state : { ...state, meKnown: true };
-  const stands = { account: view.status, signInCode: view.code ?? null };
+  const stands = { account: view.status, signInCode: view.code ?? null, genexTermsPending: view.termsPending === true };
   if (view.status === GenexAccountStatus.SignedIn) {
     const known = me ? meRead(state, me) : { ...state, meKnown: true };
     return { ...known, ...stands, ended: null };

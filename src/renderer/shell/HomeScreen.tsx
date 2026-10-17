@@ -151,37 +151,41 @@ function HomeScreen({
       />
     );
   return (
-    <section data-home="" aria-label="Home" className="home-layer">
+    <section data-home="" data-file-drop-zone aria-label="Home" className="home-layer">
       {/* Only home at rest has it: the first message's transition fades it out with the rest. */}
-      <HomeBackground />
+      <HomeBackground covered={chrome.workspaceCovered} />
       <div className="home-header titlebar-drag">
         {chrome.sidebarHidden && <ShowSidebarButton onToggle={chrome.toggleSidebar} />}
         <HomeBackdropButton picked={model.selected} />
       </div>
       <div className="home-body">
-        <h1 className="home-title">{MESSAGE.title}</h1>
-        <div className="home-compose">
-          {composer}
-          <div className="home-compose-row">
-            <HomeFolderChip
-              rootLabel={rootLabel}
-              location={location}
-              onLocation={setLocation}
-              onInspect={(inspection) => dialogs.dispatch({ type: "picked", inspection })}
-              onProblem={(words) => app.notify(words, ToastTone.Error)}
-            />
-            {/* Only while the box is empty or still holds a suggestion: it never replaces the user's words. */}
-            <button
-              type="button"
-              data-home-suggest
-              className="home-suggest"
-              disabled={!suggestion.offered}
-              onClick={suggestion.suggest}
-            >
-              <Icon name="dice" size={15} />
-              {MESSAGE.suggest}
-            </button>
+        <div className="home-primary">
+          <h1 className="home-title">{MESSAGE.title}</h1>
+          <div className="home-compose">
+            {composer}
+            <div className="home-compose-row">
+              <HomeFolderChip
+                rootLabel={rootLabel}
+                location={location}
+                onLocation={setLocation}
+                onInspect={(inspection) => dialogs.dispatch({ type: "picked", inspection })}
+                onProblem={(words) => app.notify(words, ToastTone.Error)}
+              />
+              {/* Only while the box is empty or still holds a suggestion: it never replaces the user's words. */}
+              <button
+                type="button"
+                data-home-suggest
+                className="home-suggest"
+                disabled={!suggestion.offered}
+                onClick={suggestion.suggest}
+              >
+                <Icon name="dice" size={15} />
+                {MESSAGE.suggest}
+              </button>
+            </div>
           </div>
+        </div>
+        <div className="home-plugin-slot">
           <NewChatPluginSlot />
         </div>
       </div>

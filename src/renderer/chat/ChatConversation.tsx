@@ -235,7 +235,7 @@ const ConversationContent = memo(function ConversationContent({
             />
           )}
         </ChatScroll>
-        <JumpToLatest unseen={follow.unseen} onJump={follow.jumpToLatest} />
+        <JumpToLatest unseen={follow.unseen} working={!view.idle} onJump={follow.jumpToLatest} />
       </div>
     </PerformanceBoundary>
   );

@@ -48,6 +48,8 @@ const run = promisify(execFile);
 
 /** How long one `reg` or `git` call may take. */
 const TOOL_TIMEOUT_MS = 15 * SECOND_MS;
+/** How a `reg` or `git` lookup runs: under its deadline, with no console window of its own. */
+const TOOL_RUN = { timeout: TOOL_TIMEOUT_MS, windowsHide: true } as const;
 /**
  * How often `initialize` is tried when srt-win's egress check times out. That check runs 17-23 s
  * against a 30 s limit on a hosted runner, so a busy machine can miss it once.
@@ -410,10 +412,8 @@ export interface GitBashLookup {
 export async function findGitBash(lookup: GitBashLookup = {}): Promise<string | null> {
   const registry =
     lookup.registry ??
-    (async () =>
-      (await run("reg", ["query", GIT_REGISTRY_KEY, "/v", GIT_REGISTRY_VALUE], { timeout: TOOL_TIMEOUT_MS })).stdout);
-  const execPath =
-    lookup.execPath ?? (async () => (await run("git", ["--exec-path"], { timeout: TOOL_TIMEOUT_MS })).stdout);
+    (async () => (await run("reg", ["query", GIT_REGISTRY_KEY, "/v", GIT_REGISTRY_VALUE], TOOL_RUN)).stdout);
+  const execPath = lookup.execPath ?? (async () => (await run("git", ["--exec-path"], TOOL_RUN)).stdout);
   const exists = lookup.exists ?? existsSync;
   const lookups = [
     () => registry().then(gitRootFromRegistry, () => null),
@@ -430,6 +430,24 @@ export async function findGitBash(lookup: GitBashLookup = {}): Promise<string | 
 /** The Git install a Git Bash path belongs to. */
 export function gitRootOf(bash: string): string {
   return win.dirname(win.dirname(bash));
+}
+
+/**
+ * Make the host's own `git` (game snapshots, the harness workspace) runnable on Windows: Git for
+ * Windows' `cmd` folder goes first on PATH when it is not there yet, as after installing Git while
+ * Genex was open. False when Git for Windows is not installed.
+ */
+export async function ensureHostGit(
+  lookup: GitBashLookup = {},
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
+  const bash = await findGitBash(lookup);
+  if (!bash) return false;
+  const cmd = win.join(gitRootOf(bash), "cmd");
+  const entries = (env.PATH ?? "").split(win.delimiter).filter(Boolean);
+  const onPath = entries.some((dir) => dir.toLowerCase() === cmd.toLowerCase());
+  if (!onPath) env.PATH = [cmd, ...entries].join(win.delimiter);
+  return true;
 }
 
 /**

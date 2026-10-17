@@ -29,6 +29,18 @@ licenses and terms of included third-party software.
   trademark of the Blender Foundation; Local Blender uses it only to identify Blender, which it
   runs (https://www.blender.org/about/logo/). No endorsement is implied.
 - `src/plugins/genex/icon.png` is Genex's own icon from genex.games.
+- `src/plugins/godot/icon.svg` and the `godot` glyph in `src/renderer/ui/icons.tsx` redraw the
+  head of the Godot logo as simplified line art. The Godot logo is by Andrea Calabró, licensed
+  under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); these drawings change it.
+  Godot and the Godot logo are trademarks of the Godot Foundation, used only to identify Godot,
+  which the Godot plugin runs. Genex is not affiliated with or endorsed by the Godot Foundation.
+- `src/plugins/unreal/icon.svg` and the `unreal` glyph in `src/renderer/ui/icons.tsx` draw a U in
+  a ring to identify Unreal Engine, which the Unreal plugin runs. Unreal and Unreal Engine are
+  trademarks or registered trademarks of Epic Games, Inc. in the United States and elsewhere.
+  Genex is not affiliated with or endorsed by Epic Games.
+- The Unity plugin uses a generic icon and names Unity only to identify it. Unity is a trademark
+  or registered trademark of Unity Technologies or its affiliates in the U.S. and elsewhere.
+  Genex is not affiliated with or endorsed by Unity Technologies.
 
 ## Routed tool marks
 
@@ -46,9 +58,9 @@ text behind a Studio-written preface; `vendor.json` records each source, version
 `npm run genex:skills` refreshes them.
 
 - Eight platform cards and their references, copied unchanged from
-  `@genex-ai/cli-demo` 1.36.8 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
+  `@genex-ai/cli-demo` 1.36.9 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
   license text ships beside them as `skills/LICENSE-cards`, copied from the CLI's `LICENSE`.
-- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.8), which is not part of the npm
+- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.9), which is not part of the npm
   package. It is attributed to Genex here; its license is not yet confirmed (see "Status not yet
   recorded" below).
 
@@ -298,7 +310,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-### @genex-ai/multiplayer 0.16.1
+### @genex-ai/multiplayer 0.17.0
 
 Bundled into `vendor/genex/`, the multiplayer SDK a game made from Studio's template maps in its import
 map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
