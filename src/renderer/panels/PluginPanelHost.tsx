@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PluginInfo, PluginPanelDocument } from "../../shared/plugins.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import type { PluginReviewRequest } from "../plugin-actions.ts";
+import { useAppearance } from "../appearance/store.ts";
 import { type PanelHead, PanelSurface } from "./panel-bridge.ts";
 import { type PanelBridge, PanelMessage, openPanelBridge } from "./panel-host-bridge.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
@@ -64,6 +65,7 @@ function usePanelBridge({
   setReview,
   setHeight,
 }: BridgeDeps): void {
+  const { appearance, scheme } = useAppearance();
   const now = useRef({ plugin, project, surface, allowPrompts, onHead });
   now.current = { plugin, project, surface, allowPrompts, onHead };
   const bridge = useRef<PanelBridge | null>(null);
@@ -105,6 +107,12 @@ function usePanelBridge({
     setReview(cancelReview);
     bridge.current?.contextChanged();
   }, [project, surface, setReview]);
+  const painted = useRef({ appearance, scheme });
+  useEffect(() => {
+    if (painted.current.appearance === appearance && painted.current.scheme === scheme) return;
+    painted.current = { appearance, scheme };
+    bridge.current?.contextChanged();
+  }, [appearance, scheme]);
 }
 
 export function PluginPanelHost({

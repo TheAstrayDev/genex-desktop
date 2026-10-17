@@ -34,7 +34,7 @@ document.querySelector('#apply').onclick=()=>show(()=>studioPlugin.call('customi
 document.querySelector('#reset').onclick=()=>show(()=>studioPlugin.call('customization.reset'));
 document.querySelector('#invalid').onclick=()=>show(()=>studioPlugin.call('customization.set',undefined,{version:1,css:'body{display:none}'}));
 </script>`;
-const widgetPanel = `<!doctype html><meta charset="utf-8"><style>body{margin:8px;height:5000px;font:14px system-ui;background:#15181c;color:#eee}</style><div>Custom plugin UI</div><script>${sdk}</script>`;
+const widgetPanel = `<!doctype html><meta charset="utf-8"><style>body{margin:8px;height:5000px;font:14px system-ui;background:#15181c;color:#eee}</style><div>Custom plugin UI</div><script>${sdk}</script><script>async function paint(){const c=await studioPlugin.call('context');document.body.style.background=c.theme.background}paint();addEventListener('message',e=>{if(e.data?.type==='studio-plugin-context-changed')paint()})</script>`;
 await writeFile(
   path.join(out, "check.cjs"),
   String.raw`
@@ -83,8 +83,12 @@ check('selection is saved in ordinary appearance',await js('JSON.parse(localStor
 await js('document.querySelector("#set-light").click()');
 await until(()=>js('document.documentElement.dataset.theme==="light" && getComputedStyle(document.documentElement).getPropertyValue("--background")==="#ffffff"'));
 check('light mode stays the persons choice',true);
+await until(()=>widget.executeJavaScript('getComputedStyle(document.body).backgroundColor==="rgb(255, 255, 255)"'));
+check('Home panel receives the live light theme context',true);
 await js('customizationFixture.mode("dark")');
 await until(()=>js('document.documentElement.dataset.theme==="dark" && getComputedStyle(document.documentElement).getPropertyValue("--background")==="#111111"'));
+await until(()=>widget.executeJavaScript('getComputedStyle(document.body).backgroundColor==="rgb(17, 17, 17)"'));
+check('Home panel receives the live dark theme context',true);
 check('native radii and fonts apply to the selected theme',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius==="4px" && getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").includes("Segoe UI")'));
 check('Appearance identifies the active plugin and offers turn off',await js('!!Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme") && document.querySelector("[data-plugin-theme-choice] [role=status]").textContent.includes("Plugin theme active")'));
 check('active plugin hides built-in editors and provides a filled turn off button',await js('!document.querySelector(".appearance-native-editors") && getComputedStyle(Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme")).backgroundColor!=="rgba(0, 0, 0, 0)"'));

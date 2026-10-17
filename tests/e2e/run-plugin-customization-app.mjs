@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { _electron as electron } from "playwright";
+import { expect } from "@playwright/test";
 import { allocateProfile } from "../../scripts/studio-dev/ownership.mjs";
 import { liveLaunchEnv } from "../../scripts/studio-dev/live-env.ts";
 import { resolveElectron } from "../../scripts/electron-runtime.mjs";
@@ -135,6 +136,11 @@ try {
   for (const mode of ["light", "dark"]) {
     await page.locator(`[data-appearance] input[value="${mode}"]`).check();
     await page.waitForFunction((mode) => document.documentElement.dataset.theme === mode, mode);
+    await expect(page.frameLocator("[data-new-chat-plugin] iframe").locator("body")).toHaveCSS(
+      "background-color",
+      mode === "light" ? "rgb(255, 255, 255)" : "rgb(17, 17, 17)",
+    );
+    check(`Home panel updates to the ${mode} theme`, true);
     await page.screenshot({ path: path.join(out, `appearance-${mode}.png`) });
     await page.keyboard.press("Escape");
     await page.getByTestId("settings-dialog").waitFor({ state: "hidden" });
@@ -153,15 +159,23 @@ try {
   await page.evaluate((id) => window.studio.pluginEnable(id, true), pluginId);
   await page.keyboard.press("Escape");
   await page.getByTestId("settings-dialog").waitFor({ state: "hidden" });
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(900, 650));
+  const size = await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    win.setSize(900, 650);
+    return win.getContentSize();
+  });
+  await page.waitForFunction(([width, height]) => innerWidth === width && innerHeight === height, size);
   await page.locator("[data-new-chat-plugin]").scrollIntoViewIfNeeded();
+  const short = await page.locator("[data-new-chat-plugin]").evaluate((el) => ({
+    bottom: el.getBoundingClientRect().bottom,
+    right: el.getBoundingClientRect().right,
+    height: innerHeight,
+    width: innerWidth,
+  }));
+  console.log("Short-window geometry:", JSON.stringify(short));
   check(
     "panel fits a shorter window and remains reachable",
-    await page
-      .locator("[data-new-chat-plugin]")
-      .evaluate(
-        (el) => el.getBoundingClientRect().bottom <= innerHeight && el.getBoundingClientRect().right <= innerWidth,
-      ),
+    short.bottom <= short.height + 1 && short.right <= short.width + 1,
   );
   await page.screenshot({ path: path.join(out, "home-short.png") });
   await writeFile(
@@ -171,6 +185,7 @@ try {
         checks,
         before,
         after,
+        short,
         buildId,
         profile: id,
         providers: "live",

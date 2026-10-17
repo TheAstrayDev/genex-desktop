@@ -83,6 +83,7 @@ plugins offer panels, the first plugin id in lexical order occupies the one slot
 its opaque frame and SDK bridge, with no active project. Actions and file pickers are refused in this
 automatically loaded slot, so opening Home cannot trigger approval or native dialogs. Those operations
 remain available in the plugin's ordinary panels. The slot's height never shifts Home's title or composer.
+Appearance changes notify open panels to read their current theme context again.
 For example:
 
 ```js
