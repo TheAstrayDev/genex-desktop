@@ -79,6 +79,7 @@ try {
   app.process().stderr?.pipe(stderr);
   // Owned studio:dev readiness already budgets 60s; Playwright's default 30s can expire during sandbox startup.
   const page = await app.firstWindow({ timeout: 60000 });
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1280, 900));
   page.setDefaultTimeout(15000);
   await page.locator('[data-onboarding-action="next"]').click();
   await page
@@ -88,6 +89,8 @@ try {
     .click();
   await page.getByRole("dialog", { name: "Welcome to Genex", exact: true }).waitFor({ state: "hidden" });
   await page.getByRole("button", { name: "New game", exact: true }).click();
+  await page.locator("[data-genex-promo] .genex-promo-close").click();
+  await page.locator("[data-genex-promo]").waitFor({ state: "hidden" });
   await page.locator("[data-home] .home-title").waitFor({ state: "visible" });
   const geometry = () =>
     page.locator("[data-home]").evaluate((home) => ({
@@ -116,7 +119,7 @@ try {
           el.textContent.includes("Workshop"),
       ),
   );
-  await page.locator('[aria-label="Settings"]').click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.locator("#settings-tab-appearance").click();
   await page.getByRole("button", { name: "Theme source", exact: true }).click();
   await page.getByRole("menuitemradio").filter({ hasText: "Workshop · Plugin" }).click();
@@ -134,9 +137,10 @@ try {
     await page.waitForFunction((mode) => document.documentElement.dataset.theme === mode, mode);
     await page.screenshot({ path: path.join(out, `appearance-${mode}.png`) });
     await page.keyboard.press("Escape");
+    await page.getByTestId("settings-dialog").waitFor({ state: "hidden" });
     await page.locator("[data-home]").waitFor({ state: "visible" });
     await page.screenshot({ path: path.join(out, `home-${mode}.png`) });
-    await page.locator('[aria-label="Settings"]').click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.locator("#settings-tab-appearance").click();
   }
   await off.focus();
@@ -148,6 +152,7 @@ try {
   check("Theme source row is hidden when no enabled plugin offers a theme", true);
   await page.evaluate((id) => window.studio.pluginEnable(id, true), pluginId);
   await page.keyboard.press("Escape");
+  await page.getByTestId("settings-dialog").waitFor({ state: "hidden" });
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(900, 650));
   await page.locator("[data-new-chat-plugin]").scrollIntoViewIfNeeded();
   check(
