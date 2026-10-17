@@ -164,6 +164,9 @@ try {
   );
   console.log(`Evidence: ${out}`);
 } catch (error) {
+  const startup = await readFile(path.join(owner.core, "logs/studio.log"), "utf8").catch(() => "No startup log");
+  await writeFile(path.join(out, "startup.log"), startup);
+  console.error(startup);
   if (app) {
     const page = app.windows()[0];
     if (page) {
