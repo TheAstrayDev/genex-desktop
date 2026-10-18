@@ -255,6 +255,9 @@ const FIXTURE_SAFE = [
   // Reads one game's own skill folders and a plugin's skill files: no dialog, account or socket.
   "studio:skills.project",
   "studio:plugins.skill",
+  // Read or cancel only jobs owned by this profile; neither channel launches native code.
+  "studio:plugins.native-jobs",
+  "studio:plugins.cancel-native-job",
   // Reading the index and watching a local folder open no dialog and, offline, no socket either.
   // Actions reach native steps only through the `plugins.approval`, `plugins.native-action` and
   // `open-url` checks inside them.

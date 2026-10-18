@@ -599,6 +599,10 @@ export interface PluginHostCall {
     method: "native.run",
     args: { job: string; inputs: Record<string, string>; values: Record<string, string>; background?: false },
   ): Promise<PluginNativeResult>;
+  (
+    method: "native.run",
+    args: { job: string; inputs: Record<string, string>; values: Record<string, string>; background: boolean },
+  ): Promise<PluginNativeResult | { id: string }>;
   (method: "native.jobs"): Promise<PluginNativeResult[]>;
   (method: "native.result", args: { id: string }): Promise<PluginNativeResult | null>;
   /** True when cancellation was requested; false for a finished or unowned job. */

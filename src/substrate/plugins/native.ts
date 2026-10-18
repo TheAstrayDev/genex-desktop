@@ -37,7 +37,7 @@ import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { assertRelativePath, containedReal, isInside } from "../paths.ts";
 import { download, DownloadStatus } from "../bonsai/download.ts";
 import { atomicWriteJson, openNoFollow } from "../fsx.ts";
-import { NativeEndReason, runNativeProcess, runtimeRoot } from "./native-process.ts";
+import { NativeCleanupError, NativeEndReason, runNativeProcess, runtimeRoot } from "./native-process.ts";
 import { credentialHomes } from "../credential-homes.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
@@ -221,6 +221,18 @@ interface JobDirs {
   inputDir: string;
 }
 
+interface JobExecution {
+  recipe: PluginNativeJob;
+  runtime: PluginNativeRuntime;
+  directory: string;
+  root: string;
+  dirs: JobDirs;
+  record: PluginNativeResult;
+  args: { inputs: Record<string, string>; values: Record<string, string> };
+  binding: PluginBinding;
+  signal: AbortSignal;
+}
+
 /** Only declared inputs and values, as objects. */
 function hasOnlyDeclaredArguments(recipe: PluginNativeJob, args: any): boolean {
   const bothObjects = [args.inputs, args.values].every((part) => Boolean(part) && typeof part === "object");
@@ -266,7 +278,13 @@ function validateValues(recipe: PluginNativeJob, values: Record<string, unknown>
  * Copy one declared input into the job, hashing it on the way. The source is opened without
  * following links and must still be the file that was resolved.
  */
-async function stageInput(source: string, relative: string, staged: string, binding: PluginBinding): Promise<string> {
+async function stageInput(
+  source: string,
+  relative: string,
+  staged: string,
+  binding: PluginBinding,
+  signal: AbortSignal,
+): Promise<string> {
   const hash = createHash("sha256");
   const handle = await openNoFollow(source, constants.O_RDONLY);
   try {
@@ -277,6 +295,7 @@ async function stageInput(source: string, relative: string, staged: string, bind
     const destination = await open(staged, "wx", 0o600);
     try {
       for await (const chunk of handle.createReadStream({ autoClose: false })) {
+        signal.throwIfAborted();
         hash.update(chunk);
         await destination.writeFile(chunk);
       }
@@ -448,6 +467,7 @@ export class PluginNativeServices {
   #installing = new Map<string, Promise<PluginNativeStatus>>();
   #installControllers = new Map<string, AbortController>();
   #active = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  #stopped = false;
   readonly #runProcess: typeof runNativeProcess;
   constructor(studioData: string, protectedPaths: string[], runProcess = runNativeProcess) {
     this.studioData = studioData;
@@ -455,8 +475,11 @@ export class PluginNativeServices {
     this.#runProcess = runProcess;
   }
   /** Stop every owned worker before the host releases its sandbox. */
-  async stop(): Promise<void> {
-    const active = [...this.#active.values()];
+  async stop(root?: string): Promise<void> {
+    if (!root) this.#stopped = true;
+    const active = [...this.#active.entries()]
+      .filter(([key]) => !root || isInside(path.join(root, "native-jobs"), key))
+      .map(([, job]) => job);
     for (const job of active) job.controller.abort();
     await Promise.allSettled(active.map((job) => job.done));
   }
@@ -638,16 +661,14 @@ export class PluginNativeServices {
     invocation: NativeInvocation,
     emit: Emit,
   ): Promise<PluginNativeResult | { id: string }> {
+    if (this.#stopped) throw new Error(MESSAGE.JobInterrupted);
     if (args?.background !== undefined && typeof args.background !== "boolean")
       throw new Error(MESSAGE.InvalidBackground);
     const recipe = manifest.nativeJobs?.find((j) => j.id === args?.job),
       runtime = manifest.nativeRuntimes?.find((r) => r.id === recipe?.runtime);
     if (!recipe || !runtime) throw new Error(MESSAGE.UndeclaredRecipe);
     if (!hasOnlyDeclaredArguments(recipe, args)) throw new Error(MESSAGE.UnexpectedInputs);
-    const inputs = await resolveInputs(recipe, args.inputs, binding);
     validateValues(recipe, args.values);
-    const status = await this.detect(runtime, root);
-    if (status.state !== NativeRuntimeState.Ready || !status.path) throw new Error(status.detail);
     invocation.signal.throwIfAborted();
     const id = randomUUID();
     const jobDir = path.join(jobs, id);
@@ -661,21 +682,11 @@ export class PluginNativeServices {
     await mkdir(dirs.output, { recursive: true });
     await mkdir(dirs.scratch, { recursive: true });
     await mkdir(dirs.inputDir);
-    // A script gets only the explicitly declared input files. Reading the entire project would
-    // also grant Python access to nested .env/private keys and race newly created secret files.
-    const inputIdentities: NonNullable<PluginNativeResult["inputs"]> = {};
-    for (const key of recipe.inputs) {
-      const staged = path.join(dirs.inputDir, key + path.extname(inputs[key]));
-      const sha256 = await stageInput(inputs[key], args.inputs[key], staged, binding);
-      inputIdentities[key] = { file: args.inputs[key], sha256 };
-      inputs[key] = staged;
-    }
     const record: PluginNativeResult = {
-      inputs: inputIdentities,
+      inputs: {},
       id,
       recipe: recipe.id,
       runtime: runtime.id,
-      version: status.version,
       state: NativeJobState.Running,
       project: binding.project,
       output: dirs.output,
@@ -686,7 +697,6 @@ export class PluginNativeServices {
       await atomicWriteJson(path.join(jobDir, "job.json"), record);
       emit({ kind: NativeEventKind.NativeJob, ...record });
     };
-    const argv = await jobArgv(recipe, directory, inputs, dirs.output, args.values);
     const controller = new AbortController();
     const signal = args.background ? controller.signal : AbortSignal.any([controller.signal, invocation.signal]);
     const active = { controller, done: Promise.resolve() };
@@ -698,17 +708,19 @@ export class PluginNativeServices {
       throw error;
     }
     const timeoutMs = args.background ? recipe.timeoutMs : Math.min(recipe.timeoutMs, NATIVE_JOB_TIMEOUT_MS);
-    active.done = this.#finishJob(
-      { ...recipe, timeoutMs },
-      status.path,
-      argv,
+    if (this.#stopped || invocation.signal.aborted) controller.abort();
+    const execution = {
+      recipe: { ...recipe, timeoutMs },
+      runtime,
       directory,
       root,
       dirs,
       record,
+      args,
+      binding,
       signal,
-      save,
-    );
+    };
+    active.done = this.#finishJob(execution, save);
     // The durable receipt owns the outcome; the initiating invocation is free to finish.
     if (args.background) {
       void active.done.catch(() => {});
@@ -717,21 +729,13 @@ export class PluginNativeServices {
     await active.done;
     return record;
   }
-  async #finishJob(
-    recipe: PluginNativeJob,
-    binary: string,
-    argv: string[],
-    directory: string,
-    root: string,
-    dirs: JobDirs,
-    record: PluginNativeResult,
-    signal: AbortSignal,
-    save: () => Promise<void>,
-  ): Promise<void> {
+  async #finishJob(execution: JobExecution, save: () => Promise<void>): Promise<void> {
+    const { record, signal, dirs } = execution;
     try {
-      await this.#execute(recipe, binary, argv, directory, root, dirs, record, signal);
+      await this.#prepareAndExecute(execution);
     } catch (e) {
-      record.state = signal.aborted ? NativeJobState.Cancelled : NativeJobState.Failed;
+      record.state = NativeJobState.Failed;
+      if (signal.aborted && !(e instanceof NativeCleanupError)) record.state = NativeJobState.Cancelled;
       record.reason = errorMessage(e);
     } finally {
       record.finishedAt = new Date().toISOString();
@@ -741,6 +745,28 @@ export class PluginNativeServices {
         this.#active.delete(dirs.jobDir);
       }
     }
+  }
+  async #prepareAndExecute(execution: JobExecution): Promise<void> {
+    const { recipe, runtime, directory, root, dirs, record, args, binding, signal } = execution;
+    signal.throwIfAborted();
+    const inputs = await resolveInputs(recipe, args.inputs, binding);
+    const status = await this.detect(runtime, root);
+    if (status.state !== NativeRuntimeState.Ready || !status.path) throw new Error(status.detail);
+    record.version = status.version;
+    // A script gets only the explicitly declared input files. Reading the entire project would
+    // also grant Python access to nested .env/private keys and race newly created secret files.
+    const identities: NonNullable<PluginNativeResult["inputs"]> = {};
+    for (const key of recipe.inputs) {
+      signal.throwIfAborted();
+      const staged = path.join(dirs.inputDir, key + path.extname(inputs[key]));
+      const sha256 = await stageInput(inputs[key], args.inputs[key], staged, binding, signal);
+      identities[key] = { file: args.inputs[key], sha256 };
+      inputs[key] = staged;
+    }
+    record.inputs = identities;
+    const argv = await jobArgv(recipe, directory, inputs, dirs.output, args.values);
+    signal.throwIfAborted();
+    await this.#execute(recipe, status.path, argv, directory, root, dirs, record, signal);
   }
   /** Run the confined process, then collect and deliver its declared outputs into the record. */
   async #execute(

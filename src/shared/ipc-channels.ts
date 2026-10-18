@@ -95,6 +95,8 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.skill": "pluginSkillText",
   "studio:plugins.list": "pluginsList",
   "studio:plugins.catalog": "pluginsCatalog",
+  "studio:plugins.native-jobs": "pluginNativeJobs",
+  "studio:plugins.cancel-native-job": "pluginCancelNativeJob",
   "studio:plugins.enable": "pluginEnable",
   "studio:plugins.remove": "pluginRemove",
   "studio:plugins.install": "pluginInstall",
@@ -341,6 +343,8 @@ export interface StudioInvokePayloads {
   "studio:plugins.skill": { id: string; name: string; file?: string };
   "studio:plugins.list": undefined;
   "studio:plugins.catalog": undefined;
+  "studio:plugins.native-jobs": { id: string };
+  "studio:plugins.cancel-native-job": { id: string; jobId: string };
   "studio:plugins.enable": { id: string; enabled: boolean };
   "studio:plugins.remove": { id: string };
   "studio:plugins.install": { id?: string };

@@ -153,6 +153,27 @@ test("foreground execution stays capped at five minutes", async (t) => {
   assert.equal(((await pending) as PluginNativeResult).state, NativeJobState.Cancelled);
 });
 
+test("background acknowledgement does not wait for a runtime probe", { timeout: 2000 }, async (t) => {
+  const f = await fixture(t);
+  const probing = deferred<void>();
+  f.service.detect = async () => {
+    await probing.promise;
+    return { state: NativeRuntimeState.Ready, path: "/worker", detail: "Ready" };
+  };
+  try {
+    const answer = (await f.call(PluginService.NativeRun, {
+      job: "make",
+      inputs: {},
+      values: {},
+      background: true,
+    })) as { id: string };
+    assert.match(answer.id, /^[a-f0-9-]{36}$/);
+  } finally {
+    probing.resolve();
+  }
+  await f.started.promise;
+});
+
 test("cancel respects plugin and project ownership, is idempotent, and stops only its job", async (t) => {
   const f = await fixture(t);
   const answer = (await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true })) as {
@@ -197,4 +218,33 @@ test("a restarted host marks running records interrupted without launching anyth
   assert.equal(result.state, NativeJobState.Interrupted);
   assert.match(result.reason ?? "", /not replayed/);
   assert.equal(JSON.parse(await readFile(path.join(directory, "job.json"), "utf8")).state, NativeJobState.Interrupted);
+});
+
+test("host shutdown cancels an independent background worker and waits for its record", async (t) => {
+  const f = await fixture(t);
+  const answer = (await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true })) as {
+    id: string;
+  };
+  const request = await f.started.promise;
+  const stopping = f.service.stop();
+  assert.equal(request.signal.aborted, true);
+  f.ended.resolve({ code: null, signal: "SIGKILL", stdout: "", stderr: "", reason: "cancelled", pid: null });
+  await stopping;
+  const result = (await f.call(PluginService.NativeResult, answer)) as PluginNativeResult;
+  assert.equal(result.state, NativeJobState.Cancelled);
+  assert.ok(result.finishedAt);
+});
+
+test("an invalid background flag and protected inputs cannot launch a worker", async (t) => {
+  const f = await fixture(t);
+  await assert.rejects(
+    f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: "yes" }),
+    /boolean/,
+  );
+  await assert.rejects(
+    f.call(PluginService.NativeRun, { job: "make", inputs: { secret: ".env" }, values: {}, background: true }),
+    /Unexpected native job inputs/,
+  );
+  assert.deepEqual(await f.service.jobs(f.storage), []);
+  assert.deepEqual(f.events, []);
 });

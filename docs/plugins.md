@@ -3153,8 +3153,13 @@ stages only declared project input files; the child receives no full-project rea
 the result and caps the worker at five minutes (or the recipe's shorter deadline).
 `native.run` with `background: true` returns `{id}` after persisting the running record, before
 the worker finishes. Its worker uses the manifest's deadline and survives the initiating tool
-call ending; poll `native.result` or `native.jobs`, and use `native.cancel({id})` to stop it.
+call ending, including runtime discovery and input staging; poll `native.result` or `native.jobs`,
+and use `native.cancel({id})` to stop it.
 Cancellation is restricted to the calling plugin and project and does not replay the job.
+The plugin page and install consent disclose each recipe's deadline and GPU use. The page shows
+host-drawn job cards with elapsed time and Cancel, which works without the backend responding.
+There is no additional native-job approval popup. Turning the plugin off, removing it or quitting
+Studio stops its workers; a running receipt found after restart becomes interrupted, never replayed.
 `maxOutputBytes` retains the last 1–256,000 bytes
 of each process log stream; it does not limit asset files. `maxAssetBytes` limits the combined
 declared generated files to 1–104,857,600 bytes. Delivery additionally enforces `assetLimits`.
@@ -3176,9 +3181,13 @@ shim that starts another program (`/usr/bin/python3`) is not followed: name the 
 session whose application check-in reaches LaunchServices, the quarantine resolver and TCC; opening
 other applications, the pasteboard, screen capture and the Dock stay refused. A job may fork, but `setsid` and `setpgid` are denied, so every descendant stays in
 the job's process group; on exit, timeout or cancel Studio kills that group and, while the job
-still runs, every descendant by parent id. A descendant `posix_spawn`ed into its own session whose
+still runs, every descendant by parent id. On timeout/cancel the process group is frozen before
+listing descendants, so this cleanup adds no worker compute time. A descendant `posix_spawn`ed into its own session whose
 parent has already exited is the known gap. The result is recorded once the job exits, after at
-most 2 s more for its pipes. Only declared regular output files reach the delivery directory,
+most 2 s more for its pipes. The worker timer stops at exit. Tree cleanup has its own ten-second
+budget; a timely worker exit and clean cleanup succeed even across the compute deadline.
+Cleanup failure is recorded as failure, including when an exited worker returned zero.
+Only declared regular output files reach the delivery directory,
 each opened without following links and checked by device and inode (`copyDeclaredOutput`): a
 link, a hard-linked file or a file swapped during delivery is refused. A pinned `.dmg` runtime is
 copied with its relative links kept (`copyRuntimeTree`; a link out of the runtime is refused) and

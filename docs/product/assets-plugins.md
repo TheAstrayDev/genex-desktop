@@ -39,6 +39,8 @@ The curated catalog (`plugins.genex.games`; reviewed releases in `genex-games/ge
 Genex and Local Blender as official; its installs require native-code trust
 ([procedure](../STUDIO-MARKETPLACE-RELEASE.md)).
 
+Native jobs show [time, GPU use and Cancel](../plugins.md#api-3-managed-native-services).
+
 ## Permissions and lifecycle
 
 Installation shows publisher and capabilities; new capabilities need confirmation. Game agents never
