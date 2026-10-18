@@ -1469,6 +1469,7 @@ export class StudioCore {
 
   async stop(): Promise<void> {
     this.#planReviews?.stop();
+    await this.#nativePlugins?.stop();
     // A pause appended before `start()` may have planned a resume: it, and the hold on the Mac
     // awake that it asked for, end with the core either way.
     this.#autoResume.dispose();

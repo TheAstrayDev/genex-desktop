@@ -1,4 +1,5 @@
 import type { PluginManifest, PluginNativeRuntime, PluginNativeJob, PluginNativeArg } from "../../shared/plugins.ts";
+import { NATIVE_BACKGROUND_TIMEOUT_MS } from "../../shared/plugins.ts";
 import { assertRelativePath } from "../paths.ts";
 import { PLUGIN_ID } from "../../shared/plugin-id.ts";
 /** Runtime, job and value names follow the plugin id rule. */
@@ -26,7 +27,7 @@ const NATIVE_MANIFEST_LIMITS = {
   valuePatternChars: 160,
   valueMaxLength: 1024,
   minTimeoutMs: 1000,
-  maxTimeoutMs: 300000,
+  maxTimeoutMs: NATIVE_BACKGROUND_TIMEOUT_MS,
   maxOutputBytes: 256000,
   maxAssetBytes: 100 * 1024 ** 2,
 } as const;
@@ -38,7 +39,7 @@ const MESSAGE = {
   InvalidInstall: "Invalid pinned native installation or missing trusted install action",
   InvalidRuntime: "Invalid native runtime",
   InvalidVersionPattern: "Invalid runtime version pattern",
-  TimeoutRange: (label: string) => `${label}: timeoutMs must be an integer from 1000 to 300000 milliseconds`,
+  TimeoutRange: (label: string) => `${label}: timeoutMs must be an integer from 1000 to ${L.maxTimeoutMs} milliseconds`,
   OutputLimit: (label: string) =>
     `${label}: maxOutputBytes is the retained process log limit and must be 1 to 256000 bytes; use maxAssetBytes for generated files`,
   AssetLimit: (label: string) => `${label}: maxAssetBytes must be 1 to 104857600 bytes across generated files`,

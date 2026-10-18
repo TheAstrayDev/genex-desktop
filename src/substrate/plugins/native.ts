@@ -21,6 +21,7 @@ import path from "node:path";
 import os from "node:os";
 import {
   NativeJobState,
+  NATIVE_JOB_TIMEOUT_MS,
   NativeRuntimeState,
   PluginService,
   type PluginManifest,
@@ -89,6 +90,7 @@ const MESSAGE = {
   UnknownRuntimeOperation: "Unknown runtime operation",
   InstallNeedsAction: "Runtime installation requires its trusted setup action",
   InvalidJobId: "Invalid job id",
+  InvalidBackground: "background must be a boolean",
   JobInterrupted: "Studio or plugin closed before job completion. Inspect existing files; the job was not replayed.",
   NeedsProject: "A native job requires an authorized project",
   UndeclaredRecipe: "Undeclared job recipe",
@@ -129,7 +131,7 @@ const isProtectedInputSegment = (segment: string) =>
 /** The state a finished native process leaves its job in. */
 function jobStateFor(result: { code: number | null; reason: string }): NativeJobState {
   if (result.reason === NativeEndReason.Cancelled) return NativeJobState.Cancelled;
-  return result.code === 0 ? NativeJobState.Completed : NativeJobState.Failed;
+  return result.code === 0 && result.reason === NativeEndReason.Exit ? NativeJobState.Completed : NativeJobState.Failed;
 }
 
 /**
@@ -445,10 +447,40 @@ export class PluginNativeServices {
   readonly protectedPaths: string[];
   #installing = new Map<string, Promise<PluginNativeStatus>>();
   #installControllers = new Map<string, AbortController>();
-  #active = new Set<string>();
-  constructor(studioData: string, protectedPaths: string[]) {
+  #active = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  readonly #runProcess: typeof runNativeProcess;
+  constructor(studioData: string, protectedPaths: string[], runProcess = runNativeProcess) {
     this.studioData = studioData;
     this.protectedPaths = protectedPaths;
+    this.#runProcess = runProcess;
+  }
+  /** Stop every owned worker before the host releases its sandbox. */
+  async stop(): Promise<void> {
+    const active = [...this.#active.values()];
+    for (const job of active) job.controller.abort();
+    await Promise.allSettled(active.map((job) => job.done));
+  }
+  /** Host-drawn plugin pages read the same durable records as the SDK. */
+  async jobs(root: string): Promise<PluginNativeResult[]> {
+    const jobs = path.join(root, "native-jobs");
+    await mkdir(jobs, { recursive: true, mode: 0o700 });
+    return this.#readJobs(jobs, PluginService.NativeJobs, {}, undefined) as Promise<PluginNativeResult[]>;
+  }
+  /** Cancel only a live job owned by this plugin root and, for SDK calls, this project. */
+  async cancelJob(root: string, id: string, project?: string): Promise<boolean> {
+    if (!idPattern.test(id)) throw new Error(MESSAGE.InvalidJobId);
+    const jobs = path.join(root, "native-jobs");
+    const binding = project === undefined ? undefined : { project, directory: "" };
+    const record = (await this.#readJobs(
+      jobs,
+      PluginService.NativeResult,
+      { id },
+      binding,
+    )) as PluginNativeResult | null;
+    const active = this.#active.get(path.join(jobs, id));
+    if (!record || record.state !== NativeJobState.Running || !active || active.controller.signal.aborted) return false;
+    active.controller.abort();
+    return true;
   }
   #candidate(raw: string, root: string) {
     const bases: Record<(typeof CANDIDATE_ROOTS)[number], () => string> = {
@@ -516,6 +548,7 @@ export class PluginNativeServices {
     await mkdir(jobs, { recursive: true, mode: 0o700 });
     if (method === PluginService.NativeJobs || method === PluginService.NativeResult)
       return this.#readJobs(jobs, method, args, binding);
+    if (method === PluginService.NativeCancel && binding) return this.cancelJob(root, args?.id, binding.project);
     if (method !== PluginService.NativeRun || !binding) throw new Error(MESSAGE.NeedsProject);
     return this.#run(manifest, directory, root, jobs, args, binding, invocation, emit);
   }
@@ -584,9 +617,11 @@ export class PluginNativeServices {
       ) as PluginNativeResult | null;
       if (!job) continue;
       if (binding && job.project !== binding.project) continue;
-      if (job.state === NativeJobState.Running && !this.#active.has(id)) {
+      if (job.state === NativeJobState.Running && !this.#active.has(path.join(jobs, id))) {
         job.state = NativeJobState.Interrupted;
         job.reason = MESSAGE.JobInterrupted;
+        job.finishedAt = new Date().toISOString();
+        await atomicWriteJson(path.join(jobs, id, "job.json"), job);
       }
       results.push(job);
     }
@@ -602,7 +637,9 @@ export class PluginNativeServices {
     binding: PluginBinding,
     invocation: NativeInvocation,
     emit: Emit,
-  ): Promise<PluginNativeResult> {
+  ): Promise<PluginNativeResult | { id: string }> {
+    if (args?.background !== undefined && typeof args.background !== "boolean")
+      throw new Error(MESSAGE.InvalidBackground);
     const recipe = manifest.nativeJobs?.find((j) => j.id === args?.job),
       runtime = manifest.nativeRuntimes?.find((r) => r.id === recipe?.runtime);
     if (!recipe || !runtime) throw new Error(MESSAGE.UndeclaredRecipe);
@@ -650,19 +687,60 @@ export class PluginNativeServices {
       emit({ kind: NativeEventKind.NativeJob, ...record });
     };
     const argv = await jobArgv(recipe, directory, inputs, dirs.output, args.values);
-    await save();
-    this.#active.add(id);
+    const controller = new AbortController();
+    const signal = args.background ? controller.signal : AbortSignal.any([controller.signal, invocation.signal]);
+    const active = { controller, done: Promise.resolve() };
+    this.#active.set(jobDir, active);
     try {
-      await this.#execute(recipe, status.path, argv, directory, root, dirs, record, invocation);
+      await save();
+    } catch (error) {
+      this.#active.delete(jobDir);
+      throw error;
+    }
+    const timeoutMs = args.background ? recipe.timeoutMs : Math.min(recipe.timeoutMs, NATIVE_JOB_TIMEOUT_MS);
+    active.done = this.#finishJob(
+      { ...recipe, timeoutMs },
+      status.path,
+      argv,
+      directory,
+      root,
+      dirs,
+      record,
+      signal,
+      save,
+    );
+    // The durable receipt owns the outcome; the initiating invocation is free to finish.
+    if (args.background) {
+      void active.done.catch(() => {});
+      return { id };
+    }
+    await active.done;
+    return record;
+  }
+  async #finishJob(
+    recipe: PluginNativeJob,
+    binary: string,
+    argv: string[],
+    directory: string,
+    root: string,
+    dirs: JobDirs,
+    record: PluginNativeResult,
+    signal: AbortSignal,
+    save: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await this.#execute(recipe, binary, argv, directory, root, dirs, record, signal);
     } catch (e) {
-      record.state = invocation.signal.aborted ? NativeJobState.Cancelled : NativeJobState.Failed;
+      record.state = signal.aborted ? NativeJobState.Cancelled : NativeJobState.Failed;
       record.reason = errorMessage(e);
     } finally {
-      this.#active.delete(id);
       record.finishedAt = new Date().toISOString();
-      await save();
+      try {
+        await save();
+      } finally {
+        this.#active.delete(dirs.jobDir);
+      }
     }
-    return record;
   }
   /** Run the confined process, then collect and deliver its declared outputs into the record. */
   async #execute(
@@ -673,10 +751,10 @@ export class PluginNativeServices {
     root: string,
     dirs: JobDirs,
     record: PluginNativeResult,
-    invocation: NativeInvocation,
+    signal: AbortSignal,
   ): Promise<void> {
     const binaryRoot = runtimeRoot(binary);
-    const result = await runNativeProcess({
+    const result = await this.#runProcess({
       binary,
       binaryRoot,
       args: argv,
@@ -691,7 +769,7 @@ export class PluginNativeServices {
         path.join(os.homedir(), ".genex"),
       ],
       gpu: recipe.gpu,
-      signal: invocation.signal,
+      signal,
       timeoutMs: recipe.timeoutMs,
       maxOutputBytes: recipe.maxOutputBytes,
     });

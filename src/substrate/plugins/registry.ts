@@ -37,6 +37,7 @@ import {
   PluginAccountState,
   PluginCapability,
   PluginChangeReason,
+  NATIVE_JOB_TIMEOUT_MS,
   PluginHealth,
   PluginService,
   PluginSourceKind,
@@ -1361,7 +1362,9 @@ export class PluginRegistry {
   callCeilingOf(agentName: string): number {
     const [id = ""] = agentName.split("__");
     const p = this.#installed.get(id);
-    const nativeJobTimeouts = (p?.manifest.nativeJobs ?? []).map((j) => j.timeoutMs + NATIVE_JOB_MARGIN_MS);
+    const nativeJobTimeouts = (p?.manifest.nativeJobs ?? []).map(
+      (j) => Math.min(j.timeoutMs, NATIVE_JOB_TIMEOUT_MS) + NATIVE_JOB_MARGIN_MS,
+    );
     return Math.max(PLUGIN_CALL_TIMEOUT_MS, ...nativeJobTimeouts);
   }
   /**
@@ -1934,7 +1937,9 @@ export class PluginRegistry {
         this.#active(id);
         return this.#runHostTool(id, host, args, binding, signal);
       };
-    const nativeJobTimeouts = (p.manifest.nativeJobs ?? []).map((j) => j.timeoutMs + NATIVE_JOB_MARGIN_MS);
+    const nativeJobTimeouts = (p.manifest.nativeJobs ?? []).map(
+      (j) => Math.min(j.timeoutMs, NATIVE_JOB_TIMEOUT_MS) + NATIVE_JOB_MARGIN_MS,
+    );
     const ceiling = Math.max(PLUGIN_CALL_TIMEOUT_MS, timeoutMs, ...nativeJobTimeouts);
     // The person's edit on the card (`confirmationInput`) is the call's value for that parameter.
     const parameter = declaration.confirmationInput?.parameter;

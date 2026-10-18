@@ -6,6 +6,12 @@ import type { HookContext, PluginHook, PluginLock } from "./plugin-hooks.ts";
 import { ENGINE_FACT, type FactRule, type GameKind, scopeReaches } from "./project-facts.ts";
 import type { WorkerIsolation } from "./workers.ts";
 import type { CaptureSource, StillExposure, StillMimeType } from "./preview-contract.ts";
+import { MINUTE_MS } from "./duration.ts";
+
+/** Foreground native calls retain the five-minute limit. */
+export const NATIVE_JOB_TIMEOUT_MS = 5 * MINUTE_MS;
+/** Every background recipe has the same maximum worker budget. */
+export const NATIVE_BACKGROUND_TIMEOUT_MS = 35 * MINUTE_MS;
 
 /** Where a plugin's native runtime stands on this Mac (`PluginNativeStatus.state`). */
 export const NativeRuntimeState = {
@@ -1020,6 +1026,7 @@ export const PluginService = {
   NativeRun: "native.run",
   NativeJobs: "native.jobs",
   NativeResult: "native.result",
+  NativeCancel: "native.cancel",
   RuntimeDetect: "runtime.detect",
   RuntimeInstall: "runtime.install",
   RuntimeInstallation: "runtime.installation",

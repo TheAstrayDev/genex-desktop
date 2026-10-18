@@ -3149,7 +3149,13 @@ URL or installation action: either way the manifest's pinned one is installed.
 `nativeJobs` declares fixed argument arrays with package/input/output/value bindings, validated
 value patterns, input/output names, deadline, byte limits and optional GPU access. `native.run`
 stages only declared project input files; the child receives no full-project read grant.
-`timeoutMs` is 1,000–300,000 milliseconds. `maxOutputBytes` retains the last 1–256,000 bytes
+`timeoutMs` is 1,000–2,100,000 milliseconds (35 minutes). A normal `native.run` still waits for
+the result and caps the worker at five minutes (or the recipe's shorter deadline).
+`native.run` with `background: true` returns `{id}` after persisting the running record, before
+the worker finishes. Its worker uses the manifest's deadline and survives the initiating tool
+call ending; poll `native.result` or `native.jobs`, and use `native.cancel({id})` to stop it.
+Cancellation is restricted to the calling plugin and project and does not replay the job.
+`maxOutputBytes` retains the last 1–256,000 bytes
 of each process log stream; it does not limit asset files. `maxAssetBytes` limits the combined
 declared generated files to 1–104,857,600 bytes. Delivery additionally enforces `assetLimits`.
 Set `gpu: true` for GPU rendering, including Blender EEVEE; it permits GPU services and the
