@@ -1,5 +1,6 @@
 /** Render the real host cards with disposable records; no provider or native worker is started. */
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,6 +10,7 @@ import { fixtureElectronArgs, fixtureElectronEnv, resolveElectron } from "../../
 import { removeTree } from "../helpers/tmp.ts";
 
 const root = process.cwd();
+execFileSync(process.execPath, ["scripts/build.mjs"], { cwd: root, stdio: "inherit" });
 const evidence =
   process.env.GITHUB_ACTIONS && process.platform === "win32"
     ? ".studio-dev/evidence/windows-tests"

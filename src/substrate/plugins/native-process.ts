@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { StudioPlatform } from "../../shared/boot.ts";
+import { NATIVE_JOB_CLEANUP_TIMEOUT_MS } from "../../shared/plugins.ts";
 import { killProcessTree } from "../process-tree.ts";
 const quote = (s: string) => JSON.stringify(s);
 const exec = promisify(execFile);
@@ -40,8 +41,6 @@ const GPU_DENIED_MACH_SERVICES = [
 ];
 /** How long a job's pipes may stay open after it exited before the result is recorded anyway. */
 const CLOSE_GRACE_MS = 2 * SECOND_MS;
-/** Cleanup never extends worker compute; failure to finish it is recorded separately. */
-const CLEANUP_TIMEOUT_MS = 10 * SECOND_MS;
 /** How long a quick system probe (`plutil`, `getconf`, `ps`) may take. */
 const PROBE_TIMEOUT_MS = 5 * SECOND_MS;
 /** The process table can be long on a busy Mac. */
@@ -447,7 +446,7 @@ export function superviseNativeJob(
   const beginCleanup = () => {
     clearTimeout(timer);
     p.signal.removeEventListener("abort", abort);
-    cleanupTimer ??= setTimeout(() => finish(false), CLEANUP_TIMEOUT_MS);
+    cleanupTimer ??= setTimeout(() => finish(false), NATIVE_JOB_CLEANUP_TIMEOUT_MS);
     killing ??= killAll();
     return killing;
   };

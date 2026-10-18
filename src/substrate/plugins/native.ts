@@ -464,6 +464,8 @@ async function extractTarball(archive: string, stage: string, signal: AbortSigna
 export class PluginNativeServices {
   readonly studioData: string;
   readonly protectedPaths: string[];
+  /** Keep the executing plugin's package available until its host-owned job finishes. */
+  hold: ((id: string) => () => Promise<void>) | undefined;
   #installing = new Map<string, Promise<PluginNativeStatus>>();
   #installControllers = new Map<string, AbortController>();
   #active = new Map<string, { controller: AbortController; done: Promise<void> }>();
@@ -565,15 +567,21 @@ export class PluginNativeServices {
     invocation: NativeInvocation,
     emit: Emit,
   ): Promise<unknown> {
-    await mkdir(root, { recursive: true, mode: 0o700 });
-    if (method.startsWith("runtime.")) return this.#runtimeCall(manifest, root, method, args, invocation, emit);
-    const jobs = path.join(root, "native-jobs");
-    await mkdir(jobs, { recursive: true, mode: 0o700 });
-    if (method === PluginService.NativeJobs || method === PluginService.NativeResult)
-      return this.#readJobs(jobs, method, args, binding);
-    if (method === PluginService.NativeCancel && binding) return this.cancelJob(root, args?.id, binding.project);
-    if (method !== PluginService.NativeRun || !binding) throw new Error(MESSAGE.NeedsProject);
-    return this.#run(manifest, directory, root, jobs, args, binding, invocation, emit);
+    const release = method === PluginService.NativeRun ? this.hold?.(manifest.id) : undefined;
+    try {
+      await mkdir(root, { recursive: true, mode: 0o700 });
+      if (method.startsWith("runtime.")) return this.#runtimeCall(manifest, root, method, args, invocation, emit);
+      const jobs = path.join(root, "native-jobs");
+      await mkdir(jobs, { recursive: true, mode: 0o700 });
+      if (method === PluginService.NativeJobs || method === PluginService.NativeResult)
+        return this.#readJobs(jobs, method, args, binding);
+      if (method === PluginService.NativeCancel && binding) return this.cancelJob(root, args?.id, binding.project);
+      if (method !== PluginService.NativeRun || !binding) throw new Error(MESSAGE.NeedsProject);
+      return await this.#run(manifest, directory, root, jobs, args, binding, invocation, emit, release);
+    } catch (error) {
+      await release?.();
+      throw error;
+    }
   }
   async #runtimeCall(
     manifest: PluginManifest,
@@ -660,6 +668,7 @@ export class PluginNativeServices {
     binding: PluginBinding,
     invocation: NativeInvocation,
     emit: Emit,
+    release?: () => Promise<void>,
   ): Promise<PluginNativeResult | { id: string }> {
     if (this.#stopped) throw new Error(MESSAGE.JobInterrupted);
     if (args?.background !== undefined && typeof args.background !== "boolean")
@@ -720,7 +729,7 @@ export class PluginNativeServices {
       binding,
       signal,
     };
-    active.done = this.#finishJob(execution, save);
+    active.done = this.#finishJob(execution, save, release);
     // The durable receipt owns the outcome; the initiating invocation is free to finish.
     if (args.background) {
       void active.done.catch(() => {});
@@ -729,7 +738,7 @@ export class PluginNativeServices {
     await active.done;
     return record;
   }
-  async #finishJob(execution: JobExecution, save: () => Promise<void>): Promise<void> {
+  async #finishJob(execution: JobExecution, save: () => Promise<void>, release?: () => Promise<void>): Promise<void> {
     const { record, signal, dirs } = execution;
     try {
       await this.#prepareAndExecute(execution);
@@ -743,6 +752,7 @@ export class PluginNativeServices {
         await save();
       } finally {
         this.#active.delete(dirs.jobDir);
+        await release?.();
       }
     }
   }

@@ -1049,6 +1049,7 @@ export class StudioCore {
     );
     const nativePlugins = new PluginNativeServices(this.options.paths.userData, [this.layout.secrets]);
     this.#nativePlugins = nativePlugins;
+    nativePlugins.hold = (id) => this.plugins.lease([id]);
     this.plugins.nativeService = (manifest, directory, method, args, binding, invocation) =>
       nativePlugins.call(
         manifest,

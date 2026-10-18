@@ -174,6 +174,25 @@ test("background acknowledgement does not wait for a runtime probe", { timeout: 
   await f.started.promise;
 });
 
+test("a background job holds its plugin package until completion, including after the tool returns", async (t) => {
+  const f = await fixture(t);
+  const held: string[] = [];
+  let released = 0;
+  f.service.hold = (id) => {
+    held.push(id);
+    return async () => {
+      released++;
+    };
+  };
+  await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true });
+  await f.started.promise;
+  assert.deepEqual(held, [f.spec.id]);
+  assert.equal(released, 0);
+  f.ended.resolve({ code: null, signal: "SIGKILL", stdout: "", stderr: "", reason: "cancelled", pid: null });
+  await f.service.stop();
+  assert.equal(released, 1);
+});
+
 test("cancel respects plugin and project ownership, is idempotent, and stops only its job", async (t) => {
   const f = await fixture(t);
   const answer = (await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true })) as {
