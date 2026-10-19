@@ -71,6 +71,8 @@ export { shortModelName };
 export type { ModelChoice, RoleGroup, RoleRecord, RoleRow };
 export interface AutopilotSend {
   reviewPlan?: boolean;
+  /** Keep building's own send: the build goes on, whatever the message reads like (`AutopilotCommission.keepBuilding`). */
+  keepBuilding?: boolean;
   roles?: RoleRecord;
   hours: number | null;
   frames: PickedFrame[];
@@ -101,6 +103,11 @@ export interface PromptBarHandle {
   openModelMenu(): void;
   /** Put words in the prompt when it has none yet (the first-launch idea), cursor after them. */
   compose(text: string): void;
+  /**
+   * Keep building: switch this chat's Loop on as Mode would, with its kept hours, and answer what a
+   * send now carries: the Loop's commission where Mode could start one, else none (`composerExtras`).
+   */
+  loopOn(): ComposerExtras;
 }
 
 /**
@@ -213,6 +220,18 @@ function useMention(
     setMention(null);
     placeCaret(mention.start + insert.length);
   };
+  /** The caret goes back to the end of the words after the @, so typing goes on there. */
+  const focusQuery = (): void => {
+    if (mention) placeCaret(mention.end);
+  };
+  /** The words after the @ are emptied; the @ stays and the picker with it. */
+  const clearQuery = (): void => {
+    if (!mention) return;
+    const end = mention.start + 1;
+    setDraft(draft.slice(0, end) + draft.slice(mention.end));
+    setMention({ query: "", start: mention.start, end });
+    placeCaret(end);
+  };
   /** The draft becomes this tag alone, ready for the words after it (a pick from the / list). */
   const startWith = (doc: MentionDoc): void => {
     const value = `@${doc.handle} `;
@@ -244,6 +263,8 @@ function useMention(
     mentionListId,
     findMention,
     insertMention,
+    focusQuery,
+    clearQuery,
     insertDoc,
     startWith,
     tagged,
@@ -937,7 +958,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   const addMenuRef = useRef<AddMenuHandle>(null);
   const commandMenuRef = useRef<AddMenuHandle>(null);
   const modelMenuRef = useRef<ModelMenuHandle>(null);
-  usePromptHandle(props.ref, { inputRef, modelMenuRef, draft, setDraft });
+  usePromptHandle(props.ref, { inputRef, modelMenuRef, draft, setDraft, loop, gameMode });
   const mentions = useMention(gameMode, draft, setDraft, inputRef);
   const commands = useComposerCommands(draft, setDraft);
   // A reply about the build is a note to it, delivered at once, not a message waiting in line.
@@ -1041,10 +1062,14 @@ function usePromptHandle(
     modelMenuRef: RefObject<ModelMenuHandle | null>;
     draft: string;
     setDraft: (text: string) => void;
+    loop: ReturnType<typeof useLoopSettings>;
+    gameMode: boolean;
   },
 ): void {
   const composeNow = useRef({ draft: input.draft, setDraft: input.setDraft });
   composeNow.current = { draft: input.draft, setDraft: input.setDraft };
+  const loopNow = useRef({ loop: input.loop, gameMode: input.gameMode });
+  loopNow.current = { loop: input.loop, gameMode: input.gameMode };
   const { inputRef, modelMenuRef } = input;
   useImperativeHandle(
     ref,
@@ -1058,6 +1083,14 @@ function usePromptHandle(
           element?.focus();
           element?.setSelectionRange(element.value.length, element.value.length);
         });
+      },
+      loopOn: () => {
+        const { loop, gameMode } = loopNow.current;
+        const on = { on: true, hours: loop.setting.hours };
+        const turnsOn = gameMode && loop.view.editable && !loop.view.loopUnavailable;
+        if (turnsOn) loop.chooseLoop(on);
+        const view = turnsOn ? { ...loop.view, shown: on } : loop.view;
+        return composerExtras({ gameMode, view, reviewPlan: false, frames: [] });
       },
     }),
     [],
@@ -1170,6 +1203,8 @@ function AttachControl({
         listId={mentions.mentionListId}
         onMention={mentions.insertMention}
         onMentionClose={() => mentions.setMention(null)}
+        onMentionFocus={mentions.focusQuery}
+        onMentionClear={mentions.clearQuery}
         onActiveOption={mentions.setMentionOption}
         tagging={{ tagged: mentions.taggedNow, atCap: mentions.atCap, onPick: mentions.insertDoc, side: mentionSide }}
       />

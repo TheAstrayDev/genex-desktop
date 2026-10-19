@@ -160,23 +160,23 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
   [`src/main/ipc-handle.ts`](../../src/main/ipc-handle.ts). Plugin, MCP, terminal and permission
   channels accept only the main window's top-level frame. Follow the [IPC recipe](recipes.md#ipc-channel).
 - **Boot state.** The renderer first calls `bootState` (`studio:boot`, registered before any core;
-  contract in [`src/shared/boot.ts`](../../src/shared/boot.ts)): the platform, which it sets as
-  `data-platform` on the root, and the phase. When `ProcessSandbox` raises
-  `SandboxUnavailableError` ([`src/substrate/sandbox-unavailable.ts`](../../src/substrate/sandbox-unavailable.ts):
-  unsupported platform, missing Linux tools found by a PATH lookup, Windows `not_provisioned` or
-  `wfp_fence_inactive` by code, Linux `isolation-blocked` from
-  [`linux-isolation.ts`](../../src/substrate/linux-isolation.ts)), main holds the boot gate
-  ([`src/main/boot-gate.ts`](../../src/main/boot-gate.ts)) and opens a core-less setup window
-  instead of exiting; `studio:boot.retry` recreates the core and, once started, replaces
-  that window with the studio. On Windows, `studio:boot.setup` (native) first installs the sandbox
-  with the unpacked srt-win
-  ([`src/substrate/windows-sandbox-setup.ts`](../../src/substrate/windows-sandbox-setup.ts), one
-  UAC prompt) and retries; a dismissed prompt changes nothing. Other startup failures keep the error dialog and exit; smoke
-  and developer launches still fail (the `sandbox-setup` fixture shows the screen over a ready
-  core). The window's title bar comes from
+  contract in [`src/shared/boot.ts`](../../src/shared/boot.ts)): the platform (`data-platform` on
+  the root) and the phase. When `ProcessSandbox` raises `SandboxUnavailableError`
+  ([`src/substrate/sandbox-unavailable.ts`](../../src/substrate/sandbox-unavailable.ts):
+  unsupported platform, missing Linux tools, Windows `not_provisioned` or `wfp_fence_inactive`,
+  Linux `isolation-blocked` from [`linux-isolation.ts`](../../src/substrate/linux-isolation.ts)),
+  main holds the boot gate ([`src/main/boot-gate.ts`](../../src/main/boot-gate.ts)) on a core-less
+  setup window; `studio:boot.retry` recreates the core, whose window replaces it. Windows runs
+  `studio:boot.setup` (native,
+  [`src/substrate/windows-sandbox-setup.ts`](../../src/substrate/windows-sandbox-setup.ts), one
+  UAC prompt) by itself; failures offer `studio:boot.report` (native). Windows opens that window
+  before the core (phase `starting`, stepped by boot marks). A harness that would not start, a
+  core failing there, or a start past three minutes (Try again relaunches) holds the gate on
+  `failed`: Try again, the report, Quit (`studio:boot.quit`). Other failures show the error
+  dialog and exit; smoke and developer launches fail. The window's title bar comes from
   [`src/main/window-chrome.ts`](../../src/main/window-chrome.ts): `hiddenInset` on macOS
-  (lights on the headers' line), a themed 48 px `titleBarOverlay` on Windows and Linux
-  (`studio:window.controls`).
+  (lights centred on headers), a themed 48 px `titleBarOverlay` on Windows (see-through on
+  Home) and Linux (`studio:window.controls`).
 - [`src/main/studio-core.ts`](../../src/main/studio-core.ts) keeps the core's lifecycle, the event
   log's front door, settings and public methods. It assembles the EventStore, snapshots,
   `GameWorkspaces`, the engine registry, the preview pool and the `HarnessHost`.

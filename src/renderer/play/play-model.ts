@@ -326,10 +326,10 @@ function withHeader(shown: ViewerShown, event: PlayViewerEvent): ViewerShown {
 }
 
 /**
- * Whether the game's native view lies over the window under the header: once it plays. Not while it
- * loads (the view is not shown yet), once it failed (main hides it), nor with no game open.
+ * Whether the viewer's native views lie over the window: whenever a game is open, since the bar's
+ * layer lies over its top edge from the cover on, and the game's own view under it once it plays.
  */
-export const nativeViewsUp = (viewer: ViewerShown | null): boolean => viewer?.phase === PlayViewerPhase.Playing;
+export const nativeViewsUp = (viewer: ViewerShown | null): boolean => viewer !== null;
 
 /**
  * Whether Esc in the app leaves the viewer: while the cover or the failure is up. Never once the game
@@ -354,12 +354,15 @@ const NOTE_PLACE = {
 } as const satisfies Record<PlayNote, { control: PlayControl; look: NoteLook }>;
 
 /** The note `control`'s button says now in place of its label, if the header's note is about it. */
-export function noteOn(bar: PlayBarState | undefined, control: PlayControl): { note: PlayNote; look: NoteLook } | null {
+export function noteOn(
+  bar: PlayBarState | null | undefined,
+  control: PlayControl,
+): { note: PlayNote; look: NoteLook } | null {
   const note = bar?.note;
   if (!note || NOTE_PLACE[note].control !== control) return null;
   return { note, look: NOTE_PLACE[note].look };
 }
 
 /** Whether the header just went from not liked to liked: the player's own like, worth a burst. */
-export const justLiked = (before: PlayBarState | undefined, after: PlayBarState | undefined): boolean =>
+export const justLiked = (before: PlayBarState | null | undefined, after: PlayBarState | null | undefined): boolean =>
   before?.liked === false && after?.liked === true;

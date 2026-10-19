@@ -31,7 +31,7 @@ import type { AgentWentAheadPayload } from "./plugin-hooks.ts";
 import type { ChatJudgeResultPayload } from "./chat-judge.ts";
 import type { WorkerFinishedPayload, WorkerStartedPayload } from "./workers.ts";
 import type { ObserverCapturePayload } from "./observers.ts";
-import type { FinishCheckPayload } from "./finish-check.ts";
+import type { FinishCheckPayload, StillToFix } from "./finish-check.ts";
 
 /**
  * Every custom event name in the studio's own code. A few are only read: names older versions
@@ -328,6 +328,8 @@ export interface RunFinishedPayload extends RunScope {
   stoppedBecause?: string;
   /** What a Loop's reviewer found not done at its last no, one line each (a run that ended without its yes). */
   notDone?: string[];
+  /** A Loop's close without its yes, not a pause: its result card's lists, why it stopped, its hours (`stillToFixOf`). */
+  stillToFix?: StillToFix;
   executionStatus?: string;
   iterations?: unknown[];
   landed?: boolean;

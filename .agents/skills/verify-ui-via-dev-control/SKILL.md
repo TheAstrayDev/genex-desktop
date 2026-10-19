@@ -42,7 +42,7 @@ npm run studio:dev -- clean --profile ui-check                   # disposable st
 ```
 
 Pick the fixture that already shows the surface (`app-basics`, `chat-history`, `run-controls`,
-`sidebar`, `build-history`, `game-surface`, ...). Changing source makes the session stale:
+`sidebar`, `build-history`, `game-surface`, `asset-library`, ...). Changing source makes the session stale:
 `restart --profile ui-check` rebuilds with the same fixture. `start --reuse` reopens a stopped one.
 
 ## Requests
@@ -61,6 +61,7 @@ Templates (one per request; `--request FILE` also works):
 
 ```json
 {"method":"click","params":{"selector":"button[aria-label=\"Hide sidebar\"]"}}
+{"method":"click","params":{"selector":"[data-asset-card=\"assets/a.glb\"] button","modifiers":["Meta"]}}
 {"method":"key","params":{"surface":"desktop","key":"Enter","code":"Enter"}}
 {"method":"select","params":{"selector":"select[aria-label=\"Build history\"]","value":"<runId from snapshot>"}}
 {"method":"scroll","params":{"surface":"desktop","deltaX":0,"deltaY":600,"selector":"[data-chat-scroll]"}}
@@ -68,6 +69,9 @@ Templates (one per request; `--request FILE` also works):
 {"method":"game.input","params":{"actions":[{"type":"tap","keys":["ArrowRight"]},{"type":"wait","ms":300}]}}
 {"method":"game.state","params":{}}
 ```
+
+A fixture's Genex account signs in with `STUDIO_FIXTURE_GENEX_ACCOUNT=1` (the full account; `new`,
+`quiet`, `fresh` are others); `asset-library` signs in by itself.
 
 Hooks for the controls an unattended operator presses: `[data-run-resume="<runId>"]` (Resume on
 the result card and on the chat's paused line), `[data-onboarding-action="next|skip|start"]` (the

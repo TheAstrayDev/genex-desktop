@@ -17,6 +17,9 @@ licenses and terms of included third-party software.
 - Electron supplies its own license and Chromium notices.
 - On macOS, cua-driver (MIT) keeps its license and cua's notices under `dist/resources/cua-driver`
   ([Vendored Cua Driver](#vendored-cua-driver-cua-driver)).
+- On Windows, Git for Windows (GPL-2.0 and its components' licenses) keeps its `LICENSE.txt` and
+  `usr/share/licenses` under `resources/git`
+  ([Bundled Git for Windows](#bundled-git-for-windows)).
 - The TypeScript 7 compiler (Apache-2.0), `@types/node` and `undici-types` (MIT) that the
   self-edit type gate runs keep their license and notice files under `dist/resources/tsc`.
 - The Genex asset CLI (`@genex-ai/cli-demo`, MIT) and its dependencies keep their license files
@@ -38,9 +41,11 @@ licenses and terms of included third-party software.
   a ring to identify Unreal Engine, which the Unreal plugin runs. Unreal and Unreal Engine are
   trademarks or registered trademarks of Epic Games, Inc. in the United States and elsewhere.
   Genex is not affiliated with or endorsed by Epic Games.
-- The Unity plugin uses a generic icon and names Unity only to identify it. Unity is a trademark
-  or registered trademark of Unity Technologies or its affiliates in the U.S. and elsewhere.
-  Genex is not affiliated with or endorsed by Unity Technologies.
+- `src/plugins/unity/icon.svg`, the `unity` glyph in `src/renderer/ui/icons.tsx` and the project
+  tile in `src/plugins/unity/panel.html` show the Unity logo, unaltered (its path from Simple Icons
+  13.21.0, CC0-1.0), only to identify Unity, which the Unity plugin runs. Unity and the Unity logo
+  are trademarks or registered trademarks of Unity Technologies or its affiliates in the U.S. and
+  elsewhere. Genex is not affiliated with or endorsed by Unity Technologies.
 
 ## Routed tool marks
 
@@ -110,6 +115,17 @@ executable from cua's release, thinned to the app's architecture and signed with
 (code derived from trope-cua, Interface-Agent, yabai, QuickJS-ng, rquickjs and T3 Code, all MIT)
 ship beside it as `LICENSE.md` and `THIRD_PARTY_NOTICES.md`, copied from `build/cua-driver/`. The
 bundled copy runs with cua's telemetry and update check turned off.
+
+## Bundled Git for Windows
+
+The Windows app ships Git for Windows 2.56.0.windows.2, the portable edition from
+[git-for-windows/git](https://github.com/git-for-windows/git), as `resources/git` beside the app:
+Git (GPL-2.0) and the MSYS2 and MinGW-w64 programs and libraries it is built with, each under its
+own license. Its `LICENSE.txt` and the license files in `usr/share/licenses` ship unchanged with
+it. The copy is the release's own files with its documentation, graphical tools, Vim and Git
+Credential Manager left out (`scripts/vendor-git-for-windows.ts`); nothing in it is modified. The
+source of every part is published with that release on GitHub and in the MSYS2 and Git for Windows
+package repositories it names.
 
 ## Vendored Genex embed SDK (@genex-ai/embed-sdk)
 

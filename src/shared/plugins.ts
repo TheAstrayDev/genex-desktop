@@ -395,7 +395,17 @@ export type PluginToolbarTarget =
   | { kind: "action"; name: string; args?: Record<string, PluginScalar> }
   | { kind: "panel"; id: string };
 /** Host icons a toolbar item may name instead of drawing its own glyph. */
-export const TOOLBAR_ICON_NAMES = ["globe", "export", "play", "image", "box", "boxes", "unreal", "godot"] as const;
+export const TOOLBAR_ICON_NAMES = [
+  "globe",
+  "export",
+  "play",
+  "image",
+  "box",
+  "boxes",
+  "unreal",
+  "godot",
+  "unity",
+] as const;
 export type ToolbarIconName = (typeof TOOLBAR_ICON_NAMES)[number];
 export const isToolbarIconName = (value: unknown): value is ToolbarIconName =>
   (TOOLBAR_ICON_NAMES as readonly unknown[]).includes(value);

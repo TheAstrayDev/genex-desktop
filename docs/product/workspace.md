@@ -28,8 +28,8 @@ idea.
 
 Then a Genex plugin card offers **Connect Genex plugin** once.
 
-A sandbox that cannot start opens **Set up the protected workspace**: what's missing or blocked,
-commands to copy, Retry.
+A sandbox that cannot start opens **Set up the protected workspace**; Windows needs one
+administrator prompt.
 
 ## Main actions
 

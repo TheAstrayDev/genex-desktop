@@ -1,3 +1,4 @@
+import type { KeepBuildingTap } from "../keep-building.ts";
 import { gridTransform } from "../canvas-view.ts";
 import { PerformanceComponent, PerformanceMarkName } from "../../shared/performance.ts";
 import { markPerformance, PerformanceBoundary } from "../performance.tsx";
@@ -38,6 +39,8 @@ import { leadFrameOf } from "../state/agent-screens.ts";
 import { useAgentScreens } from "../state/hooks.ts";
 import { GraphSelection, isPartSelection, partOf, partSelection } from "./inspector/selection.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
+import { keyTakenElsewhere } from "./keyboard.ts";
+import { barPlay } from "./run-graph/bar-shape.ts";
 import { BuildStatus, type BuildTabs, PlayButton, ZoomPill } from "./run-graph/chrome.tsx";
 import { GateButton, GateTip, gateWords } from "./run-graph/gates.tsx";
 import {
@@ -67,6 +70,8 @@ interface Props {
   onShowAsset?: (jobId: string) => void;
   /** Follow up in chat: the composer takes a chip naming the node; null when there is no chat to reply in. */
   onReply: ((reply: Reply) => void) | null;
+  /** Keep building on what the run left, in the chat that owns it; null when there is no chat. */
+  onKeepBuilding?: KeepBuildingTap | null;
   /** The chat's builds, as the bar's tabs, and the one on show. */
   tabs?: BuildTabs | null;
   /** The stage's toast channel: this panel's own Play/Make it live refuse for ordinary reasons. */
@@ -97,12 +102,6 @@ const EDGE: Record<string, { stroke: string; strokeDasharray?: string; strokeLin
 function zoomLevel(k: number): "far" | "mid" | "near" {
   if (k < FAR) return "far";
   return k >= NEAR ? "near" : "mid";
-}
-
-/** Whether a key press landed in a field that owns its own keys. */
-function typingIn(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 }
 
 /**
@@ -170,7 +169,7 @@ function useGraphKeys(overlays: Overlays, fitAll: () => void, step: (dir: number
       step(dir);
     };
     const onKey = (event: KeyboardEvent): void => {
-      if (typingIn(event.target)) return;
+      if (keyTakenElsewhere(event)) return;
       if (event.key === "Escape") {
         // One press, one dismissal: what this panel closes must not also reach the chat behind it.
         if (closeTopmost()) event.stopPropagation();
@@ -278,6 +277,7 @@ export const RunGraph = memo(function RunGraph({
   graph: suppliedGraph,
   project,
   onReply,
+  onKeepBuilding = null,
   tabs = null,
   onNotice,
   onShowLive,
@@ -306,6 +306,7 @@ export const RunGraph = memo(function RunGraph({
   useGraphKeys(overlays, camera.fitAll, step);
   const actions = useCanvasActions(overlays, camera.moved);
   const { hasBuild, play, openJob } = useBuildActions(project, model, { onShowLive, onShowAsset, onNotice });
+  const playBar = barPlay(hasBuild, play, onShowLive);
 
   // Keep the viewport mounted for measurements/listeners while hiding non-authoritative fallback totals.
   return (
@@ -320,8 +321,8 @@ export const RunGraph = memo(function RunGraph({
           model={model}
           tabs={tabs}
           action={
-            hasBuild ? (
-              <PlayButton quiet={graph.active} label={graph.active ? "Play latest" : "Play"} onPlay={play} />
+            playBar ? (
+              <PlayButton quiet={graph.active} label={graph.active ? "Play latest" : "Play"} onPlay={playBar} />
             ) : null
           }
         />
@@ -362,6 +363,7 @@ export const RunGraph = memo(function RunGraph({
               onStep={step}
               onOpenJob={openJob}
               onReply={onReply}
+              onKeepBuilding={onKeepBuilding}
               onNotice={onNotice}
               onPlay={hasBuild ? play : null}
             />
@@ -386,6 +388,7 @@ function SelectedPanel({
   onStep,
   onOpenJob,
   onReply,
+  onKeepBuilding,
   onNotice,
   onPlay,
 }: {
@@ -399,6 +402,7 @@ function SelectedPanel({
   onStep: (dir: number) => void;
   onOpenJob: (job: AssetInfo) => void;
   onReply: Props["onReply"];
+  onKeepBuilding: KeepBuildingTap | null;
   onNotice: Props["onNotice"];
   onPlay: (() => Promise<void> | void) | null;
 }): JSX.Element {
@@ -428,6 +432,7 @@ function SelectedPanel({
       onLight={(items, index) => overlays.setLight({ items, index })}
       onOpenJob={onOpenJob}
       onReply={onReply}
+      onKeepBuilding={onKeepBuilding}
       onNotice={onNotice}
       onPlay={onPlay}
     />

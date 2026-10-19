@@ -65,6 +65,7 @@ const OFFLINE_SOURCES: MentionSources = {
   me: async () => null,
   clone: () => Promise.reject(new Error("offline")),
   assetManifest: () => Promise.reject(new Error("offline")),
+  addFromLibrary: () => Promise.reject(new Error("offline")),
 };
 
 /** Which build `show_build` and `land_build` mean when the coordinator names none: the run's own. */
@@ -198,6 +199,15 @@ function chatSteers(events: readonly EventEnvelope[]): AnyCustomPayload[] {
   return payloadsOf(events, CustomEvent.RunSteering).filter((steer) => steer.how !== SteerDelivery.Lead);
 }
 
+/** A message's pictures as saved in its game: every file they are, and the ones it added. */
+interface SavedPictures {
+  files: string[];
+  added: string[];
+}
+
+/** No pictures saved: none sent, no game to save them in, or the save failed. */
+const NO_PICTURES: SavedPictures = Object.freeze({ files: [], added: [] }) as SavedPictures;
+
 /** Does a game thread's next message go to a plan review first? */
 function needsPlanReview(options: ComposerSendOptions, waiting: PlanReview | undefined): boolean {
   const reviewOpen = Boolean(waiting && OPEN_PLAN_REVIEW.includes(waiting.state));
@@ -297,13 +307,14 @@ export class ConversationService {
       await this.#core.games.ensureCover(target.project);
       this.#core.emit(UiEvent.GameChanged, { project: target.project });
     }
-    const references = await this.#saveMoodBoard(target.project, sendOptions);
+    const pictures = await this.#saveMoodBoard(target.project, sendOptions);
     // The agent reads the tags' lines after the person's words; the chat shows the words alone.
     const action = this.#userMessageAction(text + tags.context, target, sendOptions, {
       resume,
       extraReads,
       stills,
-      references,
+      references: pictures.added,
+      pictureFiles: pictures.files,
     });
     const refusal = this.#commissionRefusal(sendOptions);
     if (refusal) {
@@ -365,6 +376,7 @@ export class ConversationService {
     const games = await this.#core.games.list();
     const game = games.find((entry) => entry.name === project);
     const tagTarget: MentionTarget = {
+      project,
       gameDir: this.#core.games.dirFor(project),
       webGame: !game?.engine,
       libraryDir: async (name) => (name === project ? null : (games.find((entry) => entry.name === name)?.dir ?? null)),
@@ -403,20 +415,25 @@ export class ConversationService {
 
   /**
    * The mood board becomes durable project data the moment it commissions a run — the next
-   * interview finds it in <project>/references/ even if the chat is long gone. Returns the files
-   * this message added (relative to the game), which rewinding it takes back.
+   * interview finds it in <project>/references/ even if the chat is long gone. Returns, relative to
+   * the game, every file the pictures are saved as (`files`: a run's lead reads them there, a picture
+   * sent before included) and the files this message added (`added`), which rewinding it takes back.
    */
-  async #saveMoodBoard(project: string | undefined, options: ComposerSendOptions): Promise<string[]> {
+  async #saveMoodBoard(project: string | undefined, options: ComposerSendOptions): Promise<SavedPictures> {
     const frames = options.frames ?? options.autopilot?.frames;
-    if (!frames?.length || !project) return [];
+    if (!frames?.length || !project) return NO_PICTURES;
     const dir = this.#core.games.dirFor(project);
     try {
       const saved = await this.#core.saveReferenceFrames(project, frames);
-      // Only files this message added: a picture sent before is the game's already.
-      return saved.filter((entry) => entry.created).map((entry) => toPosixRelative(path.relative(dir, entry.file)));
+      const relative = (file: string) => toPosixRelative(path.relative(dir, file));
+      return {
+        files: saved.map((entry) => relative(entry.file)),
+        // Only files this message added: a picture sent before is the game's already.
+        added: saved.filter((entry) => entry.created).map((entry) => relative(entry.file)),
+      };
     } catch (err) {
       this.#core.options.onLog?.(`[core] mood board save failed: ${errorMessage(err)}`, "stderr");
-      return [];
+      return NO_PICTURES;
     }
   }
 
@@ -542,6 +559,8 @@ export class ConversationService {
       extraReads: string[];
       stills: ReferenceFrame[] | undefined;
       references: string[];
+      /** Every file its pictures are saved as in the game, new or already there: a run's lead reads them. */
+      pictureFiles: string[];
     },
   ): DispatchAction {
     const { project, newProject, studioThread } = target;
@@ -562,6 +581,7 @@ export class ConversationService {
       ...(projectDir ? { projectDir } : {}),
       ...(extraReads.length ? { extraReads } : {}),
       ...(stills?.length ? { stills } : {}),
+      ...(context.pictureFiles.length ? { pictureFiles: context.pictureFiles } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
     };
   }

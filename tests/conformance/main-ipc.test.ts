@@ -1157,6 +1157,7 @@ describe("Play's share menu", () => {
       people: unused as PlayIpcDeps["people"],
       creators: unused as PlayIpcDeps["creators"],
       credits: unused as PlayIpcDeps["credits"],
+      manage: unused as PlayIpcDeps["manage"],
       web,
       share: (url, at) => shared.push([url, at]),
     });

@@ -47,6 +47,7 @@ import type { LaunchContext } from "./launch-context.ts";
 import { DevProviders, FIXTURE_VERSION } from "./fixture-kit.ts";
 import type { StudioCore } from "../studio-core.ts";
 import type { GamePreview } from "../preview.ts";
+import { playViewsOf } from "../play/viewer-view.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { secretRedactor } from "../../shared/redact.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -192,11 +193,21 @@ async function publishIdentity(rt: Runtime): Promise<void> {
   });
 }
 
-/** The webContents a surface names: the studio window, or the game view once a game is loaded. */
+/**
+ * The webContents a surface names: the studio window, the game view once a game is loaded, or a Play
+ * game's bar layer or view while the viewer has one open.
+ */
 function surfaceContents(rt: Runtime, surface: DevSurface): WebContents {
   if (surface === DevSurface.Desktop) {
     if (rt.win.isDestroyed()) throw new DevError(DevErrorCode.UnsupportedSurface, "desktop window closed");
     return rt.win.webContents;
+  }
+  if (surface === DevSurface.PlayBar || surface === DevSurface.PlayGame) {
+    const views = playViewsOf(rt.win);
+    const view = surface === DevSurface.PlayBar ? views?.bar() : views?.game();
+    if (!view || view.webContents.isDestroyed())
+      throw new DevError(DevErrorCode.MissingPrerequisite, "open a game in Play first");
+    return view.webContents;
   }
   const view = loadedGameView(rt.preview);
   if (!view) throw new DevError(DevErrorCode.MissingPrerequisite, "load a game in Live first");
@@ -351,7 +362,7 @@ async function perform(rt: Runtime, op: Operation) {
     case DevMethod.TraceStop:
       return diagnostics.traceStop(op.params.traceId);
     default: {
-      const surface = "surface" in op.params ? op.params.surface : DevSurface.Desktop;
+      const surface = ("surface" in op.params && op.params.surface) || DevSurface.Desktop;
       return rt.control.action(surfaceContents(rt, surface), op);
     }
   }
@@ -429,6 +440,8 @@ function gameViewShown(preview: GamePreview): boolean {
 
 function surfaceWidth(rt: Runtime, surface: DevSurface): number {
   if (surface === DevSurface.Desktop) return rt.win.getContentBounds().width;
+  if (surface === DevSurface.PlayBar) return playViewsOf(rt.win)?.bar()?.getBounds().width ?? 0;
+  if (surface === DevSurface.PlayGame) return playViewsOf(rt.win)?.game()?.getBounds().width ?? 0;
   return rt.preview.view?.getBounds().width ?? 0;
 }
 

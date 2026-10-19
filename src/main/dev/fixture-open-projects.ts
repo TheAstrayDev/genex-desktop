@@ -362,7 +362,7 @@ function earlierGodotLoop(project: string): EventData[] {
   const run = fixtureRun({ runId: GODOT_CLOSED_RUN, project });
   const label = "Walls and door";
   const summary = "the walls stand and the door opens";
-  const notChecked = "Not checked by a reviewer: the time ran out before a claim.";
+  const notChecked = "The time ran out before a final look at your game.";
   return [
     ...openStart(run, GODOT_EARLIER_ASK, { budgets: { wallClockMs: EARLIER_LOOP_MS } }),
     ...savePoint(run, project, 1, label, summary),

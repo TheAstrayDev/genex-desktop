@@ -41,13 +41,17 @@ export type DevErrorCode = (typeof DevErrorCode)[keyof typeof DevErrorCode];
 export const DevReadiness = { Ready: "ready", NotReady: "not-ready" } as const;
 export type DevReadiness = (typeof DevReadiness)[keyof typeof DevReadiness];
 
-/** What an operation acts on: the studio window or the game view. */
-export const DevSurface = { Desktop: "desktop", Game: "game" } as const;
+/**
+ * What an operation acts on: the studio window, Live's game view, or a Play game open in the viewer:
+ * its bar's layer (the bar and Comments) or its own view.
+ */
+export const DevSurface = { Desktop: "desktop", Game: "game", PlayBar: "play-bar", PlayGame: "play-game" } as const;
 export type DevSurface = (typeof DevSurface)[keyof typeof DevSurface];
 
 /** Where `logs` reads: a surface's console, the core's events, the harness or the launch's own streams. */
 export const DevLogSurface = {
-  ...DevSurface,
+  Desktop: DevSurface.Desktop,
+  Game: DevSurface.Game,
   Core: "core",
   Harness: "harness",
   Stdout: "stdout",
@@ -62,6 +66,8 @@ export const DevMethod = {
   Click: "click",
   Type: "type",
   Key: "key",
+  /** The pointer moves to a point of a surface, as a mouse over it would. */
+  Move: "move",
   Select: "select",
   Scroll: "scroll",
   GameInput: "game.input",
@@ -107,14 +113,15 @@ const name = z
   .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$/)
   .refine((s) => !s.includes(".."));
 const target = { selector, scope: selector.optional() };
+/** Keys held through a key press or a click. */
+const modifiers = z.array(z.enum(["Alt", "Control", "Meta", "Shift"])).max(4);
+/** Where a click or typing lands: the studio window unless it names the Play bar's layer. */
+const onPage = z.enum([DevSurface.Desktop, DevSurface.PlayBar]).optional();
 const key = {
   surface,
   key: z.string().min(1).max(40),
   code: z.string().min(1).max(40),
-  modifiers: z
-    .array(z.enum(["Alt", "Control", "Meta", "Shift"]))
-    .max(4)
-    .default([]),
+  modifiers: modifiers.default([]),
 };
 const input = z.discriminatedUnion("type", [
   z.object({ type: z.enum(["tap", "down", "up"]), keys: z.array(z.string().max(40)).min(1).max(8) }).strict(),
@@ -145,13 +152,20 @@ const operation = <M extends string, T extends z.ZodRawShape>(method: M, params:
 export const operationSchema = z.discriminatedUnion("method", [
   operation(DevMethod.Status, {}),
   operation(DevMethod.Snapshot, {
-    surface: z.literal("desktop"),
+    surface: z.enum([DevSurface.Desktop, DevSurface.PlayBar]).default(DevSurface.Desktop),
     scope: selector.optional(),
     limit: z.number().int().min(1).max(500).default(150),
   }),
-  operation(DevMethod.Click, target),
-  operation(DevMethod.Type, { ...target, text: z.string().max(16000), replace: z.boolean().default(false) }),
+  // `modifiers` holds keys through the click, as a Cmd-click picks a card among several.
+  operation(DevMethod.Click, { ...target, surface: onPage, modifiers: modifiers.optional() }),
+  operation(DevMethod.Type, {
+    ...target,
+    surface: onPage,
+    text: z.string().max(16000),
+    replace: z.boolean().default(false),
+  }),
   operation(DevMethod.Key, key),
+  operation(DevMethod.Move, { surface, x: z.number().min(0).max(20000), y: z.number().min(0).max(20000) }),
   operation(DevMethod.Select, { ...target, value: z.string().max(1000) }),
   operation(DevMethod.Scroll, {
     surface,

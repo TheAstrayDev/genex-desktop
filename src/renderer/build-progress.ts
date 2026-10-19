@@ -23,7 +23,7 @@ import {
   turnKeyOf,
   WORKER_EVENTS,
 } from "./run-graph.ts";
-import { DayGroup, dayOf } from "./notifications.ts";
+import { DayGroup, dayGroup, dayOf } from "./notifications.ts";
 import {
   BUILD_HISTORY_WORDS,
   keptSoFarWords,
@@ -332,6 +332,22 @@ function dayWords(startedAt: string | null, now: Date): string | null {
   if (day === DayGroup.Today) return BUILD_HISTORY_WORDS.today;
   if (day === DayGroup.Yesterday) return BUILD_HISTORY_WORDS.yesterday;
   return date.toLocaleDateString([], { day: "numeric", month: "short" });
+}
+
+/** The picker's times are tabular, and tabular figures widen a plain (or narrow) space: "9:08 PM" keeps a no-break one. */
+const TIME_SPACE = "\u00a0";
+
+/** When a build started, as the Builds picker lists it: "15:02" today, "Yesterday", else "5 Sep"; "" when unknown. */
+export function buildWhen(startedAt: string | null, now: Date = new Date()): string {
+  const date = startedAt ? new Date(startedAt) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const day = dayOf(startedAt ?? "", now);
+  if (day === DayGroup.Yesterday) return dayGroup(startedAt ?? "", now);
+  const words =
+    day === DayGroup.Today
+      ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : date.toLocaleDateString([], { day: "numeric", month: "short" });
+  return words.replace(/\s/gu, TIME_SPACE);
 }
 
 /** What a build in the history is called: "This chat turn" for the newest build, else by its day: "Loop from yesterday". */

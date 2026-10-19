@@ -23,7 +23,7 @@
 | Platform | Download |
 | --- | --- |
 | macOS (Apple Silicon) | [`Genex.dmg`](https://github.com/genex-games/genex-desktop/releases/latest/download/Genex.dmg) |
-| Linux (x64) | `.deb`, `.rpm` or `.zip` from the [latest release](https://github.com/genex-games/genex-desktop/releases/latest) |
+| Linux (x64) | `.deb`, `.rpm` or `.zip` from the [latest release](https://github.com/genex-games/genex-desktop/releases/latest). The `.deb` and `.rpm` add the Genex package repository, so your system's updates (Software Updater, `apt`, `dnf`) bring every later version |
 | Windows (x64), preview | [`Genex-Setup.exe`](https://github.com/genex-games/genex-desktop/releases/latest/download/Genex-Setup.exe). Not signed yet: if Windows warns, choose More info, then Run anyway |
 
 Genex is early: expect rough edges, and tell us about them in

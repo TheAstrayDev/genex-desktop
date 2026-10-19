@@ -2390,3 +2390,194 @@ describe("a worker's own session passes the locks its pool holds for it", () => 
     }
   });
 });
+
+describe("the person writing ends a session's waits for a lock, never a lock given", () => {
+  it("a hold waiting behind another holder is refused at once, naming the lock, and leaves the line", async () => {
+    const { locks } = service();
+    const first = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "a" }));
+    await settle();
+    const wrote = new AbortController();
+    const waiting = track(
+      locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "b", personWrote: wrote.signal }),
+    );
+    const other = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "c" }));
+    await settle();
+    wrote.abort();
+    await settle();
+    assert.ok(waiting.error instanceof LockRefused, String(waiting.error));
+    assert.equal(waiting.error.code, LockRefusal.PersonWrote);
+    assert.equal(waiting.error.label, "Quiet room");
+    assert.match(waiting.error.message, /wrote/);
+    assert.match(waiting.error.message, /Quiet room/);
+    assert.equal(granted(other), false, "another caller's wait goes on");
+    first.release?.();
+    await settle();
+    assert.equal(granted(other), true, "and it is next: the refused hold left the line");
+    other.release?.();
+    assert.deepEqual(locks.holders(), []);
+  });
+
+  it("a wait on the person ends too, and the chat hears the wait is over", async () => {
+    const { locks, said, clock } = service([{ personActive: true }]);
+    const wrote = new AbortController();
+    const waiting = track(
+      locks.hold([bench], { binding: binding(), waitMs: HOUR, holder: "a", personWrote: wrote.signal }),
+    );
+    await settle();
+    assert.deepEqual(said, [{ label: "Bench", waiting: true, threadId: "t1" }]);
+    wrote.abort();
+    await settle();
+    assert.ok(waiting.error instanceof LockRefused);
+    assert.equal(waiting.error.code, LockRefusal.PersonWrote);
+    assert.deepEqual(said.at(-1), { label: "Bench", waiting: false, threadId: "t1" });
+    assert.deepEqual(locks.holders(), [], "nothing held");
+    // Not a refusal for the person's use of the bench: the next call waits its whole wait, not one short ask.
+    const next = track(locks.hold([bench], { binding: binding(), waitMs: HOUR, holder: "b" }));
+    await clock.advance(PERSON_FIRST_ASK_MS + PERSON_FIRST_POLL_MS);
+    assert.equal(next.error, null, "it still waits for the person");
+  });
+
+  it("only a wait ends: a free lock is taken though the person already wrote, and a lock given stays given", async () => {
+    const { locks } = service();
+    const wrote = new AbortController();
+    wrote.abort();
+    const free = track(
+      locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "a", personWrote: wrote.signal }),
+    );
+    await settle();
+    assert.equal(granted(free), true, "nothing to wait for: taken");
+    const later = new AbortController();
+    const given = track(
+      locks.hold([shared], { binding: binding(), waitMs: HOUR, holder: "b", personWrote: later.signal }),
+    );
+    await settle();
+    later.abort();
+    await settle();
+    assert.equal(granted(given), true);
+    assert.equal(locks.holders().length, 2, "both still held: the person's words never take a lock back");
+    free.release?.();
+    given.release?.();
+  });
+
+  it("a person who already wrote refuses the next wait at once", async () => {
+    const { locks } = service();
+    const first = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "a" }));
+    await settle();
+    const wrote = new AbortController();
+    wrote.abort();
+    const waiting = track(
+      locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "b", personWrote: wrote.signal }),
+    );
+    await settle();
+    assert.equal((waiting.error as LockRefused | null)?.code, LockRefusal.PersonWrote);
+    first.release?.();
+  });
+
+  it("Stop is still Stop: a wait the call's own signal ends is not the person's words", async () => {
+    const { locks } = service();
+    const first = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "a" }));
+    await settle();
+    const stop = new AbortController();
+    const wrote = new AbortController();
+    const waiting = track(
+      locks.hold([quiet], {
+        binding: binding(),
+        waitMs: HOUR,
+        holder: "b",
+        signal: stop.signal,
+        personWrote: wrote.signal,
+      }),
+    );
+    await settle();
+    stop.abort(new Error("stopped"));
+    wrote.abort();
+    await settle();
+    assert.equal(waiting.error instanceof LockRefused, false, "a Stop is never answered as the person's message");
+    first.release?.();
+  });
+});
+
+describe("a steer ends the waits for a lock of the session it reaches", () => {
+  const cores: CoreLite["core"][] = [];
+  after(async () => {
+    for (const core of cores) core.plugins.cancel();
+    await closeWorkerChats();
+  });
+
+  /** Until `check` holds, in real time, bounded. */
+  const eventually = async (check: () => boolean | Promise<boolean>) => {
+    for (let tries = 0; tries < 250 && !(await check()); tries++) await sleep(20);
+    assert.ok(await check(), "it never happened");
+  };
+
+  /** A worker chat with the lock plugin, whose waits never run out here, and every hold recorded as it is asked. */
+  async function benchChat() {
+    const chat = await workerChat({ locks: { agentWaitMs: HOUR } });
+    const { core, game, threadId } = chat;
+    cores.push(core);
+    await core.setPermissionMode(threadId, PermissionMode.Bypass);
+    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
+    await core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(core.plugins);
+    const asked: unknown[] = [];
+    const hold = core.locks.hold.bind(core.locks);
+    core.locks.hold = (locks, options) => {
+      asked.push(options);
+      return hold(locks, options);
+    };
+    const api = core.api() as unknown as Api;
+    const writer = { project: game, threadId, runId: RUN_ID, holder: { id: "w1", title: "Tune" } };
+    const steer = (into: string) =>
+      api[HostMethod.EngineSteer]?.({ threadId, into, messages: [{ id: "m-red", text: "Paint it red instead." }] });
+    return { ...chat, api, asked, writer, steer, gameDir: core.games.dirFor(game) };
+  }
+
+  it("the chat's session waiting for a lock hears at once that the person wrote; another session's wait goes on", async () => {
+    const { api, asked, writer, steer, delegate, personSays, runWorker, worktree, whileRunning } = await benchChat();
+    assert.deepEqual(await api[HostMethod.LocksHold]?.(writer), { held: true, labels: ["Bench"] });
+    const answers = new Map<string, string>();
+    whileRunning(async (request) => {
+      const who = request.steer ? "chat" : "worker";
+      request.steer?.ready(() => true);
+      const call = request.onLiveTool;
+      if (call) answers.set(who, JSON.stringify(await call(`${PLUGIN_ID}__paint`, {})));
+    });
+    const messageId = await personSays();
+    const chatTurn = delegate({ chatTurn: { messageId } });
+    const workerTurn = delegate(runWorker("w2"));
+    await eventually(() => asked.length >= 2);
+    await settle();
+    assert.deepEqual(await steer(messageId), { how: "native", accepted: ["m-red"] });
+    await chatTurn;
+    const answer = String(answers.get("chat"));
+    assert.match(answer, new RegExp(PluginCallBlocker.Lock));
+    assert.match(answer, new RegExp(LockRefusal.PersonWrote));
+    assert.match(answer, /read their message/i);
+    assert.equal(answers.has("worker"), false, "the worker's session still waits for the bench");
+    await api[HostMethod.LocksRelease]?.(writer);
+    await writeFile(path.join(worktree, "release"), "");
+    await workerTurn;
+    assert.match(String(answers.get("worker")), /painted/, "it waited its turn, then ran");
+  });
+
+  it("a call that already holds its lock runs to its end", async () => {
+    const { steer, delegate, personSays, whileRunning, gameDir, core } = await benchChat();
+    const answers: string[] = [];
+    whileRunning(async (request) => {
+      request.steer?.ready(() => true);
+      const call = request.onLiveTool;
+      if (call) answers.push(JSON.stringify(await call(`${PLUGIN_ID}__paint`, {})));
+    });
+    const messageId = await personSays();
+    const turn = delegate({ chatTurn: { messageId } });
+    const log = async () => (await readFile(path.join(gameDir, "paint.log"), "utf8").catch(() => "")).split("\n");
+    await eventually(async () => (await log()).includes("start"));
+    assert.deepEqual(await steer(messageId), { how: "native", accepted: ["m-red"] });
+    await settle();
+    assert.equal(core.locks.holders().length, 1, "it keeps the bench");
+    await writeFile(path.join(gameDir, "release"), "");
+    await turn;
+    assert.match(String(answers[0]), /painted/);
+  });
+});

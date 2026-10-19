@@ -1,6 +1,6 @@
 # Desktop data and privacy
 
-Updated October 17, 2026. Contact: **team@genex.games**. This describes the desktop
+Updated October 18, 2026. Contact: **team@genex.games**. This describes the desktop
 application. Connected providers, plugins and the hosted Genex service have separate policies.
 
 ## Local storage
@@ -31,7 +31,11 @@ Installed macOS and Windows release builds ask update.electronjs.org (run by the
 project) hourly whether a newer release exists, sending the app version, platform and
 architecture, and download it from GitHub Releases. Installed Linux release builds ask the GitHub
 API for the latest published release every six hours (and when you choose Check for Updates),
-which sends nothing beyond the request itself; the download is yours to start. Development
+which sends nothing beyond the request itself; the download is yours to start. The `.deb` and
+`.rpm` add the Genex package repository (packages.genex.games, served by Cloudflare), so your
+system's package manager asks it for updates on its own schedule, as it does every repository;
+those copies then ask GitHub nothing. Removing Genex removes the repository; to keep it out, put
+`repo=off` in `/etc/default/genex` before installing. Development
 builds and builds you package yourself under another name do not check.
 
 The catalog downloads listings and pinned plugin packages anonymously from its configured
@@ -51,7 +55,7 @@ undo a remote action or recall data already sent.
 | Blender assets | Blender on this Mac, or one click downloads a pinned release from download.blender.org |
 | Plugin catalog | Anonymous downloads from `plugins.genex.games` and GitHub |
 | Genex asset generation, credits and hosted publishing | A Genex account (paid credits); publishing also needs `git-lfs` |
-| Play | Nothing to browse and play; likes, signed-in play, invite links, profiles and friends need a Genex account; Remix needs `git`; voice chat needs microphone access (macOS asks once) |
+| Play | Nothing to browse and play; likes, comments, signed-in play, invite links, profiles and friends need a Genex account; Remix needs `git`; voice chat needs microphone access (macOS asks once) |
 | OpenRouter models | An OpenRouter account; prompts and context go to openrouter.ai and the model maker it routes to |
 | OpenCode models | [OpenCode](https://opencode.ai), installed separately; prompts go to whatever provider OpenCode is set up with |
 | Local server models | A model server you run (TabbyAPI, LM Studio, llama.cpp, vLLM); prompts go to the address you enter, which may be another computer on your network |
@@ -112,7 +116,7 @@ Playing a game loads it from its own `https://<name>.genex.technology/` address,
 counts the play. The game runs in Play's own storage, apart from your games and the rest of the
 app, where it keeps its saves; it may use only pointer lock, full screen and clipboard writes, and
 links that leave Genex games open in your browser. A game in voice chat gets a microphone the app
-controls: your microphone feeds it only while you turn on the mic in the game's header (off for
+controls: your microphone feeds it only while you turn on the mic in the game's bar (off for
 every game until you do), and a game never gets a camera. What the game does with that audio is
 the game's: a Genex game in voice chat sends it to the other players in its room, directly or
 through Genex's relay. Which games you left the mic on for, and the microphone you chose, stay in
@@ -121,6 +125,11 @@ the account's token to the Genex API to get a single-use sign-in ticket for that
 one, the game plays as a guest), to read a game's likes including yours, to save or remove a like,
 and to read your referral code, which Invite a friend adds to the link it copies. Share and Invite
 only copy a genex.games link to the clipboard.
+
+A game's comments are read from the Genex API without a sign-in, a page at a time while you scroll
+them, with each writer's name and picture. Signed in, the app also sends the account's token to
+post a comment you write (its text, at most 500 characters, becomes public on the game's page) or
+delete one of yours, and reads who the account is to know which comments are yours.
 
 Signed in, the app also reads, with that token, who the account is (its name, nickname, whether
 you chose it, picture, Pro and join date; the email the API returns never leaves the app's main
