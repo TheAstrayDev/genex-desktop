@@ -23,7 +23,8 @@ export function PluginCustomizationHost() {
   }, [data]);
   useEffect(() => {
     setPluginThemes(offers);
-    return () => setPluginThemes([]);
   }, [offers]);
+  // Updating an offer must not repaint the built-in theme between two valid plugin palettes.
+  useEffect(() => () => setPluginThemes([]), []);
   return null;
 }

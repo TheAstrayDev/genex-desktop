@@ -1,4 +1,4 @@
-/** Real app/IPC/registry screenshots and geometry; an owned live profile, without starting provider work. */
+/** Real app/IPC/registry screenshots and geometry in an owned profile with synthetic providers only. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -6,9 +6,8 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { _electron as electron } from "playwright";
 import { expect } from "@playwright/test";
-import { allocateProfile } from "../../scripts/studio-dev/ownership.mjs";
-import { liveLaunchEnv } from "../../scripts/studio-dev/live-env.ts";
-import { resolveElectron } from "../../scripts/electron-runtime.mjs";
+import { allocateProfile, assertStopped, removeProfile } from "../../scripts/studio-dev/ownership.mjs";
+import { fixtureElectronArgs, fixtureElectronEnv, resolveElectron } from "../../scripts/electron-runtime.mjs";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { PluginCapability, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { pluginTheme } from "../helpers/plugin-theme.ts";
@@ -18,7 +17,7 @@ const id = `customization-review-${Date.now()}`;
 const buildId = `b-${id}`;
 const out = path.join(root, ".studio-dev/evidence", ...(process.env.GITHUB_ACTIONS ? ["windows-tests", id] : [id]));
 await mkdir(out, { recursive: true });
-const owner = allocateProfile(root, id, "live", null);
+const owner = allocateProfile(root, id, "fixture", "app-basics");
 const seeds = path.join(out, "seeds");
 const pkg = path.join(out, "plugin");
 await mkdir(seeds);
@@ -70,8 +69,11 @@ const check = (name, actual) => {
 try {
   app = await electron.launch({
     executablePath: resolveElectron(),
-    args: [path.join(root, `.studio-dev/builds/${buildId}/main/main.mjs`), `--studio-dev-launch=${launch}`],
-    env: liveLaunchEnv(process.env),
+    args: fixtureElectronArgs([
+      path.join(root, `.studio-dev/builds/${buildId}/main/main.mjs`),
+      `--studio-dev-launch=${launch}`,
+    ]),
+    env: fixtureElectronEnv(),
     timeout: 60000,
   });
   const stdout = createWriteStream(path.join(out, "app-stdout.log"));
@@ -82,15 +84,19 @@ try {
   const page = await app.firstWindow({ timeout: 60000 });
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1280, 900));
   page.setDefaultTimeout(15000);
-  await page.locator('[data-onboarding-action="next"]').click();
-  await page
-    .locator('[data-onboarding-action="skip"], [data-onboarding-action="start"]')
-    .filter({ visible: true })
-    .first()
-    .click();
+  const welcome = page.getByRole("dialog", { name: "Welcome to Genex", exact: true });
+  if (await welcome.isVisible()) {
+    await page.locator('[data-onboarding-action="next"]').click();
+    await page
+      .locator('[data-onboarding-action="skip"], [data-onboarding-action="start"]')
+      .filter({ visible: true })
+      .first()
+      .click();
+  }
   await page.getByRole("dialog", { name: "Welcome to Genex", exact: true }).waitFor({ state: "hidden" });
   await page.getByRole("button", { name: "New game", exact: true }).click();
-  await page.locator("[data-genex-promo] .genex-promo-close").click();
+  const promoClose = page.locator("[data-genex-promo] .genex-promo-close");
+  if (await promoClose.isVisible()) await promoClose.click();
   await page.locator("[data-genex-promo]").waitFor({ state: "hidden" });
   await page.locator("[data-home] .home-title").waitFor({ state: "visible" });
   const geometry = () =>
@@ -141,6 +147,16 @@ try {
       mode === "light" ? "rgb(255, 255, 255)" : "rgb(17, 17, 17)",
     );
     check(`Home panel updates to the ${mode} theme`, true);
+    check(
+      `Appearance preview matches the ${mode} plugin palette`,
+      await page
+        .locator(`[data-appearance] input[value="${mode}"]`)
+        .evaluate(
+          (el, expected) =>
+            el.closest("label").querySelector(".appearance-mini").style.getPropertyValue("--preview-bg") === expected,
+          mode === "light" ? "#ffffff" : "#111111",
+        ),
+    );
     await page.screenshot({ path: path.join(out, `appearance-${mode}.png`) });
     await page.keyboard.press("Escape");
     await page.getByTestId("settings-dialog").waitFor({ state: "hidden" });
@@ -188,7 +204,8 @@ try {
         short,
         buildId,
         profile: id,
-        providers: "live",
+        providers: "fixture",
+        fixture: "app-basics",
         providerCalls: 0,
         electron: await app.evaluate(() => process.versions.electron),
       },
@@ -217,4 +234,6 @@ try {
   throw error;
 } finally {
   await app?.close();
+  assertStopped(owner);
+  removeProfile(owner);
 }

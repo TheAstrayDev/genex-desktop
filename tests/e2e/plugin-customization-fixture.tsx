@@ -2,7 +2,12 @@
 import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { PluginCustomizationHost } from "../../src/renderer/appearance/PluginCustomizationHost.tsx";
-import { initializeAppearance, updateAppearance, useAppearance } from "../../src/renderer/appearance/store.ts";
+import {
+  initializeAppearance,
+  subscribeAppearance,
+  updateAppearance,
+  useAppearance,
+} from "../../src/renderer/appearance/store.ts";
 import { PluginPanelHost } from "../../src/renderer/panels/PluginPanelHost.tsx";
 import { AppearanceSection } from "../../src/renderer/panels/AppearanceSection.tsx";
 import { NewChatPluginSlot } from "../../src/renderer/appearance/NewChatPluginSlot.tsx";
@@ -15,6 +20,11 @@ import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 let saved: PluginCustomization | null = null;
 let enabled = true;
 let showAppearance = false;
+let panelLoading: Promise<void> | null = null;
+let finishPanelLoad: ((failed: boolean) => void) | undefined;
+let panelRequests = 0;
+let themeChanges: string[] = [];
+let stopTracingTheme = () => {};
 const plugin = (): PluginInfo => ({
   manifest: {
     apiVersion: 3,
@@ -42,6 +52,8 @@ let redraw = () => {};
 const fake = fakeStudioApi({
   pluginPanel: async (id, panel) => {
     if (id !== "theme" || panel !== "widget" || !enabled) throw new Error("Undeclared panel");
+    panelRequests++;
+    await panelLoading;
     return { url: "studio-plugin://theme/widget", title: "Custom widget", html: "" };
   },
   pluginsList: async () => [plugin()],
@@ -101,6 +113,31 @@ if (!root) throw new Error("Missing fixture root");
 createRoot(root).render(<Fixture />);
 Object.assign(window, {
   customizationFixture: {
+    traceTheme: () => {
+      stopTracingTheme();
+      themeChanges = [];
+      stopTracingTheme = subscribeAppearance(() => {
+        themeChanges.push(getComputedStyle(document.documentElement).getPropertyValue("--background"));
+      });
+    },
+    themeChanges: () => themeChanges,
+    refreshTheme: async () => {
+      if (!saved?.theme) throw new Error("No theme offer");
+      saved = { ...saved, theme: { ...saved.theme, name: "Refreshed theme" } };
+      await studio().plugins.refresh();
+      redraw();
+    },
+    holdPanel: () => {
+      panelLoading = new Promise<void>((resolve, reject) => {
+        finishPanelLoad = (failed) => {
+          panelLoading = null;
+          if (failed) reject(new Error("Panel load failed"));
+          else resolve();
+        };
+      });
+    },
+    finishPanel: (failed = false) => finishPanelLoad?.(failed),
+    panelRequests: () => panelRequests,
     appearance: (next: boolean) => {
       showAppearance = next;
       redraw();

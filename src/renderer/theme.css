@@ -8220,6 +8220,20 @@ p.usage-divider {
   overflow: hidden;
   contain: layout paint;
 }
+.new-chat-plugin-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  gap: 8px;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  overflow-y: auto;
+  color: var(--muted-foreground);
+  font-size: var(--t-xs);
+  text-align: center;
+}
 
 .appearance-native-editors {
   border: 0;

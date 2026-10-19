@@ -30,6 +30,7 @@ import {
   type ThemeSelection,
 } from "../appearance/themes.ts";
 import { useAppearance } from "../appearance/store.ts";
+import { customizedAppearance } from "../appearance/plugin-customization.ts";
 import { HomeBackdropSection } from "./HomeBackdropSection.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -673,19 +674,20 @@ const PLUGIN_THEME_MESSAGE = {
   Offer: (name: string, plugin: string, publisher: string) => `${name} · Plugin: ${plugin} by ${publisher}`,
 } as const;
 function PluginThemeChoice() {
-  const { appearance, update } = useAppearance();
+  const { appearance, scheme, update } = useAppearance();
   const plugins = usePlugins((state) => state.list);
   const offers = customizationProviders(plugins).filter((p) => p.customization?.theme);
   const selected = offers.find((p) => p.manifest.id === appearance.pluginTheme);
   const available = Boolean(selected);
   if (offers.length === 0 && !appearance.pluginTheme) return null;
-  const options = offers.map((p) => ({
+  const options: { value: string; label: string; swatch?: Palette }[] = offers.map((p) => ({
     value: p.manifest.id,
     label: PLUGIN_THEME_MESSAGE.Offer(
       p.customization?.theme?.name ?? p.manifest.name,
       p.manifest.name,
       p.manifest.publisher,
     ),
+    swatch: p.customization?.theme?.[scheme],
   }));
   if (appearance.pluginTheme && !available)
     options.push({ value: appearance.pluginTheme, label: PLUGIN_THEME_MESSAGE.Unavailable });
@@ -699,7 +701,10 @@ function PluginThemeChoice() {
           <Choice
             label={PLUGIN_THEME_MESSAGE.Label}
             value={appearance.pluginTheme ?? ""}
-            options={[{ value: "", label: PLUGIN_THEME_MESSAGE.BuiltIn }, ...options]}
+            options={[
+              { value: "", label: PLUGIN_THEME_MESSAGE.BuiltIn, swatch: paletteFor(appearance, scheme) },
+              ...options,
+            ]}
             onChange={(id) => update((prev) => ({ ...prev, pluginTheme: id || undefined }))}
           />
         </SettingRow>
@@ -718,11 +723,12 @@ function PluginThemeChoice() {
 export function AppearanceSection() {
   const { appearance, scheme, error, update } = useAppearance();
   const plugins = usePlugins((state) => state.list);
-  const pluginThemeActive = customizationProviders(plugins).some(
-    (plugin) => plugin.manifest.id === appearance.pluginTheme && Boolean(plugin.customization?.theme),
-  );
-  const light = paletteFor(appearance, Scheme.Light);
-  const dark = paletteFor(appearance, Scheme.Dark);
+  const pluginTheme =
+    customizationProviders(plugins).find((plugin) => plugin.manifest.id === appearance.pluginTheme)?.customization
+      ?.theme ?? null;
+  const effective = customizedAppearance(appearance, pluginTheme);
+  const light = paletteFor(effective, Scheme.Light);
+  const dark = paletteFor(effective, Scheme.Dark);
   return (
     <div data-appearance className="appearance-section">
       <fieldset className="appearance-modes">
@@ -740,7 +746,7 @@ export function AppearanceSection() {
       </p>
       <PluginThemeChoice />
       <HomeBackdropSection />
-      {!pluginThemeActive && (
+      {!pluginTheme && (
         <fieldset className="appearance-native-editors">
           <ThemeEditor scheme={Scheme.Light} />
           <ThemeEditor scheme={Scheme.Dark} />

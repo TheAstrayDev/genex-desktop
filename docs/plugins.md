@@ -77,6 +77,9 @@ when the plugin theme is off. Disabled, removed or unavailable plugins fall back
 appearance; re-enabling restores an explicitly selected offer. The Theme source row is hidden when no
 enabled plugin offers a theme. The colour tweaker's preview still
 wins. The saved built-in palettes and fonts are never overwritten by the plugin.
+Theme choices show palette swatches for the current scheme; mode previews show the selected
+plugin's light and dark palettes. Updating an active offer applies it directly, without briefly
+restoring the built-in theme.
 
 The single New Chat slot sits below the composer in normal flow. Its host-owned box labels the
 plugin and panel, clips oversized content and cannot cover or move other UI. If several enabled
@@ -85,6 +88,8 @@ its opaque frame and SDK bridge, with no active project. Actions and file picker
 automatically loaded slot, so opening Home cannot trigger approval or native dialogs. Those operations
 remain available in the plugin's ordinary panels. The slot's height never shifts Home's title or composer.
 Appearance changes notify open panels to read their current theme context again.
+The host shows loading feedback while a panel document is requested. A failed request offers
+**Try again** inside the same bounded slot; late responses cannot revive a withdrawn panel.
 For example:
 
 ```js

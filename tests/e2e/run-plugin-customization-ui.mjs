@@ -9,7 +9,12 @@ import { fixtureElectronArgs, fixtureElectronEnv, resolveElectron } from "../../
 import { removeTree } from "../helpers/tmp.ts";
 const RUN_TIMEOUT_MS = 30_000;
 const root = process.cwd(),
-  out = path.join(root, ".studio-dev/evidence/plugin-customization-ui");
+  out = path.join(
+    root,
+    ".studio-dev/evidence",
+    ...(process.env.GITHUB_ACTIONS ? ["windows-tests"] : []),
+    "plugin-customization-ui",
+  );
 await mkdir(out, { recursive: true });
 await rm(path.join(out, "report.json"), { force: true });
 const profile = await mkdtemp(path.join(os.tmpdir(), "genex-customization-ui-"));
@@ -77,6 +82,7 @@ await until(()=>js('!!document.querySelector("[data-plugin-theme-choice]")'));
 await js('document.querySelector("[data-plugin-theme-choice] button").dispatchEvent(new PointerEvent("pointerdown",{bubbles:true,button:0,pointerType:"mouse"}))');
 await until(()=>js('!!Array.from(document.querySelectorAll("[role=menuitemradio]")).find(e=>e.textContent.includes("Test theme"))'));
 check('Appearance lists a theme with plugin name and publisher',await js('Array.from(document.querySelectorAll("[role=menuitemradio]")).some(e=>e.textContent.includes("Plugin: Fixture theme by Fixture"))'));
+check('offered theme swatches follow the current light or dark mode',await js('(()=>{const item=Array.from(document.querySelectorAll("[role=menuitemradio]")).find(e=>e.textContent.includes("Test theme"));return getComputedStyle(item.querySelector(".theme-swatch")).backgroundColor===(document.documentElement.dataset.theme==="light"?"rgb(255, 255, 255)":"rgb(17, 17, 17)")})()'));
 await js('Array.from(document.querySelectorAll("[role=menuitemradio]")).find(e=>e.textContent.includes("Test theme")).click()');
 await until(()=>js('document.querySelector("#chosen-theme").textContent==="theme"'));
 check('selection is saved in ordinary appearance',await js('JSON.parse(localStorage.getItem("studio.appearance.v1")).pluginTheme==="theme"'));
@@ -92,6 +98,10 @@ check('Home panel receives the live dark theme context',true);
 check('native radii and fonts apply to the selected theme',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius==="4px" && getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").includes("Segoe UI")'));
 check('Appearance identifies the active plugin and offers turn off',await js('!!Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme") && document.querySelector("[data-plugin-theme-choice] [role=status]").textContent.includes("Plugin theme active")'));
 check('active plugin hides built-in editors and provides a filled turn off button',await js('!document.querySelector(".appearance-native-editors") && getComputedStyle(Array.from(document.querySelectorAll("button")).find(e=>e.textContent==="Turn off plugin theme")).backgroundColor!=="rgba(0, 0, 0, 0)"'));
+check('mode previews show the selected plugin palettes',await js('Array.from(document.querySelectorAll(".appearance-mode")).filter(e=>e.querySelector("input").value!=="system").every(e=>e.querySelector(".appearance-mini").style.getPropertyValue("--preview-bg")===(e.querySelector("input").value==="light"?"#ffffff":"#111111"))'));
+await js('customizationFixture.traceTheme(); customizationFixture.refreshTheme()');
+await until(()=>js('customizationFixture.themeChanges().length>0'));
+check('updating an active offer never briefly restores the built-in theme',await js('customizationFixture.themeChanges().every(color=>color==="#111111")'));
 await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
 fs.writeFileSync(${JSON.stringify(path.join(out, "selected.png"))},(await wc.capturePage()).toPNG());
 await js('document.querySelector("[data-plugin-theme-choice]").scrollIntoView({block:"center"})');
@@ -104,7 +114,7 @@ check('turn off restores built-in editors',await js('!!document.querySelector(".
 await js('customizationFixture.select("theme")');
 await frame.executeJavaScript('document.querySelector("#invalid").click()');
 await until(()=>frame.executeJavaScript('document.querySelector("#result").textContent.includes("Invalid")'));
-check('rejected write leaves the prior profile intact',await js('customizationFixture.profile().theme.name==="Test theme"'));
+check('rejected write leaves the prior profile intact',await js('customizationFixture.profile().theme.name==="Refreshed theme"'));
 await js('customizationFixture.enable(false)');
 await until(()=>js('!document.querySelector("[data-new-chat-plugin]")'));
 check('disable restores native geometry and shows unavailable theme notice',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius')===radius && await js('document.querySelector("[data-plugin-theme-choice] [role=status]").textContent.includes("unavailable")'));
@@ -121,6 +131,34 @@ check('the small slot fits a narrow window without horizontal scrolling',await j
 await frame.executeJavaScript('document.querySelector("#reset").click()');
 await until(()=>js('customizationFixture.profile()===null && !document.querySelector("[data-new-chat-plugin]")'));
 check('reset restores native geometry',await js('getComputedStyle(document.querySelector("#native-control")).borderRadius')===radius);
+const requestsBeforeRetry=await js('customizationFixture.panelRequests()');
+await js('customizationFixture.holdPanel()');
+await frame.executeJavaScript('document.querySelector("#apply").click()');
+await until(()=>js('!!document.querySelector("[data-new-chat-plugin]")'));
+check('pending panel has an accessible loading state',await js('document.querySelector(".new-chat-plugin-content [role=status]")?.getAttribute("aria-busy")==="true"'));
+await js('document.querySelector("[data-new-chat-plugin]").scrollIntoView({block:"center"})');
+fs.writeFileSync(${JSON.stringify(path.join(out, "panel-loading.png"))},(await wc.capturePage()).toPNG());
+await js('customizationFixture.finishPanel(true)');
+await until(()=>js('!!document.querySelector(".new-chat-plugin-content [role=alert]")'));
+check('failed panel offers a native retry without mounting its frame',await js('!document.querySelector(".new-chat-plugin-content iframe") && Array.from(document.querySelectorAll(".new-chat-plugin-content button")).some(e=>e.textContent==="Try again" && getComputedStyle(e).cursor==="pointer")'));
+fs.writeFileSync(${JSON.stringify(path.join(out, "panel-failed.png"))},(await wc.capturePage()).toPNG());
+await js('document.querySelector(".new-chat-plugin-content button").focus()');
+check('panel retry is keyboard focusable',await js('document.activeElement===document.querySelector(".new-chat-plugin-content button")'));
+await js('document.activeElement.click()');
+await until(()=>js('!!document.querySelector(".new-chat-plugin-content iframe")'));
+check('retry loads only the same declared panel once',await js('customizationFixture.panelRequests()')===requestsBeforeRetry+2);
+await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+fs.writeFileSync(${JSON.stringify(path.join(out, "panel-recovered.png"))},(await wc.capturePage()).toPNG());
+await frame.executeJavaScript('document.querySelector("#reset").click()');
+await until(()=>js('!document.querySelector("[data-new-chat-plugin]")'));
+await js('customizationFixture.holdPanel()');
+await frame.executeJavaScript('document.querySelector("#apply").click()');
+await until(()=>js('!!document.querySelector(".new-chat-plugin-content [aria-busy=true]")'));
+await js('customizationFixture.enable(false)');
+await until(()=>js('!document.querySelector("[data-new-chat-plugin]")'));
+await js('customizationFixture.finishPanel()');
+await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+check('late panel responses cannot restore a disabled plugin slot',await js('!document.querySelector("[data-new-chat-plugin]")'));
 check('no renderer errors',errors.length===0);
 }catch(error){checks.push({name:'runner completed',ok:false,error:String(error.stack)});}
 fs.writeFileSync(${JSON.stringify(path.join(out, "report.json"))},JSON.stringify({checks,errors,provider:'fixture',electron:process.versions.electron},null,2));win.destroy();app.exit(checks.some(c=>!c.ok)?1:0);
