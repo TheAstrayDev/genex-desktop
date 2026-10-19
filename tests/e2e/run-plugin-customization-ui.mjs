@@ -1,5 +1,8 @@
 /** Exercise the public panel API and host effects in an isolated Electron renderer. */
 import { spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,42 +10,56 @@ import { pluginTheme } from "../helpers/plugin-theme.ts";
 import { build } from "esbuild";
 import { fixtureElectronArgs, fixtureElectronEnv, resolveElectron } from "../../scripts/electron-runtime.mjs";
 import { removeTree } from "../helpers/tmp.ts";
+import { packageBin } from "../../scripts/package-bin.ts";
 const RUN_TIMEOUT_MS = 30_000;
-const root = process.cwd(),
-  out = path.join(
-    root,
-    ".studio-dev/evidence",
-    ...(process.env.GITHUB_ACTIONS ? ["windows-tests"] : []),
-    "plugin-customization-ui",
+test("plugin customization works in an opaque Electron panel", async () => {
+  const root = process.cwd(),
+    out = path.join(
+      root,
+      ".studio-dev/evidence",
+      ...(process.env.GITHUB_ACTIONS ? ["windows-tests"] : []),
+      "plugin-customization-ui",
+    );
+  await mkdir(out, { recursive: true });
+  execFileSync(
+    process.execPath,
+    [
+      packageBin("@tailwindcss/cli", "tailwindcss"),
+      "-i",
+      path.join(root, "src/renderer/theme.css"),
+      "-o",
+      path.join(out, "theme.css"),
+      "--minify",
+    ],
+    { stdio: "inherit" },
   );
-await mkdir(out, { recursive: true });
-await rm(path.join(out, "report.json"), { force: true });
-const profile = await mkdtemp(path.join(os.tmpdir(), "genex-customization-ui-"));
-await build({
-  entryPoints: [path.join(root, "tests/e2e/plugin-customization-fixture.tsx")],
-  outfile: path.join(out, "fixture.js"),
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  jsx: "automatic",
-  define: { "process.env.NODE_ENV": '"production"' },
-});
-await writeFile(
-  path.join(out, "index.html"),
-  `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="${path.join(root, "dist/renderer/theme.css")}"><div id="root"></div><script type="module" src="fixture.js"></script>`,
-);
-const sdk = await readFile(path.join(root, "src/plugin-sdk/panel.js"), "utf8");
-const theme = { version: 1, theme: pluginTheme(), newChat: { panel: "widget", height: 160 } };
-const panel = `<!doctype html><meta charset="utf-8"><style>body{background:#15181c;color:#eee;font:14px system-ui;padding:20px}button{font:inherit;padding:10px;margin:6px;cursor:pointer}</style><h2>Disposable SDK test</h2><button id="apply">Apply</button><button id="reset">Reset</button><button id="invalid">Invalid</button><pre id="result"></pre><script>${sdk}</script><script>
+  await rm(path.join(out, "report.json"), { force: true });
+  const profile = await mkdtemp(path.join(os.tmpdir(), "genex-customization-ui-"));
+  await build({
+    entryPoints: [path.join(root, "tests/e2e/plugin-customization-fixture.tsx")],
+    outfile: path.join(out, "fixture.js"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    jsx: "automatic",
+    define: { "process.env.NODE_ENV": '"production"' },
+  });
+  await writeFile(
+    path.join(out, "index.html"),
+    '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="theme.css"><div id="root"></div><script type="module" src="fixture.js"></script>',
+  );
+  const sdk = await readFile(path.join(root, "src/plugin-sdk/panel.js"), "utf8");
+  const theme = { version: 1, theme: pluginTheme(), newChat: { panel: "widget", height: 160 } };
+  const panel = `<!doctype html><meta charset="utf-8"><style>body{background:#15181c;color:#eee;font:14px system-ui;padding:20px}button{font:inherit;padding:10px;margin:6px;cursor:pointer}</style><h2>Disposable SDK test</h2><button id="apply">Apply</button><button id="reset">Reset</button><button id="invalid">Invalid</button><pre id="result"></pre><script>${sdk}</script><script>
 const show=async(fn)=>{try{await fn();result.textContent='ok'}catch(e){result.textContent=e.message}};
 document.querySelector('#apply').onclick=()=>show(()=>studioPlugin.call('customization.set',undefined,${JSON.stringify(theme)}));
 document.querySelector('#reset').onclick=()=>show(()=>studioPlugin.call('customization.reset'));
 document.querySelector('#invalid').onclick=()=>show(()=>studioPlugin.call('customization.set',undefined,{version:1,css:'body{display:none}'}));
 </script>`;
-const widgetPanel = `<!doctype html><meta charset="utf-8"><style>body{margin:8px;height:5000px;font:14px system-ui;background:#15181c;color:#eee}</style><div>Custom plugin UI</div><script>${sdk}</script><script>async function paint(){const c=await studioPlugin.call('context');document.body.style.background=c.theme.background}paint();addEventListener('message',e=>{if(e.data?.type==='studio-plugin-context-changed')paint()})</script>`;
-await writeFile(
-  path.join(out, "check.cjs"),
-  String.raw`
+  const widgetPanel = `<!doctype html><meta charset="utf-8"><style>body{margin:8px;height:5000px;font:14px system-ui;background:#15181c;color:#eee}</style><div>Custom plugin UI</div><script>${sdk}</script><script>async function paint(){const c=await studioPlugin.call('context');document.body.style.background=c.theme.background}paint();addEventListener('message',e=>{if(e.data?.type==='studio-plugin-context-changed')paint()})</script>`;
+  await writeFile(
+    path.join(out, "check.cjs"),
+    String.raw`
 const{app,BrowserWindow,protocol}=require('electron');const fs=require('node:fs');const{setTimeout:sleep}=require('node:timers/promises');
 app.disableHardwareAcceleration();app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');app.setPath('userData',${JSON.stringify(profile)});app.setPath('sessionData',${JSON.stringify(path.join(profile, "session"))});
 protocol.registerSchemesAsPrivileged([{scheme:'studio-plugin',privileges:{standard:true,secure:true}}]);
@@ -164,24 +181,25 @@ check('no renderer errors',errors.length===0);
 fs.writeFileSync(${JSON.stringify(path.join(out, "report.json"))},JSON.stringify({checks,errors,provider:'fixture',electron:process.versions.electron},null,2));win.destroy();app.exit(checks.some(c=>!c.ok)?1:0);
 });
 `,
-);
-const child = spawn(resolveElectron(), fixtureElectronArgs([path.join(out, "check.cjs")]), {
-  env: fixtureElectronEnv(),
-  stdio: ["ignore", "pipe", "pipe"],
-});
-child.stdout.on("data", (data) => process.stdout.write(data));
-child.stderr.on("data", (data) => process.stderr.write(data));
-const timer = setTimeout(() => child.kill("SIGKILL"), RUN_TIMEOUT_MS);
-try {
-  const code = await new Promise((resolve, reject) => {
-    child.once("exit", resolve);
-    child.once("error", reject);
+  );
+  const child = spawn(resolveElectron(), fixtureElectronArgs([path.join(out, "check.cjs")]), {
+    env: fixtureElectronEnv(),
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  const report = JSON.parse(await readFile(path.join(out, "report.json"), "utf8"));
-  for (const check of report.checks)
-    console.log(`${check.ok ? "✔" : "✖"} ${check.name}${check.error ? `: ${check.error}` : ""}`);
-  if (code !== 0) process.exitCode = 1;
-} finally {
-  clearTimeout(timer);
-  await removeTree(profile);
-}
+  child.stdout.on("data", (data) => process.stdout.write(data));
+  child.stderr.on("data", (data) => process.stderr.write(data));
+  const timer = setTimeout(() => child.kill("SIGKILL"), RUN_TIMEOUT_MS);
+  try {
+    const code = await new Promise((resolve, reject) => {
+      child.once("exit", resolve);
+      child.once("error", reject);
+    });
+    const report = JSON.parse(await readFile(path.join(out, "report.json"), "utf8"));
+    for (const check of report.checks)
+      console.log(`${check.ok ? "✔" : "✖"} ${check.name}${check.error ? `: ${check.error}` : ""}`);
+    assert.equal(code, 0, "Electron customization checks failed; see the report above");
+  } finally {
+    clearTimeout(timer);
+    await removeTree(profile);
+  }
+});
