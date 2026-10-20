@@ -18,6 +18,7 @@ import { STEER_STALL_MS, steerFeed, steerSession, userFrame } from "../../src/su
 import { credentialHomes } from "../../src/substrate/credential-homes.ts";
 import { absoluteRule } from "../../src/substrate/engines/claude-permissions.ts";
 import { EngineError, type Engine } from "../../src/substrate/engines/types.ts";
+import { PermissionMode } from "../../src/shared/permissions.ts";
 import { registeredSchema, scriptedClaude, wokenSession } from "../helpers/scripted-claude.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -138,7 +139,149 @@ const successRun = [
   },
 ];
 
+/** A Windows worker with host-derived reach, in disposable folders only. */
+async function windowsWorker() {
+  const cwd = await tmpDir("claude-worker-start-");
+  return {
+    cwd,
+    prompt: "Build the fixture",
+    worker: {
+      id: "fixture-worker",
+      title: "Fixture worker",
+      mode: PermissionMode.Manual,
+      writeRoots: [cwd],
+      neverTouch: { roots: [], open: [] },
+      research: false,
+    },
+  };
+}
+
 describe("claude code delegated engine", () => {
+  it("WIN-275: reports a zero-work Windows worker startup refusal before or after init without weakening its sandbox", async () => {
+    const reason =
+      "sandbox required but unavailable: sandbox is enabled but the Windows sandbox is not active on this session (feature gate off)";
+    const failed = {
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      errors: [reason],
+      num_turns: 0,
+    };
+    const init = { type: "system", subtype: "init", model: "claude-sonnet-5", session_id: "refused-worker", tools: [] };
+    for (const initialized of [false, true]) {
+      for (const ending of ["throw", "result", "result-then-throw"]) {
+        const messages = [...(initialized ? [init] : []), ...(ending === "throw" ? [] : [failed])];
+        const options: { throwOn?: Error; throwAfter?: Error } = {};
+        if (ending === "throw") options.throwOn = new Error(reason);
+        if (ending === "result-then-throw") options.throwAfter = new Error("CLI exited 1");
+        // A post-init throw must yield init before throwing.
+        const sdk = fakeQuery(
+          messages,
+          initialized && ending === "throw" ? { throwAfter: new Error(reason) } : options,
+        );
+        const result = await (await engineWithLogin(sdk.fn, "win32")).delegate(await windowsWorker());
+        assert.equal(result.ok, false);
+        assert.equal(result.stopReason, "setup_failed", `${initialized}/${ending}`);
+        assert.match(result.errorText ?? "", /Workers/);
+        assert.ok(result.errorText?.includes(reason), "the CLI's actual reason is preserved");
+        const sandbox = sdk.seen[0]?.sandbox as Record<string, unknown>;
+        assert.equal(sandbox.enabled, true);
+        assert.equal(sandbox.failIfUnavailable, true);
+        assert.equal(sandbox.allowUnsandboxedCommands, false);
+      }
+    }
+  });
+
+  it("WIN-275: a worker that already produced assistant or tool activity remains an ordinary failed build even if the CLI reports zero turns", async () => {
+    const reason = "fixture build failed";
+    const failed = {
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      errors: [reason],
+      num_turns: 0,
+    };
+    for (const activity of [
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "fixture-tool", content: "ran" }] } },
+      { type: "assistant", message: { content: [{ type: "text", text: "I started building." }] } },
+      {
+        type: "assistant",
+        message: { content: [{ type: "tool_use", id: "fixture-tool", name: "Bash", input: { command: "fixture" } }] },
+      },
+      { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Started" } } },
+    ]) {
+      const sdk = fakeQuery([activity, failed]);
+      const result = await (await engineWithLogin(sdk.fn, "win32")).delegate(await windowsWorker());
+      assert.equal(result.stopReason, "error_during_execution");
+      assert.equal(result.errorText, reason);
+    }
+  });
+
+  it("WIN-275: replaying the user's prompt and an empty stream start do not hide a worker startup refusal", async () => {
+    for (const throwAfter of [undefined, new Error("CLI exited 1")]) {
+      const sdk = fakeQuery(
+        [
+          { type: "user", message: { role: "user", content: [{ type: "text", text: "Build the fixture" }] } },
+          { type: "stream_event", event: { type: "message_start", message: { id: "pending" } } },
+          {
+            type: "result",
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: ["fixture sandbox refusal"],
+            num_turns: 0,
+          },
+        ],
+        { throwAfter },
+      );
+      const result = await (await engineWithLogin(sdk.fn, "win32")).delegate(await windowsWorker());
+      assert.equal(result.stopReason, "setup_failed");
+    }
+  });
+
+  it("WIN-275: reported model work, other platforms and a Windows lead keep their previous failure semantics", async () => {
+    const failed = {
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      errors: ["fixture failed"],
+      num_turns: 0,
+    };
+    const sdk = fakeQuery([{ ...failed, usage: { input_tokens: 1, output_tokens: 0 } }]);
+    const result = await (await engineWithLogin(sdk.fn, "win32")).delegate(await windowsWorker());
+    assert.equal(result.stopReason, "error_during_execution");
+    for (const platform of ["darwin", "win32"] as const) {
+      const request = await windowsWorker();
+      const fixture = fakeQuery([], { throwOn: new Error("fixture startup refused") });
+      const engine = await engineWithLogin(fixture.fn, platform);
+      await assert.rejects(
+        engine.delegate(platform === "win32" ? { cwd: request.cwd, prompt: request.prompt } : request),
+        {
+          kind: "other",
+          message: "fixture startup refused",
+        },
+      );
+    }
+  });
+
+  it("WIN-275: a Windows worker preserves typed auth, limits, outages, timeouts and stops", async () => {
+    for (const kind of ["auth", "rate_limit", "usage_limit", "unavailable", "timeout", "aborted"] as const) {
+      const failure = new EngineError(kind, "claude-code", `fixture ${kind}`);
+      const sdk = fakeQuery([], { throwOn: failure });
+      const engine = await engineWithLogin(sdk.fn, "win32");
+      await assert.rejects(engine.delegate(await windowsWorker()), (error) => error === failure, kind);
+    }
+    const sdk = fakeQuery([], { throwOn: new Error("not logged in") });
+    await assert.rejects((await engineWithLogin(sdk.fn, "win32")).delegate(await windowsWorker()), { kind: "auth" });
+  });
+
+  it("WIN-275: a result's auth failure survives a generic SDK throw instead of becoming a setup failure", async () => {
+    const sdk = fakeQuery(
+      [{ type: "result", subtype: "error_during_execution", is_error: true, errors: ["not logged in"], num_turns: 0 }],
+      { throwAfter: new Error("CLI exited 1") },
+    );
+    await assert.rejects((await engineWithLogin(sdk.fn, "win32")).delegate(await windowsWorker()), { kind: "auth" });
+  });
+
   it("streams only reply text, preserves long completed replies, and retains tool results", async () => {
     const text = "The bridge and lights are ready. ".repeat(200);
     const { fn, seen } = fakeQuery([

@@ -20,6 +20,7 @@ import { blockClock, minutesToBlockEnd, nextBlockStretch, withinBlock } from "..
 import { blockBench, blockContinueAsk } from "../build-block-prompts.ts";
 import { announceLoss, lostProviderOf, stopOutOfUsage, waitForProvider } from "../provider.ts";
 import { clockRoom, sleepOnPausedClock } from "../paused-clock.ts";
+import { StopCode, stopWith } from "../../outcomes.ts";
 
 /**
  * How a delegated build turn failed, beside the engine's own failure kinds: the clock cut it
@@ -74,6 +75,11 @@ export async function buildChallenger(loop: FacetLoop, round: FacetRound): Promi
   if (retried) return retried;
   const held = await holdForProvider(loop, round);
   if (held) return held;
+  // Keep provider outage policy above this: a failed startup can still be a transient outage.
+  if (round.buildEngineError?.stopReason === StopReason.SetupFailed) {
+    stopWith(loop.result, StopCode.EngineExhausted, String(round.buildFailed));
+    return RoundFlow.Stop;
+  }
   if (!round.buildFailed) loop.outageRetries = 0;
 
   // ── stopped on purpose is not a lost round ──

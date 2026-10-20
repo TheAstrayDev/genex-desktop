@@ -188,8 +188,9 @@ function WriteTree($dir, $sd) {
   foreach ($ace in $acl) { if (-not $ace.IsInherited) { $own.InsertAce($own.Count, $ace) } }
   $bytes = New-Object byte[] $own.BinaryLength
   $own.GetBinaryForm($bytes, 0)
-  $protected = ([int]$sd.ControlFlags -band [int][Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
-  $info = if ($protected) { $PROTECTED } else { $UNPROTECTED }
+  # PowerShell variable names ignore case: this must not shadow the $PROTECTED information mask.
+  $isProtected = ([int]$sd.ControlFlags -band [int][Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0
+  $info = if ($isProtected) { $PROTECTED } else { $UNPROTECTED }
   $code = $api::SetNamedSecurityInfoW($dir, $SE_FILE_OBJECT, $info, [IntPtr]::Zero, [IntPtr]::Zero, $bytes, [IntPtr]::Zero)
   if ($code -ne 0) { throw (Refused $code) }
 }

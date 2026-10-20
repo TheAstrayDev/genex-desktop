@@ -65,6 +65,8 @@ the setup screen opens on `git-missing`. What differs from macOS:
   [sandbox-runtime#523](https://github.com/anthropic-experimental/sandbox-runtime/pull/523) proposes), with
   [`windows-folder-ace.ts`](../src/substrate/windows-folder-ace.ts): `SetNamedSecurityInfoW` on
   the path, `SetFileSecurityW` on the parent. A write deny there also refuses FILE_DELETE_CHILD.
+  Applying or removing a deny preserves whether the path's DACL is protected from inheritance;
+  protected paths use `PROTECTED_DACL_SECURITY_INFORMATION` together with the DACL mask.
   The entries name the group because srt-win's recompose of a path drops every explicit entry for
   the user's SID. Each Genex records its entries in `%LOCALAPPDATA%\genex-sandbox-denies\<pid>.json`;
   every edit makes a path what all running holders need, and a gone holder's entries go on the

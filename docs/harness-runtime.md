@@ -3,6 +3,14 @@
 Read this when changing the in-app game-building harness. External developer memory is
 owned by [AGENTS.md](../AGENTS.md); this page describes product behavior.
 
+A Claude Code worker on Windows that fails before any model or tool activity reports
+`setup_failed`, preserving the CLI's reason and asking the person to check sandbox support or
+choose another Workers provider. Its facet stops `engine-exhausted` after that first startup
+attempt, without judging an absent build or spending two broken-build strikes. Provider
+outages retain their existing patience; auth, limits, timeouts and Stop retain their own
+semantics. Sandbox enforcement stays required. This does not enable a CLI's unavailable
+Windows sandbox or change the person's Workers provider automatically.
+
 What the harness may assume of any served page (studio-ultra M4). Every page the studio serves
 carries the studio's own shim before the game's first line, so `window.__studio` answers on a game
 that never heard of the contract, the studio owns the clock, `seed(n)` is reproducible, draw calls

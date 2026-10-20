@@ -184,6 +184,8 @@ export const StopReason = {
   /** Its time budget ran out. */
   Deadline: "deadline",
   Error: "error",
+  /** The worker session failed before any model or tool activity; no build exists to judge. */
+  SetupFailed: "setup_failed",
   /** The model's output hit its length limit. */
   Length: "length",
   ContextOverflow: "context_overflow",

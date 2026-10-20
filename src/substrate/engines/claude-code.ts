@@ -254,6 +254,7 @@ const SdkBlock = {
   ToolResult: "tool_result",
   MessageStart: "message_start",
   ContentBlockDelta: "content_block_delta",
+  ContentBlockStart: "content_block_start",
   TextDelta: "text_delta",
 } as const;
 
@@ -304,6 +305,8 @@ const MESSAGE = {
   JudgeFailed: "Claude Code judge failed",
   JudgeEmpty: "the Claude Code judge gave no reply",
   NotCompacted: "Claude Code did not compact the session",
+  WorkerSetupFailed: (reason: string) =>
+    `Claude worker could not start: ${reason} Check Claude CLI sandbox support or choose another Workers provider in the model picker.`,
   WokeAfterEnd:
     "the session went on after its turn ended (a background task woke it), when Genex could no longer answer its tool calls; what it did then is not finished work",
 } as const;
@@ -421,6 +424,7 @@ export class ClaudeCodeEngine implements Engine {
   readonly #catalog: ModelCatalog;
   /** The sandbox of a session that runs no tool: the usage read, model discovery, the judge. */
   readonly #toolless: { enabled: boolean };
+  readonly #platform: NodeJS.Platform;
   #telemetryAt = new WeakMap<object, number>();
   #telemetryEpoch = new WeakMap<object, number>();
   #catalogEpoch = new WeakMap<object, number>();
@@ -521,7 +525,8 @@ export class ClaudeCodeEngine implements Engine {
     this.#executable = options.executable;
     this.#resolveCli = options.resolveCli ?? requireCodingCli;
     this.#queryFn = options.queryFn;
-    this.#toolless = toollessSandbox(options.platform);
+    this.#platform = options.platform ?? process.platform;
+    this.#toolless = toollessSandbox(this.#platform);
     this.#costs = new SessionCostLedger(options.sessionCosts);
     this.#authStatusFn = options.authStatusFn;
     this.judgeCwd = options.judgeCwd ?? JUDGE_CWD;
@@ -1356,6 +1361,8 @@ export class ClaudeCodeEngine implements Engine {
   /** One message of the contractor's stream: what it tells the chat, the log and the run's state. */
   #observeMessage(message: Record<string, unknown>, run: RunState, request: DelegateRequest, stream: unknown): void {
     const type = String(message.type ?? "unknown");
+    // A result can overwrite num_turns with zero; it cannot erase activity already witnessed.
+    if (workerActivityOf(message)) run.observedActivity = true;
     // A steer's receipt: `started` is the session reading it, in stream order (claude-steer.ts).
     if (type === SdkMessage.CommandLifecycle) {
       run.feed?.lifecycle(message, request.onEvent);
@@ -1468,7 +1475,7 @@ export class ClaudeCodeEngine implements Engine {
     // because their signal fired first.
     const aborted = request.signal?.aborted;
     if (aborted || run.deadlineHit) return this.#partial(interruption(aborted), partialState());
-    const classified = this.#classify(err as Error);
+    const classified = this.#delegateFailure(err, run);
     if (classified.kind === EngineFailureKind.Auth) this.#authFailure = classified.message;
     // A limit that arrived as an error result: the text names it, the throw does not. Read the
     // text before treating the throw as "some error" — a session limit must reach the run as
@@ -1478,6 +1485,8 @@ export class ClaudeCodeEngine implements Engine {
       const text = String(run.errorText ?? run.summary);
       throw new EngineError(limitInText, this.id, text, limitResetMs(text) ?? undefined);
     }
+    const startup = this.#workerSetupFailure(run, request, run.errorText ?? classified.message, classified.kind);
+    if (startup) return this.#partial(startup, partialState());
     // The SDK throws AFTER yielding an error result ("Claude Code returned an error result:
     // …"). If we already heard how the build ended, that throw adds nothing — return the
     // partial outcome instead of letting 61 turns of work on disk read as a crash. Auth and
@@ -1505,6 +1514,8 @@ export class ClaudeCodeEngine implements Engine {
     }
     if (run.ok) this.#authFailure = null;
     this.#throwIfLimited(run);
+    const startup = this.#workerSetupFailure(run, request);
+    if (startup) return this.#partial(startup, runPartialState(run, request, startedAt, this.#model));
     failWokenWorker(run, request);
     const model = request.model ?? this.#model;
     const result: DelegateResult = {
@@ -1560,7 +1571,29 @@ export class ClaudeCodeEngine implements Engine {
     return partialDelegateResult(this.id, ending, state);
   }
 
+  /** A Windows worker that did no work failed to start, even if the CLI already sent init. */
+  #workerSetupFailure(
+    run: RunState,
+    request: DelegateRequest,
+    reason = run.errorText ?? run.summary,
+    kind?: EngineFailureKind,
+  ): DelegateEnding | null {
+    const workerOnWindows = this.#platform === "win32" && request.worker !== undefined;
+    if (!workerOnWindows || run.ok || run.observedActivity || run.resultTurns !== 0 || reportedModelWork(run.usage))
+      return null;
+    if ((kind ?? this.#classify(new Error(reason)).kind) !== EngineFailureKind.Other) return null;
+    return { stopReason: StopReason.SetupFailed, errorText: MESSAGE.WorkerSetupFailed(reason) };
+  }
+
+  /** The CLI's error result carries the cause when the SDK only says that its process exited. */
+  #delegateFailure(error: unknown, run: RunState): EngineError {
+    const failure = this.#classify(error as Error);
+    if (failure.kind !== EngineFailureKind.Other || !run.errorText) return failure;
+    return this.#classify(new Error(run.errorText));
+  }
+
   #classify(err: Error): EngineError {
+    if (err instanceof EngineError) return err;
     const text = `${err.message}`;
     // A spawn that fails before Claude Code starts is an install problem, not a build failure:
     // the bundled binary is missing (ENOENT) or the app bundle was rewritten under a running
@@ -1722,6 +1755,8 @@ interface JudgeState {
 /** Everything one delegation learns from its stream, in the order it learns it. */
 interface RunState {
   turns: number;
+  /** Model output or a tool event was seen, independently of the result's turn count. */
+  observedActivity: boolean;
   summary: string;
   ok: boolean;
   /** The result's own subtype when the build did not end well; "error" when it gave none. */
@@ -1769,6 +1804,7 @@ interface RunState {
 function newRunState(usage: Usage, cliInstallation: ClaudeInstallation): RunState {
   return {
     turns: 0,
+    observedActivity: false,
     summary: "",
     ok: false,
     errorSubtype: null,
@@ -1881,6 +1917,39 @@ function readInit(message: Record<string, unknown>, run: RunState): void {
   run.modelUsed = String(message.model ?? "") || undefined;
   run.cliVersion = typeof message.claude_code_version === "string" ? message.claude_code_version : run.cliVersion;
   run.sessionId = String(message.session_id ?? "") || undefined;
+}
+
+/** A provider's own usage reading proves activity even when it omitted streamed messages. */
+function reportedModelWork(usage: Usage): boolean {
+  const counts = [
+    usage.input_tokens,
+    usage.output_tokens,
+    usage.cache_read_tokens,
+    usage.cache_write_tokens,
+    usage.cost_usd,
+  ];
+  return counts.some((count) => typeof count === "number" && count > 0) || Object.keys(usage.by_model ?? {}).length > 0;
+}
+
+/** Prompt replay and an empty message start are not model output or tool execution. */
+function workerActivityOf(message: Record<string, unknown>): boolean {
+  if (message.type === SdkMessage.Assistant) return true;
+  const body = message.message as { content?: Array<{ type?: unknown }> } | undefined;
+  if (message.type === SdkMessage.User)
+    return Array.isArray(body?.content) && body.content.some((block) => block.type === SdkBlock.ToolResult);
+  if (message.type !== SdkMessage.StreamEvent) return false;
+  const event = message.event as
+    | {
+        type?: unknown;
+        delta?: Record<string, unknown>;
+        content_block?: { type?: unknown };
+      }
+    | undefined;
+  if (event?.type === SdkBlock.ContentBlockStart) return event.content_block?.type === SdkBlock.ToolUse;
+  if (event?.type !== SdkBlock.ContentBlockDelta) return false;
+  return Object.entries(event.delta ?? {}).some(
+    ([key, value]) => key !== "type" && typeof value === "string" && value.length > 0,
+  );
 }
 
 /**
@@ -2345,6 +2414,7 @@ async function workerSandbox(
   return {
     enabled: true,
     autoAllowBashIfSandboxed: box.autoAllow,
+    failIfUnavailable: true,
     allowUnsandboxedCommands: box.unsandboxed,
     filesystem: {
       ...(box.writes && writes.length ? { allowWrite: writes } : {}),

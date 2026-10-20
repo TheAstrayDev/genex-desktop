@@ -536,6 +536,47 @@ describe("an entry on one folder alone, on Windows", {
     assert.equal(await folderDenyEditor()([edit]), null);
     assert.doesNotMatch(sddl(target, root), /\(D;/);
   });
+
+  for (const protectedAcl of [false, true]) {
+    for (const access of [DenyAccess.Read, DenyAccess.Write]) {
+      const inheritance = protectedAcl ? "protected" : "unprotected";
+      it(`denies ${access} access on ${inheritance} DACL without changing inheritance`, async () => {
+        const root = realpathSync.native(await tmpDir("folder-deny-inheritance-"));
+        const above = path.join(root, "above");
+        const secret = path.join(above, "secret");
+        const key = path.join(secret, "nested", "key");
+        const sibling = path.join(above, "sibling");
+        await mkdir(path.dirname(key), { recursive: true });
+        await mkdir(sibling);
+        await writeFile(key, "fixture");
+        if (protectedAcl) execFileSync("icacls", [secret, "/inheritance:d"], { stdio: "ignore" });
+        const protectedDacl = /D:P/;
+        assert.equal(protectedDacl.test(sddl(secret, root)), protectedAcl, "fixture inheritance");
+        const denies = ownDenyStamps(path.join(root, "holders"), {
+          sid: async () => GUESTS,
+          pid: 1,
+          alive: () => false,
+        });
+        const own = routeWindowsDenies({
+          read: access === DenyAccess.Read ? [secret] : [],
+          write: access === DenyAccess.Write ? [secret] : [],
+        }).own;
+        const mask = access === DenyAccess.Read ? "FA" : "(?:0x10156|DCLCRPDTCRSD)";
+        try {
+          assert.equal(await denies.sync(own), true);
+          assert.match(sddl(secret, root), new RegExp(`\\(D;OICI;${mask};;;BG\\)`));
+          assert.match(sddl(key, root), new RegExp(`\\(D;ID;${mask};;;BG\\)`));
+          assert.match(sddl(above, root), /\(D;;(?:0x40|DT);;;BG\)/, "parent guard is not inherited");
+          assert.doesNotMatch(sddl(sibling, root), /\(D;[^)]*;;;BG\)/, "guard stays on the parent alone");
+          assert.equal(protectedDacl.test(sddl(secret, root)), protectedAcl, "deny preserves inheritance");
+        } finally {
+          await denies.revokeAll();
+        }
+        for (const dir of [secret, key, above]) assert.doesNotMatch(sddl(dir, root), /\(D;[^)]*;;;BG\)/, dir);
+        assert.equal(protectedDacl.test(sddl(secret, root)), protectedAcl, "removal preserves inheritance");
+      });
+    }
+  }
 });
 
 describe("toolchain and deny paths", () => {

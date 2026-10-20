@@ -4917,6 +4917,42 @@ describe("a provider lost mid-run", () => {
     return { result, appended, turns };
   };
 
+  it("WIN-275. a worker rejected before any work stops on its first attempt, with the CLI reason and no judge or broken-build strike", async () => {
+    const reason =
+      "Claude Code worker could not start. Check CLI sandbox support or choose another Workers provider. sandbox required but unavailable";
+    const { result, appended, turns } = await facetOnStub(() => ({
+      ok: false,
+      stopReason: "setup_failed",
+      errorText: reason,
+      turns: 0,
+      usage: {},
+      engine: "claude-code",
+    }));
+    assert.equal(turns.length, 1, "a startup refusal is not tried as a second build");
+    assert.equal(result.stopCode, "engine-exhausted");
+    assert.ok(result.stoppedBecause.includes(reason));
+    assert.deepEqual(appended("facet_provider_outage"), []);
+    assert.deepEqual(appended("facet_circuit_break"), []);
+    assert.deepEqual(appended("facet_iteration"), [], "there is no built game to judge");
+  });
+
+  it("WIN-275. a zero-work startup failure from a transient network outage retains provider patience", async () => {
+    const { result, appended, turns } = await facetOnStub(
+      () => ({
+        ok: false,
+        stopReason: "setup_failed",
+        errorText: "Claude Code could not start this Windows worker: ECONNRESET",
+      }),
+      { budgets: { outageDelays: [] } },
+    );
+    assert.equal(turns.length, 1);
+    assert.deepEqual(
+      appended("facet_provider_outage").map((event) => event.lost),
+      ["unavailable"],
+    );
+    assert.equal(result.stopCode, "stopped-round", "the director stops a waiting provider, not a setup failure");
+  });
+
   it("D12. a worker's build turn that meets a disabled account is an outage, never a broken round: it waits, and the run's stop keeps its work", async () => {
     try {
       const { result, appended } = await facetOnStub(() => Object.assign(new Error(DISABLED), { kind: "auth" }));
