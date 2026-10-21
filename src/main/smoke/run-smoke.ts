@@ -38,6 +38,7 @@ import { PluginSourceKind } from "../../shared/plugins.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { CredentialState } from "../../substrate/session-credentials.ts";
 import { StudioPlatform } from "../../shared/boot.ts";
+import { recommendModels, type HardwareInfo } from "../../substrate/hardware.ts";
 
 /** How long the packaged harness is given to boot and report ready. */
 const HARNESS_READY_POLL = { timeoutMs: 30 * SECOND_MS, intervalMs: 250 } as const;
@@ -680,10 +681,12 @@ async function checkReadGates(buildSmoke: BuildSmoke): Promise<void> {
   );
   releaseBootstrap();
   smokeReads.bootstrap = undefined;
+  // Launches now land on Home; request this chat while its read is still held.
+  await openFixtureChat(buildSmoke);
   check(
     "games can load while the chat is still pending",
     await waitFor(
-      `!document.body.innerText.includes('Could not load games and chats.')&&!!document.querySelector('[aria-label="Loading conversation…"]')&&!!document.querySelector('nav [data-project]')`,
+      `(()=>{const pending=document.querySelector('[aria-label="Loading conversation…"]');return !document.body.innerText.includes('Could not load games and chats.')&&!!pending&&!pending.closest('[inert]')&&document.querySelector('nav [data-thread="${buildSmoke.threadId}"]')?.getAttribute('aria-current')==='page';})()`,
     ),
   );
   smokeReads.failThread = true;
@@ -729,7 +732,17 @@ async function checkSidebarToggle(buildSmoke: BuildSmoke): Promise<void> {
 /** Bonsai as a descriptor fixture, the Studio model menu, and the local models in Settings. */
 async function checkModelRoles(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, waitFor } = buildSmoke;
-  const { core, pushUiEvent } = buildSmoke.ctx;
+  const { core, pushUiEvent, smokeReads } = buildSmoke.ctx;
+  const hardware: HardwareInfo = {
+    cpu: "Fixture Apple Silicon",
+    ramBytes: 32 * 1024 ** 3,
+    ramGb: 32,
+    usableModelGb: 23,
+    platform: "darwin",
+    arch: "arm64",
+    appleSilicon: true,
+  };
+  smokeReads.hardware = { hardware, recommendation: await recommendModels(hardware) };
   // Bonsai UI acceptance uses only a descriptor fixture: no weights, runtime or accounts.
   core.engines.register({
     id: EngineId.Bonsai,
@@ -793,6 +806,7 @@ async function checkModelRoles(buildSmoke: BuildSmoke): Promise<void> {
   );
   await wc.executeJavaScript(`document.querySelector('[data-testid="settings-dialog"] [aria-label="Close"]')?.click()`);
   await waitFor(`!document.querySelector('[data-testid="settings-dialog"]')`);
+  smokeReads.hardware = undefined;
 }
 
 /** A game chat picks its builder and judge, and the choice survives a reload. */
@@ -814,12 +828,14 @@ async function checkChatModelRoles(buildSmoke: BuildSmoke): Promise<void> {
     await waitFor(`JSON.parse(localStorage.getItem('studio.roles.codex')||'{}').roles?.engines?.builder==='bonsai'`),
   );
   await wc.executeJavaScript(
-    `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));localStorage.removeItem('studio.roles.codex');localStorage.setItem(${JSON.stringify(`studio.model.${threadId}`)},'bonsai::bonsai-2:27b-pq2_0')`,
+    `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));localStorage.removeItem('studio.roles.codex')`,
   );
-  wc.reload();
+  await reloadGameChatOn(buildSmoke, "bonsai::bonsai-2:27b-pq2_0", "Bonsai");
   check(
     "Bonsai selection restores on reload",
-    await waitFor(`document.querySelector('[aria-label="Model settings"]')?.textContent.includes('Bonsai')`),
+    await waitFor(
+      `document.querySelector('[data-chat-composer] [aria-label="Model settings"]')?.textContent.includes('Bonsai')`,
+    ),
   );
   await wc.executeJavaScript(`document.querySelector('[aria-label="Model settings"]')?.click()`);
   await waitFor(`!!document.querySelector('[data-model-view="roles"] [data-role="judge"]')`);
@@ -834,14 +850,11 @@ async function checkChatModelRoles(buildSmoke: BuildSmoke): Promise<void> {
     await fs.writeFile(bonsaiShot.replace(/\.png$/, "-bonsai.png"), (await wc.capturePage()).toPNG());
   }
   await checkLocalModelRoles(buildSmoke);
-  await wc.executeJavaScript(
-    `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));localStorage.setItem(${JSON.stringify(`studio.model.${threadId}`)},'codex::gpt-5.6-sol')`,
-  );
-  wc.reload();
+  await reloadGameChatOn(buildSmoke, "codex::gpt-5.6-sol", "Sol");
   check(
     "returning to Codex preserves the project",
     await waitFor(
-      `document.body.innerText.includes('Ready for your first idea')&&document.querySelector('[aria-label="Model settings"]')?.textContent.includes('Sol')`,
+      `document.body.innerText.includes('Ready for your first idea')&&document.querySelector('[data-chat-composer] [aria-label="Model settings"]')?.textContent.includes('Sol')&&document.querySelector('nav [data-thread="${threadId}"]')?.getAttribute('aria-current')==='page'`,
     ),
   );
 }
@@ -891,20 +904,33 @@ async function checkLocalModelRoles(buildSmoke: BuildSmoke): Promise<void> {
   );
 }
 
-/** Reload on a model for the game's chat, open that chat itself and its model menu. */
-async function openGameChatOn(buildSmoke: BuildSmoke, modelKey: string, shown: string): Promise<void> {
+/** Open the fixture game's own chat, including after a reload lands on Home. */
+async function openFixtureChat(buildSmoke: BuildSmoke): Promise<void> {
+  const { wc, project, threadId, waitFor } = buildSmoke;
+  const row = `nav [data-project=${JSON.stringify(project.name)}][data-thread=${JSON.stringify(threadId)}]`;
+  await waitFor(`!!document.querySelector(${JSON.stringify(row)})`);
+  await wc.executeJavaScript(`document.querySelector(${JSON.stringify(row)})?.click()`);
+}
+
+/** Reload the stored model and navigate to the fixture game before reading its composer. */
+async function reloadGameChatOn(buildSmoke: BuildSmoke, modelKey: string, shown: string): Promise<void> {
   const { wc, threadId, waitFor } = buildSmoke;
   await wc.executeJavaScript(
     `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));localStorage.setItem(${JSON.stringify(`studio.model.${threadId}`)},${JSON.stringify(modelKey)})`,
   );
   wc.reload();
-  // Open the game's chat itself: the reload is not relied on to land there.
-  await waitFor(`!!document.querySelector('nav [data-thread="${threadId}"]')`);
-  await wc.executeJavaScript(`document.querySelector('nav [data-thread="${threadId}"]')?.click()`);
+  await openFixtureChat(buildSmoke);
   await waitFor(
     `document.querySelector('[data-chat-composer] [aria-label="Model settings"]')?.textContent.includes(${JSON.stringify(shown)})`,
   );
-  await wc.executeJavaScript(`document.querySelector('[data-chat-composer] [aria-label="Model settings"]')?.click()`);
+}
+
+/** Reload on a model for the game's chat, open that chat itself and its model menu. */
+async function openGameChatOn(buildSmoke: BuildSmoke, modelKey: string, shown: string): Promise<void> {
+  await reloadGameChatOn(buildSmoke, modelKey, shown);
+  await buildSmoke.wc.executeJavaScript(
+    `document.querySelector('[data-chat-composer] [aria-label="Model settings"]')?.click()`,
+  );
 }
 
 /** Plugins is a workspace page with bundled Genex, and it hides the native preview. */
@@ -994,14 +1020,14 @@ async function checkPluginSearchAndZoom(buildSmoke: BuildSmoke): Promise<void> {
     ),
   );
   await capturePlugins("skills");
-  const [pluginWidth = 0, pluginHeight = 0] = window.getSize();
+  const [pluginWidth = 0, pluginHeight = 0] = window.getContentSize();
   const pluginZoom = wc.getZoomFactor();
-  window.setSize(1000, 720);
+  window.setContentSize(1000, 720);
   wc.setZoomFactor(2);
   check(
     "Plugins at 200 percent zoom keeps header actions reachable",
     await waitFor(
-      `(()=>{const p=document.querySelector('[data-plugins-page]'),a=p?.querySelector('[aria-label="Add integration"]'),s=p?.querySelector('[aria-label="Show sidebar"]');return !!a&&!!s&&a.getBoundingClientRect().right<=innerWidth&&s.getBoundingClientRect().left>=76&&p.scrollWidth<=p.clientWidth;})()`,
+      `(()=>{const p=document.querySelector('[data-plugins-page]'),a=p?.querySelector('[aria-label="Add integration"]'),s=p?.querySelector('[aria-label="Show sidebar"]');return !!a&&!!s&&a.getBoundingClientRect().right<=innerWidth&&s.getBoundingClientRect().left>=${process.platform === "darwin" ? 76 : 0}&&p.scrollWidth<=p.clientWidth;})()`,
     ),
   );
   check(
@@ -1011,7 +1037,7 @@ async function checkPluginSearchAndZoom(buildSmoke: BuildSmoke): Promise<void> {
     ),
   );
   await capturePlugins("zoom-200");
-  window.setSize(pluginWidth, pluginHeight);
+  window.setContentSize(pluginWidth, pluginHeight);
   wc.setZoomFactor(pluginZoom);
 }
 
@@ -2127,6 +2153,12 @@ async function seedOutcomeRun(buildSmoke: BuildSmoke): Promise<OutcomeRun> {
     verdictSource: "stopped",
     reason: "Director stopped the follow-up after integration",
   });
+  await outcomeEvent(CustomEvent.RunInteractionEvidence, {
+    head: "head-5",
+    label: "Earlier revision walkthrough",
+    status: "passed",
+    source: InteractionSource.IndependentPlaytester,
+  });
   await outcomeEvent(CustomEvent.DirectorVerdict, {
     pass: "judge",
     build: { head: "head-6" },
@@ -2280,7 +2312,7 @@ async function checkChecksAndCapture(buildSmoke: BuildSmoke): Promise<void> {
   check(
     "checks show the failed question on its own revision",
     await waitFor(
-      `document.body.innerText.includes('Is the requested first-person view confirmed?')&&document.body.innerText.includes('head-6')&&document.body.innerText.includes('failed · visual')`,
+      `(()=>{const groups=Array.from(document.querySelectorAll('[data-graph-panel="final"] [data-outcome-checks] section'));const current=groups.find(e=>e.querySelector('h4')?.textContent==='This build'),earlier=groups.find(e=>e.querySelector('h4')?.textContent==='Earlier builds');return !!current?.querySelector('[data-check-status="failed"]')?.textContent.includes('Is the requested first-person view confirmed?')&&current.textContent.includes('Failed · Reviewer')&&!current.textContent.includes('Earlier revision walkthrough')&&!!earlier?.textContent.includes('Earlier revision walkthrough')&&document.querySelector('[data-graph-panel="final"] [data-testid="build-details"]')?.textContent.includes('Available revision: head-6');})()`,
     ),
   );
   await wc.executeJavaScript(
@@ -2328,7 +2360,7 @@ async function checkActivityAndMcp(buildSmoke: BuildSmoke): Promise<void> {
   check(
     "a search finds a plugin's own server and names the plugin it is part of",
     await waitFor(
-      `document.querySelector('[data-testid="mcp-connectors"] [data-plugin-server="creator"]')?.textContent.includes('Part of Game dev tools router')`,
+      `document.querySelector('[data-testid="mcp-connectors"] [data-plugin-server="creator"]')?.textContent.includes('Part of Genex plugin')`,
     ),
   );
   await wc.executeJavaScript(`document.querySelector('[data-plugins-page] [aria-label="Clear search"]').click()`);
@@ -2351,7 +2383,7 @@ async function captureBuildShot(buildSmoke: BuildSmoke): Promise<void> {
     await waitFor(`!document.querySelector('[data-graph-panel]')`);
     await wc.executeJavaScript(`document.querySelector('button[title="Fit everything (0)"]')?.click()`);
     await fs.writeFile(shotPath.replace(/\.png$/, "-overview.png"), (await wc.capturePage()).toPNG());
-    window.setSize(1000, 720);
+    window.setContentSize(1000, 720);
     check(
       "small window keeps the status line within its panel",
       await waitFor(
@@ -2385,7 +2417,8 @@ async function checkDesignAt(buildSmoke: BuildSmoke, width: number, height: numb
   const { wc, check, waitFor } = buildSmoke;
   const { window } = buildSmoke.ctx;
   const buildShot = flagValue(StudioFlag.BuildShot);
-  window.setSize(width, height);
+  // The viewport is the client area; native Windows borders belong to outer bounds.
+  window.setContentSize(width, height);
   wc.setZoomFactor(zoom);
   await wc.capturePage();
   check(
@@ -2475,7 +2508,7 @@ async function checkChromeAndCursors(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, waitFor } = buildSmoke;
   const { window } = buildSmoke.ctx;
   wc.setZoomFactor(1);
-  window.setSize(1440, 900);
+  window.setContentSize(1440, 900);
   await wc.capturePage();
   await waitFor(`innerWidth===1440 && innerHeight===900`);
   check(

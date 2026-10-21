@@ -53,11 +53,13 @@ export interface ModelsIpcDeps {
   pushUiEvent(event: UiEvent): void;
   /** OpenRouter's browser sign-in, which hands the key it gets to the engine. */
   openRouterLogin: OpenRouterLogin;
+  /** The isolated UI smoke supplies a catalog machine without probing the host. */
+  readHardware?: typeof hardwareReport;
 }
 
 export function registerModelsIpc(
   handle: IpcHandle,
-  { core, subscription, pushUiEvent, openRouterLogin }: ModelsIpcDeps,
+  { core, subscription, pushUiEvent, openRouterLogin, readHardware = hardwareReport }: ModelsIpcDeps,
 ): void {
   handle("studio:engines", async () => core.engines.describe());
   handle("studio:models.refresh", async (payload) => {
@@ -81,7 +83,7 @@ export function registerModelsIpc(
     );
     return reports.filter((report): report is ProviderUsageReport => report !== null);
   });
-  handle("studio:hardware", async () => hardwareReport());
+  handle("studio:hardware", async () => readHardware());
   handle("studio:engines.recheck", async (payload) => {
     const ids = payload?.engine ? [payload.engine] : [...SUBSCRIPTION_ENGINES, ...RECHECKED_BY_MODELS];
     for (const id of ids) {
