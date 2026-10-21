@@ -919,9 +919,9 @@ async function checkPluginsSurface(buildSmoke: BuildSmoke): Promise<void> {
   );
   await wc.executeJavaScript(`document.querySelector('button[aria-label="Plugins"]').click()`);
   check(
-    "Plugins surface opens with bundled Genex, shown as the game dev tools router",
+    "Plugins surface opens with bundled Genex plugin",
     await waitFor(
-      `document.querySelector('[aria-label="Studio plugins"] [data-plugin-row="genex"]')?.textContent.includes('Game dev tools router')`,
+      `document.querySelector('[aria-label="Studio plugins"] [data-plugin-row="genex"]')?.textContent.includes('Genex plugin')`,
     ),
   );
   check(
@@ -931,8 +931,10 @@ async function checkPluginsSurface(buildSmoke: BuildSmoke): Promise<void> {
     ),
   );
   check(
-    "Genex row offers one Connect button for a locked account",
-    await waitFor(`!!document.querySelector('[data-plugin-row="genex"] [aria-label="Connect Game dev tools router"]')`),
+    "Genex row offers browser sign-in for a disconnected account",
+    await waitFor(
+      `!!document.querySelector('[data-plugin-row="genex"] [aria-label="Sign in to Genex in your browser"]')`,
+    ),
   );
   check(
     "bundled plugins show their pictures: Local Blender its own, Genex the eight tools it routes",
@@ -1021,7 +1023,7 @@ async function checkGenexPanel(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, waitFor } = buildSmoke;
   const { core } = buildSmoke.ctx;
   await wc.executeJavaScript(`document.querySelector('[aria-label="Extensions"] button:first-child').click()`);
-  await wc.executeJavaScript(`document.querySelector('button[aria-label="View Game dev tools router"]').click()`);
+  await wc.executeJavaScript(`document.querySelector('[data-plugin-row="genex"] .extension-open')?.click()`);
   check("Genex page draws its own account card", await waitFor(`!!document.querySelector('[data-genex-account]')`));
   check(
     "Genex page lists the tools it routes and no Connections",
