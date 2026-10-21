@@ -122,8 +122,9 @@ describe("boot gate", () => {
 });
 
 describe("starting and a studio that would not start", () => {
-  it("moves the starting window on at the core's games and sandbox marks", () => {
+  it("moves the starting window on at the core's seed, games and sandbox marks", () => {
     assert.equal(startStepAfter("core:settings"), null);
+    assert.equal(startStepAfter("core:seed"), StartStep.Games);
     assert.equal(startStepAfter("core:games"), StartStep.Workspace);
     assert.equal(startStepAfter("core:sandbox"), StartStep.Studio);
   });
@@ -170,6 +171,32 @@ describe("starting and a studio that would not start", () => {
     });
     const after = await gate.retry();
     assert.equal(after.phase, BootPhase.Failed);
+    assert.equal(after.failure, "EPERM: lstat AppData");
+  });
+
+  it("keeps the open studio when its agents would not start, and Try again that works clears the failure", async () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    let attempts = 0;
+    gate.agentsFailed("srt-win acl stamp timed out after 60000ms", async () => {
+      attempts++;
+    });
+    assert.deepEqual(gate.state(), {
+      platform: StudioPlatform.Windows,
+      phase: BootPhase.Ready,
+      sandbox: null,
+      failure: "srt-win acl stamp timed out after 60000ms",
+    });
+    assert.deepEqual(await gate.retry(), { platform: StudioPlatform.Windows, phase: BootPhase.Ready, sandbox: null });
+    assert.equal(attempts, 1);
+  });
+
+  it("a Try again for the agents that fails again keeps the studio, with the new failure", async () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    gate.agentsFailed("first", async () => {
+      throw new Error("EPERM: lstat AppData");
+    });
+    const after = await gate.retry();
+    assert.equal(after.phase, BootPhase.Ready);
     assert.equal(after.failure, "EPERM: lstat AppData");
   });
 
@@ -301,6 +328,19 @@ describe("Set up (Windows)", () => {
     await gate.setUp();
     await gate.setUp();
     assert.equal(installs, 2);
+  });
+
+  it("hands the install the problem it is held on, so Set up does what that problem needs", async () => {
+    const handed: SandboxProblem[] = [];
+    const gate = createBootGate(StudioPlatform.Windows, {
+      installSandbox: async (problem) => {
+        handed.push(problem);
+        return { cancelled: true };
+      },
+    });
+    gate.hold(NOT_PROVISIONED, async () => {});
+    await gate.setUp();
+    assert.deepEqual(handed, [NOT_PROVISIONED]);
   });
 
   it("says a Set up has run this launch, so a window that loads again does not run it by itself", async () => {
@@ -440,6 +480,13 @@ describe("boot IPC", () => {
     gate.fail("harness exited during boot", async () => {});
     await invoke("studio:boot.report", { error: "harness exited during boot" });
     assert.match(reports[0]?.text ?? "", /^Genex couldn't start/);
+  });
+
+  it("names agents that would not start in an open studio in its report", async () => {
+    const { gate, invoke, reports } = bootIpc(false);
+    gate.agentsFailed("srt-win acl stamp timed out", async () => {});
+    await invoke("studio:boot.report", { error: "srt-win acl stamp timed out" });
+    assert.match(reports[0]?.text ?? "", /^Genex's agents didn't start/);
   });
 
   it("paints the window controls with two hex colours, see-through or not", async () => {

@@ -531,11 +531,13 @@ Every Loop's close that is neither a yes nor a pause writes `run_finished.stillT
 the last no's `done` and `notDone`, why it stopped (`StopWhy`: its time, the no's, another end) and
 its hours (`loopHoursOf`); a time-out with no no lists nothing and still has the card. The chat's card
 reads only that, so a page that lost the run's start still shows it. A Stop pauses every Loop (a web
-finish then closing too), and a pause keeps its own reason and Resume. Keep building is offered on the
+finish whose landing it refused too; one after the landing ends nothing more), and a pause keeps its
+own reason and Resume. Keep building is offered on the
 chat's newest card until the person writes again, and on Builds' newest ended build, while nothing runs
 or waits paused. It sends through the composer's Loop (`loopOn`) marked `keepBuilding`, and goes once
-it went out. That mark reopens the finished build, or starts the next Loop on the last goal and what is
-left, with no turn deciding (chat-dispatch.ts `keepBuildingNow`). Yes ends the Loop, no
+it went out. That mark reopens the finished build, or launches the next Loop as the launch tool would (an
+Autopilot run on the base goal plus what is left, its reference, ∞ under `MAX_RUN_HOURS`), with no
+turn deciding (chat-dispatch.ts `keepBuildingNow`); a tap always takes a turn of its own. Yes ends the Loop, no
 goes back to the lead with both, and `MAX_FINISH_REJECTIONS` (3) no's in a row stop it, a timed Loop
 only once little time is left; after a row it went on past, a claim whose proof names no file made
 since the last no is turned back before any review (`freshProofIn`), and nothing is recorded. An answer
@@ -1397,6 +1399,29 @@ worker's clock stands still (`facet/paused-clock.ts`): its deadline moves on by 
 up to the run's working deadline, as the outage ladder's waits do. A worker the provider ended before
 any round of it was judged gives its goal attempt back (`attempt-refund.ts` `refundProviderAttempt`), so a
 restart is never refused for progress it never had the chance to make.
+
+### A workers' engine that cannot run its sandbox
+
+A worker always runs its commands in a sandbox, never without it: Claude Code's worker box keeps
+`failIfUnavailable: true`, because its sandboxed commands run unasked and the CLI itself is not inside
+ProcessSandbox. On Windows, where Claude Code's own sandbox cannot start, a worker (and an unattended
+builder) runs its commands in Genex's instead: the session gets no box of Claude Code's and none of
+its process-starting built-ins (`Bash`, `PowerShell`, `Monitor`, `REPL`: an allowlist), and runs each
+command through the studio's `run_command` in a `ProcessSandbox` made for the session on its first
+command (`engines/claude-code.ts` `studioShell`, `engines/session-commands.ts`). That box is the one
+Claude Code's would have been: the worker's roots (in Bypass the home folder too), the sign-in homes
+and the never-touch list denied, no network. The host reads the tool as `Bash` (its question card,
+the never-touch screen, the log). Its commands run under Git Bash, one at a time, nothing in the
+background, and a saved "always allow" rule for `Bash` does not cover them. Where a CLI still refuses
+its box, it refuses the session before the model says anything, and the engine reports it
+as `StopReason.SandboxUnavailable` with the CLI's own words (`engines/claude-code.ts`
+`sandboxRefusal`); a session that already replied keeps its ordinary failure. The refusal holds that
+engine for an hour across every pool and Loop of the harness (`loop/workers/sandbox-refusal.ts`): a
+director's builder facet stops on its first build (`StopCode.SandboxUnavailable`: no judge, strike,
+outage wait or rollback, its goal attempt given back), a pool worker ends with
+`WorkerStopCode.SandboxUnavailable`, and every later `worker_start` on that engine starts nothing and
+tells the lead to do the work itself, naming the other workers' engine when the host reports it
+signed in. A Loop's person is told once on a decision card, with that engine offered for Workers.
 
 ### Automatic resume
 

@@ -226,7 +226,8 @@ link and pruned in place, so the `prePackage` hook refuses it. On Windows, `node
 tests/e2e/run-squirrel-install.mjs` installs `Genex-Setup.exe` for the current user, checks its
 shortcuts and path lengths, then uninstalls it. CI: `package.yml` makes and smokes unsigned packages on
 PRs into `main` and pushes to `main` (with that install on Windows, and there a packaged fixture chat turn:
-`node tests/e2e/run-electron-e2e.mjs --packaged`), and a dispatch with `only` (`darwin`, `linux` or `win32`)
+`node tests/e2e/run-electron-e2e.mjs --packaged --claude-worker`, the last a Claude Code worker on a
+scripted Anthropic stand-in), and a dispatch with `only` (`darwin`, `linux` or `win32`)
 builds one platform; `release.yml` signs, notarizes, verifies and uploads to a draft release ([release operations](release-operations.md)).
 Optimization UI replay additionally needs prior AG-931 result data; it is conditional, not a
 clean-checkout gate. Seed-upgrade, interrupted, snapshots, sandbox, harness-host and
@@ -375,7 +376,8 @@ installed, and sign-in, links and downloads are refused as in every fixture) and
 and delivered, failed and stopped builds arrive as news; macOS notifications are refused) and
 sandbox-setup (the window opens on "Set up the protected workspace" for a Linux machine missing
 bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]` opens the studio) and
-update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
+agents-start-failed (the open studio's sidebar says "Agents didn't start", `[data-agents-start]`, with
+a stand-in srt-win timeout under its details; Try again clears it) and update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
 itself is refused as native) and plugin-updates (Genex and Blender installed one version back: their
 rows and pages offer `Update to <version>` and the sidebar `[data-plugins-update]`, each refused as
 native) and unreal-game (the game linked to a stand-in Unreal project inside
@@ -445,8 +447,8 @@ opt-in unset for automated acceptance.
 
 `capture --profile ag-933 --surface desktop --name after` writes an owned surface-labelled PNG;
 repeat for game. Renderer captures do not include the native game child. While Play's viewer has a
-game open, `play-bar` is its bar's layer (the bar and Comments) and `play-game` the game's own view;
-the bar comes back for a `move` near the top edge of `play-game`. The capture records
+game open, `play-bar` is its bar's layer (the bar and Comments) and `play-game` the game's own view
+below it. The capture records
 image dimensions, image-pixel/CSS-pixel scale, renderer zoom, visibility, focus and time. For diagnostics use a JSON request
 with `diagnostics --profile ag-933 --request FILE`. Start/stop a matching CPU profile ID; heap
 needs surface/name. Trace needs traceId, durationMs (100–30000) and supported categories from
@@ -488,7 +490,8 @@ in the UI; set it on start and restart.
 
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket
-permissions. Protocol v1 uses bounded newline-delimited JSON, request IDs and one operation at
+permissions; on Windows the control is a named pipe with a fresh random name, which other accounts
+can open only read-only. Protocol v1 uses bounded newline-delimited JSON, request IDs and one operation at
 a time. A timeout is not success and does not authorize retrying a mutation blindly.
 
 ## Embedded terminal acceptance
@@ -558,7 +561,8 @@ establish real browser/Keychain authorization.
 `run-publish-cover-ui.mjs` renders the production Publish dialog beside the production
 ChatPanel of the same game with a fake `window.studio`: with no shot the dialog asks the plugin to
 take one, the arrows pick a recent frame, Another cover sends its request through that chat and
-the banner says one is coming until a new frame arrives, and a kept clip plays behind its switch
+closes the dialog, the banner opened again says one is being made until a new frame arrives (with
+the time left once one was timed, in dark and light), and a kept clip plays behind its switch
 (screenshots in `.studio-dev/evidence/`). A fixture
 profile cannot show this dialog's body, since its Genex account is never connected.
 `run-publish-test-link-ui.mjs` renders the same dialog for its test link: it shows under "Publish

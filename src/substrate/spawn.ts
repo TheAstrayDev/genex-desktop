@@ -26,10 +26,11 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import type { Readable } from "node:stream";
+import type { Readable, Writable } from "node:stream";
 import { MINUTE_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
-import { StudioPlatform } from "../shared/boot.ts";
+import { type SandboxProblem, StudioPlatform } from "../shared/boot.ts";
+import { ownBubblewrap } from "./linux-bubblewrap.ts";
 import { prepareSandbox } from "./sandbox-prepare.ts";
 import {
   SandboxLaunchCode,
@@ -39,6 +40,7 @@ import {
   missingLinuxTools,
   sandboxProblem,
   windowsLaunchError,
+  windowsProxyPortsError,
   windowsSetupProblem,
 } from "./sandbox-unavailable.ts";
 import { childEnv, windowsBaseEnv } from "./child-env.ts";
@@ -65,13 +67,16 @@ import {
   renderEnvFile,
   srtWinExecFailure,
   srtWinPath,
-  windowsDependencyErrors,
+  type WindowsSetupGap,
   windowsDenyRead,
   windowsRunEnv,
   windowsSessionFor,
+  windowsSetupGaps,
   writeCurlHome,
   writeDeniesBeyondRead,
 } from "./windows-sandbox.ts";
+import { DenyAccess } from "./windows-folder-ace.ts";
+import { type LiveInput, openLiveInput } from "./windows-live-input.ts";
 
 // Linux launches this native helper through a shell, which cannot traverse Electron's asar.
 // The runtime's automatic lookup returns its virtual archive path even when the file is unpacked.
@@ -114,8 +119,15 @@ export interface RunRequest {
   /** Correlation label used for sandbox-violation attribution and logging. */
   label?: string;
   maxOutputBytes?: number;
+  /** Which end of a stream longer than `maxOutputBytes` is kept; the head unless said. */
+  keepOutput?: OutputKept;
   signal?: AbortSignal;
 }
+
+/** Which end of a long stdout or stderr a run keeps: a long build log ends with its verdict. */
+export const OutputKept = { Head: "head", Tail: "tail" } as const;
+/** Which end of a long stream a run keeps. */
+export type OutputKept = (typeof OutputKept)[keyof typeof OutputKept];
 
 /**
  * The folders a confined run writes: a game's build or install writes its game and its own scratch,
@@ -192,6 +204,11 @@ export interface SandboxOptions {
   startInBackground?: boolean;
   /** Where the sandbox says how long each step of its start took (Windows). */
   log?: (line: string) => void;
+  /**
+   * Linux: the bubblewrap to run (default: the app's own copy beside its executable when there is
+   * one, else the system's on PATH; substrate/linux-bubblewrap.ts says why).
+   */
+  bubblewrap?: string | null;
 }
 
 /** What a test may hand the Windows backend instead of letting it look for itself. */
@@ -202,8 +219,8 @@ export interface WindowsSeams {
   session?: WindowsSandboxSession;
   /** The real user's profile folder (default: the home folder). */
   profile?: string;
-  /** sandbox-runtime's Windows dependency check (default: {@link windowsDependencyErrors}). */
-  dependencyErrors?: () => Promise<string[]>;
+  /** What of the Windows sandbox is not set up yet (default: {@link windowsSetupGaps}). */
+  setupGaps?: () => Promise<WindowsSetupGap[]>;
 }
 
 /** The part of sandbox-runtime's `SandboxManager` this file drives. */
@@ -298,21 +315,26 @@ function asSetupProblem(error: unknown): unknown {
   return setup ? new SandboxUnavailableError(setup) : error;
 }
 
-/**
- * A failed Windows start as the setup problem the window shows, when it is one: by the error's
- * code, else by sandbox-runtime's dependency check, whose refusal `initialize` throws untyped. A
- * failure the check does not explain, or a check that fails itself, stays the error it was.
- */
-async function asWindowsSetupProblem(error: unknown, dependencyErrors: () => Promise<string[]>): Promise<unknown> {
-  const typed = asSetupProblem(error);
-  if (typed !== error) return typed;
-  const errors = await dependencyErrors().catch((): string[] => []);
-  const problem = sandboxProblem({
+/** The Windows setup problem for what is not set up yet, carrying what Set up does; null when nothing is missing. */
+function windowsGapProblem(gaps: readonly WindowsSetupGap[]): SandboxProblem | null {
+  return sandboxProblem({
     platform: StudioPlatform.Windows,
     supported: true,
-    dependencyErrors: errors,
+    dependencyErrors: gaps.map((gap) => gap.detail),
     missingTools: [],
+    windowsNeeds: [...new Set(gaps.map((gap) => gap.need))],
   });
+}
+
+/**
+ * A failed Windows start as the setup problem the window shows, when it is one: by the error's
+ * code, else by what is not set up yet, whose refusal `initialize` throws untyped. A failure the
+ * check does not explain, or a check that fails itself, stays the error it was.
+ */
+async function asWindowsSetupProblem(error: unknown, setupGaps: () => Promise<WindowsSetupGap[]>): Promise<unknown> {
+  const typed = asSetupProblem(error);
+  if (typed !== error) return typed;
+  const problem = windowsGapProblem(await setupGaps().catch((): WindowsSetupGap[] => []));
   return problem ? new SandboxUnavailableError(problem) : error;
 }
 
@@ -336,31 +358,68 @@ interface LaunchPlan {
   stdinInFile?: boolean;
 }
 
-/** Collect a child's stdout and stderr as text, each clipped at `maxChars`. */
+/** One stream's kept text: its first or its last `maxChars` characters. */
+interface KeptStream {
+  add(text: string): void;
+  text(): string;
+}
+
+/** Keep the first `maxChars` characters of a stream; `onClip` hears that some were dropped. */
+function keptHead(maxChars: number, onClip: () => void): KeptStream {
+  let kept = "";
+  return {
+    add(text) {
+      if (kept.length + text.length > maxChars) onClip();
+      if (kept.length < maxChars) kept = (kept + text).slice(0, maxChars);
+    },
+    text: () => kept,
+  };
+}
+
+/**
+ * Keep the last `maxChars` characters of a stream. The text is trimmed only once it holds twice
+ * the cap, so a long log costs a copy per `maxChars` of output, not one per chunk.
+ */
+function keptTail(maxChars: number, onClip: () => void): KeptStream {
+  let kept = "";
+  return {
+    add(text) {
+      kept += text;
+      if (kept.length > maxChars) onClip();
+      if (kept.length > 2 * maxChars) kept = kept.slice(-maxChars);
+    },
+    text: () => kept.slice(-maxChars),
+  };
+}
+
+/** Collect a child's stdout and stderr as text, each clipped at `maxChars` from the end `keep` names. */
 function captureOutput(
   child: { stdout: Readable; stderr: Readable },
   maxChars: number,
+  keep: OutputKept,
 ): { stdout: string; stderr: string; truncated: boolean } {
-  const output = { stdout: "", stderr: "", truncated: false };
-  const clip = (buf: Buffer, current: string): string => {
-    if (current.length >= maxChars) {
-      output.truncated = true;
-      return current;
-    }
-    const next = current + buf.toString("utf8");
-    if (next.length > maxChars) {
-      output.truncated = true;
-      return next.slice(0, maxChars);
-    }
-    return next;
+  let truncated = false;
+  const onClip = () => {
+    truncated = true;
   };
-  child.stdout.on("data", (buf: Buffer) => {
-    output.stdout = clip(buf, output.stdout);
-  });
-  child.stderr.on("data", (buf: Buffer) => {
-    output.stderr = clip(buf, output.stderr);
-  });
-  return output;
+  const kept = keep === OutputKept.Tail ? keptTail : keptHead;
+  const stdout = kept(maxChars, onClip);
+  const stderr = kept(maxChars, onClip);
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (text: string) => stdout.add(text));
+  child.stderr.on("data", (text: string) => stderr.add(text));
+  return {
+    get stdout() {
+      return stdout.text();
+    },
+    get stderr() {
+      return stderr.text();
+    },
+    get truncated() {
+      return truncated;
+    },
+  };
 }
 
 /**
@@ -495,6 +554,8 @@ export class ProcessSandbox {
   #starting: Promise<void> | null = null;
   #initError: Error | null = null;
   #log: ((line: string) => void) | null = null;
+  /** Linux: the bubblewrap sandbox-runtime runs, when not the system's on PATH. */
+  #bubblewrap: string | null = null;
   #toolPath: (() => Promise<string>) | null = null;
   #resolvedToolPath: Promise<string> | null = null;
   readonly #platform: NodeJS.Platform;
@@ -532,6 +593,7 @@ export class ProcessSandbox {
     sandbox.#runtime = options.runtime ?? null;
     sandbox.#seams = options.windows ?? {};
     sandbox.#log = options.log ?? null;
+    sandbox.#bubblewrap = platform === StudioPlatform.Linux ? (options.bubblewrap ?? ownBubblewrap()) : null;
     if (!sandbox.enabled) return sandbox;
     if (options.startInBackground && platform === StudioPlatform.Windows) await sandbox.#startInBackground();
     else await sandbox.#initialize();
@@ -552,6 +614,11 @@ export class ProcessSandbox {
     return this.#initError;
   }
 
+  /** Wait for sandbox initialization before booting or recovering code that must run inside it. */
+  async ensureReady(): Promise<void> {
+    if (this.enabled) await this.#initialize();
+  }
+
   /**
    * Open another folder the agent may write. Idempotent, and a no-op when `dir` already sits
    * inside a writable root (the default library covers `~/AI Games/...`).
@@ -561,6 +628,21 @@ export class ProcessSandbox {
     const already = this.policy.allowWrite.some((root) => isInside(root, resolved));
     if (already) return;
     this.policy.allowWrite.push(resolved);
+    // Windows: grants change only between commands, so the session queues a regrant instead.
+    if (this.#windows) this.#windows.session.update(this, this.#windowsGrants(this.#windows));
+    else this.#pushConfig();
+  }
+
+  /**
+   * Open another folder the agent may read: a native runtime the person installed in their own
+   * profile, which srt-win's sandbox user cannot read otherwise. Idempotent, and a no-op when `dir`
+   * already sits inside a readable or writable root.
+   */
+  allowRead(dir: string): void {
+    const resolved = path.resolve(dir);
+    const roots = [...this.policy.allowRead, ...this.policy.allowWrite];
+    if (roots.some((root) => isInside(root, resolved))) return;
+    this.policy.allowRead.push(resolved);
     // Windows: grants change only between commands, so the session queues a regrant instead.
     if (this.#windows) this.#windows.session.update(this, this.#windowsGrants(this.#windows));
     else this.#pushConfig();
@@ -620,13 +702,8 @@ export class ProcessSandbox {
     assertSandboxReady(runtime, this.#platform);
     const bash = this.#seams.bash === undefined ? await findGitBash() : this.#seams.bash;
     if (!bash) throw new SandboxUnavailableError(gitMissingProblem());
-    const gaps = await (this.#seams.dependencyErrors ?? windowsDependencyErrors)().catch((): string[] => []);
-    const problem = sandboxProblem({
-      platform: StudioPlatform.Windows,
-      supported: true,
-      dependencyErrors: gaps,
-      missingTools: [],
-    });
+    const gaps = await (this.#seams.setupGaps ?? windowsSetupGaps)().catch((): WindowsSetupGap[] => []);
+    const problem = windowsGapProblem(gaps);
     if (problem) throw new SandboxUnavailableError(problem);
     const started = performance.now();
     this.#initialize().then(
@@ -696,7 +773,10 @@ export class ProcessSandbox {
     await session
       .join(this, { grants: this.#windowsGrants(backend), config: this.#windowsSessionConfig() })
       .catch(async (error: unknown) => {
-        throw await asWindowsSetupProblem(error, this.#seams.dependencyErrors ?? windowsDependencyErrors);
+        throw (
+          windowsProxyPortsError(error) ??
+          (await asWindowsSetupProblem(error, this.#seams.setupGaps ?? windowsSetupGaps))
+        );
       });
     this.#windows = backend;
     // A folder or deny added while the session started (a start in the background) joins it now.
@@ -736,6 +816,7 @@ export class ProcessSandbox {
   toRuntimeConfig(policy: SandboxPolicy): import("@anthropic-ai/sandbox-runtime").SandboxRuntimeConfig {
     return {
       ...(packagedSeccomp ? { seccomp: { applyPath: packagedSeccomp } } : {}),
+      ...(this.#bubblewrap ? { bwrapPath: this.#bubblewrap } : {}),
       network: {
         allowedDomains: policy.allowedDomains,
         deniedDomains: [],
@@ -761,23 +842,60 @@ export class ProcessSandbox {
     env?: Record<string, string>;
     label?: string;
     policy?: Partial<SandboxPolicy>;
-  }): Promise<{ child: ChildProcess; sandboxed: boolean }> {
+    /**
+     * All of the process's input, sent once and then closed. Pass it here rather than writing to
+     * the child: on Windows srt-win does not pass stdin on, so only the run's stdin file carries it.
+     */
+    stdin?: string;
+    /**
+     * Input the caller keeps writing for the life of the process (the Play Protocol's requests):
+     * write it to the answer's `input`, never to `child.stdin`, which srt-win does not pass on.
+     */
+    liveInput?: boolean;
+  }): Promise<{ child: ChildProcess; sandboxed: boolean; input: Writable }> {
     // Held open until the process is gone, as `run` holds it for the length of a run.
     const close = await this.#openDomains(request.policy);
+    let live: LiveInput | null = null;
     try {
-      const plan = await this.#launchPlan({ ...request, longLived: true });
+      live = request.liveInput ? await this.#liveInput(request.command) : null;
+      const launch = live ? { ...request, ...this.#relayed(live, request.env) } : request;
+      const plan = await this.#launchPlan({ ...launch, longLived: true });
+      const relay = live;
       const done = () => {
         plan.release?.();
         close();
+        void relay?.close();
       };
       const child = this.#start(plan);
       child.once("close", done);
       child.once("error", done);
-      return { child, sandboxed: plan.sandboxed };
+      if (request.stdin !== undefined) {
+        // A process that exits before reading its input lands EPIPE here; its exit already says so.
+        child.stdin.on("error", () => {});
+        child.stdin.end(plan.stdinInFile ? undefined : request.stdin);
+      }
+      if (relay) void relay.connect(() => child.exitCode === null && child.signalCode === null);
+      return { child, sandboxed: plan.sandboxed, input: relay?.input ?? child.stdin };
     } catch (err) {
       close();
+      await live?.close();
       throw err;
     }
+  }
+
+  /** Windows, sandboxed: the relay a process's live input goes through. Null elsewhere: stdin carries it. */
+  async #liveInput(command: string): Promise<LiveInput | null> {
+    await this.ensureReady();
+    const backend = this.#windows;
+    if (!this.enabled || !backend) return null;
+    return openLiveInput({ command, shell: backend.bash, scratchDir: this.scratchDir });
+  }
+
+  /** The relay in place of the caller's command, by the studio's own Node, its variables beside the caller's. */
+  #relayed(live: LiveInput, env: Record<string, string> | undefined): { command: string; env: Record<string, string> } {
+    const node = shellQuote(mixedPath(longPath(process.execPath, this.#platform)));
+    const file = shellQuote(mixedPath(live.file));
+    return { command: `export ELECTRON_RUN_AS_NODE=1; exec ${node} ${file}`, env: { ...env, ...live.env } };
   }
 
   /**
@@ -930,7 +1048,8 @@ export class ProcessSandbox {
    * A Windows run's own config: its network and the run's own denies (the instance's are the
    * session's). Grants are the session's too (srt-win refuses a per-command grant), and a deny
    * path that does not exist is dropped where it is unreadable anyway (in the profile, outside
-   * every grant), so srt-win never creates a placeholder there.
+   * every grant), so srt-win never creates a placeholder there. So is one Genex already denies
+   * for the session: srt-win would stamp it again for the command, walking its parent folder.
    */
   #windowsOverlay(
     backend: WindowsBackend,
@@ -938,14 +1057,16 @@ export class ProcessSandbox {
   ): import("@anthropic-ai/sandbox-runtime").SandboxRuntimeConfig {
     const applied = backend.session.applied ?? { write: [], read: [] };
     const scope = { roots: [...applied.write, ...applied.read], profile: backend.profile };
-    const denyRead = keepWindowsDenies(patch.denyRead ?? [], scope);
+    const kept = (paths: readonly string[] | undefined, access: DenyAccess) =>
+      backend.session.withoutOwnDenies(keepWindowsDenies(paths ?? [], scope), access);
+    const denyRead = kept(patch.denyRead, DenyAccess.Read);
     const config = this.toRuntimeConfig({
       ...this.policy,
       allowedDomains: [...this.policy.allowedDomains, ...(patch.allowedDomains ?? [])],
       allowWrite: [],
       allowRead: [],
       denyRead,
-      denyWrite: writeDeniesBeyondRead(keepWindowsDenies(patch.denyWrite ?? [], scope), denyRead),
+      denyWrite: writeDeniesBeyondRead(kept(patch.denyWrite, DenyAccess.Write), denyRead),
     });
     return config;
   }
@@ -1008,7 +1129,11 @@ export class ProcessSandbox {
 
     const child = this.#start(plan);
     return await new Promise<RunResult>((resolve, reject) => {
-      const output = captureOutput(child, request.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_CHARS);
+      const output = captureOutput(
+        child,
+        request.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_CHARS,
+        request.keepOutput ?? OutputKept.Head,
+      );
 
       let timedOut = false;
       const timer = setTimeout(() => {

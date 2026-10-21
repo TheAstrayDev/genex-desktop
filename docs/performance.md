@@ -119,6 +119,12 @@ counters carry the regression gates.
   launch checked while this launch's checks run (`main/engine-boot.ts`).
 - Plugin packages are inspected from directory listings, several folders at a time; event bodies
   are read through a sliding window.
+- The launch's seed upgrade (`substrate/seed-upgrade.ts`) hashes the seed and the harness
+  workspace, and rewrites renamed names, 32 files at a time rather than one after another.
+- Each harness boot (launch, restart, self-edit reload) runs with `NODE_COMPILE_CACHE` in the
+  sandbox's scratch (`harness-compile-cache`), flushed once the harness is ready, so a boot reuses
+  the type-stripped, compiled seed (Node 24, Linux: importing the seed 640 → 225 ms median). Entries
+  are keyed by file content, so the agent's edits compile afresh.
 
 ## Packaged builds
 
@@ -127,11 +133,18 @@ differs from an owned development build:
 
 - **Renderer:** minified, production React, no StrictMode replays, no Profiler or journey marks.
   Owned builds overstate render cost; a packaged measurement needs `--studio-diagnostics`.
-- **Main bundle:** `main.mjs` is not minified in any mode, and no build uses a V8 code cache, so
-  every launch parses and compiles it. Heavy packages load on first use, not at its top.
+- **Main bundle:** `main.mjs` is a small entry (`main/boot.ts`) that turns on V8's compile cache
+  and then imports the app, `app.mjs`, which is not minified in any mode. A packaged normal launch
+  keeps the compiled code in `<userData>/v8-compile-cache` (`main/compile-cache.ts`), written 30 s
+  after launch and at quit, so later launches skip most parsing and compiling (Electron 43, Linux:
+  the bundle's import 238 → 168 ms median). Development, test and runner launches never write it.
+  Heavy packages load on first use, not at its top.
 - **Archive:** the app loads from `app.asar` with integrity validation; `dist/resources` (harness
   seed, vendored TypeScript, three.js, plugin payloads), node-pty and the sandbox vendor folder
-  are unpacked because they are spawned or served.
+  are unpacked because they are spawned or served. Packages esbuild bundles (React, xterm,
+  `es-module-lexer`, `update-electron-app`, …) are devDependencies, so the packager's prune leaves
+  them out of `app.asar`; `dependencies` holds only what the bundles load from `node_modules` at run
+  time (the `external` list in `scripts/build.mjs`, and `zod`, which the agent SDK peers on).
 - **Fuses:** `NODE_OPTIONS` and `--inspect` are off, so a packaged app cannot be profiled with a
   Node inspector; use diagnostics and Chromium traces.
 - **First launch:** Gatekeeper verifies the signed bundle once, which lengthens the first start.

@@ -96,22 +96,46 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 ## Playing a game
 
-- A game plays across the whole window in a sandboxed view (`persist:genex-play`). The app's bar
-  lies over its top edge as glass, in a transparent view of its own above the game's
-  (`renderer/play-bar.html`, `main/play/bar-reveal.ts`): back, the name and facts, Like, Comments,
-  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. It is up while the game loads, for 3 seconds
-  after play starts and again when the pointer reaches the top edge or Esc is pressed in the game;
-  then it fades up and out, and macOS's window buttons go with it (on Windows and Linux it stays up,
-  since their window controls can't). A game holding the mouse doesn't bring it back. A held Esc
-  gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
-  sign-in. The rest of the app is inert until the game closes.
+- A game plays in a sandboxed view (`persist:genex-play`) filling the window below the app's bar, a
+  48px strip of its own across the top that never covers the game and never fades, as on the
+  genex.games game page. The bar is drawn in a transparent view of its own above the game's
+  (`renderer/play-bar.html`, `main/play/bar-layout.ts`): back, the name and facts, Like, Comments,
+  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. Only the game's own full screen
+  gives it the whole window; the bar comes back when it ends. A held Esc gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
+  sign-in. The rest of the app is inert until the game closes. Closing the window closes it; another
+  window over the studio's, another desktop or minimizing leaves it playing (`view-drop.ts`).
 - Comments (the count, or the icon alone) opens a modal over the dimmed game: its count as the
   title, genex.games' comments newest first in pages of 20, a footer pinned under the list (Sign in
   signed out, else the field with Post inside it once something is typed; at most 500 characters).
   The account's own comments can be deleted. Main reads and writes them for the game on screen
   (`main/play/comments.ts`); Esc, ✕ or a click outside closes it and the game gets the keyboard back.
+- Paying in coin: a game's purchase (the embed SDK's `buy()` or `requestPayment()`) opens Studio's
+  own sheet over the dimmed game in the bar's layer (`main/play/viewer-purchase.ts`,
+  `renderer/play/PlayPurchase.tsx`), never genex.games' confirm page. The SDK's popup is made hidden,
+  at most one per game and only while the viewer may show a sheet; only the game's own top frame's
+  counts, its first move ends it, and it never loads the confirm page. While one lives, Play's session
+  cancels any request for a confirm page; with none alive it cancels nothing
+  (`main/play/purchase-window.ts`, `purchase-address.ts`). Main reads the purchase as the app's Genex
+  account, then the coin balance
+  only for a purchase the game may ask for, and shows a sheet only for the game on screen while the
+  purchase is open to pay (`main/play/coin.ts`); an ask it drops waits 5 seconds like a Cancel.
+  Pay counts once the page has shown Ask for a second with no press in it; a press, a held key or the
+  window's focus changing starts that second again. Main confirms the purchase it holds, never one the
+  page names, and the game learns how it went from its own SDK. Cancel, Esc, ✕ or a click outside
+  cancels it on genex.games, and the next sheet waits 5 seconds; a page that reloads or leaves, or a
+  viewer that closes, cancels one still unpaid. Its states: Ask (`× N` above one; a game-priced
+  payment's terms whole, in a scroll area), Paying, Paid (the receipt and what is left), Not enough
+  coin (Get coin opens genex.games; once the coin arrives, Review; after genex.games refused Pay for
+  want of coin, try again in the game), Sign in (Review once signed in), Pending (genex.games has not
+  answered; asked every 2 seconds) and Failed (timed out, canceled, refused or refunded). A purchase
+  genex.games still holds open never times out sooner than its two minutes after the game asked, by
+  the app's own clock, however far that clock runs ahead. Signing in from the sheet signs the bar in
+  too. UNCONFIRMED with genex.games: confirming from Studio on the `native_modal` surface, and
+  `/inventory` as Get coin's page; each is one constant (`STUDIO_CONFIRM_SURFACE`, `playCoinPageUrl`).
+  A development profile pointing Studio at another API catches nothing.
 - The page stays on Genex games' addresses; a link it opens goes to the browser, at most one every
-  few seconds.
+  few seconds. A coin purchase's popup is the exception above: its confirm address no longer goes to
+  the browser.
 - Voice chat: a game that asks for a microphone gets the bar's mic switch, remembered per game.
   Main lets the page open the microphone only right after it asked it to, and only on the game's
   own origin.
@@ -128,6 +152,71 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   game takes the row. A failure is a toast, and Play comes back for a person still with it. A remix
   keeps its scripts off until a build fails and the person trusts it: the stage's Run setup scripts.
 
+## Native builds
+
+A game made in Unity, Godot or Unreal can carry a Mac app or a Windows program besides (or instead
+of) its web build. The app's copy of the contract is `src/shared/play-native.ts`; genex.games does
+not serve it yet, and every field is optional, so a server that sends none of it leaves Play as it
+is.
+
+- A gallery item (feed, search catalog, a profile's games, `/api/gallery/world/<slug>`) may add
+  `builds` (a list of rows), `web` (false when there is no web build; absent means there is one)
+  and `engine` (an engine id: `unity`, `godot`, `unreal`). The world item may add `shots` (https
+  images on Genex's image hosts, four at most) and `updatedAt`. Multiplayer stays `multiplayer`.
+- A build row: `platform` (`mac`, `windows`, `linux`), `arch` (`arm64`, `x64`, `universal` for a
+  Mac app), `version` (the author's build id), `sizeBytes` (the archive), `installedBytes`
+  (unpacked), `sha256` (hex of the archive), `url`, `entry` (what runs, from the archive's root: a
+  `.app` bundle at the root for a Mac, an `.exe` for Windows), optional `minOs` (`13.0`,
+  `10.0.19041`) and `publishedAt`. The archive is a zip; its `url` is https on a build host the app
+  trusts (`NATIVE_BUILD_HOSTS`: `cdn.genex.technology` by exact name, so a game's own
+  `<slug>.genex.technology` site never hands out an app), with no port or credentials, never
+  redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
+- The build a computer installs is its platform's for its own processor, else a universal Mac app,
+  else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
+  (`buildFor`). Nothing is launched on Windows until its sandbox can show a program's window. A game with no web
+  build and no build for this computer is left out of the tabs and search; its maker's profile
+  still lists it.
+- Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as
+  `UiEvent.PlayInstalls`): one install at a time, the rest queued; a free-space check (download,
+  unpacked game and 1 GiB); the archive streamed to `installed-games/.downloads/` (resumed by
+  range, given up after a minute without a byte), its sha256 checked, its zip directory read before
+  anything is unpacked (`native-zip.ts`: no entry or link outside it, nothing written through a
+  link, no more than the stated size), unpacked with `ditto --noqtn`, every link resolved inside it,
+  the app's signature (ad hoc is enough) and processor checked, then its bundle id set to
+  `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. Each
+  game keeps `installed-games/<slug>/<version>/` and `saves/`; `index.json` lists them. Removing a
+  game (refused while it runs) keeps its saves; an update keeps the running version until it quits.
+- Playing (`main/play/native-launch.ts`): one copy per game, in the game sandbox (`spawnNativeGame`:
+  the app read-only, `saves/` its HOME and `CFFIXED_USER_HOME`, its own preference domain, its
+  `NSIRD_` atomic-save folder, window, GPU and sound, no network). Genex finds its window by pid and
+  brings it forward (macOS does not). A game opens full screen with its engine's own argument
+  (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
+  engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
+  Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;
+  quitting Genex ends every game, and the next start ends a leftover only while it is the same
+  process. A web game's Mac app is offered in the viewer's bar (install, progress, play: the viewer
+  gives way), and opening a game whose app runs brings the app forward.
+- Links (`main/play/game-links.ts`): the website's Open in Genex sends `genex://game/<slug>`.
+  The packaged app declares the scheme (`protocols` in `forge.config.cjs`, the Linux packages'
+  `x-scheme-handler/genex`) and registers it at start; macOS hands a link over `open-url`, Windows
+  and Linux start Genex with it (`second-instance`, or the first start's arguments). Only that exact
+  shape with a Play slug is taken. Main shows the window and keeps the newest link until the page
+  takes it once (`studio:play.take-game-link`, announced by `play.game-link`); the page then opens
+  the game's own page in Play (`use-game-links.ts`), which shows its own error when the game
+  cannot be read. Developer and test launches register nothing.
+- Notices: an install finished or failed, and a newer build of an installed game (checked at start
+  and every six hours, once per version), are written to the log (`play_install_finished`,
+  `play_install_failed`, `play_update_available`); the feed shows them as Play rows that open the
+  game's page. Settings › Storage lists installed games with Remove; they are not a "Free up" kind.
+- Fixtures: every fixture launch has native games (Dust Runners, Iron Tide, Frigate, Puck Rush,
+  Harbor Lights, and SKATE's Mac app) on `builds.genex.invalid`, which never resolves. The
+  `native-games` fixture builds their Mac apps on this Mac (Xcode, `dev/fixture-native-app.ts`),
+  serves the archives from the profile at a few MB a second, and starts with Frigate installed,
+  Puck Rush one version behind, and a Mac build in the library game's `Builds/Mac`, so its Publish
+  dialog lists platforms ([Genex publish](plugins.md#first-party-privileges)).
+- `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
+  description, screenshots and when it changed.
+
 ## Where to work
 
 `src/renderer/play/`, `src/renderer/state/play.ts` and `people.ts`, `src/renderer/avatars/`,
@@ -135,8 +224,11 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 [feature map](agent/feature-map.md). Fixtures: `STUDIO_FIXTURE_GENEX_ACCOUNT=1|admin|new|quiet|fresh|nickname|terms`
 signs a fixture launch in (the full account owns Snowball, and `admin` is it as a genex.games
 admin; `new` and `nickname` have not chosen a nickname; a few names, such as `rab`, read as taken),
-`ended` gives it a refused one. Tests: `tests/conformance/play-*`,
-`genex-account`, `app-account-plugin`.
+`ended` gives it a refused one. A fixture launch's stand-in game asks for a coin purchase from a
+button per case (`[data-fixture-buy="<case>"]`) or keys 1 to 9 and 0 (`dev/fixture-coin.ts`): every
+state of the sheet, on a confirm website that resolves nowhere; the account holds 1,240 coin, and Get
+coin adds 1,000. Tests: `tests/conformance/play-*`, `genex-account`, `app-account-plugin`; the
+purchase popup in Electron: `npm run test:ui -- play-purchase`.
 
 A live `studio:dev` profile can point Play at a local or test genex.games with
 `GENEX_DEV_PLAY_API_ORIGIN` and `GENEX_DEV_PLAY_WEB_ORIGIN` (bare origins: https, or http on this

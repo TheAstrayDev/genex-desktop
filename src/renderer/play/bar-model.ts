@@ -83,23 +83,23 @@ export const withoutComment = (list: CommentsList, id: string): CommentsList => 
 export const NOTHING_TOLD = "";
 
 /**
- * What the layer tells main about what holds the bar, given what it last told (`told`, a key from an
- * earlier answer): nothing when that is unchanged; the first word after `NOTHING_TOLD` asks main to
- * draw the bar again for it (`ready`).
+ * What the layer tells main about itself, given what it last told (`told`, a key from an earlier
+ * answer): nothing when that is unchanged; the first word after `NOTHING_TOLD` asks main to draw the
+ * bar again for it (`ready`).
  */
 export function holdToTell(told: string, hold: PlayBarHold): { key: string; payload: PlayBarHold } | null {
-  const plain = { held: hold.held, comments: hold.comments };
+  const plain = { comments: hold.comments };
   const key = holdKey(plain);
   if (key === told) return null;
   return { key, payload: told === NOTHING_TOLD ? { ...plain, ready: true } : plain };
 }
 
 /** The key a hold is remembered by, once told. */
-export const holdKey = (hold: PlayBarHold): string => JSON.stringify({ held: hold.held, comments: hold.comments });
+export const holdKey = (hold: PlayBarHold): string => JSON.stringify({ comments: hold.comments });
 
 /** What Esc in the bar's layer does. Never rename a value. */
 export const BarEscape = {
-  /** Nothing: Comments closes itself, a key held down repeats, or no game is open. */
+  /** Nothing: Comments closes itself, a purchase sheet answers it, a key held down repeats, or no game is open. */
   None: "none",
   /** The game is playing: the keyboard goes back to it. */
   Resume: "resume",
@@ -111,9 +111,11 @@ export type BarEscape = (typeof BarEscape)[keyof typeof BarEscape];
 /** What an Esc press in the bar's layer does, by the game's phase. */
 export function barEscape(
   phase: PlayViewerPhase | undefined,
-  press: { repeat: boolean; commentsOpen: boolean },
+  press: { repeat: boolean; commentsOpen: boolean; sheetOpen: boolean },
 ): BarEscape {
-  if (!phase || press.repeat || press.commentsOpen) return BarEscape.None;
+  // Comments and a purchase sheet each answer Esc themselves; the game stays covered under them.
+  const covered = press.commentsOpen || press.sheetOpen;
+  if (!phase || press.repeat || covered) return BarEscape.None;
   return phase === PlayViewerPhase.Playing ? BarEscape.Resume : BarEscape.Leave;
 }
 

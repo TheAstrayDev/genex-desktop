@@ -15,11 +15,13 @@ licenses and terms of included third-party software.
   `@modelcontextprotocol/sdk`, `@xterm/*`, `zod` and their dependencies) keep their license
   files in the packaged `node_modules`.
 - Electron supplies its own license and Chromium notices.
-- On macOS, cua-driver (MIT) keeps its license and cua's notices under `dist/resources/cua-driver`
-  ([Vendored Cua Driver](#vendored-cua-driver-cua-driver)).
+- On macOS and Windows, cua-driver (MIT) keeps its license and cua's notices under
+  `dist/resources/cua-driver` ([Vendored Cua Driver](#vendored-cua-driver-cua-driver)).
 - On Windows, Git for Windows (GPL-2.0 and its components' licenses) keeps its `LICENSE.txt` and
   `usr/share/licenses` under `resources/git`
   ([Bundled Git for Windows](#bundled-git-for-windows)).
+- On Windows, Microsoft's Visual C++ runtime DLL ships beside sandbox-runtime's `srt-win.exe`
+  ([Visual C++ runtime](#visual-c-runtime-windows)).
 - The TypeScript 7 compiler (Apache-2.0), `@types/node` and `undici-types` (MIT) that the
   self-edit type gate runs keep their license and notice files under `dist/resources/tsc`.
 - The Genex asset CLI (`@genex-ai/cli-demo`, MIT) and its dependencies keep their license files
@@ -63,9 +65,9 @@ text behind a Studio-written preface; `vendor.json` records each source, version
 `npm run genex:skills` refreshes them.
 
 - Eight platform cards and their references, copied unchanged from
-  `@genex-ai/cli-demo` 1.36.9 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
+  `@genex-ai/cli-demo` 1.36.11 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
   license text ships beside them as `skills/LICENSE-cards`, copied from the CLI's `LICENSE`.
-- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.9), which is not part of the npm
+- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.11), which is not part of the npm
   package. It is attributed to Genex here; its license is not yet confirmed (see "Status not yet
   recorded" below).
 
@@ -108,10 +110,11 @@ Basis Universal decoders to `dist/renderer/decoders`.
 
 ## Vendored Cua Driver (cua-driver)
 
-On macOS, computer control runs cua-driver 0.35.2 from [trycua/cua](https://github.com/trycua/cua)
-(MIT, Copyright (c) 2025 Cua AI, Inc.), bundled as `dist/resources/cua-driver/cua-driver`: the
-executable from cua's release, thinned to the app's architecture and signed with the app's identity
-(`scripts/vendor-cua-driver.ts`). Its license and cua's third-party notices for that release
+On macOS and Windows, computer control runs cua-driver 0.35.2 from
+[trycua/cua](https://github.com/trycua/cua) (MIT, Copyright (c) 2025 Cua AI, Inc.), bundled as
+`dist/resources/cua-driver/cua-driver` (`cua-driver.exe` on Windows): the executable from cua's
+release, on macOS thinned to the app's architecture and signed with the app's identity, on Windows
+as cua signed it (`scripts/vendor-cua-driver.ts`). Its license and cua's third-party notices for that release
 (code derived from trope-cua, Interface-Agent, yabai, QuickJS-ng, rquickjs and T3 Code, all MIT)
 ship beside it as `LICENSE.md` and `THIRD_PARTY_NOTICES.md`, copied from `build/cua-driver/`. The
 bundled copy runs with cua's telemetry and update check turned off.
@@ -126,6 +129,17 @@ it. The copy is the release's own files with its documentation, graphical tools,
 Credential Manager left out (`scripts/vendor-git-for-windows.ts`); nothing in it is modified. The
 source of every part is published with that release on GitHub and in the MSYS2 and Git for Windows
 package repositories it names.
+
+## Visual C++ runtime (Windows)
+
+The Windows app ships Microsoft's Visual C++ 2015-2022 runtime library `vcruntime140.dll`
+(Copyright (c) Microsoft Corporation) beside sandbox-runtime's `srt-win.exe`, which imports it and
+would not start without it: Windows does not include it. Packaging copies it unchanged, for that
+executable's architecture, from the Visual C++ redistributable folder of the Visual Studio that
+builds the package (`VC\Redist\MSVC\<version>\<arch>\Microsoft.VC14x.CRT`,
+`scripts/package-vc-runtime.cjs`): app-local deployment, which the Distributable Code terms of the
+Visual Studio license allow. It remains under those terms. Any other Visual C++ runtime DLL a
+bundled program imports ships the same way, and the packaged smoke fails when one is missing.
 
 ## Vendored Genex embed SDK (@genex-ai/embed-sdk)
 
@@ -202,8 +216,8 @@ generation for the film.
 These need an owner decision before public distribution; see
 [release readiness](docs/release-readiness.md#distribution-and-open-source).
 
-- Genex UI sources: components, theme tokens, the wordmark and the catalog-search engine were
-  adapted from the owner's `genex-cli-threejs` web app (`src/renderer/ui/GENEX-SOURCES.md`).
+- Genex UI sources: components, theme tokens, the wordmark, the coin mark and the catalog-search
+  engine were adapted from the owner's `genex-cli-threejs` web app (`src/renderer/ui/GENEX-SOURCES.md`).
   The owner's contributed adaptations are covered by the root MIT license. Genex's name and
   logo identify the product; the code license does not grant trademark rights.
 - The Genex guide https://genex.games/SKILL.md, vendored as `src/plugins/genex/skills/genex`:
@@ -326,10 +340,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-### @genex-ai/multiplayer 0.17.0
+### @genex-ai/multiplayer 0.17.1
 
 Bundled into `vendor/genex/`, the multiplayer SDK a game made from Studio's template maps in its import
-map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
+map, and shipped as `genex-multiplayer-bridge.js` (its `dist/bridge.global.js`) beside a multiplayer
+Godot game's web export. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
 without a license file. The MIT terms:
 
 Copyright (c) 2026 Genex
