@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { EngineHostAction } from "../../shared/game-engine.ts";
 import { isInside } from "../../substrate/paths.ts";
 import { projectRayTracing, turnOffRayTracing } from "./ray-tracing.ts";
 import type {
@@ -116,7 +117,7 @@ import {
   planSetup,
   realProjectFile,
   SetupError,
-  type SetupErrorCode,
+  SetupErrorCode,
   type SetupEnv,
   type SetupOptions,
   SetupStep,
@@ -151,7 +152,8 @@ const HostService = {
 const UnrealAction = {
   Status: "status",
   Setup: "setup",
-  UndoSetup: "undo-setup",
+  /** Also what a link's Undo runs, with `ifSetUp`, when the link set its project up. */
+  UndoSetup: EngineHostAction.UndoSetUp,
   Templates: "templates",
   Create: "create",
   OpenEditor: "open-editor",
@@ -232,12 +234,20 @@ const MESSAGE = {
   RayTracingDetail: (name: string) =>
     `Genex will set r.RayTracing=False in ${name}'s Config/DefaultEngine.ini. On a Mac, Unreal 5.8 can crash while it renders a ray-traced game behind another app. Lumen keeps lighting the level in software, and you can turn ray tracing back on in Project Settings. Unreal uses the change from its next start.`,
   NoGame: "Open a game in Genex first: an Unreal project is used by a game.",
-  NotSetUp: (name: string) => `${name} isn't set up for Genex yet. Set it up from the Unreal button first.`,
-  NoSetUpProject: "No Unreal project is set up for Genex yet. Set one up from the Unreal button first.",
+  NotSetUp: (name: string) => `${name} isn't set up for Genex yet. Set it up first.`,
+  NoSetUpProject:
+    "No Unreal project is set up for Genex yet. Give unreal__use-project the project's .uproject path: it sets the project up and links it.",
   UnknownProject: (asked: string, names: string) =>
-    `No set-up Unreal project is called ${asked}. The set-up projects are: ${names}.`,
+    `No set-up Unreal project is called ${asked}. The set-up projects are: ${names}. For another project, give its .uproject path.`,
   Linked: (name: string, file: string) =>
     `This game now builds in ${name} (${file}). Later Unreal calls in this game go to it.`,
+  SetUpAndLinked: (name: string, file: string) =>
+    `Set up ${name} for Genex and linked this game to it (${file}); the chat shows both with one Undo. Later Unreal calls in this game go to it.`,
+  SetUpOpen: (name: string) =>
+    `${name} is open in Unreal Editor, so Genex can't set it up yet (Unreal rewrites its settings when it closes). Ask the user to quit Unreal Editor, then call unreal__use-project again.`,
+  SetUpRefused: (name: string, why: string) => `Genex couldn't set up ${name}: ${why}`,
+  SetUpSwitchesEngine: (name: string, from: string, to: string) =>
+    `${name} was made in Unreal ${from}, and switching it to ${to} is the user's choice. Ask the user to press Set up in the Unreal panel, then call unreal__use-project again.`,
   StepsShown: "The Unreal setup card is in the chat.",
   InstallCardShown: (version: string) =>
     `The Unreal setup card is in the chat, and the Unreal button is above the game: it gets Epic's launcher, and the user installs Unreal ${version} in it (only they can sign in to Epic). Tell them in one line, then end your reply; the chat tells you when Unreal is installed.`,
@@ -252,7 +262,8 @@ const MESSAGE = {
   StepsDone: "Every recommended step is done; there is no card to show.",
   StepsNoChat: "There is no chat to show the Unreal setup card in.",
   NoLinkedProject: "This game isn't linked to an Unreal project yet.",
-  LinkedNotSetUp: "This game's Unreal project isn't set up for Genex. Set it up from the Unreal button.",
+  LinkedNotSetUp:
+    "This game's Unreal project isn't set up for Genex. Call unreal__use-project with its .uproject path: it sets the project up.",
   XcodeMacOnly: "Xcode is for a Mac. On Windows, Unreal builds C++ with Visual Studio.",
   [SetupStep.Engine]: (file: string, from: string, to: string) =>
     `${file}: switch from Unreal ${from} to ${to}. Content you save in ${to} won't open in ${from}. To keep a ${from} version, duplicate the project folder first.`,
@@ -940,6 +951,57 @@ async function linkGame(deps: UnrealBackendDeps, file: string, context: PluginCo
   return context.host(HostService.EngineLink, { project: realProjectFile(state) });
 }
 
+/**
+ * Sets a project up for the agent's `use-project` as the panel's Set up does, unasked (the chat's
+ * Undo takes it back with the link). A project from an older Unreal is left to the user, whose
+ * panel warns before it switches the engine: nothing changes. A refusal says why in one line the
+ * agent can act on.
+ */
+async function setUpForLink(file: string, options: SetupOptions, name: string): Promise<ProjectState> {
+  try {
+    const { engine } = await planSetup(file, options);
+    if (engine) throw new Error(MESSAGE.SetUpSwitchesEngine(name, engine.from, engine.to));
+    return await setUpProject(file, options);
+  } catch (error) {
+    if (!(error instanceof SetupError)) throw error;
+    const open = error.code === SetupErrorCode.EditorRunning;
+    throw new Error(open ? MESSAGE.SetUpOpen(name) : MESSAGE.SetUpRefused(name, error.message));
+  }
+}
+
+/**
+ * The agent's `use-project`: links the calling game to `file`, setting the project up first when
+ * it isn't. A project Genex had never set up is set up on the link (`setUp`), so the chat's one
+ * Undo takes both back; when the host refuses the link, that set-up is taken back at once.
+ */
+async function useProject(
+  deps: UnrealBackendDeps,
+  file: string,
+  context: PluginContext,
+): Promise<{ link: PluginEngineLink; setUp: boolean }> {
+  if (!context.project) throw new Error(MESSAGE.NoGame);
+  const options = await setupOptions(deps, context);
+  const state = await inspectProject(file, options);
+  // Read before the set-up check, which narrows `state` away once it says no.
+  const { name, undoable } = state;
+  if (isSetUp(state)) {
+    const link = await context.host(HostService.EngineLink, { project: realProjectFile(state) });
+    return { link, setUp: false };
+  }
+  const made = await setUpForLink(file, options, name);
+  const setUp = !undoable;
+  try {
+    const link = await context.host(HostService.EngineLink, {
+      project: realProjectFile(made),
+      ...(setUp ? { setUp } : {}),
+    });
+    return { link, setUp };
+  } catch (error) {
+    if (setUp) await undoSetup(file, options).catch(() => undefined);
+    throw error;
+  }
+}
+
 /** The project a game uses now: its link, else the panel's choice; undefined when neither is set up. */
 async function gameProject(deps: UnrealBackendDeps, context: PluginContext): Promise<ProjectState | undefined> {
   const options = await setupOptions(deps, context);
@@ -1351,8 +1413,16 @@ async function undoPluginHost(
   await undoGameProjectFolder(game, error, ignore);
 }
 
-/** Undoes setup; `note` says how many helper files the user changed were left in place. */
-async function undo(file: string, options: SetupOptions) {
+/** Whether Genex holds a set-up record of `file`; a project that is gone or can't be read holds none. */
+const recorded = async (file: string, options: SetupOptions): Promise<boolean> =>
+  (await inspectProject(file, options).catch(() => undefined))?.undoable === true;
+
+/**
+ * Undoes setup; `note` says how many helper files the user changed were left in place. A link's
+ * Undo asks `ifSetUp`: a project no longer set up then has nothing to undo (null), not a refusal.
+ */
+async function undo(file: string, options: SetupOptions, ifSetUp = false) {
+  if (ifSetUp && !(await recorded(file, options))) return null;
   const state = await undoSetup(file, options);
   return { ...state, note: state.kept.length > 0 ? MESSAGE.KeptAfterUndo(state.kept.length) : null };
 }
@@ -1378,7 +1448,8 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
   const actions: Record<UnrealAction, ActionHandler> = {
     [UnrealAction.Status]: (args, context) => status(deps, args, context, scanned),
     [UnrealAction.Setup]: async (args, context) => setUp(projectArg(args), await setupOptions(deps, context)),
-    [UnrealAction.UndoSetup]: async (args, context) => undo(projectArg(args), await setupOptions(deps, context)),
+    [UnrealAction.UndoSetup]: async (args, context) =>
+      undo(projectArg(args), await setupOptions(deps, context), args.ifSetUp === true),
     [UnrealAction.Templates]: (_args, context) => templates(deps, context),
     [UnrealAction.Create]: (args, context) => create(deps, args, context),
     [UnrealAction.OpenEditor]: (args, context) => openForUser(deps, projectArg(args), context),
@@ -1404,8 +1475,8 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
   const tools: Record<UnrealTool, ToolHandler> = {
     [UnrealTool.UseProject]: async (args, context) => {
       const storage = (await setupOptions(deps, context)).storage;
-      const link = await linkGame(deps, await namedProject(textArg(args, "project"), storage), context);
-      return MESSAGE.Linked(link.name, link.project);
+      const { link, setUp } = await useProject(deps, await namedProject(textArg(args, "project"), storage), context);
+      return setUp ? MESSAGE.SetUpAndLinked(link.name, link.project) : MESSAGE.Linked(link.name, link.project);
     },
     [UnrealTool.ShowSteps]: (_args, context) => showSteps(deps, context),
     [UnrealTool.NewGame]: (args, context) => newGame(deps, args, context),

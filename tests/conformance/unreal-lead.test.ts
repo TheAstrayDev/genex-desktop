@@ -710,7 +710,7 @@ describe("the lead at Genex's moments", () => {
       throw new Error("Stopped.");
     });
     const report = await run(host, { run: shortRun(20) });
-    assert.equal(report.executionStatus, "cancelled");
+    assert.equal(report.executionStatus, "paused", "a Stop pauses the run for a Resume");
     assert.equal(report.endReason, "stopped");
     assert.doesNotMatch(String(report.stoppedBecause), /couldn't ask|plugins|start the Loop again/i);
     assert.equal(leadTurns(host).length, 0, "no turn");
@@ -729,7 +729,7 @@ describe("the lead at Genex's moments", () => {
       throw new Error("Stopped.");
     });
     const report = await run(host, { run: shortRun(40) });
-    assert.equal(report.executionStatus, "cancelled");
+    assert.equal(report.executionStatus, "paused", "a Stop pauses the run for a Resume");
     assert.equal(report.endReason, "stopped");
   });
 
@@ -812,7 +812,7 @@ describe("the lead at Genex's moments", () => {
       return Promise.reject(new Error("Stopped."));
     };
     const report = await run(host, { run: shortRun(40) });
-    assert.equal(report.executionStatus, "cancelled");
+    assert.equal(report.executionStatus, "paused", "a Stop pauses the run for a Resume");
     assert.ok(!(journalOf(host).crashes ?? []).some((crash) => crash.reopened), "no crash is recorded as reopened");
     const told = host.appended("autopilot_decision").map((p) => String(p.plain ?? p.text));
     assert.ok(!told.some((line) => /Genex reopened it/.test(line)), told.join(" | "));
@@ -828,7 +828,7 @@ describe("the lead at Genex's moments", () => {
     // Turn 1's save point is the first checkpoint; the autosave after turn 2 is the second.
     host.rec.cancelAfter("checkpoint.take", 2);
     const report = await run(host, { run: shortRun(40) });
-    assert.equal(report.executionStatus, "cancelled");
+    assert.equal(report.executionStatus, "paused", "a Stop pauses the run for a Resume");
     assert.ok(host.rec.paramsOf("checkpoint.take").length >= 2, "the autosave was asked for");
     assert.deepEqual(host.rec.paramsOf("snapshot.restore"), [], "no rewind ran after the Stop");
   });
@@ -1019,10 +1019,11 @@ describe("the lead's limits, handovers and end", () => {
     };
     const host = leadHost({ turns: [buildsAndSaves, stopped] });
     const report = await run(host);
-    assert.equal(report.executionStatus, "cancelled");
+    assert.equal(report.executionStatus, "paused", "a Stop pauses the run for a Resume");
     assert.equal(leadTurns(host).length, 2);
-    assert.equal(journalOf(host).phase, "done");
-    assert.equal(host.appended("run_finished").at(-1)?.executionStatus, "cancelled");
+    assert.equal(journalOf(host).phase, "paused");
+    assert.equal(host.appended("run_finished").at(-1)?.executionStatus, "paused");
+    assert.equal(host.appended("run_finished").at(-1)?.stillToFix, undefined, "a pause keeps Resume, with no list");
   });
 
   it("ends a run whose lead ends turn after turn within minutes, saving nothing: it has nothing more to build", async () => {

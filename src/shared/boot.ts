@@ -27,7 +27,9 @@ export type BootPhase = (typeof BootPhase)[keyof typeof BootPhase];
 
 /** What a starting core is doing, as the window's status line says it. */
 export const StartStep = {
-  /** Reading the settings, the event log and the games. */
+  /** Reading the settings and preparing the agents' own workspace (a first start commits it). */
+  Agents: "agents",
+  /** Reading the event log and the games. */
   Games: "games",
   /** Starting the protected workspace: on Windows the slow step, with its network check. */
   Workspace: "workspace",
@@ -54,6 +56,18 @@ export const SandboxProblemCode = {
   IsolationBlocked: "isolation-blocked",
 } as const;
 export type SandboxProblemCode = (typeof SandboxProblemCode)[keyof typeof SandboxProblemCode];
+
+/** Windows, not provisioned: what Set up does about it. */
+export const WindowsSetupNeed = {
+  /** Install the `srt-sandbox` user, its credential and its network filters (srt-win's install). */
+  Sandbox: "sandbox",
+  /**
+   * Turn the Secondary Logon service (`seclogon`) back on: every sandboxed command starts as the
+   * sandbox user through it, so with it disabled Windows refuses each one.
+   */
+  LogonService: "logon-service",
+} as const;
+export type WindowsSetupNeed = (typeof WindowsSetupNeed)[keyof typeof WindowsSetupNeed];
 
 /** The programs the Linux sandbox needs, by the command it runs. */
 export const SandboxTool = {
@@ -101,6 +115,8 @@ export interface SandboxProblem {
   details: string[];
   /** Isolation blocked by AppArmor: the command that installs a profile allowing it for this app. */
   allowCommand?: string;
+  /** Windows, not provisioned: what Set up does; absent means the sandbox install alone. */
+  windowsNeeds?: WindowsSetupNeed[];
 }
 
 /** Main's answer to `bootState`: the platform, and the setup problem while the phase is SandboxSetup. */
@@ -115,7 +131,7 @@ export interface BootState {
   setupTried?: true;
   /** What the core is doing while the phase is Starting. */
   step?: StartStep;
-  /** Why the studio would not start, while the phase is Failed. */
+  /** Why the studio would not start, while the phase is Failed; why its agents would not, while it is Ready. */
   failure?: string;
 }
 

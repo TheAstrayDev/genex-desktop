@@ -3,11 +3,14 @@ import type {
   PlayFeedPage,
   PlayFeedRequest,
   PlayGame,
+  PlayGameDetail,
   PlayPoint,
   PlayShelf,
   PlayShelves,
 } from "./play.ts";
 import type { PlayChangeResult, PlayCoverResult, PlayCoverType, PlayGameChange } from "./play-manage.ts";
+import type { NativeInstalls, NativeSession, SessionAction } from "./play-native.ts";
+import type { PublishPlatform } from "./publish-platforms.ts";
 import type { GenexCatalogItem } from "./mention-corpus.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 import type {
@@ -23,12 +26,14 @@ import type {
 } from "./play-people.ts";
 import type { GenexAccountView } from "./genex-account.ts";
 import type { PlayBarHold } from "./play-bar.ts";
+import type { PurchaseAnswer } from "./play-purchase.ts";
 import type { PlayComment, PlayCommentsPage } from "./play-comments.ts";
 import type { PlayCredits } from "./play-credits.ts";
 import type {
   AddOutcome,
   AddSource,
   GameLibraryStates,
+  LibraryFileAnswer,
   LibraryPage,
   LibraryQuery,
   ShareItem,
@@ -107,6 +112,11 @@ export interface Bootstrap {
 export interface WindowControlColors {
   color: string;
   symbolColor: string;
+}
+
+/** The window controls as the renderer paints them: the theme's colours, and whether Home's background lies under them. */
+export interface WindowControls extends WindowControlColors {
+  seeThrough: boolean;
 }
 
 /** One read of the all-threads log: the events, and the cursor the next read starts after. */
@@ -190,7 +200,8 @@ export interface StudioApi {
   pluginsList(): Promise<PluginInfo[]>;
   pluginsCatalog(): Promise<PluginCatalogEntry[]>;
   /** The installed plugin's durable native job records, including interrupted jobs. */
-  pluginNativeJobs(id: string): Promise<PluginNativeResult[]>;
+  pluginNativeJobs(id: string): Promise<import("./plugins.ts").PluginNativeJobSummary[]>;
+  pluginNativeJob(id: string, jobId: string): Promise<PluginNativeResult | null>;
   /** The person's Cancel on a job owned by this installed plugin. */
   pluginCancelNativeJob(id: string, jobId: string): Promise<boolean>;
   pluginEnable(id: string, enabled: boolean): Promise<void>;
@@ -210,11 +221,19 @@ export interface StudioApi {
   pluginChooseFile(id: string, request: PluginFileRequest): Promise<string | null>;
   /** The files Publish would put online for a game, for Studio's Publish dialog to show. Uploads nothing. */
   genexPublishReview(project: string): Promise<ExportReview>;
+  /** The web, Mac and Windows rows of Studio's Publish dialog for a game, from what its folder holds. */
+  genexPublishPlatforms(project: string): Promise<PublishPlatform[]>;
   /**
    * Publish the game to the Genex gallery from Studio's Publish dialog: its Publish press approved
    * the files in `review`; `title` is the name players see.
    */
   genexPublish(project: string, review: ExportReview, title?: string): Promise<void>;
+  /**
+   * Publish a game that has only apps (no web build) from Studio's Publish dialog: its ready Mac and
+   * Windows apps go to Genex and the game is listed under `title`. The press, under the rows it names,
+   * is the consent.
+   */
+  genexPublishApps(project: string, title?: string): Promise<void>;
   pluginsIndex(refresh?: boolean): Promise<PluginIndexView>;
   pluginInstallGithub(spec: string): Promise<void>;
   /** What a pasted GitHub link leads to, pinned to one exact commit; nothing is installed. */
@@ -279,8 +298,11 @@ export interface StudioApi {
   reportSandboxSetup(error: string): Promise<void>;
   /** Quit the app from the screen of a studio that would not start. */
   quitFromBoot(): Promise<void>;
-  /** Paint the Windows and Linux window controls (`titleBarOverlay`) in the theme's colours; macOS ignores it. */
-  setWindowControls(colors: WindowControlColors): Promise<void>;
+  /**
+   * Paint the Windows and Linux window controls (`titleBarOverlay`) in the theme's colours, with no box
+   * of their own on Windows while `seeThrough`; macOS ignores it.
+   */
+  setWindowControls(controls: WindowControls): Promise<void>;
   /** The new version of the app downloaded in the background, or null; `onEvent` announces later ones. */
   readyUpdate(): Promise<ReadyUpdate | null>;
   /**
@@ -494,11 +516,33 @@ export interface StudioApi {
   playOnline(slugs: string[]): Promise<Record<string, number>>;
   /** Play: open a game full screen in the viewer, its bar showing `title`; how it goes arrives as `UiEvent.PlayViewer`. */
   playOpen(slug: string, title: string): Promise<void>;
+  /** Play: a game's own page (a native game's, which has no web build to open): its card and what the page adds. */
+  playGame(slug: string): Promise<PlayGameDetail>;
+  /** Play: install a game's build for this computer; how it goes arrives as `UiEvent.PlayInstalls`. */
+  playInstall(slug: string): Promise<void>;
+  /** Play: stop a game's install, waiting or under way, or forget how a failed one ended. */
+  playInstallCancel(slug: string): Promise<void>;
+  /** Play: every game installed on this computer and every install under way or failed. */
+  playInstalls(): Promise<NativeInstalls>;
+  /** Play: remove a game from this computer; its saves stay. */
+  playUninstall(slug: string): Promise<void>;
+  /** Play: play an installed game in its own window (a running one comes forward); how it goes arrives as `UiEvent.PlaySessions`. */
+  playLaunch(slug: string): Promise<void>;
+  /** Play: bring a running game forward, quit it, or forget how it failed to start. */
+  playSession(slug: string, action: SessionAction): Promise<void>;
+  /** Play: the games being played in their own windows, and the ones that failed to start. */
+  playSessions(): Promise<NativeSession[]>;
+  /** Play: show an installed game's app in Finder. */
+  playRevealInstall(slug: string): Promise<void>;
+  /** Play: like or unlike a game from its own page, as the Genex account; answers its likes after. */
+  playLike(slug: string, liked: boolean): Promise<{ liked: boolean; likes: number }>;
   /** Play: close the viewer. */
   playClose(): Promise<void>;
+  /** Play: the game a `genex://game/<slug>` link asked to open, once; null when none waits. */
+  playTakeGameLink(): Promise<string | null>;
   /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
   playControl(control: PlayControl, at?: PlayPoint): Promise<void>;
-  /** Play: what holds the viewer's bar up (the pointer or the keyboard on it, its Comments open). */
+  /** Play: whether the viewer bar's Comments is open (main lays its layer over the whole window). */
   playBar(hold: PlayBarHold): Promise<void>;
   /** Play: a page of the viewed game's comments, newest first: the first, or the one after `cursor`. */
   playComments(cursor: string | null): Promise<PlayCommentsPage>;
@@ -506,6 +550,11 @@ export interface StudioApi {
   playComment(body: string): Promise<PlayComment>;
   /** Play: delete one of the account's comments on the viewed game. */
   playUncomment(commentId: string): Promise<void>;
+  /**
+   * Play: the bar's answer to the purchase sheet numbered `sheet` (Pay, Cancel…). Main acts only on
+   * the sheet on screen and the purchase it holds; Play's bar layer alone may send it.
+   */
+  playPurchase(sheet: number, answer: PurchaseAnswer): Promise<void>;
   /** Play: the Genex account the app is signed in as, or null while it is signed out. */
   playMe(): Promise<PlayMe | null>;
   /** Play: rename the account (2–20 characters); the account as it is after. */
@@ -594,6 +643,11 @@ export interface StudioApi {
   assetUnshare(project: string, file: string): Promise<GameLibraryStates>;
   /** Bring a library generation or a shared asset into a game; where it landed. */
   assetAdd(project: string, source: AddSource): Promise<AddOutcome>;
+  /**
+   * A library file's bytes for a tile's picture: only an https file on genex.games' asset hosts,
+   * within a cap; otherwise why there are none (too large, refused, or unavailable for now).
+   */
+  assetLibraryFile(url: string): Promise<LibraryFileAnswer>;
   /**
    * One image from inside the game, contained and byte-sniffed. `maxPx` asks for a thumbnail;
    * `scope: "genex-inspection"` reads the one saved frame of the named job instead, and
@@ -757,7 +811,7 @@ export interface StudioSettingsView {
   blender?: boolean;
   /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
   autoResume?: boolean;
-  /** Let agents control your computer (Settings → Permissions, macOS); off by default. */
+  /** Let agents control your computer (Settings → Permissions, macOS and Windows); off by default. */
   computerControl?: boolean;
 }
 

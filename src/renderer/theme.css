@@ -10,6 +10,7 @@
 @import "./styles/play.css";
 @import "./styles/play-assets.css";
 @import "./styles/people.css";
+@import "./styles/native-games.css";
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @source "./";
@@ -1125,7 +1126,7 @@
 /* Native window controls, by the platform main reports (`data-platform` on the root). macOS draws its
  * traffic lights in the leading 72px of the headers, so the sidebar toggle sits at 80px whether or not
  * the sidebar is open. Windows and Linux draw minimise, maximise and close over the trailing edge
- * (Electron's titleBarOverlay); the header under them leaves that width free. */
+ * (Electron's titleBarOverlay); the header under them, Home's too, leaves that width free. */
 :root[data-platform="win32"],
 :root[data-platform="linux"] {
   --window-controls-end: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 144px)));
@@ -2608,6 +2609,89 @@ button.chat-header-title:hover {
 }
 .chat-genex-terms .genex-terms-line-label {
   padding-inline-end: 8px;
+}
+/* The open studio's agents did not start (`AgentsStartLine.tsx`): the terms line's shape, its words
+ * and button in the warning colour (no icon, so the words fit the sidebar's default width), its
+ * name opening why (the raw error, Send a report) under it. */
+.agents-start {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-control);
+  background: var(--field);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+.agents-start-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding-inline: 4px;
+}
+.agents-start-label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  padding-inline: 5px 4px;
+  color: color-mix(in oklab, var(--orange) 62%, var(--ink));
+  text-align: start;
+  cursor: pointer;
+}
+.agents-start-retry,
+.agents-start-send {
+  flex: none;
+  height: 24px;
+  padding-inline: 9px;
+  border-radius: 7px;
+  background: var(--orange-tint);
+  color: color-mix(in oklab, var(--orange) 62%, var(--ink));
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-quick);
+}
+.agents-start-retry:hover,
+.agents-start-send:hover {
+  background: color-mix(in oklab, var(--orange) 24%, transparent);
+}
+.agents-start-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0 9px 9px;
+}
+.agents-start-error {
+  max-height: 72px;
+  width: 100%;
+  overflow: auto;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.agents-start-report {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.agents-start-note {
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+}
+.agents-start-sent {
+  padding-inline: 4px;
+  color: var(--ink);
 }
 /* Install what is ticked, on the line and in its list: the accent as a soft tint, its label a
  * lighter blue on dark and a deeper one on light. */
@@ -4450,10 +4534,10 @@ button.chat-header-title:hover {
   --presence-gap: 0.5rem;
   margin-block-start: -8px;
 }
-/* A running build's card is a box, not a line: it stands well clear of the reply above it (24px from
+/* A running build's card is a box, not a line: it stands well clear of the reply above it (32px from
    the reply's last line), so it never reads as part of the message. */
 .chat-work-build {
-  padding-block-start: 14px;
+  padding-block-start: 22px;
 }
 .chat-user-content[data-collapsed] {
   max-height: 154px;
@@ -5853,8 +5937,98 @@ a:focus-visible {
   border-radius: 50%;
   background: var(--ink-3);
 }
+/* Past three builds the track becomes one picker of the same height and edge: the open build's
+ * whole name, then ⌄ and the count. Its list is the shared dropdown with one-line rows. */
+.build-picker {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 520px;
+  height: 32px;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-quick);
+}
+.build-picker:hover,
+.build-picker[data-state="open"] {
+  background: var(--control-hover, var(--hover));
+}
+.build-picker-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: 2px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.build-picker-menu {
+  width: 440px;
+  min-width: var(--radix-dropdown-menu-trigger-width);
+  max-width: calc(100vw - 24px);
+  /* Ten rows, the list's 4px padding and its edge: a tenth build does not scroll. */
+  max-height: min(calc(10 * 32px + 10px), var(--radix-dropdown-menu-content-available-height));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* While more rows lie below, the last one shown fades into the list's fill. Drawn over it rather
+ * than masked, so the menu keeps its shadow; it sticks past the list's 4px padding to its inner
+ * edge, so no row scrolls by under it unfaded. */
+.build-picker-fade {
+  display: none;
+}
+.build-picker-menu[data-more] > .build-picker-fade {
+  position: sticky;
+  bottom: -4px;
+  display: block;
+  height: 32px;
+  margin-top: -32px;
+  background: linear-gradient(to bottom, transparent, var(--popover));
+  pointer-events: none;
+}
+.build-row {
+  height: 32px;
+  /* A row scrolled into view clears the fade and the list's 4px padding, so the next-to-last ends it. */
+  scroll-margin-block-end: 36px;
+  gap: 8px;
+  padding-block: 0;
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+/* The open build's row keeps the highlight's fill at rest, so the list shows which one is on show. */
+.build-row[data-state="checked"] {
+  background: var(--control-hover, var(--hover));
+  color: var(--ink);
+}
+.build-row-mark {
+  display: inline-flex;
+  width: 14px;
+  flex: none;
+  justify-content: center;
+  color: var(--ink-3);
+}
+.build-row-when {
+  flex: none;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
 @media (prefers-reduced-motion: reduce) {
-  .build-tab {
+  .build-tab,
+  .build-picker {
     transition: none;
   }
 }

@@ -860,7 +860,12 @@ describe("steer through the host and the harness process", () => {
         }
         chat.push(request);
         if (chat.length === 1) {
-          assert.equal(request.interviewTools, undefined, "Loop off: no build to start");
+          // Flipped: Auto is handed the Loop's start too, for a Loop the user asks for in words.
+          assert.deepEqual(
+            request.interviewTools?.map((tool) => tool.name),
+            ["start_autopilot"],
+            "Loop off: only the Loop asked for in words",
+          );
           // A session that reads words mid-turn: the switch must never be handed to it as words.
           request.steer?.ready(() => assert.fail("a switch is never read as words mid-turn"));
           started.resolve();

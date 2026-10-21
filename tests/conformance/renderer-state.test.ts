@@ -12,13 +12,15 @@ import { describe, it } from "node:test";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import type { ConversationRecord, GameProject, ProjectAssets } from "../../src/shared/studio-api.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
+import { PermissionMode } from "../../src/shared/permissions.ts";
+import { EngineId } from "../../src/shared/providers.ts";
+import { shownPermissionMode } from "../../src/renderer/chat/use-permission-mode.ts";
 import { createRefresher } from "../../src/renderer/state/refresher.ts";
-import {
-  computerControlOffered,
-  computerControlOn,
-  setComputerControl,
-} from "../../src/renderer/use-computer-control.ts";
+import { computerControlOn, setComputerControl } from "../../src/renderer/use-computer-control.ts";
+import { computerControlDetail } from "../../src/renderer/words.ts";
+import { computerControlOffered, desktopStopShortcut, stopShortcutWords } from "../../src/shared/computer-control.ts";
 import { StudioPlatform } from "../../src/shared/boot.ts";
+import { SetupReport } from "../../src/renderer/state/boot.ts";
 import { PlayViewerPhase } from "../../src/shared/play.ts";
 import { UpdateAction } from "../../src/shared/app-update.ts";
 import {
@@ -402,6 +404,45 @@ describe("the threads store: the open game is derived from the open chat", () =>
       "an unknown kind or a wrong type is absent, as before (not a game)",
     );
     assert.deepEqual(threadMeta(null), {});
+  });
+
+  it("reads the permission mode a chat's record keeps, and only a known one", () => {
+    const bypass = thread("rift-chat", { kind: "game", project: "rift", permissionMode: "bypassPermissions" });
+    assert.equal(threadMeta(bypass).permissionMode, "bypassPermissions");
+    assert.equal(threadMeta(thread("x", { kind: "game", permissionMode: "yolo" })).permissionMode, undefined);
+  });
+
+  it("shows a chat opened again in the mode its record keeps, not the one new chats start in", () => {
+    const record = thread("rift-chat", { kind: "game", project: "rift", permissionMode: "bypassPermissions" });
+    const shown = (picked?: PermissionMode) =>
+      shownPermissionMode({
+        engine: EngineId.ClaudeCode,
+        picked,
+        recorded: threadMeta(record).permissionMode,
+        defaultMode: PermissionMode.Auto,
+      });
+    assert.equal(shown(), PermissionMode.Bypass, "the pick is gone after switching chats or a restart");
+    assert.equal(shown(PermissionMode.Manual), PermissionMode.Manual, "a pick on its way to the host shows at once");
+    assert.equal(
+      shownPermissionMode({
+        engine: EngineId.OpenCode,
+        picked: undefined,
+        recorded: PermissionMode.Bypass,
+        defaultMode: PermissionMode.Auto,
+      }),
+      PermissionMode.Auto,
+      "an engine that cannot honour the mode runs, and shows, Auto",
+    );
+    assert.equal(
+      shownPermissionMode({
+        engine: EngineId.ClaudeCode,
+        picked: undefined,
+        recorded: undefined,
+        defaultMode: PermissionMode.AcceptEdits,
+      }),
+      PermissionMode.AcceptEdits,
+      "a chat that never chose shows the mode new chats start in",
+    );
   });
 });
 
@@ -789,6 +830,36 @@ describe("the studio: one subscription, the bootstrap and the commands that span
     assert.equal(unreadable.app.session.getState().status, "ready", "the studio opens without it");
   });
 
+  it("agents that would not start show in the open studio: read at the bootstrap, announced, and Try again or a start clears them", async () => {
+    const failed = { platform: "win32", phase: "ready", sandbox: null, failure: "srt-win acl stamp timed out" };
+    const before = started({ bootState: async () => failed as never });
+    await tick();
+    assert.equal(before.app.agentsStart.getState().failure, "srt-win acl stamp timed out", "before this window opened");
+    const retries: Array<() => Promise<unknown>> = [
+      async () => ({ ...failed, failure: "EPERM: lstat AppData" }),
+      async () => ({ platform: "win32", phase: "ready", sandbox: null }),
+    ];
+    const { fake, app } = started({ retrySandboxSetup: (() => retries.shift()?.()) as never });
+    await tick();
+    assert.equal(app.agentsStart.getState().failure, null);
+    fake.emit({ type: "harness.start-failed", payload: { failure: "srt-win acl stamp timed out" } });
+    assert.equal(app.agentsStart.getState().failure, "srt-win acl stamp timed out");
+    await app.agentsStart.report();
+    assert.deepEqual(fake.callsOf("reportSandboxSetup"), [["srt-win acl stamp timed out"]]);
+    assert.equal(app.agentsStart.getState().report, SetupReport.Sent);
+    const trying = app.agentsStart.retry();
+    assert.equal(app.agentsStart.getState().retrying, true);
+    await trying;
+    assert.equal(app.agentsStart.getState().failure, "EPERM: lstat AppData", "a Try again that fails says why");
+    assert.equal(app.agentsStart.getState().report, SetupReport.Idle, "a new failure gets a report of its own");
+    await app.agentsStart.retry();
+    assert.equal(app.agentsStart.getState().failure, null);
+    assert.equal(fake.callsOf("retrySandboxSetup").length, 2);
+    fake.emit({ type: "harness.start-failed", payload: { failure: "again" } });
+    fake.emit({ type: "studio.ready", payload: { userData: "/u" } });
+    assert.equal(app.agentsStart.getState().failure, null, "a studio that started has its agents");
+  });
+
   it("a failed bootstrap says why, and a retry replaces it", async () => {
     let fail = true;
     const { app } = started({
@@ -974,14 +1045,28 @@ function rendererFiles(): string[] {
 }
 
 describe("Settings → Permissions: Let agents control your computer", () => {
-  it("is off unless the host's settings say it is on, and offered only on macOS", () => {
+  it("is off unless the host's settings say it is on, and offered only on macOS and Windows", () => {
     assert.equal(computerControlOn(null), false, "before the settings load");
     assert.equal(computerControlOn({ learning: true, selfImproving: false }), false, "an older host's view");
     assert.equal(computerControlOn({ learning: true, selfImproving: false, computerControl: false }), false);
     assert.equal(computerControlOn({ learning: true, selfImproving: false, computerControl: true }), true);
     assert.equal(computerControlOffered(StudioPlatform.Mac), true);
-    for (const platform of [StudioPlatform.Windows, StudioPlatform.Linux, ""])
+    assert.equal(computerControlOffered(StudioPlatform.Windows), true, "the desktop driver ships on Windows too");
+    for (const platform of [StudioPlatform.Linux, ""])
       assert.equal(computerControlOffered(platform), false, platform || "before main answered");
+  });
+
+  it("stops by a shortcut each system can register: no Command key on Windows, and not Task Manager's", () => {
+    const mac = desktopStopShortcut(StudioPlatform.Mac);
+    const windows = desktopStopShortcut(StudioPlatform.Windows);
+    assert.equal(mac.accelerator, "Control+Alt+Command+Escape");
+    assert.equal(stopShortcutWords(mac), "Control-Option-Command-Escape (⌃⌥⌘Esc)");
+    assert.equal(windows.accelerator, "Control+Alt+Shift+Escape");
+    assert.doesNotMatch(windows.accelerator, /Command|Cmd|Super|Meta/);
+    assert.notEqual(windows.accelerator, "Control+Shift+Escape");
+    assert.equal(stopShortcutWords(windows), "Ctrl+Alt+Shift+Esc");
+    assert.match(computerControlDetail(StudioPlatform.Windows), /Ctrl\+Alt\+Shift\+Esc stops it/);
+    assert.match(computerControlDetail(StudioPlatform.Mac), /⌃⌥⌘Esc stops it/);
   });
 
   it("the switch sends only this setting and shows what the host saved", async () => {

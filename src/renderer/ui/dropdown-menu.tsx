@@ -159,13 +159,27 @@ function DropdownMenuRadioGroup({ ...props }: React.ComponentProps<typeof Dropdo
  * column: the caller (the composer's model picker) is a two-line row whose name
  * and sentence share one left edge, and a leading indicator would indent the
  * sentence under nothing. Its box is reserved whether or not the row is the
- * checked one, so choosing cannot reflow the menu.
+ * checked one, so choosing cannot reflow the menu. A row that shows the choice
+ * its own way (the Builds picker's) passes `indicator={false}` and lays out its
+ * children itself.
  */
 function DropdownMenuRadioItem({
   className,
   children,
+  indicator = true,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem> & { indicator?: boolean }) {
+  if (!indicator) {
+    return (
+      <DropdownMenuPrimitive.RadioItem
+        data-slot="dropdown-menu-radio-item"
+        className={cn(rowClass, className)}
+        {...props}
+      >
+        {children}
+      </DropdownMenuPrimitive.RadioItem>
+    );
+  }
   return (
     <DropdownMenuPrimitive.RadioItem
       data-slot="dropdown-menu-radio-item"

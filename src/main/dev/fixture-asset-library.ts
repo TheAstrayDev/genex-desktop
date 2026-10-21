@@ -4,10 +4,14 @@
  * can be checked with no socket. Saves and shares last the launch; signed out answers 401. A share
  * named with "refuse" is refused by the check; one named with "slow" is still being checked when it
  * answers, and is live by the next read.
- * Downloads are files made here: a one-triangle model, a short tone, a gradient picture.
+ * Downloads are files made here: a one-triangle model, a short tone, a gradient picture. Like most of
+ * a real library, a few generations list no thumbnail: their tiles draw their own pictures, and the
+ * asset-library launch's window gets their files from here too (`fixtureFileResponse`).
  */
+import { LibraryFileMiss } from "../../shared/asset-library.ts";
+import { DownloadRefused } from "../play/asset-library.ts";
 import type { GalleryAnswer, GalleryRequest } from "../play/gallery.ts";
-import { gradientShot } from "./fixture-kit.ts";
+import { gradientShot, type Rgb } from "./fixture-kit.ts";
 import { fixtureAccountOf } from "./fixture-people.ts";
 
 const OK = 200;
@@ -33,6 +37,10 @@ interface FixtureGeneration {
   shared: { projectId: string; slug: string; status: "published" | "draft" } | null;
   provider: string;
   createdAt: string;
+  /** genex.games lists no thumbnail for it, as for most of a real library. */
+  noThumbnail?: true;
+  /** A picture's colours, top to bottom; the moss wall's greens otherwise. */
+  colors?: readonly [Rgb, Rgb];
 }
 
 /** The generation ids the fixture's games link their files to. */
@@ -43,9 +51,49 @@ export const FixtureGenerationId = {
   Crowd: "fxgen-stadium-crowd-0004",
   Moss: "fxgen-moss-wall-0005",
   Lantern: "fxgen-iron-lantern-0006",
+  Dusk: "fxgen-dusk-sky-0007",
+  Sword: "fxgen-bone-sword-0008",
+  Wind: "fxgen-desert-wind-0009",
 } as const;
 
 const SEED: readonly FixtureGeneration[] = [
+  {
+    id: FixtureGenerationId.Dusk,
+    kind: "image",
+    prompt: "Desert sky at dusk",
+    hue: 20,
+    savedAt: null,
+    shared: null,
+    provider: "genex",
+    createdAt: "2026-10-18T09:00:00.000Z",
+    noThumbnail: true,
+    colors: [
+      [58, 46, 92],
+      [236, 140, 84],
+    ],
+  },
+  {
+    id: FixtureGenerationId.Sword,
+    kind: "model",
+    prompt: "Bone sword with a curved blade",
+    hue: 200,
+    savedAt: null,
+    shared: null,
+    provider: "genex",
+    createdAt: "2026-10-18T08:00:00.000Z",
+    noThumbnail: true,
+  },
+  {
+    id: FixtureGenerationId.Wind,
+    kind: "sfx",
+    prompt: "Desert wind over dunes",
+    hue: 30,
+    savedAt: null,
+    shared: null,
+    provider: "genex",
+    createdAt: "2026-10-18T07:00:00.000Z",
+    noThumbnail: true,
+  },
   {
     id: FixtureGenerationId.Mushroom,
     kind: "model",
@@ -147,6 +195,22 @@ const EXTENSION_OF_KIND: Readonly<Record<FixtureGeneration["kind"], string>> = {
   video: "mp4",
 };
 
+/** The content type each kind's made-up file is served as. */
+const CONTENT_TYPE_OF_KIND: Readonly<Record<FixtureGeneration["kind"], string>> = {
+  model: "model/gltf-binary",
+  image: "image/png",
+  sfx: "audio/wav",
+  video: "video/mp4",
+};
+
+/** The moss wall's greens, top to bottom: a picture's colours unless its row names its own. */
+const MOSS_COLORS: readonly [Rgb, Rgb] = [
+  [40, 90, 50],
+  [120, 160, 110],
+];
+/** The most a file served to the window may be; every made-up file is far smaller. */
+const SERVED_MAX_BYTES = 1024 * 1024;
+
 /** A drawn thumbnail in the generation's hue: a soft floor and a shape for its kind. */
 function thumbnail(row: FixtureGeneration): string {
   const shape =
@@ -177,7 +241,7 @@ function view(row: FixtureGeneration) {
     provider: row.provider,
     status: "completed",
     prompt: row.prompt,
-    thumbnailUrl: thumbnail(row),
+    thumbnailUrl: row.noThumbnail ? null : thumbnail(row),
     files: [
       {
         role,
@@ -351,15 +415,31 @@ export function toneWav(): Uint8Array {
   return Buffer.concat([header, data]);
 }
 
+/** The generation a file address names: `/generations/<id>/<name>`. */
+const generationOfFile = (url: URL): string => /\/generations\/([^/]+)\//.exec(url.pathname)?.[1] ?? "";
+
 /** A fixture launch's download: the made-up file for the generation the address names. */
 export async function fixtureDownload(url: string, maxBytes: number): Promise<Uint8Array> {
-  const id = /\/generations\/([^/]+)\//.exec(new URL(url).pathname)?.[1] ?? "";
-  const row = library.get(id);
+  const row = library.get(generationOfFile(new URL(url)));
   const bytes = (() => {
     if (row?.kind === "sfx") return toneWav();
-    if (row?.kind === "image") return gradientShot([40, 90, 50], [120, 160, 110]);
+    if (row?.kind === "image") return gradientShot(...(row.colors ?? MOSS_COLORS));
     return triangleGlb(row?.hue ?? 200);
   })();
-  if (bytes.byteLength > maxBytes) throw new Error("That file is too large to add.");
+  if (bytes.byteLength > maxBytes)
+    throw new DownloadRefused(LibraryFileMiss.TooLarge, "That file is too large to add.");
   return bytes;
+}
+
+/**
+ * What the asset-library launch's window gets for one of the fixture library's file addresses (the
+ * picture a tile shows, the sound it plays): the made-up file, so no socket opens. Null for any other
+ * address.
+ */
+export async function fixtureFileResponse(url: string): Promise<Response | null> {
+  const address = URL.canParse(url) ? new URL(url) : null;
+  const row = address?.origin === FILE_HOST ? library.get(generationOfFile(address)) : undefined;
+  if (!row) return null;
+  const bytes = new Uint8Array(await fixtureDownload(url, SERVED_MAX_BYTES));
+  return new Response(bytes, { headers: { "content-type": CONTENT_TYPE_OF_KIND[row.kind] } });
 }

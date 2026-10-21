@@ -78,6 +78,7 @@ import {
 } from "../../src/harness-seed/loop/replan.ts";
 import { isTransientProviderError, StopReason, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
+import { forgetSandboxRefusals, sandboxRefusalOn } from "../../src/harness-seed/loop/workers/sandbox-refusal.ts";
 import {
   HARNESS_CHECKS,
   loadCatalogue,
@@ -126,6 +127,14 @@ import { cancelThread } from "../../src/harness-seed/loop/main.ts";
 import type { Studio } from "../../src/harness-seed/loop/studio-state.ts";
 import type { Host } from "../../src/harness-seed/types/harness.d.ts";
 import { wakeTools } from "../../src/harness-seed/loop/director/wake-prompts.ts";
+import { folderLabelOf } from "../../src/harness-seed/loop/workers/identity.ts";
+
+it("WIN-FOLDER-LABEL: a Windows game folder is named by its last two parts, never the whole C:\\Users path", () => {
+  assert.equal(folderLabelOf("C:\\Users\\ana\\AI Games\\rift", "rift"), "AI Games/rift");
+  assert.equal(folderLabelOf("C:/Users/ana/AI Games/rift/", "rift"), "AI Games/rift");
+  assert.equal(folderLabelOf("/Users/ana/AI Games/rift", "rift"), "AI Games/rift");
+  assert.equal(folderLabelOf(null, "rift"), "rift");
+});
 
 it("AUDIT-WAKE-TOOL: shortened worker guidance still tells a waking lead to end its turn", () => {
   const tool = wakeTools(DIRECTOR_TOOLS, { lead: true }).find((tool) => tool.name === "worker_start");
@@ -3892,6 +3901,96 @@ describe("a Loop chat asked for research (corner-guy)", () => {
 });
 
 /**
+ * "Can you start a 3h Loop…" sent with Mode on Auto (Loop off) reached a contractor with no launch
+ * tool: it worked on in its own turn and said "The 3-hour loop starts now" while no run started and
+ * the Builds bar stayed empty. Asked in words, an Auto chat starts the Loop itself, for the hours named.
+ */
+describe("a Loop asked for in words with Mode on Auto (auto-loop)", () => {
+  /** A game chat on a delegated engine whose answer records `launch`; the run's own sessions end at once. */
+  async function autoChat(launch: Record<string, unknown>) {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    const project = "seyda-neen";
+    await rig.core.games.scaffold(project);
+    const thread = await rig.core.createGameThread(project);
+    const chat: DelegateRequest[] = [];
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        const inTheGame = request.cwd?.endsWith(`/games/${project}`) === true;
+        const ran = { ok: true, engine: "vendor", turns: 1, usage: {} };
+        if (request.director || !inTheGame || chat.length > 0)
+          return { ...ran, sessionId: "run-session", summary: "Looked around." };
+        chat.push(request);
+        return {
+          ...ran,
+          sessionId: "auto-chat",
+          summary: "Starting the Loop.",
+          studioToolCalls: [{ name: "start_autopilot", args: launch }],
+        };
+      },
+    });
+    return { rig, thread, chat };
+  }
+  type Json = Record<string, any>;
+  const ask = { goal: "The Morrowind start scene", direction: "AAA swamp town at dawn" };
+  /** The thread's registered runs in `log`, by their payloads. */
+  const runsIn = (log: Parameters<typeof customEvents>[0], thread: string): Json[] =>
+    customEvents(
+      log.filter((e) => e.thread_id === thread),
+      "run_registered",
+    );
+  /** The run the chat registered, once it has. */
+  async function registered(rig: Rig, thread: string): Promise<Json | undefined> {
+    const events = await waitForLog(rig.core, (log) => runsIn(log, thread).length > 0, 30_000, "run_registered");
+    await rig.core.stopThread(thread);
+    return runsIn(events, thread)[0];
+  }
+
+  it('auto-loop. "start a 3h Loop" in Auto: the chat is handed the Loop\'s start and a 3-hour run starts', async () => {
+    const { rig, thread, chat } = await autoChat({ ...ask, hours: 3 });
+    await rig.core.sendUserMessage("Can you start a 3h Loop on my Morrowind scene?", { thread, engine: "vendor" });
+    const run = await registered(rig, thread);
+
+    const launch = chat[0]?.interviewTools?.find((tool) => tool.name === "start_autopilot");
+    assert.ok(launch, "an Auto chat may start the Loop it is asked for");
+    assert.ok((launch?.parameters as Json)?.properties?.hours, "with the hours the user named");
+    assert.match(String(chat[0]?.prompt), /Never say a Loop started/);
+    assert.equal(run?.goal, ask.goal);
+    assert.equal(run?.budgets?.wallClockMs, 3 * HOUR_MS, "for the hours named");
+    assert.notEqual(run?.budgets?.untilSatisfied, true);
+  });
+
+  it('auto-loop. hours sent as text ("2h", as engines that bridge every field as text send them) still cap the run', async () => {
+    const { rig, thread, chat } = await autoChat({ ...ask, hours: "2h" });
+    await rig.core.sendUserMessage("Start a 2h Loop", { thread, engine: "vendor" });
+    const run = await registered(rig, thread);
+    assert.equal(run?.budgets?.wallClockMs, 2 * HOUR_MS);
+    const launch = chat[0]?.interviewTools?.find((tool) => tool.name === "start_autopilot");
+    assert.equal(launch?.onlyWhenAsked, true, "called only when asked: messages still join the turn");
+  });
+
+  it('auto-loop. "30m" is half an hour, never 30 hours', async () => {
+    const { rig, thread } = await autoChat({ ...ask, hours: "30m" });
+    await rig.core.sendUserMessage("Start a 30 minute Loop", { thread, engine: "vendor" });
+    const run = await registered(rig, thread);
+    assert.equal(run?.budgets?.wallClockMs, HOUR_MS / 2);
+  });
+
+  it('auto-loop. a Loop "until it\'s done" in Auto: no hours named, the run goes until what was asked is verified', async () => {
+    const { rig, thread } = await autoChat(ask);
+    await rig.core.sendUserMessage("Start a Loop and don't stop until it's really AAA", { thread, engine: "vendor" });
+    const run = await registered(rig, thread);
+    assert.equal(run?.budgets?.untilSatisfied, true);
+  });
+});
+
+/**
  * A resumed run read its inbox from the whole log as if it were new: a wrap-up the user asked
  * of the session before the Resume told it to skip every builder and integrate having built
  * nothing (the host only narrowed this by refusing a finish on a run that was not running), and
@@ -4826,6 +4925,30 @@ describe("a provider lost mid-run", () => {
     const turns = calls.filter((c) => c.method === "engine.delegate").map((c) => c.params);
     return { result, appended, turns };
   };
+
+  it("WIN-275. a build the engine refused because its sandbox cannot run here stops the facet on its first attempt: no judge, no strike, no outage wait, and no later worker starts on that engine", async () => {
+    const said =
+      "Claude Code cannot run its sandbox on this computer, so it refused the session before it began: sandbox required but unavailable: the Windows sandbox is not active on this session (feature gate off)";
+    try {
+      const { result, appended, turns } = await facetOnStub(() => ({
+        ok: false,
+        stopReason: "sandbox_unavailable",
+        errorText: said,
+        turns: 0,
+        usage: {},
+        engine: "codex",
+      }));
+      assert.equal(turns.length, 1, "a refused build is not tried a second time");
+      assert.equal(result.stopCode, "sandbox-unavailable");
+      assert.ok(result.stoppedBecause.includes("sandbox required but unavailable"), result.stoppedBecause);
+      assert.deepEqual(appended("facet_iteration"), [], "there is no build to judge");
+      assert.deepEqual(appended("facet_circuit_break"), []);
+      assert.deepEqual(appended("facet_provider_outage"), []);
+      assert.ok(sandboxRefusalOn("codex"), "the refusal holds the engine for the next worker start");
+    } finally {
+      forgetSandboxRefusals();
+    }
+  });
 
   it("D12. a worker's build turn that meets a disabled account is an outage, never a broken round: it waits, and the run's stop keeps its work", async () => {
     try {
@@ -5931,7 +6054,7 @@ describe("the Loop's time limit", () => {
     assert.doesNotMatch(unbounded, /Building until about/, "∞ has no end time to promise");
     assert.match(unbounded, /required outcomes are verified/);
     assert.ok(unbounded.includes(ceilingDay), `the ceiling is dated (${ceilingDay}): ${unbounded}`);
-    assert.match(unbounded, /keep the app open and the Mac awake/i);
+    assert.match(unbounded, /keep the app open and the computer awake/i);
     assert.match(unbounded, /resumes itself|tap on Resume/);
 
     const capped = launchPromise({ wallClockMs: 3_600_000 }, null, now);
@@ -9880,11 +10003,15 @@ describe("a game New game made is asked its engine on its chat's first ask", () 
     assert.ok(asks(first.prompt), "the first build asks the engine first");
     assert.deepEqual(
       first.interviewTools?.map((tool) => tool.name),
-      ["ask_user"],
-      "with the question card bridged in",
+      ["start_autopilot", "ask_user"],
+      "with the question card bridged in beside Auto's Loop start (flipped: auto-loop)",
     );
     assert.ok(!asks(next.prompt), "a later message is never asked again");
-    assert.equal(next.interviewTools, undefined);
+    assert.deepEqual(
+      next.interviewTools?.map((tool) => tool.name),
+      ["start_autopilot"],
+      "no card, only Auto's Loop start (flipped: auto-loop)",
+    );
   });
 });
 
@@ -9984,7 +10111,8 @@ describe("the Unreal lead's saves, crashes, owner words and end", () => {
       throw new Error("Stopped.");
     });
     const report = await runLead(host, { minutes: 20 });
-    assert.equal(report.executionStatus, "cancelled");
+    // A Stop pauses every Loop for a Resume: it ends as the person's stop, never as the plugins' halt.
+    assert.deepEqual([report.executionStatus, report.endReason], ["paused", "stopped"]);
     assert.doesNotMatch(String(report.stoppedBecause), /couldn't ask the game's plugins/);
   });
 

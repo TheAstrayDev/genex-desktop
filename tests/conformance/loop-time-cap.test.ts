@@ -248,6 +248,11 @@ describe("the open Loop under its cap", () => {
       assert.match(String(host.prompts()[1]), /^Time's up: put the build together\./, "the wrap-up opens with it");
       assert.equal(report.stoppedBecause, OPEN_END.timeUpNoClaim);
       assert.deepEqual(report.notDone, [TIME_CAP_WORDS.notChecked]);
+      assert.deepEqual(
+        report.stillToFix,
+        { done: [], notDone: [], why: StopWhy.Time, hours: 0.5 },
+        "its card says its time ran out before a final look, with Keep building",
+      );
       assert.match(String(report.summary), /Door/);
       assert.match(String(report.summary), /time ran out before a final look/);
       assert.deepEqual(
@@ -257,6 +262,41 @@ describe("the open Loop under its cap", () => {
       assert.equal(report.victory, false);
     },
   );
+});
+
+describe("a web Loop's close and its result card (director/integrate.ts)", () => {
+  it("a Stop that refused a closing finish's landing pauses the build; one after it landed ends nothing more; a close its time ended lists what is left", async () => {
+    const { endedAs } = await import("../../src/harness-seed/loop/director/integrate.ts");
+    const STOPPED = { ok: false, why: "stopped", reason: "stopped by the user" };
+    const LANDED = { ok: true, how: "judge-pick", line: "made live" };
+    const closing = (over: { cancelled: boolean; state: Record<string, unknown> }, landed: object = STOPPED) => {
+      const loopRun = {
+        ctx: { cancelled: over.cancelled },
+        journal: { phase: "running" },
+        report: {} as Record<string, unknown>,
+        run: { runId: "run_w", project: "plaza", budgets: { wallClockMs: 2 * HOUR_MS, completionPolicy: "duration" } },
+        state: { integrationHead: "a".repeat(40), ...over.state },
+      };
+      endedAs(loopRun as never, landed);
+      return loopRun;
+    };
+    const finish = { summary: "done", land: true, victory: true, at: 0 };
+    const stopped = closing({ cancelled: true, state: { finish } });
+    assert.equal(stopped.report.executionStatus, "paused", "Resume picks it up");
+    assert.equal(stopped.report.stillToFix, undefined, "a pause keeps its own words, with no list");
+    const late = closing({ cancelled: true, state: { finish } }, LANDED);
+    assert.equal(late.report.executionStatus, "completed", "a Stop after the landing: the build is done, no Resume");
+    const tally = { round: 1, rejections: 1, checking: false, reasons: [], notDone: ["No door"] };
+    const timedOut = closing(
+      {
+        cancelled: false,
+        state: { finish: { ...finish, victory: false }, endedWhy: StopWhy.Time, finishTally: tally },
+      },
+      LANDED,
+    );
+    assert.equal(timedOut.report.executionStatus, "completed");
+    assert.deepEqual(timedOut.report.stillToFix, { done: [], notDone: ["No door"], why: StopWhy.Time, hours: 2 });
+  });
 });
 
 describe("the open Loop past its grace with a claim", () => {

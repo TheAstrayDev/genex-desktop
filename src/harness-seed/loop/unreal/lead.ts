@@ -397,7 +397,6 @@ function reportOf(lead: LeadRun, end: RunEnd): AnyRecord {
 const STOP_WHY_OF_END: Partial<Record<LeadEndReason, StopWhy>> = {
   [LeadEndReason.NotDone]: StopWhy.Stuck,
   [LeadEndReason.TimeUp]: StopWhy.Time,
-  [LeadEndReason.Stopped]: StopWhy.Person,
 };
 
 /** What a close that is neither the goal reached nor a pause leaves for its result card: the last no's lists, why, the hours. */

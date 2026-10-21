@@ -52,12 +52,13 @@ describe("Keep building's send", () => {
       await new Promise<void>((resolve) => {
         release = resolve;
       });
+      return true;
     });
     const first = send(["The timer resets"]);
-    await send(["The timer resets"]);
-    assert.equal(sent.length, 1, "the second tap while the first sends does nothing");
+    assert.equal(await send(["The timer resets"]), false, "the second tap while the first sends sends nothing");
+    assert.equal(sent.length, 1);
     release();
-    await first;
+    assert.equal(await first, true);
     const again = send(["The timer resets"]);
     release();
     await again;

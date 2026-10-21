@@ -71,6 +71,7 @@ const METHODS = [
   "playLive",
   "pluginBinding",
   "pluginNativeJobs",
+  "pluginNativeJob",
   "pluginCancelNativeJob",
   "presentProjectAssets",
   "previewProjectAsset",

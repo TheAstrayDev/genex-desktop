@@ -118,7 +118,7 @@ Workers remain compact 32px rows with 6px insets/gaps, named tasks and disclosed
 Successful tools need no repeated status. Code uses mono; tool labels, filenames and prose
 use the body font. A shown path is not repeated in the result.
 
-Working status belongs to the chat's own work (a turn, a plan, Stop, a pending permission). While only a build runs, chat shows one build card instead, and nothing under it: an 8px-inset 16px-radius composer-colored surface with the lead's latest non-black frame (88×55, 10px radius, omitted until one exists), "Building" and a chevron at 15px, one line of what is happening now at 14px ink-3 (the part at work, "and N more" when several are, else what the lead is doing — never "Running a tool"), and its clock on the right at 14px: the elapsed time, and under it in ink-3 the most it was given ("up to 10h", a cap, never "of 10h": a build may finish inside it; an ∞ build shows only the clock). The finished build is the same card: its capture, the outcome and chevron, one line of failed checks, parts added and duration ("4 parts added · 5h 17m"; orange and led by "1 check failed" when one failed), and Play on the right in the model pill's fill (`pill-quiet`, as every result button, “See it” included) with a filled play glyph. Nothing wraps under it. The whole card is one button to the build's graph on Builds (its title stretched over the card, tooltip "Open in Builds"): the pointer on it steps the card to composer-panel with a line-strong ring and inks the nudging chevron; keyboard focus rings the card in accent; Play sits above it, and the pointer on Play leaves the card unlit. Studio learning after a build is a static line. The composer placeholder during a build reads "Talk to the lead while it builds…" when its lead takes the chat (live chat), else "Sends when the build finishes…".
+Working status belongs to the chat's own work (a turn, a plan, Stop, a pending permission). While only a build runs, chat shows one build card instead, and nothing under it: an 8px-inset 16px-radius composer-colored surface with the lead's latest non-black frame (88×55, 10px radius, omitted until one exists), "Building" and a chevron at 15px, one line of what is happening now at 14px ink-3 (the part at work, "and N more" when several are, else what the lead is doing — never "Running a tool"), and its clock on the right at 14px: the elapsed time, and under it in ink-3 the most it was given ("up to 10h", a cap, never "of 10h": a build may finish inside it; an ∞ build shows only the clock). The finished build is the same card: its capture, the outcome and chevron, one line of failed checks, parts added and duration ("4 parts added · 5h 17m"; orange and led by "1 check failed" when one failed), and Play on the right in the model pill's fill (`pill-quiet`, as every result button, “See it” included) with a filled play glyph. Nothing wraps under it. The whole card is one button to the build's graph on Builds (its title stretched over the card, tooltip "Open in Builds"): the pointer on it steps the card to composer-panel with a line-strong ring and inks the nudging chevron; keyboard focus rings the card in accent; Play sits above it, and the pointer on Play leaves the card unlit. Studio learning after a build is a static line. The composer placeholder during a build reads "Talk to the lead while it builds…" when its lead takes the chat (live chat), else "Sends when the build finishes…". A message sent during a build never takes the card's place: one the lead takes opens above the card, any other waits below it, and the card holds still. The card stands 32px below the last line above it.
 The current status names the latest running tool, falling back to the actual task. Explicit
 reply, tool and waiting phases retain priority. The live status line (home's Naming and Opening
 too) is 12/18 type after a 14px halftone plasma orb (the Live loader's, `ui/StatusOrb.tsx`), 8px
@@ -358,6 +358,35 @@ along it every 1.3s. No "Loading" word; nothing of it draws once the game plays.
 navy card with a blue hairline, Back to Play and Try again; offline it says "You're offline" over
 the signal, "<game> opens as soon as you're back online.", and opens it by itself once back.
 
+A game's coin purchase is Studio's own sheet, never genex.games' page: Comments' dialog over the
+game dimmed by black at 50%, a 440px card (the popover colour, a 1px line edge, 16px corners, 20px
+padding, 16px between rows), with the bar left down under it. A 32px ✕ in ink at 6% sits top right.
+Rows: the game (its 28px 16:9 cover and title); the item (a 72px picture with 12px corners, or the
+plain tile with the box glyph; its name 20/28 medium with "× 5" in ink-3 above one; a game-priced
+payment's terms whole in ink-3 in a scroll area at most 120px tall with the scroll fade, so the
+price and the buttons always show); the price box (ink at 4% with an inset soft line, 12px corners):
+Price and the coin mark, "75 coin" 16/22 medium, "$0.75" in mono 12/16 ink-3, then under a line
+"Your balance 1,240 → 1,165 coin" in mono 13, the balance before paying quieter; and Cancel beside
+the one thing to do, right-aligned, 32px with 9px corners, the primary in Play's blue. The coin mark
+is genex.games' own 11×10 pixel coin (`CoinMark.tsx`) in `--coin` gold, its light 45% of the gold
+in white and its shade 65% in black; never the blue credits shard, since coin pays for what games sell
+and credits for making. Pay stays disabled for a second after the sheet shows; a press before then,
+a held key or the window's focus changing starts the second again. Paying shows the spinner and
+"Paying…" with Cancel and ✕ at half opacity. Paid tints the price box green (8%, a 30% inset edge),
+puts "✓ Paid" in the paid ink, badges the picture with a 24px green check and leaves only Back to
+game. Not enough coin shows the balance and "N more needed" in the short orange, Cancel and Get coin
+↗ with the note "Opens genex.games. Pay comes back once the coin lands."; once the coin arrives,
+Review; after genex.games refused Pay for want of coin, Back to game, Get coin and "Try again in the
+game once the coin lands." Sign in, Pending (a clock beside its title) and Failed are a title and
+body above the item in a compact 40px row (in ink-3, its picture at 0.6, when Failed): Failed reads
+"This purchase timed out", "…was canceled", "…didn't go through" or "…was refunded", each "Try again
+in the game."; a refunded one says the coin went back to the balance, never that none was charged.
+The game writes the item's words: they wrap anywhere, run in their own direction (`unicode-bidi:
+isolate`, direction controls removed) and are never cut. On the light theme the coin is a deeper
+gold and the green and orange words mix toward the ink to read at 4.5:1. The buttons keep the app's
+controls font. Focus starts on Cancel (Back once it is over) and stays in the card; Esc, ✕ or a left
+click outside cancels (or goes back), and nothing answers while Paying.
+
 At the sidebar's foot in Play, while the Genex plugin is missing, off or not connected, sits the
 Genex card: an 8px-inset surface card with a 19:10 muted looping film (`play-publish.mp4`, rendered
 with Remotion from `design/play-publish-video/`; its poster under Reduce Motion; paused while a game
@@ -579,7 +608,14 @@ quiet track with the open tab raised (surface fill, a ring halfway from `line` t
 asked, ellipsized, after a bare ✓ once done, a muted dot while paused, or the status line's orb
 while it works, then its clock at 12px in the chat's shimmer. No "Building", budget or progress
 rule; the open build's status line ("Building · 9 of 30 min · 2 parts working") is its tooltip and
-what a screen reader hears. A selected node opens in place: the camera glides to it at 160%, the graph dims to
+what a screen reader hears. Past three builds, or when the bar less Play's fixed 160px is too narrow
+for each tab to show about 16 characters (150px), the track becomes one picker of the same height
+and edge (focus moves with the swap): the open build's mark, whole name and clock, then ⌄ and the
+count. Its list is the shared dropdown, newest first, one 32px line per build with its start time
+(its clock while it works). The open build's row is filled and scrolled into view, and focused when
+the list opens from the keyboard. Past ten rows it scrolls, the last row shown fading under a
+gradient that keeps the menu's shadow. Play keeps its place at the right end and shows for every
+build; one that made nothing yet plays Live as it is. A selected node opens in place: the camera glides to it at 160%, the graph dims to
 40% and stays clickable, and one card (max 560px, centred, scrolling inside) carries the detail —
 never a side panel. Replies go through the chat composer, so the app keeps one input. Semantic zoom
 trades words for pictures below 60% and adds the asked sentence from 135%.

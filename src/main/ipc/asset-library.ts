@@ -11,7 +11,7 @@ import {
 } from "../../shared/asset-library.ts";
 import { isPlaySlug } from "../../shared/play.ts";
 import type { LibrarySharing } from "../core/library-sharing.ts";
-import type { AssetLibrary } from "../play/asset-library.ts";
+import type { AssetLibrary, LibraryPictureFile } from "../play/asset-library.ts";
 import type { IpcHandle } from "./registrar.ts";
 
 const MESSAGE = {
@@ -28,6 +28,8 @@ const FILE_MAX = 1024;
 export interface AssetLibraryIpcDeps {
   library: AssetLibrary;
   sharing: LibrarySharing;
+  /** A tile's picture file, which checks the address itself before anything is asked. */
+  pictureFile: LibraryPictureFile;
 }
 
 /** A library read as the renderer may ask it: only the fields it knows, in their shapes. */
@@ -79,7 +81,7 @@ function readSource(value: unknown): AddSource {
 
 /** Register the asset library's channels. */
 export function registerAssetLibraryIpc(handle: IpcHandle, deps: AssetLibraryIpcDeps): void {
-  const { library, sharing } = deps;
+  const { library, sharing, pictureFile } = deps;
   handle("studio:assets.library", (payload) => library.list(readQuery(payload)));
   handle("studio:assets.states", (payload) => sharing.states(readProject(payload)));
   handle("studio:assets.save", (payload) =>
@@ -88,4 +90,5 @@ export function registerAssetLibraryIpc(handle: IpcHandle, deps: AssetLibraryIpc
   handle("studio:assets.share", (payload) => sharing.share(readProject(payload), readShareItems(payload?.items)));
   handle("studio:assets.unshare", (payload) => sharing.unshare(readProject(payload), readFile(payload?.file)));
   handle("studio:assets.add", (payload) => sharing.add(readProject(payload), readSource(payload?.source)));
+  handle("studio:assets.file", (payload) => pictureFile(payload?.url));
 }

@@ -69,11 +69,13 @@ async function fixture(t: TestContext) {
   const started = deferred<NativeProcessRequest>();
   const ended = deferred<NativeProcessResult>();
   const finished = deferred<void>();
+  const requests: NativeProcessRequest[] = [];
   const run = async (request: NativeProcessRequest) => {
+    requests.push(request);
     started.resolve(request);
     return ended.promise;
   };
-  const service = new PluginNativeServices(root, [], run);
+  const service = new PluginNativeServices(root, [], { runProcess: run });
   service.detect = async () => ({
     state: NativeRuntimeState.Ready,
     path: "/worker",
@@ -85,11 +87,11 @@ async function fixture(t: TestContext) {
   const controller = new AbortController();
   const spec = manifest();
   const events: PluginNativeResult[] = [];
-  const call = (method: string, args: unknown, own = binding) =>
+  const call = (method: string, args: unknown, own = binding, at = storage) =>
     service.call(
       spec,
       root,
-      storage,
+      at,
       method,
       args,
       own,
@@ -104,7 +106,7 @@ async function fixture(t: TestContext) {
     ended.resolve({ code: null, signal: null, stdout: "", stderr: "", reason: "cancelled", pid: null });
     await service.stop();
   });
-  return { root, storage, spec, service, started, ended, finished, binding, controller, call, events };
+  return { root, storage, spec, service, started, ended, finished, binding, controller, call, events, requests };
 }
 
 test("native manifests allow the uniform 35-minute ceiling and reject any excess", () => {
@@ -142,7 +144,7 @@ test("background run returns its durable id, survives the invocation, and uses e
   assert.deepEqual(await f.call(PluginService.NativeJobs, {}), [result]);
 });
 
-test("foreground execution stays capped at five minutes", async (t) => {
+test("foreground execution stays capped at five minutes and invocation abort interrupts it", async (t) => {
   const f = await fixture(t);
   const pending = f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {} });
   const request = await f.started.promise;
@@ -150,7 +152,93 @@ test("foreground execution stays capped at five minutes", async (t) => {
   f.controller.abort();
   assert.equal(request.signal.aborted, true);
   f.ended.resolve({ code: null, signal: "SIGKILL", stdout: "", stderr: "", reason: "cancelled", pid: null });
-  assert.equal(((await pending) as PluginNativeResult).state, NativeJobState.Cancelled);
+  assert.equal(((await pending) as PluginNativeResult).state, NativeJobState.Interrupted);
+});
+
+test("a missing foreground runtime rejects with setup guidance and keeps a failed receipt", async (t) => {
+  const f = await fixture(t);
+  const detail = "Worker is not installed. Install it using the plugin publisher's guidance.";
+  f.service.detect = async () => ({ state: NativeRuntimeState.Missing, detail });
+  await assert.rejects(f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {} }), { message: detail });
+  const records = await f.service.jobs(f.storage);
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.state, NativeJobState.Failed);
+  assert.ok(records[0]);
+  assert.equal((await f.service.result(f.storage, records[0].id))?.reason, detail);
+  assert.equal("stdout" in records[0], false);
+  assert.equal("files" in records[0], false);
+  assert.ok(records[0]?.finishedAt);
+  assert.deepEqual(f.requests, []);
+});
+
+test("a missing background runtime returns an id whose durable receipt fails with setup guidance", async (t) => {
+  const f = await fixture(t);
+  const detail = "Worker is not installed. Install it using the plugin publisher's guidance.";
+  f.service.detect = async () => ({ state: NativeRuntimeState.Missing, detail });
+  const answer = (await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true })) as {
+    id: string;
+  };
+  assert.match(answer.id, /^[a-f0-9-]{36}$/);
+  await f.finished.promise;
+  const result = (await f.call(PluginService.NativeResult, answer)) as PluginNativeResult;
+  assert.equal(result.state, NativeJobState.Failed);
+  assert.equal(result.reason, detail);
+  assert.ok(result.finishedAt);
+  assert.deepEqual(f.requests, []);
+});
+
+test("parallel background requests reserve one plugin root before either request can yield", async (t) => {
+  const f = await fixture(t);
+  const probing = deferred<void>();
+  f.service.detect = async () => {
+    await probing.promise;
+    return { state: NativeRuntimeState.Ready, path: "/worker", detail: "Ready" };
+  };
+  const args = { job: "make", inputs: {}, values: {}, background: true };
+  try {
+    const answers = await Promise.allSettled([
+      f.call(PluginService.NativeRun, args),
+      f.call(PluginService.NativeRun, args),
+    ]);
+    assert.equal(answers.filter((answer) => answer.status === "fulfilled").length, 1);
+    assert.equal(answers.filter((answer) => answer.status === "rejected").length, 1);
+    assert.equal((await f.service.jobs(f.storage)).length, 1);
+  } finally {
+    probing.resolve();
+  }
+  await f.started.promise;
+});
+
+test("a background reservation spans projects and is released after the job finishes", async (t) => {
+  const f = await fixture(t);
+  const args = { job: "make", inputs: {}, values: {}, background: true };
+  const first = (await f.call(PluginService.NativeRun, args)) as { id: string };
+  const request = await f.started.promise;
+  const otherGame = path.join(f.root, "other-game");
+  await mkdir(otherGame);
+  const other = { project: "other-game", directory: otherGame };
+  await assert.rejects(f.call(PluginService.NativeRun, args, other));
+  assert.equal(f.requests.length, 1);
+  await writeFile(request.args[0], "first asset");
+  f.ended.resolve({ code: 0, signal: null, stdout: "done", stderr: "", reason: "exit", pid: null });
+  await f.finished.promise;
+  const result = (await f.call(PluginService.NativeResult, first)) as PluginNativeResult;
+  assert.equal(result.state, NativeJobState.Completed);
+  const next = (await f.call(PluginService.NativeRun, args, other)) as { id: string };
+  assert.notEqual(next.id, first.id);
+});
+
+test("different plugin roots can run background jobs independently", async (t) => {
+  const f = await fixture(t);
+  const args = { job: "make", inputs: {}, values: {}, background: true };
+  const otherStorage = path.join(f.root, "other-storage");
+  const [first, second] = (await Promise.all([
+    f.call(PluginService.NativeRun, args),
+    f.call(PluginService.NativeRun, args, f.binding, otherStorage),
+  ])) as Array<{ id: string }>;
+  assert.notEqual(first?.id, second?.id);
+  assert.equal((await f.service.jobs(f.storage)).length, 1);
+  assert.equal((await f.service.jobs(otherStorage)).length, 1);
 });
 
 test("background acknowledgement does not wait for a runtime probe", { timeout: 2000 }, async (t) => {
@@ -236,10 +324,11 @@ test("a restarted host marks running records interrupted without launching anyth
   const result = (await f.call(PluginService.NativeResult, { id })) as PluginNativeResult;
   assert.equal(result.state, NativeJobState.Interrupted);
   assert.match(result.reason ?? "", /not replayed/);
+  assert.equal(result.finishedAt, undefined, "a restarted host does not know when the lost worker stopped");
   assert.equal(JSON.parse(await readFile(path.join(directory, "job.json"), "utf8")).state, NativeJobState.Interrupted);
 });
 
-test("host shutdown cancels an independent background worker and waits for its record", async (t) => {
+test("host shutdown interrupts an independent background worker and waits for its record", async (t) => {
   const f = await fixture(t);
   const answer = (await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true })) as {
     id: string;
@@ -250,8 +339,62 @@ test("host shutdown cancels an independent background worker and waits for its r
   f.ended.resolve({ code: null, signal: "SIGKILL", stdout: "", stderr: "", reason: "cancelled", pid: null });
   await stopping;
   const result = (await f.call(PluginService.NativeResult, answer)) as PluginNativeResult;
-  assert.equal(result.state, NativeJobState.Cancelled);
+  assert.equal(result.state, NativeJobState.Interrupted);
   assert.ok(result.finishedAt);
+});
+
+test("plugin shutdown keeps the stop time even when worker cleanup and later reads happen much later", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 21) });
+  const f = await fixture(t);
+  const answer = (await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true })) as {
+    id: string;
+  };
+  const request = await f.started.promise;
+  t.mock.timers.tick(1000);
+  const stoppedAt = new Date().toISOString();
+  const stopping = f.service.stop(f.storage);
+  assert.equal(request.signal.aborted, true);
+  t.mock.timers.tick(60000);
+  f.ended.resolve({ code: null, signal: "SIGKILL", stdout: "", stderr: "", reason: "cancelled", pid: null });
+  await stopping;
+  const result = (await f.call(PluginService.NativeResult, answer)) as PluginNativeResult;
+  assert.equal(result.state, NativeJobState.Interrupted);
+  assert.equal(result.finishedAt, stoppedAt, "cleanup time is not the worker's stop time");
+  t.mock.timers.tick(60000);
+  const later = (await f.call(PluginService.NativeResult, answer)) as PluginNativeResult;
+  assert.equal(later.finishedAt, stoppedAt, "reading the receipt never changes its stop time");
+});
+
+test("200 concurrent result and list reads racing completion never overwrite the terminal receipt", async (t) => {
+  const f = await fixture(t);
+  const answer = (await f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true })) as {
+    id: string;
+  };
+  const request = await f.started.promise;
+  await writeFile(request.args[0], "completed asset");
+  const reads = Array.from({ length: 200 }, async () => {
+    const [result, jobs] = (await Promise.all([
+      f.call(PluginService.NativeResult, answer),
+      f.call(PluginService.NativeJobs, {}),
+    ])) as [PluginNativeResult, PluginNativeResult[]];
+    for (const record of [result, ...jobs]) {
+      assert.notEqual(record.state, NativeJobState.Interrupted);
+      if (record.state === NativeJobState.Completed) {
+        assert.deepEqual(record.files, ["result.txt"]);
+        assert.equal(record.stdout, "completed stdout");
+      }
+    }
+  });
+  f.ended.resolve({ code: 0, signal: null, stdout: "completed stdout", stderr: "", reason: "exit", pid: null });
+  await Promise.all(reads);
+  await f.finished.promise;
+  const result = (await f.call(PluginService.NativeResult, answer)) as PluginNativeResult;
+  const stored = JSON.parse(await readFile(path.join(f.storage, "native-jobs", answer.id, "job.json"), "utf8"));
+  for (const record of [result, stored]) {
+    assert.equal(record.state, NativeJobState.Completed);
+    assert.deepEqual(record.files, ["result.txt"]);
+    assert.equal(record.stdout, "completed stdout");
+  }
 });
 
 test("an invalid background flag and protected inputs cannot launch a worker", async (t) => {
@@ -266,4 +409,22 @@ test("an invalid background flag and protected inputs cannot launch a worker", a
   );
   assert.deepEqual(await f.service.jobs(f.storage), []);
   assert.deepEqual(f.events, []);
+});
+
+test("plugin shutdown fences background admission still awaiting its initial folders", async (t) => {
+  const f = await fixture(t);
+  const pending = f.call(PluginService.NativeRun, { job: "make", inputs: {}, values: {}, background: true });
+  await f.service.stop(f.storage);
+  const answer = (await pending) as { id: string };
+  try {
+    const first = await Promise.race([
+      f.finished.promise.then(() => "stopped"),
+      f.started.promise.then(() => "started"),
+    ]);
+    assert.equal(first, "stopped", "withdrawn plugin must not start its queued worker");
+    assert.equal((await f.service.result(f.storage, answer.id))?.state, NativeJobState.Interrupted);
+  } finally {
+    f.ended.resolve({ code: null, signal: "SIGKILL", stdout: "", stderr: "", reason: "cancelled", pid: null });
+    await f.service.stop(f.storage);
+  }
 });

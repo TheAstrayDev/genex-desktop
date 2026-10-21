@@ -17,6 +17,7 @@ import {
   resolveChatProject,
 } from "./chat-session.ts";
 import type { LaunchGrant } from "./launch-prompts.ts";
+import { AUTO_LAUNCH_WORDS } from "./auto-loop-prompts.ts";
 // The launch tools double as a Loop chat's bridged tools (MCP for Claude, the bridge command for
 // Codex) — one definition, two transports.
 import { tools as launchToolset } from "../tools/game-tools.ts";
@@ -73,6 +74,7 @@ import { compactedSummary, endedByCompaction } from "./compaction-log.ts";
 import { TurnStop, sayInTurn } from "./turn-record.ts";
 import { type ChatWorkersSeat, chatWorkersGrant, withChatWorkers } from "./workers/chat-workers.ts";
 import type { TurnOptions, TurnOutcome } from "./turn-loop.ts";
+import { folderLabelOf } from "./workers/identity.ts";
 import type { AnyRecord, CallResult, HarnessCtx, HarnessTool, ToolCtx, ToolOutcome } from "../types/harness.d.ts";
 import type {
   BuildObservation,
@@ -168,6 +170,8 @@ interface Handoff {
   commission: AnyRecord | null;
   /** Loop on: the tool that launches a build, bridged in with `ask_user`; null in Auto. */
   launchTool: HarnessTool | null;
+  /** Auto: the launch bridged in for a Loop the user asks for in words; null with Loop on, after a run or in a run's turn. */
+  autoLaunch: HarnessTool | null;
   /** After a finished build the chat may reopen, with Loop on: the reopen is offered (reopen-run.ts). */
   reopening: boolean;
   /** The contractor session this chat resumes, if any. */
@@ -464,11 +468,13 @@ async function switchSeat(ctx: HarnessCtx, seat: Seat, item: AnyRecord): Promise
   const commission = settings.autopilot ?? settings.loop ?? null;
   const reopening = reopens(options.afterLoopRun, commission);
   const newSession = settings.engine !== before.engine;
+  const launchTool = launchToolFor(options, reopening);
   const handoff: Handoff = {
     ...seat.handoff,
     commission,
     reopening,
-    launchTool: launchToolFor(options, reopening),
+    launchTool,
+    autoLaunch: autoLaunchFor(options, launchTool),
     ...(newSession ? { resume: null } : {}),
   };
   const briefFor = await briefWriter(ctx, options, handoff);
@@ -550,7 +556,7 @@ async function finishTurn(
   result: DelegateResult,
   change: FolderChange,
 ): Promise<TurnOutcome> {
-  const { launchTool } = handoff;
+  const launchTool = handoff.launchTool ?? handoff.autoLaunch;
   const recorded = result.studioToolCalls ?? [];
   // After a paused run the session may ask to resume it: the chat does that once the reply ends.
   const resume = options.afterLoopRun ? resumeAsked(options.afterLoopRun, recorded) : null;
@@ -768,6 +774,7 @@ async function readChat(ctx: HarnessCtx, options: DelegatedOptions): Promise<Cha
   // beside it only for an explicit start over.
   const reopening = reopens(options.afterLoopRun, commission);
   const launchTool = launchToolFor(options, reopening);
+  const autoLaunch = autoLaunchFor(options, launchTool);
   // This chat's contractor session, if any — follow-ups resume it instead of starting a new
   // mind that only sees the last line ("keep going" with no idea what the game is). Only the
   // chat's latest goes on: one another model answered after missed those turns (chat-continuity.ts).
@@ -788,7 +795,19 @@ async function readChat(ctx: HarnessCtx, options: DelegatedOptions): Promise<Cha
     resume || !hasPriorAsk
       ? compactedSummary(events)
       : await briefSummary(ctx, { threadId, engine, model: options.model, events });
-  return { ask, messages, commission, launchTool, reopening, resume, compacted, hasPriorAsk, project, games };
+  return {
+    ask,
+    messages,
+    commission,
+    launchTool,
+    autoLaunch,
+    reopening,
+    resume,
+    compacted,
+    hasPriorAsk,
+    project,
+    games,
+  };
 }
 
 /**
@@ -801,6 +820,37 @@ function launchToolFor(options: DelegatedOptions, reopening: boolean): HarnessTo
   if (!name) return null;
   if (options.afterLoopRun && !reopening) return null;
   return launchToolset.find((t) => t.name === name) ?? null;
+}
+
+/**
+ * Auto (Loop off): Autopilot's launch, for a Loop the user asks for in words. Only in the chat's own
+ * turn: never beside a Loop's own launch, after a run the chat led, in a run's turn or in the build
+ * a finished run's coordinator handed on. An Auto chat once asked for a Loop said it had started
+ * one, with no way to start it.
+ */
+function autoLaunchFor(options: DelegatedOptions, launchTool: HarnessTool | null): HarnessTool | null {
+  const loopOff = !launchTool && !options.autopilot && !options.loop;
+  const chatsOwnTurn = !options.afterLoopRun && !options.runId && !options.followupOf;
+  if (!loopOff || !chatsOwnTurn) return null;
+  const launch = launchToolset.find((t) => t.name === "start_autopilot");
+  // A launch kept from before hours could reach it would turn every "3h Loop" into one until done.
+  return launch?.parameters?.properties?.hours ? launch : null;
+}
+
+/** Auto: the Loop the user asked for in words, for the hours they named (none: until done), on this message's pictures. */
+function loopAskedInWords(hours: unknown, stills: readonly DelegateImage[]): AnyRecord {
+  const named = hoursNamed(hours);
+  return { ...(named > 0 ? { hours: named } : {}), ...(stills.length ? { frames: [...stills] } : {}) };
+}
+
+/** A number of hours, or minutes when it says so; NaN when it names none. */
+const HOURS_TEXT = /^\s*(\d*\.?\d+)\s*(m\b|mins?\b|minutes?)?/i;
+
+/** The hours an engine sent, as a number: 3, "3", "3h" or "2.5 hours"; "30m" is half an hour. */
+function hoursNamed(hours: unknown): number {
+  const match = HOURS_TEXT.exec(String(hours ?? ""));
+  if (!match) return Number.NaN;
+  return Number(match[1]) / (match[2] ? 60 : 1);
 }
 
 function launchToolName(options: DelegatedOptions): string | null {
@@ -848,7 +898,7 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
       fresh: await isFreshGame(ctx, chat, descriptor),
       engineChoice: asksKind(options, chat, descriptor, offer.kinds),
       ...offer,
-      folderLabel: folderLabel(projectDir, chat.project),
+      folderLabel: folderLabelOf(projectDir, chat.project),
       extraReads,
       startedAt: Date.now(),
     };
@@ -874,7 +924,7 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
     // A game the studio just made has no kind yet: with an engine plugin on, the user picks first.
     engineChoice: offer.kinds.length > 0,
     ...offer,
-    folderLabel: folderLabel(created.dir, project),
+    folderLabel: folderLabelOf(created.dir, project),
     extraReads,
     startedAt: Date.now(),
   };
@@ -934,11 +984,6 @@ async function pluginOffer(ctx: HarnessCtx, project: string, descriptor: GamePro
   return { kinds, pluginsOff };
 }
 
-/** "folder AI Games/rift", never an absolute path — the last two segments say it all. */
-function folderLabel(projectDir: string | null | undefined, project: string): string {
-  return projectDir ? projectDir.split("/").slice(-2).join("/") : project;
-}
-
 /**
  * The contractor's brief, for the session this chat resumes or for a new one (a session that
  * cannot be resumed is started afresh): a build's, with a Loop chat's launch rules.
@@ -972,6 +1017,7 @@ async function briefWriter(
       gameEngine: engineOfGame(descriptor),
       engineProject: descriptor?.engine?.project ?? null,
       launch,
+      autoLoop: handoff.autoLaunch ? handoff.autoLaunch.name : null,
       engineChoice: handoff.engineChoice,
       // What the folder holds decides the rules; a host that lists no facts leaves them to the engine.
       facts: Array.isArray(descriptor?.facts) ? descriptor.facts : null,
@@ -1146,6 +1192,19 @@ function bridgedTools(launchTool: HarnessTool): StudioToolSpec[] {
   return [bridged(launchTool), bridged(askUser)];
 }
 
+/** An Auto chat's: the Loop's launch, for a Loop asked for in words, and the engine question when it is asked. */
+function autoTools(handoff: Handoff): StudioToolSpec[] {
+  const launch = handoff.autoLaunch ? [autoLaunchSpec(handoff.autoLaunch)] : [];
+  return [...launch, ...questionCard(handoff)];
+}
+
+/** The Loop start as an Auto chat is handed it: called only when asked, so messages still join the turn. */
+const autoLaunchSpec = (tool: HarnessTool): StudioToolSpec => ({
+  ...bridged(tool),
+  description: AUTO_LAUNCH_WORDS,
+  onlyWhenAsked: true,
+});
+
 /** The question card alone, for an Auto chat asked to choose its new game's engine. */
 function questionCard(handoff: Handoff): StudioToolSpec[] {
   return handoff.engineChoice ? [bridged(askUser)] : [];
@@ -1157,7 +1216,7 @@ function questionCard(handoff: Handoff): StudioToolSpec[] {
  * — reopening a finished build — the reopen first, beside the launch for a start over.
  */
 function sessionTools(options: DelegatedOptions, handoff: Handoff): AnyRecord {
-  const launch = handoff.launchTool ? bridgedTools(handoff.launchTool) : questionCard(handoff);
+  const launch = handoff.launchTool ? bridgedTools(handoff.launchTool) : autoTools(handoff);
   if (!options.afterLoopRun) return launch.length ? { interviewTools: launch } : {};
   const grant = afterLoopRunGrant(options.afterLoopRun);
   const reopen = handoff.reopening ? [reopenRunTool] : [];
@@ -1499,7 +1558,7 @@ async function executeLaunch(
     engine,
     model,
     ...(options.loop ? { loop: options.loop } : {}),
-    ...(options.autopilot ? { autopilot: options.autopilot } : {}),
+    autopilot: options.autopilot ?? (options.loop ? undefined : loopAskedInWords(args.hours, messageStills(options))),
   } as ToolCtx)) as ToolOutcome;
   const content = toolResult.content ?? "";
   await ctx.call(HostMethod.TurnAppend, {

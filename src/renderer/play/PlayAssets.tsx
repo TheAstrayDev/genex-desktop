@@ -2,11 +2,12 @@
  * Play's Assets shelf as square tiles: the kind and whose switchers on the bar, and the grid under
  * them. Everyone shows the shared assets (the Assets feed page by page, the whole catalog for one
  * kind, or what a search answers); Mine shows the person's own genex.games library page by page,
- * each tile tagged Saved or Shared. A sound plays on its tile when the tile knows its file, and Use
- * adds an asset to one of the person's games.
+ * each tile tagged Saved or Shared. A tile with no cover shows an image's own file or a picture drawn
+ * from its 3D file (`use-tile-picture.ts`). A sound plays on its tile when the tile knows its file,
+ * and Use adds an asset to one of the person's games.
  */
 import type { JSX, RefObject } from "react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AssetScope, LibraryKind } from "../../shared/asset-library.ts";
 import { GenexAccountStatus } from "../../shared/genex-account.ts";
 import type { GameProject } from "../../shared/game-project.ts";
@@ -50,6 +51,7 @@ import type { SearchState } from "./PlayRoom.tsx";
 import { SoundFace } from "./PlaySoundTile.tsx";
 import { FeedStatus } from "./play-model.ts";
 import { useGenexSignIn } from "./use-genex-sign-in.ts";
+import { useTilePicture } from "./use-tile-picture.ts";
 
 const WORDS = PLAY_ASSET_WORDS;
 /** How many tile shapes stand in for a grid on its way: two rows of five. */
@@ -100,8 +102,12 @@ export function AssetSwitchers({ onChoose }: { onChoose: () => void }): JSX.Elem
   );
 }
 
-/** The picture: fades in once loaded; a missing or broken one leaves the kind's glyph on the tile. */
-function TileImage({ src, kind }: { src: string | null; kind: LibraryKind | null }): JSX.Element {
+/**
+ * The picture: fades in once loaded; a missing, broken or still-drawing one leaves the kind's glyph on
+ * the tile. An image's own file can be a full-size original, so it loads only as its tile nears the
+ * screen.
+ */
+export function TileImage({ src, kind }: { src: string | null; kind: LibraryKind | null }): JSX.Element {
   const [state, setState] = useState<ImageState>(ImageState.Loading);
   const glyph = (!src || state === ImageState.Failed) && (
     <Icon name={KIND_GLYPH[kind ?? LibraryKind.Model]} size={22} className="play-asset-glyph" />
@@ -115,6 +121,7 @@ function TileImage({ src, kind }: { src: string | null; kind: LibraryKind | null
           src={src}
           alt=""
           draggable={false}
+          loading="lazy"
           decoding="async"
           data-shown={state === ImageState.Shown || undefined}
           onLoad={() => setState(ImageState.Shown)}
@@ -189,17 +196,19 @@ function UseMenu({ tile }: { tile: AssetTile }): JSX.Element | null {
 /** One asset: its square cover (a sound's drawing), its tag, Use on hover, its title and who made it. */
 const AssetTileView = memo(function AssetTileView({ tile }: { tile: AssetTile }): JSX.Element {
   const { slug } = tile;
+  const cover = useRef<HTMLDivElement>(null);
+  const picture = useTilePicture(tile, cover);
   const open = slug ? () => void studio().play.open({ slug, title: tile.title, coverUrl: tile.coverUrl }) : undefined;
   return (
     <article className="play-asset" data-play-asset={tile.key} data-kind={tile.kind ?? undefined}>
-      <div className="play-asset-cover">
+      <div ref={cover} className="play-asset-cover">
         {open && (
           <button type="button" className="play-asset-open" aria-label={WORDS.open(tile.title)} onClick={open} />
         )}
         {tile.kind === LibraryKind.Sound ? (
           <SoundFace title={tile.title} seed={tile.key} fileUrl={tile.fileUrl} />
         ) : (
-          <TileImage src={tile.coverUrl} kind={tile.kind} />
+          <TileImage src={picture} kind={tile.kind} />
         )}
         {tile.tag && <CardTagMark tag={tile.tag} />}
         <UseMenu tile={tile} />

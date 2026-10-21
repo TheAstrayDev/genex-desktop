@@ -140,12 +140,16 @@ function reasonsOf(value: unknown): string[] | null {
   return value.filter((reason) => reason.trim());
 }
 
-/** A close's `stillToFix` as the chat reads it: null unless it names something left with a known why. */
+/**
+ * A close's `stillToFix` as the chat reads it: null unless its why is known and it names something
+ * left; a Loop whose time ran out before any final look lists nothing and still says so.
+ */
 export function stillToFixOf(value: unknown): StillToFix | null {
   if (typeof value !== "object" || value === null) return null;
   const { done, notDone, why, hours } = value as Record<string, unknown>;
   const left = reasonsOf(notDone);
-  if (!left?.length || !STOP_WHYS.has(why)) return null;
+  if (!left || !STOP_WHYS.has(why)) return null;
+  if (!left.length && why !== StopWhy.Time) return null;
   const timed = typeof hours === "number" && Number.isFinite(hours) && hours > 0;
   return { done: reasonsOf(done) ?? [], notDone: left, why: why as StopWhy, hours: timed ? hours : null };
 }

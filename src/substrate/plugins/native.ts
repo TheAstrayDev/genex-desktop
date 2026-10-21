@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import {
   access as accessFile,
+  copyFile,
   cp,
   lstat,
   mkdir,
@@ -24,6 +25,8 @@ import {
   NATIVE_JOB_TIMEOUT_MS,
   NativeRuntimeState,
   PluginService,
+  RuntimeArchive,
+  runtimePinFor,
   type PluginManifest,
   type PluginBinding,
   type PluginNativeJob,
@@ -31,32 +34,61 @@ import {
   type PluginNativeStatus,
   type PluginNativeResult,
   type PluginRuntimeInstall,
+  type PluginRuntimePin,
 } from "../../shared/plugins.ts";
+import { StudioPlatform } from "../../shared/boot.ts";
 import { InstallPhase } from "../../shared/model-install.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { assertRelativePath, containedReal, isInside } from "../paths.ts";
 import { download, DownloadStatus } from "../bonsai/download.ts";
 import { atomicWriteJson, openNoFollow } from "../fsx.ts";
-import { NativeCleanupError, NativeEndReason, runNativeProcess, runtimeRoot } from "./native-process.ts";
+import {
+  NativeCleanupError,
+  NativeEndReason,
+  type NativeJobSandbox,
+  type NativeProcessRequest,
+  type NativeProcessResult,
+  runNativeProcess,
+  runSandboxedNativeProcess,
+  runtimeRoot,
+} from "./native-process.ts";
+import { candidatePaths, hostCandidateDeps } from "./native-candidates.ts";
+import { insideWindowsPath } from "../windows-sandbox.ts";
+import { SandboxLaunchCode, SandboxLaunchError } from "../sandbox-unavailable.ts";
 import { credentialHomes } from "../credential-homes.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
 const exec = promisify(execFile);
-const VERSION_PROBE_TIMEOUT_MS = 8 * SECOND_MS;
+/**
+ * How long a version probe may take. A program's first start after it was unpacked or after a
+ * restart is slow where antivirus scans it: Blender 5.2.1's `--version` took 15.8 s cold on a
+ * 4-core Windows 11 VM with Defender (then 0.2 s), so 8 s read a good Blender as broken.
+ */
+const VERSION_PROBE_TIMEOUT_MS = 30 * SECOND_MS;
+/** The first probe of a runtime Genex just unpacked, which every one of its files is scanned for. */
+const FRESH_RUNTIME_PROBE_TIMEOUT_MS = 2 * MINUTE_MS;
 const VERSION_PROBE_MAX_BUFFER = 16000;
 const DISK_RESERVE_BYTES = 256 * 1024 ** 2;
 const HDIUTIL_TIMEOUT_MS = 30 * SECOND_MS;
 const TAR_LIST_TIMEOUT_MS = 30 * SECOND_MS;
 const TAR_LIST_MAX_BUFFER = 4 * 1024 ** 2;
-const TAR_EXTRACT_TIMEOUT_MS = 2 * MINUTE_MS;
+/** A pinned Windows Blender is a zip of about 7,500 files; Defender scans each one as it lands. */
+const TAR_EXTRACT_TIMEOUT_MS = 10 * MINUTE_MS;
 /** A Studio native job id: a UUID, so it names a folder and never a path. */
 const idPattern = /^[a-f0-9-]{36}$/;
 /** A runtime's version as its probe reads it: x.y.z, or x.y (read as x.y.0: Godot names a first release 4.3). */
 const SEMVER = /^\d+\.\d+(\.\d+)?$/;
 /** The environment a runtime's version probe runs with: nothing of Studio's. */
 const PROBE_ENV = { PATH: "/usr/bin:/bin", LANG: "en_US.UTF-8" };
-/** Candidate path prefixes a runtime declaration may start with, and the folder each stands for. */
-const CANDIDATE_ROOTS = ["home:", "studio:", "storage:"] as const;
+/** On Windows, only where Windows is: a program cannot start its DLLs without `SystemRoot`. */
+const windowsProbeEnv = () => ({ SystemRoot: process.env.SystemRoot ?? "C:\\Windows" });
+/** The archiver every pinned runtime is unpacked with: the system's own tar (bsdtar on Windows, which reads zip too). */
+const tarProgram = () =>
+  process.platform === StudioPlatform.Windows
+    ? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
+    : "/usr/bin/tar";
+/** This computer, as a pinned download names the one it is for (`NativePlatform`). */
+const hostPlatform = () => `${process.platform}-${process.arch}`;
 /** Input path segments a job may never be handed: dotfiles, dependencies, agent instructions and key material. */
 const PROTECTED_INPUT_SEGMENTS = ["node_modules", "AGENTS.md", "CLAUDE.md"];
 const SECRET_NAME = /^(credentials|secrets|id_rsa|id_ed25519)(\.|$)/i;
@@ -90,6 +122,7 @@ const MESSAGE = {
   UnknownRuntimeOperation: "Unknown runtime operation",
   InstallNeedsAction: "Runtime installation requires its trusted setup action",
   InvalidJobId: "Invalid job id",
+  BackgroundBusy: "A background job is already running for this plugin. Wait for it to finish or cancel it.",
   InvalidBackground: "background must be a boolean",
   JobInterrupted: "Studio or plugin closed before job completion. Inspect existing files; the job was not replayed.",
   NeedsProject: "A native job requires an authorized project",
@@ -103,7 +136,11 @@ const MESSAGE = {
   OutputTooLarge: (total: number, limit: number) =>
     `Native job output is ${total} bytes; the declared aggregate size limit is ${limit} bytes, including renders. Original inputs were preserved.`,
   NoOutput: "Runtime exited successfully but produced no declared output",
-  AppleSiliconOnly: "This pinned runtime supports macOS Apple Silicon only",
+  SandboxNotStarted: "Genex's sandbox has not started yet. Try again in a moment.",
+  NoPinHere: (label: string) =>
+    `Genex has no download of ${label} for this computer. Install it yourself, then check again.`,
+  NotGrantedYet: (folder: string) =>
+    `Genex is still giving its sandbox access to ${folder}. Try again once the agents' current work has finished, or restart Genex.`,
   NoSpace: "Not enough space for the pinned runtime and staging copy",
   UnsafeArchive: "Unsafe runtime archive",
 } as const;
@@ -119,8 +156,9 @@ const versionAtLeast = (version: string, minimum: string) => {
   return true;
 };
 const isMissing = (e: unknown) => (e as NodeJS.ErrnoException).code === "ENOENT";
-const isAppleSilicon = () => process.platform === "darwin" && process.arch === "arm64";
-const isUnsafeArchiveEntry = (name: string) => name.startsWith("/") || name.split("/").includes("..");
+/** An archive entry that would land outside the folder it is unpacked in: absolute, a drive, a parent, or a Windows separator. */
+const isUnsafeArchiveEntry = (name: string) =>
+  name.startsWith("/") || /^[A-Za-z]:/.test(name) || name.includes("\\") || name.split("/").includes("..");
 /** A path segment a native job must never see: a dotfile, dependencies, an agent file or key material. */
 const isProtectedInputSegment = (segment: string) =>
   segment.startsWith(".") ||
@@ -128,9 +166,19 @@ const isProtectedInputSegment = (segment: string) =>
   SECRET_NAME.test(segment) ||
   KEY_FILE.test(segment);
 
+/**
+ * The folder a Windows runtime runs from when it lies in the person's profile, which the sandbox
+ * user reads only once granted; null for one outside it (or off Windows).
+ */
+function profileRuntimeRoot(binary: string): string | null {
+  if (process.platform !== StudioPlatform.Windows) return null;
+  const folder = runtimeRoot(binary);
+  return insideWindowsPath(os.homedir(), folder) ? folder : null;
+}
+
 /** The state a finished native process leaves its job in. */
 function jobStateFor(result: { code: number | null; reason: string }): NativeJobState {
-  if (result.reason === NativeEndReason.Cancelled) return NativeJobState.Cancelled;
+  if (result.reason === NativeEndReason.Cancelled) return NativeJobState.Interrupted;
   return result.code === 0 && result.reason === NativeEndReason.Exit ? NativeJobState.Completed : NativeJobState.Failed;
 }
 
@@ -211,17 +259,58 @@ function installConfirmed(
   if (invocation.method === Invocation.Tool) return confirmedEntry(manifest.tools, install.action);
   return invocation.method === Invocation.Action && confirmedEntry(manifest.actions, install.action);
 }
-type RuntimeInstall = NonNullable<PluginNativeRuntime["install"]>;
-/** The folders one native job works in, all under its own job folder. */
+type RuntimeInstall = PluginRuntimePin;
+
+/** The pinned download for this computer the person confirmed; refused without a confirmed action, or with no download here. */
+function confirmedPin(
+  manifest: PluginManifest,
+  runtime: PluginNativeRuntime,
+  invocation: Pick<NativeInvocation, "method" | "name">,
+  platform: string,
+): RuntimeInstall {
+  const pins = [...(runtime.install ? [runtime.install] : []), ...(runtime.installs ?? [])];
+  if (!pins.some((pin) => installConfirmed(manifest, pin, invocation))) throw new Error(MESSAGE.InstallNeedsAction);
+  const install = runtimePinFor(runtime, platform);
+  if (!install) throw new Error(MESSAGE.NoPinHere(runtime.label));
+  if (!installConfirmed(manifest, install, invocation)) throw new Error(MESSAGE.InstallNeedsAction);
+  return install;
+}
+/**
+ * The folders one native job works in: its record's folder, and where it stages inputs, writes
+ * outputs and keeps scratch (under the record's folder, or on Windows under the granted work folder).
+ */
 interface JobDirs {
   id: string;
   jobDir: string;
   output: string;
   scratch: string;
   inputDir: string;
+  /** Windows: where the plugin's own files the job reads are copied, since its package is not granted. */
+  packageDir?: string;
+}
+
+/** A job is waitable from registration, including while its initial receipt is being saved. */
+function jobCompletion() {
+  let resolve: () => void = () => {};
+  let reject: (reason: unknown) => void = () => {};
+  const promise = new Promise<void>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+interface ActiveNativeJob {
+  controller: AbortController;
+  done: Promise<void>;
+  record: PluginNativeResult;
+  stopState?: NativeJobState;
+  stoppedAt?: string;
 }
 
 interface JobExecution {
+  background: boolean;
+  manifest: PluginManifest;
   recipe: PluginNativeJob;
   runtime: PluginNativeRuntime;
   directory: string;
@@ -308,20 +397,30 @@ async function stageInput(
   return hash.digest("hex");
 }
 
+/** A file of the plugin's package the job reads: in place, or copied into `packageDir` when the job cannot read the package. */
+async function packageFile(directory: string, name: string, packageDir: string | undefined): Promise<string> {
+  const source = await containedReal(directory, name);
+  if (!packageDir) return source;
+  const copy = path.join(packageDir, name);
+  await mkdir(path.dirname(copy), { recursive: true });
+  await copyFile(source, copy);
+  return copy;
+}
+
 /** The runtime's argv: literal arguments, package files, staged inputs, output paths and checked values. */
 async function jobArgv(
   recipe: PluginNativeJob,
   directory: string,
   inputs: Record<string, string>,
-  output: string,
+  dirs: Pick<JobDirs, "output" | "packageDir">,
   values: Record<string, string>,
 ): Promise<string[]> {
   const argv: string[] = [];
   for (const arg of recipe.args) {
     if (typeof arg === "string") argv.push(arg);
-    else if (arg.source === "package") argv.push(await containedReal(directory, arg.name));
+    else if (arg.source === "package") argv.push(await packageFile(directory, arg.name, dirs.packageDir));
     else if (arg.source === "input") argv.push(inputs[arg.name]);
-    else if (arg.source === "output") argv.push(path.join(output, arg.name));
+    else if (arg.source === "output") argv.push(path.join(dirs.output, arg.name));
     else argv.push(values[arg.name]);
   }
   return argv;
@@ -448,15 +547,54 @@ async function extractDmg(
   swap.mount = undefined;
 }
 
-/** Unpack a pinned tarball after refusing absolute or parent-relative entries. */
-async function extractTarball(archive: string, stage: string, signal: AbortSignal) {
-  const listing = await exec("/usr/bin/tar", ["-tzf", archive], {
+/**
+ * Unpack a pinned tarball or zip after refusing absolute, drive, parent-relative or backslashed
+ * entries. The system's tar reads both (on Windows it is bsdtar, which reads zip as it reads tar).
+ */
+async function extractArchive(archive: string, stage: string, signal: AbortSignal) {
+  const listing = await exec(tarProgram(), ["-tf", archive], {
     signal,
     timeout: TAR_LIST_TIMEOUT_MS,
     maxBuffer: TAR_LIST_MAX_BUFFER,
+    windowsHide: true,
   });
-  if (listing.stdout.split("\n").some(isUnsafeArchiveEntry)) throw new Error(MESSAGE.UnsafeArchive);
-  await exec("/usr/bin/tar", ["-xzf", archive, "-C", stage], { signal, timeout: TAR_EXTRACT_TIMEOUT_MS });
+  if (listing.stdout.split(/\r?\n/).some(isUnsafeArchiveEntry)) throw new Error(MESSAGE.UnsafeArchive);
+  await exec(tarProgram(), ["-xf", archive, "-C", stage], {
+    signal,
+    timeout: TAR_EXTRACT_TIMEOUT_MS,
+    windowsHide: true,
+  });
+}
+
+/**
+ * Windows: where native jobs work and pinned runtimes live, two folders the process sandbox is
+ * granted when it starts (srt-win changes grants only while no sandboxed command runs, and agents
+ * keep commands running), and the sandbox every job runs in. Records and deliveries stay in the
+ * plugin's storage, which no sandboxed process may write.
+ */
+export interface WindowsNativeHost {
+  /** The process sandbox, once it has started. */
+  sandbox(): NativeJobSandbox | null;
+  /** One folder per job: its staged inputs, outputs and scratch. */
+  work: string;
+  /** One folder per plugin: its pinned runtimes. */
+  runtimes: string;
+}
+
+/** What the service reads beside a call: a plugin's settings (`setting:` candidates), and Windows's job host. */
+export interface NativeServiceOptions {
+  settings?: (pluginId: string) => Promise<Record<string, unknown>>;
+  windows?: WindowsNativeHost;
+  /** This computer as a pin names it (`win32-x64`); the host's own when left out. */
+  platform?: string;
+  /** Test worker; production uses the platform's confined native process. */
+  runProcess?: typeof runNativeProcess;
+}
+
+/** Whose runtime is detected: the plugin, by its id, and its settings. */
+export interface RuntimeOwner {
+  pluginId?: string;
+  settings?: Record<string, unknown>;
 }
 
 /** Reusable host-owned runtime and job service. Plugin code remains trusted executable code;
@@ -468,28 +606,49 @@ export class PluginNativeServices {
   hold: ((id: string) => () => Promise<void>) | undefined;
   #installing = new Map<string, Promise<PluginNativeStatus>>();
   #installControllers = new Map<string, AbortController>();
-  #active = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  #active = new Map<string, ActiveNativeJob>();
+  #backgroundRoots = new Set<string>();
+  #rootGenerations = new Map<string, number>();
   #stopped = false;
-  readonly #runProcess: typeof runNativeProcess;
-  constructor(studioData: string, protectedPaths: string[], runProcess = runNativeProcess) {
+  readonly #options: NativeServiceOptions;
+  constructor(studioData: string, protectedPaths: string[], options: NativeServiceOptions = {}) {
     this.studioData = studioData;
     this.protectedPaths = protectedPaths;
-    this.#runProcess = runProcess;
+    this.#options = options;
   }
   /** Stop every owned worker before the host releases its sandbox. */
   async stop(root?: string): Promise<void> {
     if (!root) this.#stopped = true;
+    else this.#rootGenerations.set(root, (this.#rootGenerations.get(root) ?? 0) + 1);
     const active = [...this.#active.entries()]
       .filter(([key]) => !root || isInside(path.join(root, "native-jobs"), key))
       .map(([, job]) => job);
-    for (const job of active) job.controller.abort();
+    for (const job of active) this.#stopJob(job, NativeJobState.Interrupted);
     await Promise.allSettled(active.map((job) => job.done));
   }
   /** Host-drawn plugin pages read the same durable records as the SDK. */
-  async jobs(root: string): Promise<PluginNativeResult[]> {
+  async jobs(root: string): Promise<import("../../shared/plugins.ts").PluginNativeJobSummary[]> {
     const jobs = path.join(root, "native-jobs");
     await mkdir(jobs, { recursive: true, mode: 0o700 });
-    return this.#readJobs(jobs, PluginService.NativeJobs, {}, undefined) as Promise<PluginNativeResult[]>;
+    const records = (await this.#readJobs(jobs, PluginService.NativeJobs, {}, undefined)) as PluginNativeResult[];
+    return records.map(({ id, recipe, runtime, state, project, createdAt, finishedAt }) => ({
+      id,
+      recipe,
+      runtime,
+      state,
+      project,
+      createdAt,
+      ...(finishedAt ? { finishedAt } : {}),
+    }));
+  }
+  /** A full durable receipt for an explicitly opened host job. */
+  async result(root: string, id: string): Promise<PluginNativeResult | null> {
+    return this.#readJobs(
+      path.join(root, "native-jobs"),
+      PluginService.NativeResult,
+      { id },
+      undefined,
+    ) as Promise<PluginNativeResult | null>;
   }
   /** Cancel only a live job owned by this plugin root and, for SDK calls, this project. */
   async cancelJob(root: string, id: string, project?: string): Promise<boolean> {
@@ -504,27 +663,56 @@ export class PluginNativeServices {
     )) as PluginNativeResult | null;
     const active = this.#active.get(path.join(jobs, id));
     if (!record || record.state !== NativeJobState.Running || !active || active.controller.signal.aborted) return false;
-    active.controller.abort();
+    this.#stopJob(active, NativeJobState.Cancelled);
     return true;
   }
-  #candidate(raw: string, root: string) {
-    const bases: Record<(typeof CANDIDATE_ROOTS)[number], () => string> = {
-      "home:": () => os.homedir(),
-      "studio:": () => this.studioData,
-      "storage:": () => root,
+  /** Record why and when the host stopped work, before waiting for cleanup. */
+  #stopJob(job: ActiveNativeJob, state: NativeJobState): void {
+    if (job.controller.signal.aborted) return;
+    job.stopState = state;
+    job.stoppedAt = new Date().toISOString();
+    job.controller.abort();
+  }
+  /** Reserve a plugin's background slot before any asynchronous setup starts. */
+  #holdJob(pluginId: string, root: string, background: boolean): () => Promise<void> {
+    if (background && this.#backgroundRoots.has(root)) throw new Error(MESSAGE.BackgroundBusy);
+    const releasePackage = this.hold?.(pluginId);
+    if (background) this.#backgroundRoots.add(root);
+    let released = false;
+    return async () => {
+      if (released) return;
+      released = true;
+      if (background) this.#backgroundRoots.delete(root);
+      await releasePackage?.();
     };
-    const prefix = CANDIDATE_ROOTS.find((p) => raw.startsWith(p));
-    return prefix ? path.join(bases[prefix](), raw.slice(prefix.length)) : raw;
+  }
+  get #platform(): string {
+    return this.#options.platform ?? hostPlatform();
+  }
+  /** The folder a plugin's pinned runtimes are installed in: Windows's granted folder, else its storage. */
+  #runtimesFolder(root: string, pluginId: string | undefined): string {
+    const windows = this.#options.windows;
+    return windows && pluginId ? path.join(windows.runtimes, pluginId) : path.join(root, "runtimes");
+  }
+  /** Who owns `manifest`'s runtimes, with the settings its `setting:` candidates read. */
+  async #owner(manifest: PluginManifest): Promise<RuntimeOwner> {
+    const settings = (await this.#options.settings?.(manifest.id).catch(() => ({}))) ?? {};
+    return { pluginId: manifest.id, settings };
   }
   /** Probe one candidate binary: ready, or why not. Undefined when it does not exist. */
-  async #probe(runtime: PluginNativeRuntime, candidate: string): Promise<PluginNativeStatus | undefined> {
+  async #probe(
+    runtime: PluginNativeRuntime,
+    candidate: string,
+    timeout = VERSION_PROBE_TIMEOUT_MS,
+  ): Promise<PluginNativeStatus | undefined> {
     try {
       await accessFile(candidate, constants.X_OK);
       const binary = await realpath(candidate);
       const result = await exec(binary, runtime.version.args, {
-        timeout: VERSION_PROBE_TIMEOUT_MS,
+        timeout,
         maxBuffer: VERSION_PROBE_MAX_BUFFER,
-        env: PROBE_ENV,
+        env: process.platform === StudioPlatform.Windows ? windowsProbeEnv() : PROBE_ENV,
+        windowsHide: true,
       });
       const version = new RegExp(runtime.version.pattern).exec(result.stdout)?.[1];
       if (!version || !SEMVER.test(version))
@@ -542,20 +730,25 @@ export class PluginNativeServices {
       return { state: NativeRuntimeState.Failed, path: candidate, detail: MESSAGE.ProbeFailed };
     }
   }
-  async detect(runtime: PluginNativeRuntime, root: string): Promise<PluginNativeStatus> {
+  /** Every path to probe for `runtime`, in order: its declared candidates, then Genex's own pinned copy. */
+  async #candidates(runtime: PluginNativeRuntime, root: string, owner: RuntimeOwner): Promise<string[]> {
+    const deps = hostCandidateDeps({ studio: this.studioData, storage: root, settings: owner.settings ?? {} });
+    const declared = await Promise.all(runtime.candidates.map((c) => candidatePaths(c, deps)));
+    const pin = runtimePinFor(runtime, this.#platform);
+    const pinned = pin ? [path.join(this.#runtimesFolder(root, owner.pluginId), runtime.id, pin.executable)] : [];
+    return [...declared.flat(), ...pinned];
+  }
+  async detect(runtime: PluginNativeRuntime, root: string, owner: RuntimeOwner = {}): Promise<PluginNativeStatus> {
+    const pin = runtimePinFor(runtime, this.#platform);
+    const download = pin ? { download: { action: pin.action, url: pin.url, bytes: pin.bytes } } : {};
     let incompatible: PluginNativeStatus | undefined;
-    const candidates = [
-      ...runtime.candidates.map((c) => this.#candidate(c, root)),
-      ...(runtime.install ? [path.join(root, "runtimes", runtime.id, runtime.install.executable)] : []),
-    ];
-    for (const candidate of candidates) {
+    for (const candidate of await this.#candidates(runtime, root, owner)) {
       const status = await this.#probe(runtime, candidate);
-      if (status?.state === NativeRuntimeState.Ready) return status;
+      if (status?.state === NativeRuntimeState.Ready) return { ...status, ...download };
       if (status) incompatible = status;
     }
-    return (
-      incompatible ?? { state: NativeRuntimeState.Missing, detail: MESSAGE.Missing(runtime.label, !!runtime.install) }
-    );
+    const missing = { state: NativeRuntimeState.Missing, detail: MESSAGE.Missing(runtime.label, !!pin) };
+    return { ...(incompatible ?? missing), ...download };
   }
   async call(
     manifest: PluginManifest,
@@ -567,7 +760,9 @@ export class PluginNativeServices {
     invocation: NativeInvocation,
     emit: Emit,
   ): Promise<unknown> {
-    const release = method === PluginService.NativeRun ? this.hold?.(manifest.id) : undefined;
+    const generation = this.#rootGenerations.get(root) ?? 0;
+    const release =
+      method === PluginService.NativeRun ? this.#holdJob(manifest.id, root, args?.background === true) : undefined;
     try {
       await mkdir(root, { recursive: true, mode: 0o700 });
       if (method.startsWith("runtime.")) return this.#runtimeCall(manifest, root, method, args, invocation, emit);
@@ -577,7 +772,7 @@ export class PluginNativeServices {
         return this.#readJobs(jobs, method, args, binding);
       if (method === PluginService.NativeCancel && binding) return this.cancelJob(root, args?.id, binding.project);
       if (method !== PluginService.NativeRun || !binding) throw new Error(MESSAGE.NeedsProject);
-      return await this.#run(manifest, directory, root, jobs, args, binding, invocation, emit, release);
+      return await this.#run(manifest, directory, root, jobs, args, binding, invocation, emit, release, generation);
     } catch (error) {
       await release?.();
       throw error;
@@ -593,7 +788,8 @@ export class PluginNativeServices {
   ): Promise<unknown> {
     const runtime = manifest.nativeRuntimes?.find((r) => r.id === args?.runtime);
     if (!runtime) throw new Error(MESSAGE.UndeclaredRuntime);
-    if (method === PluginService.RuntimeDetect) return this.detect(runtime, root);
+    const owner = await this.#owner(manifest);
+    if (method === PluginService.RuntimeDetect) return this.#detectAndGrant(runtime, root, owner);
     const key = path.join(root, runtime.id);
     if (method === PluginService.RuntimeInstallation) return this.#installation(root, runtime, key);
     if (method === PluginService.RuntimeCancelInstall) {
@@ -602,8 +798,7 @@ export class PluginNativeServices {
       return true;
     }
     if (method !== PluginService.RuntimeInstall) throw new Error(MESSAGE.UnknownRuntimeOperation);
-    const install = runtime.install;
-    if (!install || !installConfirmed(manifest, install, invocation)) throw new Error(MESSAGE.InstallNeedsAction);
+    const install = confirmedPin(manifest, runtime, invocation, this.#platform);
     const byAgent = invocation.method === Invocation.Tool;
     if (!this.#installing.has(key)) {
       const controller = new AbortController();
@@ -612,7 +807,7 @@ export class PluginNativeServices {
       this.#installControllers.set(key, controller);
       this.#installing.set(
         key,
-        this.#install(runtime, install, root, signal, emit).finally(() => {
+        this.#install(runtime, install, root, owner, signal, emit).finally(() => {
           this.#installing.delete(key);
           this.#installControllers.delete(key);
         }),
@@ -643,20 +838,28 @@ export class PluginNativeServices {
     const ids = single ? [args.id] : (await readdir(jobs)).filter((id) => idPattern.test(id));
     const results: PluginNativeResult[] = [];
     for (const id of ids) {
-      const job = JSON.parse(
-        await readFile(path.join(jobs, id, "job.json"), "utf8").catch(() => "null"),
-      ) as PluginNativeResult | null;
-      if (!job) continue;
-      if (binding && job.project !== binding.project) continue;
-      if (job.state === NativeJobState.Running && !this.#active.has(path.join(jobs, id))) {
-        job.state = NativeJobState.Interrupted;
-        job.reason = MESSAGE.JobInterrupted;
-        job.finishedAt = new Date().toISOString();
-        await atomicWriteJson(path.join(jobs, id, "job.json"), job);
-      }
+      const job = await this.#readJob(path.join(jobs, id), binding?.project);
+      if (!job || (binding && job.project !== binding.project)) continue;
       results.push(job);
     }
     return single ? (results[0] ?? null) : results;
+  }
+  /** Read a committed active snapshot, or reconcile an orphan left by a prior host. */
+  async #readJob(dir: string, project?: string): Promise<PluginNativeResult | null> {
+    // Keep the active snapshot until its final save. A disk read must never race completion.
+    const active = this.#active.get(dir);
+    if (active) return structuredClone(active.record);
+    const job = JSON.parse(
+      await readFile(path.join(dir, "job.json"), "utf8").catch(() => "null"),
+    ) as PluginNativeResult | null;
+    if (job && project !== undefined && job.project !== project) return null;
+    if (!job || job.state !== NativeJobState.Running) return job;
+    job.state = NativeJobState.Interrupted;
+    job.reason = MESSAGE.JobInterrupted;
+    // After a crash the stop time is unknown, not the time someone first opens this record.
+    delete job.finishedAt;
+    await atomicWriteJson(path.join(dir, "job.json"), job);
+    return job;
   }
   /** Check a job request, stage its inputs and run it confined; the record says how it ended. */
   async #run(
@@ -668,7 +871,8 @@ export class PluginNativeServices {
     binding: PluginBinding,
     invocation: NativeInvocation,
     emit: Emit,
-    release?: () => Promise<void>,
+    release: (() => Promise<void>) | undefined,
+    generation: number,
   ): Promise<PluginNativeResult | { id: string }> {
     if (this.#stopped) throw new Error(MESSAGE.JobInterrupted);
     if (args?.background !== undefined && typeof args.background !== "boolean")
@@ -679,18 +883,8 @@ export class PluginNativeServices {
     if (!hasOnlyDeclaredArguments(recipe, args)) throw new Error(MESSAGE.UnexpectedInputs);
     validateValues(recipe, args.values);
     invocation.signal.throwIfAborted();
-    const id = randomUUID();
-    const jobDir = path.join(jobs, id);
-    const dirs: JobDirs = {
-      id,
-      jobDir,
-      output: path.join(jobDir, "output"),
-      scratch: path.join(jobDir, "scratch"),
-      inputDir: path.join(jobDir, "inputs"),
-    };
-    await mkdir(dirs.output, { recursive: true });
-    await mkdir(dirs.scratch, { recursive: true });
-    await mkdir(dirs.inputDir);
+    const dirs = await this.#jobDirs(jobs, randomUUID());
+    const { id, jobDir } = dirs;
     const record: PluginNativeResult = {
       inputs: {},
       id,
@@ -704,21 +898,27 @@ export class PluginNativeServices {
     };
     const save = async () => {
       await atomicWriteJson(path.join(jobDir, "job.json"), record);
+      active.record = structuredClone(record);
       emit({ kind: NativeEventKind.NativeJob, ...record });
     };
     const controller = new AbortController();
     const signal = args.background ? controller.signal : AbortSignal.any([controller.signal, invocation.signal]);
-    const active = { controller, done: Promise.resolve() };
+    const completion = jobCompletion();
+    const active: ActiveNativeJob = { controller, record: structuredClone(record), done: completion.promise };
     this.#active.set(jobDir, active);
     try {
       await save();
     } catch (error) {
       this.#active.delete(jobDir);
+      completion.resolve();
       throw error;
     }
     const timeoutMs = args.background ? recipe.timeoutMs : Math.min(recipe.timeoutMs, NATIVE_JOB_TIMEOUT_MS);
-    if (this.#stopped || invocation.signal.aborted) controller.abort();
+    const withdrawn = generation !== (this.#rootGenerations.get(root) ?? 0);
+    if (this.#stopped || invocation.signal.aborted || withdrawn) this.#stopJob(active, NativeJobState.Interrupted);
     const execution = {
+      background: args.background === true,
+      manifest,
       recipe: { ...recipe, timeoutMs },
       runtime,
       directory,
@@ -729,7 +929,7 @@ export class PluginNativeServices {
       binding,
       signal,
     };
-    active.done = this.#finishJob(execution, save, release);
+    void this.#finishJob(execution, save, release).then(completion.resolve, completion.reject);
     // The durable receipt owns the outcome; the initiating invocation is free to finish.
     if (args.background) {
       void active.done.catch(() => {});
@@ -740,14 +940,19 @@ export class PluginNativeServices {
   }
   async #finishJob(execution: JobExecution, save: () => Promise<void>, release?: () => Promise<void>): Promise<void> {
     const { record, signal, dirs } = execution;
+    const active = this.#active.get(dirs.jobDir);
     try {
       await this.#prepareAndExecute(execution);
     } catch (e) {
       record.state = NativeJobState.Failed;
-      if (signal.aborted && !(e instanceof NativeCleanupError)) record.state = NativeJobState.Cancelled;
+      if (signal.aborted && !(e instanceof NativeCleanupError))
+        record.state = active?.stopState ?? NativeJobState.Interrupted;
       record.reason = errorMessage(e);
+      if (!execution.background && !signal.aborted) throw e;
     } finally {
-      record.finishedAt = new Date().toISOString();
+      const aborted = record.state === NativeJobState.Interrupted || record.state === NativeJobState.Cancelled;
+      if (aborted && active?.stopState) record.state = active.stopState;
+      record.finishedAt = (aborted && active?.stoppedAt) || new Date().toISOString();
       try {
         await save();
       } finally {
@@ -760,7 +965,7 @@ export class PluginNativeServices {
     const { recipe, runtime, directory, root, dirs, record, args, binding, signal } = execution;
     signal.throwIfAborted();
     const inputs = await resolveInputs(recipe, args.inputs, binding);
-    const status = await this.detect(runtime, root);
+    const status = await this.detect(runtime, root, await this.#owner(execution.manifest));
     if (status.state !== NativeRuntimeState.Ready || !status.path) throw new Error(status.detail);
     record.version = status.version;
     // A script gets only the explicitly declared input files. Reading the entire project would
@@ -774,9 +979,39 @@ export class PluginNativeServices {
       inputs[key] = staged;
     }
     record.inputs = identities;
-    const argv = await jobArgv(recipe, directory, inputs, dirs.output, args.values);
+    const argv = await jobArgv(recipe, directory, inputs, dirs, args.values);
     signal.throwIfAborted();
     await this.#execute(recipe, status.path, argv, directory, root, dirs, record, signal);
+  }
+  /** A new job's folders, made: under its record's folder, or on Windows its work under the granted work folder. */
+  async #jobDirs(jobs: string, id: string): Promise<JobDirs> {
+    const jobDir = path.join(jobs, id);
+    const windows = this.#options.windows;
+    const work = windows ? path.join(windows.work, id) : jobDir;
+    const dirs: JobDirs = {
+      id,
+      jobDir,
+      output: path.join(work, "output"),
+      scratch: path.join(work, "scratch"),
+      inputDir: path.join(work, "inputs"),
+      ...(windows ? { packageDir: path.join(work, "package") } : {}),
+    };
+    await mkdir(jobDir, { recursive: true });
+    await mkdir(dirs.output, { recursive: true });
+    await mkdir(dirs.scratch, { recursive: true });
+    await mkdir(dirs.inputDir);
+    return dirs;
+  }
+  /**
+   * `detect`, and on Windows let the sandbox user read a ready runtime that lives in the person's
+   * profile (a per-user install, a file they chose): srt-win applies a new grant only while no
+   * sandboxed command runs, so it is asked for as soon as the runtime is found, not when a job starts.
+   */
+  async #detectAndGrant(runtime: PluginNativeRuntime, root: string, owner: RuntimeOwner): Promise<PluginNativeStatus> {
+    const status = await this.detect(runtime, root, owner);
+    const folder = status.state === NativeRuntimeState.Ready && status.path ? profileRuntimeRoot(status.path) : null;
+    if (folder) this.#options.windows?.sandbox()?.allowRead(folder);
+    return status;
   }
   /** Run the confined process, then collect and deliver its declared outputs into the record. */
   async #execute(
@@ -790,7 +1025,7 @@ export class PluginNativeServices {
     signal: AbortSignal,
   ): Promise<void> {
     const binaryRoot = runtimeRoot(binary);
-    const result = await this.#runProcess({
+    const request = {
       binary,
       binaryRoot,
       args: argv,
@@ -808,7 +1043,10 @@ export class PluginNativeServices {
       signal,
       timeoutMs: recipe.timeoutMs,
       maxOutputBytes: recipe.maxOutputBytes,
-    });
+    };
+    const result = this.#options.windows
+      ? await this.#runOnWindows(this.#options.windows, request)
+      : await (this.#options.runProcess ?? runNativeProcess)(request);
     record.stdout = result.stdout;
     record.stderr = result.stderr;
     record.exitCode = result.code;
@@ -819,10 +1057,29 @@ export class PluginNativeServices {
     if (!record.files.length) throw new Error(MESSAGE.NoOutput);
     await deliverOutputs(dirs.jobDir, dirs.output, record);
   }
+  /**
+   * A job in Windows's process sandbox. Its work folder is granted to the sandbox when it starts;
+   * the runtime's own folder needs a grant only inside the person's profile (Program Files and the
+   * Store's folders are readable by every user, and a grant there would need an administrator).
+   */
+  async #runOnWindows(windows: WindowsNativeHost, request: NativeProcessRequest): Promise<NativeProcessResult> {
+    const sandbox = windows.sandbox();
+    if (!sandbox) throw new Error(MESSAGE.SandboxNotStarted);
+    const folder = profileRuntimeRoot(request.binary);
+    if (folder) sandbox.allowRead(folder);
+    try {
+      return await runSandboxedNativeProcess(sandbox, { ...request, reads: folder ? [folder] : [] });
+    } catch (e) {
+      if (folder && e instanceof SandboxLaunchError && e.code === SandboxLaunchCode.NotGranted)
+        throw new Error(MESSAGE.NotGrantedYet(folder), { cause: e });
+      throw e;
+    }
+  }
   async #install(
     runtime: PluginNativeRuntime,
     install: RuntimeInstall,
     root: string,
+    owner: RuntimeOwner,
     signal: AbortSignal,
     emit: Emit,
   ): Promise<PluginNativeStatus> {
@@ -833,9 +1090,10 @@ export class PluginNativeServices {
       path.join(root, `runtime-install-${runtime.id}.json`),
       emit,
     );
-    const destination = path.join(root, "runtimes", runtime.id);
+    const runtimes = this.#runtimesFolder(root, owner.pluginId);
+    const destination = path.join(runtimes, runtime.id);
     const swap: RuntimeSwap = {
-      stage: path.join(root, "runtimes", `${runtime.id}.staging-${randomUUID()}`),
+      stage: path.join(runtimes, `${runtime.id}.staging-${randomUUID()}`),
       destination,
       previous: `${destination}.previous`,
       activated: false,
@@ -844,7 +1102,6 @@ export class PluginNativeServices {
     try {
       recorder.progress(InstallPhase.Preflight);
       await recorder.flush();
-      if (!isAppleSilicon()) throw new Error(MESSAGE.AppleSiliconOnly);
       await mkdir(downloads, { recursive: true });
       const disk = await statfs(root);
       if (disk.bavail * disk.bsize < install.bytes + install.unpackedBytes + DISK_RESERVE_BYTES)
@@ -871,14 +1128,14 @@ export class PluginNativeServices {
       await recorder.flush();
       await mkdir(swap.stage, { recursive: true });
       recorder.progress(InstallPhase.Extracting);
-      if (install.format === "dmg") await extractDmg(install, archive, downloads, swap, signal);
-      else await extractTarball(archive, swap.stage, signal);
+      if (install.format === RuntimeArchive.Dmg) await extractDmg(install, archive, downloads, swap, signal);
+      else await extractArchive(archive, swap.stage, signal);
       signal.throwIfAborted();
-      await this.#verifyStaged(runtime, install, root, swap.stage);
+      await this.#verifyStaged(runtime, install, swap.stage);
       await activateRuntime(swap);
       recorder.progress(InstallPhase.Ready);
       await recorder.flush();
-      return this.detect(runtime, root);
+      return this.#detectAndGrant(runtime, root, owner);
     } catch (e) {
       // Failure to durably record activation must not leave a newly installed runtime
       // behind a failed job. Keep the previous verified installation available.
@@ -900,13 +1157,11 @@ export class PluginNativeServices {
     }
   }
   /** The staged copy has its executable and notices, and its binary reports a supported version. */
-  async #verifyStaged(runtime: PluginNativeRuntime, install: RuntimeInstall, root: string, stage: string) {
+  async #verifyStaged(runtime: PluginNativeRuntime, install: RuntimeInstall, stage: string) {
     await containedReal(stage, install.executable);
     for (const notice of install.notices) await containedReal(stage, notice);
-    const probe = await this.detect(
-      { ...runtime, candidates: [path.join(stage, install.executable)], install: undefined },
-      root,
-    );
-    if (probe.state !== NativeRuntimeState.Ready) throw new Error(probe.detail);
+    const probe = await this.#probe(runtime, path.join(stage, install.executable), FRESH_RUNTIME_PROBE_TIMEOUT_MS);
+    if (probe?.state !== NativeRuntimeState.Ready)
+      throw new Error(probe?.detail ?? MESSAGE.Missing(runtime.label, false));
   }
 }

@@ -145,13 +145,13 @@ const MESSAGE = {
   UnknownTool: (name: string) =>
     `Unknown Unreal Editor tool ${JSON.stringify(name)}. Use ${Object.values(EditorTool).join(", ")}.`,
   NoProject:
-    "No Unreal project is set up for Genex yet. Ask the user to set one up from the Unreal button, then retry.",
+    "No Unreal project is set up for Genex yet. Call unreal__use-project with the project's .uproject path: it sets the project up and links it to this game. Then retry.",
   NotAnswering: (name: string, endpoint: URL, reason: string) =>
     `${name}'s Unreal MCP server isn't answering on ${endpoint.host} (${reason}). Ask the user to open ${name} in Unreal from the Unreal button, then retry.`,
   OtherOpen: (name: string, other: string) =>
     `${name}'s Unreal MCP server isn't answering. ${other} is open in Unreal instead. Ask the user to choose ${other} from the Unreal button, or to open ${name}, then retry.`,
-  NotSetUp: (name: string) =>
-    `${name} isn't set up for Genex. Ask the user to set it up from the Unreal button, then retry.`,
+  NotSetUp: (name: string, file: string) =>
+    `${name} isn't set up for Genex. Call unreal__use-project with ${file}: it sets the project up and links it to this game. Then retry.`,
   StillStarting: (name: string) => `Unreal is still starting ${name}. Call again in a minute.`,
   Answered: (name: string) => `[Unreal project: ${name}]`,
   CallFailed: (reason: string) =>
@@ -506,7 +506,7 @@ async function reachEditor(
   const { chosen, setUp } = found;
   const { fetchImpl } = bridge;
   if (chosen?.port !== undefined) return reachChosen({ ...chosen, port: chosen.port }, setUp, bridge, signal);
-  if (chosen) return { error: MESSAGE.NotSetUp(chosen.name) };
+  if (chosen) return { error: MESSAGE.NotSetUp(chosen.name, chosen.project) };
   const [first, ...others] = setUp;
   if (!first) return { error: MESSAGE.NoProject };
   const tried = await trySession(first, fetchImpl, signal);

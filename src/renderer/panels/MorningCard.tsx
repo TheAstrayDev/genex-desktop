@@ -1,3 +1,4 @@
+import type { KeepBuildingTap } from "../keep-building.ts";
 import { LearningSummary } from "../chat/LearningSummary.tsx";
 /**
  * The morning card — the last thing a run writes into the chat, and usually the first thing
@@ -84,7 +85,7 @@ export interface MorningCardProps {
   /** ended without the reviewer's yes: what is done and still to fix, which the card lists in place of the report */
   stillToFix?: StillToFix | null;
   /** Keep building on what is left (the chat's Loop again); none where no chat can take it */
-  onKeepBuilding?: ((notDone: string[]) => void) | null;
+  onKeepBuilding?: KeepBuildingTap | null;
   onShowLive?: () => void;
   onOpenAssets?: () => void;
   onOpenStudio?: () => void;
@@ -95,8 +96,8 @@ export interface MorningCardProps {
 /** Keep building on what is left, when there is something left and a chat to take it. */
 function keepOf(
   stillToFix: StillToFix | null,
-  onKeepBuilding: ((notDone: string[]) => void) | null,
-): (() => void) | null {
+  onKeepBuilding: KeepBuildingTap | null,
+): (() => Promise<boolean>) | null {
   return stillToFix && onKeepBuilding ? () => onKeepBuilding(stillToFix.notDone) : null;
 }
 
@@ -109,7 +110,7 @@ function ReportOrLeft({
 }: {
   summary: string | null;
   stillToFix: StillToFix | null;
-  onKeepBuilding: (() => void) | null;
+  onKeepBuilding: (() => Promise<boolean>) | null;
   children: ReactNode;
 }): JSX.Element | null {
   if (stillToFix)
@@ -117,7 +118,7 @@ function ReportOrLeft({
       <StillToFixCard
         done={stillToFix.done}
         notDone={stillToFix.notDone}
-        why={stopWhyLine(stillToFix.why, stillToFix.hours)}
+        why={stopWhyLine(stillToFix.why, stillToFix.hours, stillToFix.notDone.length > 0)}
         onKeepBuilding={onKeepBuilding}
       >
         {children}

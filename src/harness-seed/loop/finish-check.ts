@@ -39,7 +39,7 @@ import {
   MAX_FINISH_REJECTIONS,
   ObserverSource,
   PROOF_OBSERVER,
-  type StopWhy,
+  StopWhy,
 } from "./finish-contract.ts";
 import {
   freshProofIn,
@@ -159,14 +159,16 @@ export interface StillToFix {
 
 /**
  * The result card's list for a close without a yes or a pause, from the reviewer's last no
- * (`notDoneOf`); null when no no names anything, so a Loop no reviewer read ends on its own words.
+ * (`notDoneOf`). With no no that names anything, only a time-out has a card (its hours ran out
+ * before a final look, Keep building on); any other end says its own words.
  */
 export function stillToFixOf(
   tally: Pick<FinishTally, "reasons" | "notDone" | "done"> | null | undefined,
   end: { why: StopWhy; hours: number | null },
 ): StillToFix | null {
   const notDone = notDoneOf(tally);
-  return notDone.length ? { done: [...(tally?.done ?? [])], notDone, why: end.why, hours: end.hours } : null;
+  if (!notDone.length && end.why !== StopWhy.Time) return null;
+  return { done: notDone.length ? [...(tally?.done ?? [])] : [], notDone, why: end.why, hours: end.hours };
 }
 
 /** Where a Loop's finish checks stand: kept in the run's journal by the caller. */

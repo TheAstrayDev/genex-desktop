@@ -20,6 +20,10 @@ test("host job channels validate payloads and reach only the owning core methods
       calls.push(["list", id]);
       return [];
     },
+    pluginNativeJob: async (id: string, jobId: string) => {
+      calls.push(["detail", id, jobId]);
+      return null;
+    },
     pluginCancelNativeJob: async (id: string, jobId: string) => {
       calls.push(["cancel", id, jobId]);
       return true;
@@ -53,14 +57,31 @@ test("host job channels validate payloads and reach only the owning core methods
     (await invoke("studio:plugins.native-jobs", { id: "plugin" }, { sender: "other", senderFrame: "other" })).ok,
     false,
   );
+  for (const payload of [undefined, null, {}, { id: 7 }, { id: "plugin", jobId: 1 }])
+    assert.equal((await invoke("studio:plugins.native-job", payload)).ok, false);
+  assert.equal(
+    (
+      await invoke(
+        "studio:plugins.native-job",
+        { id: "plugin", jobId: "job" },
+        { sender: "other", senderFrame: "other" },
+      )
+    ).ok,
+    false,
+  );
   assert.deepEqual(calls, []);
   assert.deepEqual(await invoke("studio:plugins.native-jobs", { id: "plugin" }), { ok: true, value: [] });
+  assert.deepEqual(await invoke("studio:plugins.native-job", { id: "plugin", jobId: "job" }), {
+    ok: true,
+    value: null,
+  });
   assert.deepEqual(await invoke("studio:plugins.cancel-native-job", { id: "plugin", jobId: "job" }), {
     ok: true,
     value: true,
   });
   assert.deepEqual(calls, [
     ["list", "plugin"],
+    ["detail", "plugin", "job"],
     ["cancel", "plugin", "job"],
   ]);
 });

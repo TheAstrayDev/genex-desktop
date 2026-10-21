@@ -85,6 +85,8 @@ const library: LibraryAsset[] = FILES.filter((entry) => !("mine" in entry)).map(
   title: entry.prompt ?? "",
   thumbnailUrl: thumbnail(entry.hue),
   fileUrl: null,
+  fileKind: null,
+  fileFormat: null,
   saved: false,
   shared: null,
   shareable: true,

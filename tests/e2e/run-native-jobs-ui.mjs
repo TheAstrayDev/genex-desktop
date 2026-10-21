@@ -1,6 +1,5 @@
 /** Render the real host cards with disposable records; no provider or native worker is started. */
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +11,6 @@ import { removeTree } from "../helpers/tmp.ts";
 
 await test("host native job cards disclose limits, follow receipts and cancel by keyboard", async () => {
   const root = process.cwd();
-  execFileSync(process.execPath, ["scripts/build.mjs"], { cwd: root, stdio: "inherit" });
   const evidence =
     process.env.GITHUB_ACTIONS && process.platform === "win32"
       ? ".studio-dev/evidence/windows-tests"
@@ -58,6 +56,34 @@ await test("host native job cards disclose limits, follow receipts and cancel by
     await expect(cancel).toHaveCSS("cursor", "pointer");
     await expect(page.locator('[data-native-job="job-0"] [data-native-job-elapsed]')).toHaveText(/3:\d\d/);
     checks.push("running card has elapsed time and one host Cancel control");
+    expect(await page.evaluate(() => window.nativeJobsFixture.detailCalls)).toEqual([]);
+    await expect(page.locator('[data-native-job="job-3"] [data-native-job-elapsed]')).toHaveText("—");
+    const completed = page.locator('[data-native-job="job-1"]');
+    await page.evaluate(() => window.nativeJobsFixture.holdDetails());
+    await completed.getByRole("button", { name: "Show details for hunyuan-shape" }).click();
+    await expect(completed).toContainText("Loading details…");
+    await page.evaluate(() => window.nativeJobsFixture.releaseDetails());
+    await expect(completed.locator("[data-native-job-log]")).toContainText("Mesh generation complete.");
+    await expect(completed.locator("[data-native-job-files]")).toContainText("shape.glb");
+    expect(await page.evaluate(() => window.nativeJobsFixture.detailCalls)).toEqual([
+      { plugin: "local-generation", jobId: "job-1" },
+    ]);
+    const polls = await page.evaluate(() => window.nativeJobsFixture.summaryCalls());
+    await expect.poll(() => page.evaluate(() => window.nativeJobsFixture.summaryCalls())).toBeGreaterThan(polls);
+    expect(await page.evaluate(() => window.nativeJobsFixture.detailCalls.length)).toBe(1);
+    await completed.getByRole("button", { name: "Hide details for hunyuan-shape" }).click();
+    await page.evaluate(() => window.nativeJobsFixture.failDetails("job-1"));
+    await completed.getByRole("button", { name: "Show details for hunyuan-shape" }).click();
+    await expect(completed.getByRole("alert")).toContainText("Unable to load job details. Try again.");
+    await page.evaluate(() => window.nativeJobsFixture.clearDetailFailure());
+    await completed.getByRole("button", { name: "Retry" }).click();
+    await expect(completed.locator("[data-native-job-log]")).toContainText("Mesh generation complete.");
+    await completed.getByRole("button", { name: "Hide details for hunyuan-shape" }).click();
+    await page.evaluate(() => window.nativeJobsFixture.emptyDetails("job-1"));
+    await completed.getByRole("button", { name: "Show details for hunyuan-shape" }).click();
+    await expect(completed).toContainText("No logs or output files yet.");
+    checks.push("summary polling never downloads logs; explicit details supports loading, retry and empty output");
+
     await page.evaluate(() => window.nativeJobsFixture.theme("light"));
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     const lightBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);

@@ -71,6 +71,8 @@ export { shortModelName };
 export type { ModelChoice, RoleGroup, RoleRecord, RoleRow };
 export interface AutopilotSend {
   reviewPlan?: boolean;
+  /** Keep building's own send: the build goes on, whatever the message reads like (`AutopilotCommission.keepBuilding`). */
+  keepBuilding?: boolean;
   roles?: RoleRecord;
   hours: number | null;
   frames: PickedFrame[];

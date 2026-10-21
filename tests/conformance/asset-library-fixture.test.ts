@@ -2,14 +2,15 @@
  * The `asset-library` dev fixture: the fixture game's Assets tab with a file in every library state.
  * Its links, read by the app's own library sharing over the fixture library, put the mushroom in
  * the library unsaved, the strider and the crowd saved, the hut shared, and the dropped picture in
- * the game only.
+ * the game only. A picture, a model and a sound list no thumbnail, as most of a real library, and the
+ * window gets their files from the fixture.
  */
 import assert from "node:assert/strict";
 import { access, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { after, before, it } from "node:test";
 import { type LibrarySharingDeps, librarySharing } from "../../src/main/core/library-sharing.ts";
-import { fixtureDownload, FixtureGenerationId } from "../../src/main/dev/fixture-asset-library.ts";
+import { fixtureDownload, fixtureFileResponse, FixtureGenerationId } from "../../src/main/dev/fixture-asset-library.ts";
 import { ASSET_LIBRARY_FILES, seedAssetLibrary } from "../../src/main/dev/fixture-assets-tab.ts";
 import { fixturePlayRequest } from "../../src/main/dev/fixture-play.ts";
 import { FixtureName } from "../../src/main/dev/fixture-kit.ts";
@@ -104,4 +105,32 @@ it("answers a share named slow as still checked, and live by the next read; one 
 it("signs in as the full account, whose library it is, unless the launch names another", () => {
   assert.equal(launchFixtureAccount(undefined, FixtureName.AssetLibrary), FixtureAccount.Full);
   assert.equal(launchFixtureAccount(FixtureAccount.New, FixtureName.AssetLibrary), FixtureAccount.New);
+});
+
+it("lists a picture, a model and a sound with no thumbnail, and serves their files to the window", async () => {
+  const library = assetLibrary({
+    request: fixturePlayRequest,
+    token: async () => fixtureAccountToken(FixtureAccount.Full),
+    upload: async () => 200,
+    localImages: true,
+  });
+  const { assets } = await library.list();
+  const bare = assets.filter((asset) => asset.thumbnailUrl === null);
+  assert.deepEqual(
+    bare.map((asset) => asset.id),
+    [FixtureGenerationId.Dusk, FixtureGenerationId.Sword, FixtureGenerationId.Wind],
+  );
+  const served = await Promise.all(bare.map((asset) => fixtureFileResponse(asset.fileUrl ?? "")));
+  assert.deepEqual(
+    served.map((response) => response?.headers.get("content-type")),
+    ["image/png", "model/gltf-binary", "audio/wav"],
+  );
+  const glb = new Uint8Array(await (served[1]?.arrayBuffer() ?? new ArrayBuffer(0)));
+  assert.equal(Buffer.from(glb.subarray(0, 4)).toString("latin1"), "glTF");
+  for (const other of [
+    "https://assets.genex.technology/generations/not-in-the-library/a.png",
+    "https://evil.example/generations/fxgen-dusk-sky-0007/a.png",
+    "not a url",
+  ])
+    assert.equal(await fixtureFileResponse(other), null, other);
 });

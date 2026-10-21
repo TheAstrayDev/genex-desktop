@@ -1,7 +1,12 @@
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useId, useState, type JSX } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
 import { nativeJobDisclosure } from "../../../shared/native-job-disclosure.ts";
-import { NativeJobState, type PluginManifest, type PluginNativeResult } from "../../../shared/plugins.ts";
+import {
+  NativeJobState,
+  type PluginManifest,
+  type PluginNativeJobSummary,
+  type PluginNativeResult,
+} from "../../../shared/plugins.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Section } from "./rows.tsx";
 
@@ -11,6 +16,17 @@ const MESSAGE = {
   permission: "Agents can start background jobs. Cancel a running job here.",
   cancel: "Cancel",
   cancelling: "Cancelling…",
+  details: "Details",
+  hideDetails: "Hide details",
+  loading: "Loading details…",
+  unavailable: "Job details are unavailable.",
+  empty: "No logs or output files yet.",
+  retry: "Retry",
+  log: "Log",
+  files: "Output files",
+  detailsLabel: (recipe: string) => `Details for ${recipe}`,
+  showDetailsLabel: (recipe: string) => `Show details for ${recipe}`,
+  hideDetailsLabel: (recipe: string) => `Hide details for ${recipe}`,
   status: {
     [NativeJobState.Running]: "Running",
     [NativeJobState.Completed]: "Completed",
@@ -36,15 +52,140 @@ export function NativeJobLimits({ manifest }: { manifest: PluginManifest }): JSX
   );
 }
 
-function elapsed(job: PluginNativeResult): string {
+function elapsed(job: PluginNativeJobSummary): string {
+  if (job.state === NativeJobState.Interrupted && !job.finishedAt) return "—";
   const end = job.finishedAt ? Date.parse(job.finishedAt) : Date.now();
   const seconds = Math.max(0, Math.floor((end - Date.parse(job.createdAt)) / SECOND_MS));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function useJobDetails(id: string, job: PluginNativeJobSummary) {
+  const [detail, setDetail] = useState<PluginNativeResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Refresh only on a state transition or explicit retry, never on each summary poll.
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    void window.studio.pluginNativeJob(id, job.id).then(
+      (next) => {
+        if (!alive) return;
+        setDetail(next);
+        setLoading(false);
+      },
+      (e: unknown) => {
+        if (!alive) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [id, job.id, job.state, attempt]);
+  return { detail, loading, error, retry: () => setAttempt((previous) => previous + 1) };
+}
+
+function JobDetailBody({ job }: { job: PluginNativeResult }): JSX.Element {
+  const log = [job.stdout, job.stderr].filter(Boolean).join("\n");
+  return (
+    <div className="space-y-3 text-sm text-ink-3">
+      {job.reason && <p>{job.reason}</p>}
+      {!log && !job.files.length && <p>{MESSAGE.empty}</p>}
+      {log && (
+        <div className="space-y-1">
+          <h4 className="font-medium text-ink-2">{MESSAGE.log}</h4>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs" data-native-job-log>
+            {log}
+          </pre>
+        </div>
+      )}
+      {job.files.length > 0 && (
+        <div className="space-y-1">
+          <h4 className="font-medium text-ink-2">{MESSAGE.files}</h4>
+          <ul className="list-disc space-y-1 pl-4 break-words" data-native-job-files>
+            {job.files.map((file) => (
+              <li key={file}>{file}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function JobDetails({ id, job }: { id: string; job: PluginNativeJobSummary }): JSX.Element {
+  const { detail, loading, error, retry } = useJobDetails(id, job);
+  if (loading)
+    return (
+      <p role="status" className="text-sm text-ink-3">
+        {MESSAGE.loading}
+      </p>
+    );
+  if (error || !detail)
+    return (
+      <div className="space-y-2">
+        <p role={error ? "alert" : "status"} className="text-sm text-ink-3">
+          {error || MESSAGE.unavailable}
+        </p>
+        <Button onClick={retry}>{MESSAGE.retry}</Button>
+      </div>
+    );
+  return <JobDetailBody job={detail} />;
+}
+
+function JobRow({
+  id,
+  job,
+  pending,
+  cancel,
+}: {
+  id: string;
+  job: PluginNativeJobSummary;
+  pending: boolean;
+  cancel: () => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const detailsId = useId();
+  return (
+    <div className="genex-account space-y-4" data-native-job={job.id}>
+      <div className="genex-account-row">
+        <div className="genex-account-copy">
+          <h3 className="text-sm font-medium">{job.recipe}</h3>
+          <p>
+            {job.project} · {MESSAGE.status[job.state]} · <span data-native-job-elapsed>{elapsed(job)}</span>
+          </p>
+        </div>
+        <div className="genex-account-actions">
+          <Button
+            aria-expanded={open}
+            aria-controls={detailsId}
+            aria-label={open ? MESSAGE.hideDetailsLabel(job.recipe) : MESSAGE.showDetailsLabel(job.recipe)}
+            onClick={() => setOpen((previous) => !previous)}
+          >
+            {open ? MESSAGE.hideDetails : MESSAGE.details}
+          </Button>
+          {job.state === NativeJobState.Running && (
+            <Button disabled={pending} aria-label={`Cancel ${job.recipe}`} onClick={cancel}>
+              {pending ? MESSAGE.cancelling : MESSAGE.cancel}
+            </Button>
+          )}
+        </div>
+      </div>
+      {open && (
+        <section id={detailsId} aria-label={MESSAGE.detailsLabel(job.recipe)} data-native-job-details>
+          <JobDetails id={id} job={job} />
+        </section>
+      )}
+    </div>
+  );
+}
+
 /** Durable native jobs, drawn by the host so cancellation does not depend on plugin code. */
 export function NativeJobs({ id }: { id: string }): JSX.Element | null {
-  const [jobs, setJobs] = useState<PluginNativeResult[]>([]);
+  const [jobs, setJobs] = useState<PluginNativeJobSummary[]>([]);
   const [pending, setPending] = useState<string[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -75,7 +216,7 @@ export function NativeJobs({ id }: { id: string }): JSX.Element | null {
       window.clearInterval(timer);
     };
   }, [id]);
-  const cancel = async (job: PluginNativeResult) => {
+  const cancel = async (job: PluginNativeJobSummary) => {
     setPending((ids) => [...ids, job.id]);
     try {
       await window.studio.pluginCancelNativeJob(id, job.id);
@@ -96,26 +237,7 @@ export function NativeJobs({ id }: { id: string }): JSX.Element | null {
       {[...jobs]
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .map((job) => (
-          <div className="genex-account genex-account-row" key={job.id} data-native-job={job.id}>
-            <div className="genex-account-copy">
-              <h3 className="text-sm font-medium">{job.recipe}</h3>
-              <p>
-                {job.project} · {MESSAGE.status[job.state]} · <span data-native-job-elapsed>{elapsed(job)}</span>
-              </p>
-              {job.reason && job.state !== NativeJobState.Completed && (
-                <p className="text-sm text-ink-3">{job.reason}</p>
-              )}
-            </div>
-            {job.state === NativeJobState.Running && (
-              <Button
-                disabled={pending.includes(job.id)}
-                aria-label={`Cancel ${job.recipe}`}
-                onClick={() => void cancel(job)}
-              >
-                {pending.includes(job.id) ? MESSAGE.cancelling : MESSAGE.cancel}
-              </Button>
-            )}
-          </div>
+          <JobRow id={id} job={job} key={job.id} pending={pending.includes(job.id)} cancel={() => void cancel(job)} />
         ))}
     </div>
   );

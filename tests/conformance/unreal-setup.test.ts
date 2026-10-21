@@ -28,7 +28,7 @@ import { UnrealStepId, unrealInstallCard, unrealSteps, XcodeStep } from "../../s
 import type { PluginEngineLink } from "../../src/plugin-sdk/index.d.ts";
 import { pluginBackendEnv } from "../../src/substrate/plugins/process.ts";
 import { editorLogPath, readEditorLog } from "../../src/plugins/unreal/editor-log.ts";
-import { derivedPort, listSetUpProjects, SetupStorage } from "../../src/plugins/unreal/editor-port.ts";
+import { chosenProject, derivedPort, listSetUpProjects, SetupStorage } from "../../src/plugins/unreal/editor-port.ts";
 import {
   addToolsetPlugins,
   findEngines,
@@ -48,6 +48,8 @@ import {
   updateHelper,
 } from "../../src/plugins/unreal/setup.ts";
 import { type XcodeStatus, XcodeState } from "../../src/plugins/unreal/xcode.ts";
+import { createEngineLinks } from "../../src/substrate/plugins/engine-links.ts";
+import { ENGINES as ENGINE_CATALOG } from "../helpers/engines.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const GIB = 1024 ** 3;
@@ -1232,6 +1234,18 @@ describe("the Unreal plugin's setup actions", () => {
     });
   });
 
+  it("a link's Undo takes the set-up back through undo-setup, and answers nothing once it is gone", async () => {
+    const b = await backendFixture();
+    await b.backend.action?.("setup", { project: b.project.file }, b.context);
+    const args = { project: await realpath(b.project.file), ifSetUp: true };
+    const undone = (await b.backend.action?.("undo-setup", args, b.context)) as { undoable: boolean };
+    assert.equal(undone.undoable, false);
+    assert.equal(await b.backend.action?.("undo-setup", args, b.context), null, "nothing left to undo is no refusal");
+    await assert.rejects(b.backend.action?.("undo-setup", { project: b.project.file }, b.context) ?? Promise.reject(), {
+      code: SetupErrorCode.NothingToUndo,
+    });
+  });
+
   it("status asks only the chosen project's own port whether Unreal answers", async () => {
     const asked: number[] = [];
     const b = await backendFixture({
@@ -1526,12 +1540,124 @@ describe("a game's own Unreal project and the steps card", () => {
     assert.deepEqual(methods(b.calls), ["game.engine.link", "game.engine.link", "game.engine.read"]);
   });
 
+  it("the agent's use-project sets up a project that isn't set up, then links it with the set-up on the link", async () => {
+    const b = await linkFixture();
+    const answer = String(await b.backend.tool?.("use-project", { project: b.project.file }, b.context));
+    assert.match(answer, /Set up Drift for Genex/);
+    assert.deepEqual(b.calls, [["game.engine.link", { project: b.real, setUp: true }]]);
+    const state = await inspectProject(b.project.file, b.options);
+    assert.deepEqual([state.plugins, state.autoStart, state.undoable], [true, true, true], "set up as the panel does");
+    assert.equal(await chosenProject(b.storage), undefined, "the panel's choice stays as it was");
+    await b.backend.tool?.("use-project", { project: "drift" }, b.context);
+    assert.deepEqual(b.calls.at(-1), ["game.engine.link", { project: b.real }], "a set-up project links as before");
+  });
+
+  it("the agent's use-project refuses a project open in Unreal, saying why in one line, and changes nothing", async () => {
+    const b = await linkFixture({ editorRunning: async () => true });
+    const before = await tree(b.root);
+    const call = b.backend.tool?.("use-project", { project: b.project.file }, b.context) ?? Promise.reject();
+    await assert.rejects(call, (error: Error) => {
+      assert.match(error.message, /Drift is open in Unreal Editor/);
+      assert.match(error.message, /quit Unreal Editor/);
+      assert.doesNotMatch(error.message, /Unreal button|\n/);
+      return true;
+    });
+    assert.deepEqual(await tree(b.root), before, "no record, the .uproject and its settings untouched");
+    assert.deepEqual(b.calls, [], "nothing is linked");
+  });
+
+  it("the agent's use-project takes its set-up back when the host refuses the link", async () => {
+    const b = await linkFixture();
+    const uproject = await readFile(b.project.file, "utf8");
+    const host = (async (method: string) => {
+      if (method === "storage.root") return b.storage;
+      throw new Error("the link was refused");
+    }) as never;
+    await assert.rejects(
+      b.backend.tool?.("use-project", { project: b.project.file }, { ...b.context, host }) ?? Promise.reject(),
+      /the link was refused/,
+    );
+    const state = await inspectProject(b.project.file, b.options);
+    assert.deepEqual([state.plugins, state.autoStart, state.undoable], [false, false, false]);
+    assert.equal(await readFile(b.project.file, "utf8"), uproject);
+    assert.deepEqual(await listSetUpProjects(b.storage), []);
+    assert.equal(await exists(path.join(b.project.directory, "Plugins")), false, "no Genex editor helper left");
+  });
+
   it("the setup question is short, and what changes sits under it", async () => {
     const b = await linkFixture();
     const review = await b.backend.review!("setup", { project: b.project.file }, b.context);
     assert.equal(review.message, "Set up Drift for Genex?");
     assert.match(review.detail ?? "", /Drift\.uproject/);
     assert.doesNotMatch(review.detail ?? "", /[{}]/, "no JSON");
+  });
+
+  it("the agent's use-project leaves a project from an older Unreal to the user, in one line, and changes nothing", async () => {
+    const b = await linkFixture();
+    const older = UPROJECT.replace('"EngineAssociation": "5.8"', '"EngineAssociation": "5.7"');
+    await writeFile(b.project.file, older);
+    const before = await tree(b.root);
+    const call = b.backend.tool?.("use-project", { project: b.project.file }, b.context) ?? Promise.reject();
+    await assert.rejects(call, (error: Error) => {
+      assert.match(error.message, /Drift was made in Unreal 5\.7/);
+      assert.match(error.message, /5\.8 is the user's choice/);
+      assert.match(error.message, /press Set up in the Unreal panel/);
+      assert.doesNotMatch(error.message, /\n/);
+      return true;
+    });
+    assert.equal(await readFile(b.project.file, "utf8"), older, "the .uproject byte for byte");
+    assert.deepEqual(await tree(b.root), before, "no set-up record, no settings, no helper");
+    assert.deepEqual(await listSetUpProjects(b.storage), []);
+    assert.deepEqual(b.calls, [], "nothing is linked");
+  });
+
+  /** Two games on one backend, their links made and undone by the host's own link service, which takes a set-up back through the plugin's undo-setup. */
+  async function twoGames() {
+    const b = await linkFixture();
+    const gameDir = (game: string) => path.join(b.root, "games", game);
+    const binding = (game: string) => ({ project: game, directory: gameDir(game), threadId: `thread-of-${game}` });
+    const links = createEngineLinks({
+      root: () => b.storage,
+      gameDir,
+      append: async () => {},
+      changed: () => {},
+      gameThread: async (game) => `thread-of-${game}`,
+      now: () => new Date("2026-10-04T12:00:00.000Z"),
+      catalog: () => ENGINE_CATALOG,
+      undoSetUp: async (_pluginId, game, project) => {
+        await b.backend.action?.("undo-setup", { project, ifSetUp: true }, contextOf(game));
+      },
+    });
+    function contextOf(game: string) {
+      const host = (async (method: string, args?: unknown) => {
+        if (method === "storage.root") return b.storage;
+        if (method === "game.engine.link") return links.link("unreal", binding(game), args);
+        if (method === "game.engine.read") return links.read("unreal", binding(game));
+        throw new Error(`unexpected host call ${method}`);
+      }) as never;
+      return { ...b.context, project: game, host };
+    }
+    for (const game of ["valley", "lantern"]) await mkdir(gameDir(game), { recursive: true });
+    return { ...b, links, binding, contextOf };
+  }
+
+  it("Undo of the link that set a project up keeps the set-up while another game builds in it", async () => {
+    const g = await twoGames();
+    await g.backend.tool?.("use-project", { project: g.project.file }, g.contextOf("valley"));
+    await g.backend.tool?.("use-project", { project: "drift" }, g.contextOf("lantern"));
+    const made = await g.links.read("unreal", g.binding("valley"));
+    assert.ok(made);
+    await g.links.undo("unreal", "valley", made.linkedAt, "thread-of-valley");
+    assert.equal(await g.links.read("unreal", g.binding("valley")), null, "the first game's link is undone");
+    assert.deepEqual(
+      (await listSetUpProjects(g.storage)).map((p) => p.project),
+      [g.real],
+      "Drift's set-up record stays: the other game's Unreal calls find it",
+    );
+    assert.equal((await inspectProject(g.project.file, g.options)).ready, true);
+    assert.equal((await g.links.read("unreal", g.binding("lantern")))?.project, g.real);
+    const again = await g.backend.tool?.("use-project", { project: "drift" }, g.contextOf("lantern"));
+    assert.match(String(again), /now builds in Drift/);
   });
 });
 

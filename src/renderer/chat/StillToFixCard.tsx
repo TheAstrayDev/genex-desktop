@@ -10,8 +10,8 @@ import { STILL_TO_FIX_WORDS } from "../words.ts";
 export interface StillToFixProps {
   done: readonly string[];
   notDone: readonly string[];
-  /** Start the chat's Loop again on what is left, once (the button goes after a tap); none where no chat can take it. */
-  onKeepBuilding?: (() => void) | null;
+  /** Start the chat's Loop again on what is left; the button goes once that went out. None where no chat can take it. */
+  onKeepBuilding?: (() => Promise<boolean>) | null;
   /** The title over the list; none inside a card that has its own. */
   title?: string | null;
   /** Why the Loop stopped, one line under the title (`stopWhyLine`). */
@@ -47,12 +47,12 @@ export function StillToFix({
   why = null,
   children,
 }: StillToFixProps): JSX.Element {
-  const [tapped, setTapped] = useState(false);
+  const [tap, setTap] = useState<"idle" | "sending" | "sent">("idle");
   const keep =
-    onKeepBuilding && !tapped
+    onKeepBuilding && tap !== "sent"
       ? () => {
-          setTapped(true);
-          onKeepBuilding();
+          setTap("sending");
+          void onKeepBuilding().then((sent) => setTap(sent ? "sent" : "idle"));
         }
       : null;
   const hasActions = Boolean(keep || children);
@@ -64,18 +64,20 @@ export function StillToFix({
           {why ? <span className="text-chat-sub text-ink-3">{why}</span> : null}
         </div>
       ) : null}
-      <ul className="flex flex-col gap-1.5 text-chat-sub">
-        {done.map((item) => (
-          <Item key={`done:${item}`} text={item} left={false} />
-        ))}
-        {notDone.map((item) => (
-          <Item key={`left:${item}`} text={item} left />
-        ))}
-      </ul>
+      {done.length || notDone.length ? (
+        <ul className="flex flex-col gap-1.5 text-chat-sub">
+          {done.map((item) => (
+            <Item key={`done:${item}`} text={item} left={false} />
+          ))}
+          {notDone.map((item) => (
+            <Item key={`left:${item}`} text={item} left />
+          ))}
+        </ul>
+      ) : null}
       {hasActions ? (
         <div className="flex flex-wrap gap-1.5">
           {keep ? (
-            <Button variant="play-fill" size="sm" data-keep-building onClick={keep}>
+            <Button variant="play-fill" size="sm" data-keep-building disabled={tap === "sending"} onClick={keep}>
               {STILL_TO_FIX_WORDS.keepBuilding}
             </Button>
           ) : null}

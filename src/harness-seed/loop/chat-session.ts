@@ -5,6 +5,7 @@
  * re-briefed from the last line alone, and a chat never guesses a different game folder.
  */
 import { launchRules, RESUME_LOOP_CHAT, type LaunchGrant } from "./launch-prompts.ts";
+import { autoLoopRule } from "./auto-loop-prompts.ts";
 import { UNTIL_DONE_WORDS } from "./until-done-prompts.ts";
 import { type EngineId, GameEngine } from "./game-engine.ts";
 import { handoverSection } from "./session-compact-prompts.ts";
@@ -542,6 +543,8 @@ export function buildContractorBrief({
   engineProject = null,
   /** Loop is on: this chat may also launch a build. */
   launch = null,
+  /** Loop is off: the launch tool this chat may call for a Loop the user asks for in words. */
+  autoLoop = null,
   /** The build this chat's session led is over: what it is told of it (after-loop-run-prompts.ts). */
   afterLoopRun = null,
   /** A new game while the Unreal plugin is on: the user picks the web or Unreal first (unreal-prompts.ts). */
@@ -574,6 +577,7 @@ export function buildContractorBrief({
   gameEngine?: EngineId;
   engineProject?: string | null;
   launch?: LaunchGrant | null;
+  autoLoop?: string | null;
   afterLoopRun?: string | null;
   engineChoice?: boolean;
   /** Read no more, kept for a caller kept from before: each kind's readiness comes with the kinds (`ready`, `note`). */
@@ -590,7 +594,10 @@ export function buildContractorBrief({
   const identity = appIdentity({ folderLabel, facts: game.facts, holds: game.holds });
   const workHere = workHereLine(game, folderLabel);
   const stills = stillsBlock(extraReads);
-  const launchBlock = launch?.toolName ? launchRules(engine, launch, ...loopOfGame(game)) : [];
+  const launchBlock = [
+    ...(launch?.toolName ? launchRules(engine, launch, ...loopOfGame(game)) : []),
+    ...(autoLoop ? [autoLoopRule(engine, autoLoop)] : []),
+  ];
   const workersLine = workers ? WORKERS_BRIEF_LINE : "";
 
   if (resume)

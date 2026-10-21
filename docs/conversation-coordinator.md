@@ -767,7 +767,12 @@ does not make a new game a contained change. Before it launches, the session mus
 game is and how it should look, from the conversation, attached stills or the game in the folder;
 when either is missing it asks one `ask_user` question with a recommended answer, even when the user
 asks for speed, and launches after the answer (the question the write-less interviewer used to
-ask). The direct engines' briefing (`turn-prompts.ts`) carries the same rule. A recorded
+ask). The direct engines' briefing (`turn-prompts.ts`) carries the same rule. With Loop off (Auto),
+the chat's own turn has `start_autopilot` bridged in too (`delegated-turn.ts` `autoLaunchFor`; never in
+a run's turn, after a run the chat led or in a build a coordinator handed on), for a Loop the user
+asks for in words: its `hours` argument is the hours they named, none runs until done
+(`auto-loop-prompts.ts` `autoLoopRule`), and the chat never says a Loop started unless that call
+answered. A recorded
 question is asked (after the preview health pass when game sources changed); a recorded launch
 starts from the folder as the session left it; a turn that records neither is reported like an
 Auto chat build. A non-launching turn that changed game sources takes the preview health pass and a

@@ -210,6 +210,11 @@ export interface StudioToolSpec {
     properties: Record<string, { type: string; description?: string }>;
     required?: string[];
   };
+  /**
+   * Called only when the person asks for it in words (an Auto chat's Loop start): it doesn't make the
+   * session an interview, so messages still join it mid-turn, and no nudge names it.
+   */
+  onlyWhenAsked?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -1127,7 +1132,7 @@ export interface StudioSettingsView {
   blender?: boolean;
   /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
   autoResume?: boolean;
-  /** Let agents control your computer (Settings → Permissions, macOS); off by default. */
+  /** Let agents control your computer (Settings → Permissions, macOS and Windows); off by default. */
   computerControl?: boolean;
 }
 // ↑ src/shared/studio-api.ts
@@ -2578,6 +2583,11 @@ export interface AutopilotCommission {
   roles?: RunRoles;
   /** Request host-owned explicit approval before execution (default off). */
   reviewPlan?: boolean;
+  /**
+   * The person's Keep building tap after a Loop ended with something still to fix: the finished
+   * build reopens, or the next Loop starts, with no turn deciding whether it is a contained change.
+   */
+  keepBuilding?: boolean;
 }
 // ↑ src/shared/protocol.ts
 

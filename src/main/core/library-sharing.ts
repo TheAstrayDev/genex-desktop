@@ -21,6 +21,7 @@ import {
   LIBRARY_IDS_MAX,
   type LibraryAsset,
   LibraryKind,
+  libraryFileUrl,
   libraryKindOf,
   type ShareItem,
   ShareMiss,
@@ -30,7 +31,6 @@ import { assetKind, type ProjectAsset, type ProjectAssets } from "../../shared/g
 import { isPlaySlug } from "../../shared/play.ts";
 import { atomicWriteJson, createFileInDir, ensureDirBelow, readRegularFile } from "../../substrate/fsx.ts";
 import type { AssetLibrary, ShareAnswer } from "../play/asset-library.ts";
-import { libraryFileUrl } from "../play/asset-library.ts";
 
 /** Where a game keeps which generation each saved or added file is. */
 const LINKS_FILE = ["library-links.json"] as const;

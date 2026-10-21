@@ -96,6 +96,11 @@ export interface AutopilotCommission {
   roles?: RunRoles;
   /** Request host-owned explicit approval before execution (default off). */
   reviewPlan?: boolean;
+  /**
+   * The person's Keep building tap after a Loop ended with something still to fix: the finished
+   * build reopens, or the next Loop starts, with no turn deciding whether it is a contained change.
+   */
+  keepBuilding?: boolean;
 }
 
 /**

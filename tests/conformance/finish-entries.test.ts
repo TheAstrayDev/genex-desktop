@@ -93,6 +93,26 @@ it("only the chat's newest result card is the latest, the one that offers Keep b
   assert.deepEqual(latest([finished(1, { stillToFix: left() })]), [true]);
 });
 
+it("a Loop whose hours ran out before any final look still ends on the card: no list, its hours, Keep building", () => {
+  const unlooked = { done: [], notDone: [], why: StopWhy.Time, hours: 5 };
+  assert.deepEqual(stillToFixOf([finished(1, { stillToFix: unlooked })]), [unlooked]);
+  assert.equal(stopWhyLine(StopWhy.Time, 5, false), "Your 5 hours ran out before a final look at your game.");
+  const ended = { done: [], notDone: [], why: StopWhy.Ended, hours: null };
+  assert.deepEqual(
+    stillToFixOf([finished(1, { stillToFix: ended })]),
+    [null],
+    "any other end with nothing left: no card",
+  );
+});
+
+it("a message the person sends after the newest result retires its Keep building, as a later chat turn does in Builds", () => {
+  const said = event(2, { type: "messages", messages: [{ role: "user", content: "make the sky darker" }] });
+  const latest = toEntries([finished(1, { stillToFix: left() }), said]).flatMap((entry) =>
+    entry.kind === EntryKind.Morning ? [entry.latest === true] : [],
+  );
+  assert.deepEqual(latest, [false]);
+});
+
 it("a close's list it cannot trust says nothing", () => {
   const hostile: Array<[string, unknown]> = [
     ["no list", { why: StopWhy.Stuck }],

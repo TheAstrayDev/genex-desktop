@@ -18,7 +18,16 @@ import {
   type SandboxSetupResult,
 } from "../../src/shared/boot.ts";
 import { BootView, bootView, canSetUp, createBoot, SetupReport } from "../../src/renderer/state/boot.ts";
-import { windowControlColors } from "../../src/renderer/window-controls.ts";
+import { nativeViewsUp } from "../../src/renderer/play/play-model.ts";
+import { gameOpened, initialPlay, type PlayState, viewerReported } from "../../src/renderer/state/play.ts";
+import {
+  homeUnderControls,
+  setHomeUnderControls,
+  syncWindowControls,
+  windowControlColors,
+} from "../../src/renderer/window-controls.ts";
+import { PlayViewerPhase } from "../../src/shared/play.ts";
+import { type ReadyUpdate, UpdateAction } from "../../src/shared/app-update.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
 const PROBLEM: SandboxProblem = {
@@ -343,6 +352,7 @@ const FAILED: BootState = {
 describe("a window that opens while the studio starts", () => {
   it("says which step the core is on, and follows it", async () => {
     const { controller, waits } = startingBoot([
+      starting(StartStep.Agents),
       starting(StartStep.Games),
       starting(StartStep.Workspace),
       starting(StartStep.Studio),
@@ -353,8 +363,8 @@ describe("a window that opens while the studio starts", () => {
       if (bootView(state) === BootView.Starting) steps.push(state.step);
     });
     await controller.start();
-    assert.deepEqual(steps, [StartStep.Games, StartStep.Workspace, StartStep.Studio]);
-    assert.equal(waits.length, 3, "one wait before each new question");
+    assert.deepEqual(steps, [StartStep.Agents, StartStep.Games, StartStep.Workspace, StartStep.Studio]);
+    assert.equal(waits.length, 4, "one wait before each new question");
   });
 
   it("goes on to the setup screen a start ends on, and runs Set up there by itself", async () => {
@@ -419,6 +429,56 @@ describe("a studio that would not start", () => {
   });
 });
 
+describe("an update that arrives before the studio opens", () => {
+  const NEXT: ReadyUpdate = { version: "0.1.14", action: UpdateAction.Restart };
+
+  /** A boot whose main has nothing downloaded for the first `empty` questions, then `NEXT`. */
+  function updatingBoot(first: BootState, empty: number) {
+    const booted = startingBoot([first]);
+    let asked = 0;
+    booted.fake.stub("readyUpdate", async () => (asked++ < empty ? null : NEXT));
+    return booted;
+  }
+
+  it("a start that failed shows the update downloaded meanwhile, and Relaunch installs it", async () => {
+    const { controller, fake, waits } = updatingBoot(FAILED, 2);
+    await controller.start();
+    assert.equal(controller.store.getState().update, null);
+    await controller.watchUpdate();
+    assert.deepEqual(controller.store.getState().update, NEXT);
+    assert.equal(fake.callsOf("readyUpdate").length, 3, "asks again until one is downloaded");
+    assert.equal(waits.length, 2, "one wait between questions");
+    await controller.restartToUpdate();
+    assert.equal(fake.callsOf("restartToUpdate").length, 1);
+  });
+
+  it("the setup screen shows it too", async () => {
+    const { controller } = updatingBoot(WINDOWS_SETUP, 0);
+    await controller.load();
+    await controller.watchUpdate();
+    assert.deepEqual(controller.store.getState().update, NEXT);
+  });
+
+  it("stops asking once the studio is up: its sidebar offers the relaunch", async () => {
+    const { controller, fake } = updatingBoot(WINDOWS_READY, 5);
+    await controller.load();
+    await controller.watchUpdate();
+    assert.equal(fake.callsOf("readyUpdate").length, 0);
+  });
+
+  it("a main that cannot say keeps the screen as it is and asks again", async () => {
+    const { controller, fake } = startingBoot([FAILED]);
+    let asked = 0;
+    fake.stub("readyUpdate", async () => {
+      if (asked++ === 0) throw new Error("no handler");
+      return NEXT;
+    });
+    await controller.start();
+    await controller.watchUpdate();
+    assert.deepEqual(controller.store.getState().update, NEXT);
+  });
+});
+
 describe("window control colours", () => {
   const style = (values: Record<string, string>) => ({ getPropertyValue: (name: string) => values[name] ?? "" });
 
@@ -437,5 +497,61 @@ describe("window control colours", () => {
       { "--background": "#1d1d1f", "--foreground": "color-mix(in oklab, red, blue)" },
     ];
     for (const values of unusable) assert.equal(windowControlColors(style(values)), null, JSON.stringify(values));
+  });
+
+  it("say whether Home's background lies under the controls, and send again only when that changes", () => {
+    const fake = fakeStudioApi();
+    const theme = style({ "--background": "#1d1d1f", "--foreground": "#dee0e2" });
+    const stop = syncWindowControls(fake.api, StudioPlatform.Windows, () => theme);
+    try {
+      setHomeUnderControls(true);
+      setHomeUnderControls(true);
+      setHomeUnderControls(false);
+    } finally {
+      stop();
+      setHomeUnderControls(false);
+    }
+    setHomeUnderControls(true);
+    setHomeUnderControls(false);
+    const colors = { color: "#1d1d1f", symbolColor: "#dee0e2" };
+    assert.deepEqual(
+      fake.callsOf("setWindowControls").map(([controls]) => controls),
+      [
+        { ...colors, seeThrough: false },
+        { ...colors, seeThrough: true },
+        { ...colors, seeThrough: false },
+      ],
+    );
+  });
+
+  it("count Home's background under them only at rest, with no room, remix or game viewer over it", () => {
+    const home = { resting: true, covered: false, viewerUp: false };
+    assert.equal(homeUnderControls(home), true);
+    assert.equal(homeUnderControls({ ...home, resting: false }), false, "a game launching from Home");
+    assert.equal(homeUnderControls({ ...home, covered: true }), false, "Play, Plugins or a remix over Home");
+    assert.equal(homeUnderControls({ ...home, viewerUp: true }), false, "a game viewer over Home");
+  });
+
+  it("stop counting Home's background while a friend's game opens in the viewer over it, and count it again once it closes", () => {
+    const atRest = (play: PlayState) =>
+      homeUnderControls({ resting: true, covered: false, viewerUp: nativeViewsUp(play.viewer) });
+    let play = initialPlay();
+    assert.equal(atRest(play), true);
+    play = gameOpened(play, { slug: "kart", title: "Kart", coverUrl: null });
+    assert.equal(atRest(play), false, "the cover shows before main answers");
+    play = viewerReported(play, { slug: "kart", openId: 1, phase: PlayViewerPhase.Playing });
+    assert.equal(atRest(play), false);
+    play = viewerReported(play, { slug: "kart", openId: 1, phase: PlayViewerPhase.Closed });
+    assert.equal(atRest(play), true);
+  });
+
+  it("send nothing on macOS, which draws its own lights", () => {
+    const fake = fakeStudioApi();
+    const theme = style({ "--background": "#1d1d1f", "--foreground": "#dee0e2" });
+    const stop = syncWindowControls(fake.api, StudioPlatform.Mac, () => theme);
+    setHomeUnderControls(true);
+    stop();
+    setHomeUnderControls(false);
+    assert.deepEqual(fake.callsOf("setWindowControls"), []);
   });
 });

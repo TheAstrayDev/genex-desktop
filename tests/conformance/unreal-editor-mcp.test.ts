@@ -345,7 +345,11 @@ test("a chosen project that isn't set up gets the set-up message, and no editor 
         assert.equal(result.isError, true, betaMode);
         assert.match(textOf(result), /Mine/);
         assert.match(textOf(result), /set up/i);
-        assert.match(textOf(result), /Unreal button/);
+        assert.match(
+          textOf(result),
+          /unreal__use-project with \S*Mine\.uproject/,
+          "the agent links it, which sets it up",
+        );
         assert.doesNotMatch(textOf(result), /Alpha/);
       }
       assert.deepEqual([toolCalls(alpha).length, toolCalls(beta).length], [0, 0], betaMode);
@@ -392,14 +396,14 @@ test("another app on a project's port is never taken for Unreal", async () => {
   }
 });
 
-test("with no project set up, the bridge says so and names the Unreal button, asking nothing", async () => {
+test("with no project set up, the bridge says so and names unreal__use-project, asking nothing", async () => {
   const unreal = editor();
   const { client, close } = await connected(unreal.fetchImpl, []);
   try {
     const result: any = await client.callTool({ name: EditorTool.ListToolsets, arguments: {} });
     assert.equal(result.isError, true);
     assert.match(textOf(result), /set up/i);
-    assert.match(textOf(result), /Unreal button/);
+    assert.match(textOf(result), /unreal__use-project/);
     assert.deepEqual(unreal.seen, []);
   } finally {
     await close();
