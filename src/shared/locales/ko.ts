@@ -5729,8 +5729,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "이 컴퓨터에서는 Genex가 Roblox Studio를 클릭할 수 없어요. Studio에서 직접 게시하세요:",
   "Handing it to the agent…": "에이전트에게 넘기는 중…",
-  "If the chat asks to use computer control, answer it there.":
-    "채팅에서 컴퓨터 제어를 써도 되는지 물으면 거기서 답하세요.",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "채팅이나 macOS에서 권한을 물으면 허용하세요. 게시는 알아서 계속됩니다.",
   "In Roblox Studio": "Roblox Studio에서",
   "Name on Roblox": "Roblox에서의 이름",
   "On Roblox": "Roblox에",

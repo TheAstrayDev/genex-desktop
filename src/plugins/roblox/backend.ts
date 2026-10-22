@@ -19,6 +19,8 @@ import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
 import { EnginePlayTool } from "../../shared/engine-play.ts";
 import { PluginService } from "../../shared/plugins.ts";
+import { coverPictures, makeCover } from "./cover-pictures.ts";
+import { backToEdit } from "./studio-edit.ts";
 import { RobloxAction } from "./actions.ts";
 import { agentFolder } from "./agent-marks.ts";
 import { type AiTool, type AskFirstGame, createAiTools } from "./ai-tools.ts";
@@ -955,6 +957,15 @@ function publishDeps(deps: RobloxDeps, services: MomentServices, context: Plugin
   const answer: PublishDeps = {
     assist: (task) => context.host(PluginService.GameEngineAssist, { task }),
     flush: () => services.flush(game),
+    toEdit: () =>
+      backToEdit({
+        studio: deps.studio,
+        studioId: services.bound(game),
+        now: deps.now,
+        sleep: async (ms) => {
+          await deps.sleep(ms);
+        },
+      }),
   };
   const project = place.link?.project;
   if (!project) return answer;
@@ -1072,9 +1083,8 @@ async function publishResult(deps: RobloxDeps, context: PluginContext, args: Rec
   if (!context.project) return PUBLISH_PROMPTS.NoAttempt;
   const storage = await context.host(PluginService.StorageRoot);
   const end = { published: args.published === true, detail: args.detail };
-  return (await endAttempt(storage, context.project, end, deps.now()))
-    ? PUBLISH_PROMPTS.ResultNoted
-    : PUBLISH_PROMPTS.NoAttempt;
+  if (!(await endAttempt(storage, context.project, end, deps.now()))) return PUBLISH_PROMPTS.NoAttempt;
+  return end.published ? PUBLISH_PROMPTS.PublishedNoted : PUBLISH_PROMPTS.ResultNoted;
 }
 
 /**
@@ -1092,6 +1102,19 @@ function firstPublishHandler(deps: RobloxDeps, services: MomentServices, asker: 
     if (unfit) return unfit;
     const answer = await firstPublish(place, publishDeps(deps, services, context, place), asker, requested);
     return noteAttempt(deps, context, RobloxPublishKind.First, answer);
+  };
+}
+
+/** `cover-pictures`: the game's icon and thumbnail for Roblox, from its connected Studio's viewport. */
+function coverTool(deps: RobloxDeps, services: MomentServices): Handler {
+  return async (_args, context) => {
+    const ops = await momentOps(deps, services, context);
+    return coverPictures({
+      bound: () => ops.bound(),
+      shot: (timeoutMs) => ops.shot(timeoutMs),
+      folder: context.directory,
+      make: (picture, folder) => makeCover(picture, folder),
+    });
   };
 }
 
@@ -1276,6 +1299,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxTool.PublishUpdate]: publishHandler(deps, services, PublishAsker.Agent),
     [RobloxTool.FirstPublish]: firstPublishHandler(deps, services, PublishAsker.Agent),
     [RobloxTool.PublishResult]: (args, context) => publishResult(deps, context, args),
+    [RobloxTool.CoverPictures]: coverTool(deps, services),
     ...pressHandlers(deps, slot, luau),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.

@@ -1447,7 +1447,7 @@ export const MESSAGES = [
   "Ideas",
   "Idle",
   "If Studio shows its sign-in screen, sign in there first.",
-  "If the chat asks to use computer control, answer it there.",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.",
   "If the plugin is in a folder, open that folder on GitHub and paste its link.",
   "If the server needs an account, you'll sign in in your browser.",
   "Image",

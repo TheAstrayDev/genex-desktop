@@ -133,6 +133,7 @@ describe("publish-status and publish-result through the backend", () => {
       assert.equal(under.attempt?.kind, RobloxPublishKind.Update);
       const said = String(await backend.tool?.(RobloxTool.PublishResult, { published: true }, host.context));
       assert.match(said, /card shows it/);
+      assert.match(said, /cover-pictures/, "a publish that went out goes on to the game's cover in the same turn");
       assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Published);
       const again = String(await backend.tool?.(RobloxTool.PublishResult, { published: false }, host.context));
       assert.match(again, /No publish is under way/);
@@ -162,7 +163,8 @@ describe("publish-status and publish-result through the backend", () => {
     const { host, backend, status } = await linkedGame(true);
     await backend.action?.(RobloxAction.PublishUpdate, {}, host.context);
     const detail = "Roblox asks you to verify your age in Studio's publish window.";
-    await backend.tool?.(RobloxTool.PublishResult, { published: false, detail }, host.context);
+    const stopped = String(await backend.tool?.(RobloxTool.PublishResult, { published: false, detail }, host.context));
+    assert.doesNotMatch(stopped, /cover/, "a stopped publish asks for nothing more");
     const after = await status();
     assert.equal(after.attempt?.phase, RobloxPublishPhase.Stopped);
     assert.equal(after.attempt?.detail, detail);

@@ -26,7 +26,10 @@ import {
   declaredPlayerApps,
   engineAppIds,
   engineAssist,
+  followAssistDeliveries,
 } from "../../src/main/core/desktop-assist.ts";
+import { CustomEvent, customEventData } from "../../src/shared/custom-events.ts";
+import { SteerDelivery } from "../../src/shared/message-queue.ts";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
 import {
   EngineAssistRefusal,
@@ -50,6 +53,7 @@ interface Seen {
   cards: AssistCard[];
   posted: Array<{ threadId: string; project: string; text: string; messageId: string }>;
   turnedOn: number;
+  grantWaits: number;
 }
 
 /** A host with one plugin, `toy-engine`: bundled or local, its apps, and the person's answers. */
@@ -61,9 +65,11 @@ function fakeHost(
     desktop?: boolean;
     answers?: boolean[];
     now?: () => number;
+    /** Whether this Mac gives the driver its grants while the press waits. */
+    macGrants?: boolean;
   } = {},
 ) {
-  const seen: Seen = { cards: [], posted: [], turnedOn: 0 };
+  const seen: Seen = { cards: [], posted: [], turnedOn: 0, grantWaits: 0 };
   let control = options.control ?? false;
   const answers = [...(options.answers ?? [])];
   const grants = new AssistGrants(options.now);
@@ -74,6 +80,10 @@ function fakeHost(
         ? { name: "Toy Engine", bundled: options.bundled ?? true, apps: options.apps ?? ["com.example.toy"] }
         : null,
     desktopAvailable: async () => options.desktop ?? true,
+    grantsReady: async () => {
+      seen.grantWaits += 1;
+      return options.macGrants ?? true;
+    },
     computerControlOn: () => control,
     turnOnComputerControl: async () => {
       control = true;
@@ -110,7 +120,21 @@ describe("game.engine.assist", () => {
       pluginId: "toy-engine",
       apps: new Set(["com.example.toy"]),
       messageId: "msg_assist_1",
+      asked: true,
     });
+  });
+
+  it("waits for this Mac's grants after the setting, and starts nothing when the person doesn't give them", async () => {
+    const given = fakeHost({ answers: [true] });
+    assert.deepEqual(await assist(given.host), { started: true });
+    assert.equal(given.seen.grantWaits, 1, "the task goes to the chat only once the driver can see and move");
+    const withheld = fakeHost({ control: true, macGrants: false });
+    assert.deepEqual(await assist(withheld.host), { started: false, reason: EngineAssistRefusal.Declined });
+    assert.deepEqual(withheld.seen.posted, [], "nothing is handed to the chat to fail");
+    assert.equal(withheld.grants.live("chat-1"), null);
+    const declined = fakeHost({ answers: [false] });
+    await assist(declined.host);
+    assert.equal(declined.seen.grantWaits, 0, "no macOS prompt follows a no to the setting");
   });
 
   it("with computer control off, a no leaves it off and starts nothing", async () => {
@@ -213,6 +237,7 @@ describe("game.engine.assist", () => {
     const unasked = { pluginId: "toy-engine", binding: BINDING, task: TASK, asked: false };
     assert.deepEqual(await engineAssist(fake.host, unasked), { started: true });
     const grant = fake.grants.live("chat-1");
+    assert.equal(grant?.asked, false, "nobody pressed it, so its turn still asks its own cards");
     // The turn that answers it calls the plugin's tool again instead of clicking.
     assert.deepEqual(await engineAssist(fake.host, unasked), { started: false, reason: EngineAssistRefusal.InAssist });
     assert.equal(fake.seen.posted.length, 1, "nothing more was posted");
@@ -220,6 +245,7 @@ describe("game.engine.assist", () => {
     // The person's own press still starts one.
     assert.deepEqual(await assist(fake.host), { started: true });
     assert.equal(fake.seen.posted.length, 2);
+    assert.equal(fake.grants.live("chat-1")?.asked, true, "the press is the person's yes");
   });
 
   it("any other plugin's call the person didn't make is refused before any card", async () => {
@@ -275,6 +301,19 @@ describe("an assist's grant", () => {
     grants.steered("chat-1", "msg_running", "msg_a");
     grants.turnEnded("chat-1", "msg_running");
     assert.equal(grants.live("chat-1"), null);
+  });
+
+  it("follows its message into the turn the log says it reached, by interrupt too, never into a lead's run", () => {
+    const delivered = (into: string, how: SteerDelivery, messageId = "msg_a") =>
+      customEventData(CustomEvent.CoordinatorMessageDelivered, { messageId, into, how });
+    const grants = new AssistGrants(() => 0);
+    grants.record("chat-1", grant);
+    followAssistDeliveries(grants, "chat-1", [delivered("run_7", SteerDelivery.Lead)]);
+    assert.equal(grants.forTurn("chat-1", "run_7"), null, "a build's lead never clicks for the person");
+    followAssistDeliveries(grants, "chat-1", [delivered("msg_running", SteerDelivery.Interrupt, "msg_other")]);
+    assert.equal(grants.forTurn("chat-1", "msg_running"), null, "another message's delivery moves nothing");
+    followAssistDeliveries(grants, "chat-1", [delivered("msg_running", SteerDelivery.Interrupt)]);
+    assert.ok(grants.forTurn("chat-1", "msg_running"), "the turn resumed with the message in front holds it");
   });
 
   it("drives the engine's app only in the turn that answers its message, never in a build turn running beside it", () => {

@@ -68,6 +68,8 @@ export interface PublishDeps {
   assist(task: string): Promise<PluginEngineAssistAnswer>;
   /** Sends the script files changed and not yet in Studio, so the publish holds them. */
   flush?(): Promise<void>;
+  /** Ends a play test running in the game's Studio and waits until Studio is editing again. */
+  toEdit?(): Promise<boolean>;
   /**
    * Notes a first publish under this name once the chat has started it, so Genex links the game to
    * the published place afterwards (`relink.ts`); a refused hand-over is never noted.
@@ -198,6 +200,8 @@ function refusedAnswer(answer: PluginEngineAssistAnswer, words: PublishWords): P
 
 /** Hands the chat a publish's task, once the game's changed script files are in Studio. */
 async function handOver(deps: PublishDeps, task: string): Promise<PluginEngineAssistAnswer> {
+  // Studio publishes from its editor: a play test running there is ended first, never the person's chore.
+  await deps.toEdit?.().catch(() => false);
   // Studio holds the scripts it last had when a send fails; the publish goes on with those.
   await deps.flush?.().catch(() => undefined);
   return deps.assist(task);

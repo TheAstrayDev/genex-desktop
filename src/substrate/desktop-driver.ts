@@ -92,6 +92,8 @@ export interface DesktopDriver {
   focus(): Promise<DesktopFocus>;
   /** The app under a screen point, so a click is checked against the app it lands in. */
   appAt?(x: number, y: number): Promise<DesktopApp | null>;
+  /** Bring a running app (a Mac bundle id) to the front, where the driver can. */
+  bringToFront?(app: string): Promise<void>;
   move(x: number, y: number): Promise<void>;
   click(x: number, y: number, options: { button: DesktopButton; count: number; modifiers: DesktopKeys }): Promise<void>;
   mouse(x: number, y: number, options: { button: DesktopButton; down: boolean }): Promise<void>;

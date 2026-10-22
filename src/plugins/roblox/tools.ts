@@ -51,6 +51,8 @@ export const RobloxTool = {
   ImportModel: "import-model",
   /** The publishing turn's word on how its publish ended, for Studio's publishing card. */
   PublishResult: "publish-result",
+  /** The game's icon and thumbnail for Roblox, made from Studio's viewport. */
+  CoverPictures: "cover-pictures",
   PublishUpdate: RobloxAction.PublishUpdate,
   FirstPublish: RobloxAction.FirstPublish,
   Setup: RobloxAction.Setup,

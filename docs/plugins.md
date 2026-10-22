@@ -1524,7 +1524,9 @@ Import 3D.
 
 **Publishing** (`publish.ts`, the `publish` skill). No Studio or plugin API publishes a place, and
 Open Cloud's place publishing takes API keys Genex never asks for, so publishing is a Do it for me:
-the game's changed script files go to Studio first, then the game's chat is handed the task through
+Studio is brought back to its editor first (`studio-edit.ts`: a play test that `get_studio_state`
+reports is ended with `start_stop_play` and waited out), the game's changed script files go to
+Studio, then the game's chat is handed the task through
 `game.engine.assist`, and the turn that answers it (the agent's own turn when the message joins it)
 clicks File › Publish to Roblox in Studio itself, as the `publish` skill says. The person's press is
 their go-ahead: the actions ask on no card, while the agent's tools still do. A Roblox game's strip
@@ -1546,6 +1548,12 @@ first links a place just published by hand): "Publish <place> to Roblox: File �
 in its Roblox Studio window…". Each answers the other's case with the right tool, clicking nothing.
 The place block keeps Studio's click path under either button, and where Genex can't click (no
 driver, Windows, or the person said no), the answer and the block give it instead.
+The same turn then gives the game its cover on Roblox, which Studio's publish never sets (after a
+first publish, or an update while the game still shows Roblox's default icon): `cover-pictures`
+(`cover-pictures.ts`) makes Studio's viewport into the game icon (512 × 512) and a thumbnail
+(1920 × 1080) in the game's `.genex/roblox-cover/` (a centred crop, scaled by `sips` or PowerShell;
+a link there is refused or replaced, never followed), and the agent uploads both in Studio's Game
+Settings › Basic Info, as the `publish` skill says.
 
 **After a publish** (`relink.ts`) Genex links the game to the published place by itself: Studio
 reopens a newly published place under its name ("<name> (placeId: N)"), which the game's link no

@@ -23,7 +23,10 @@
  * - **Where it can't run.** A computer with no desktop driver (Linux, or a development build
  *   without one): `unavailable`, and the plugin shows its click path instead.
  */
+import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
+import { type EventData, EventKind } from "../../shared/event-log.ts";
+import { SteerDelivery } from "../../shared/message-queue.ts";
 import {
   computerSettingQuestion,
   type EngineAssistAnswer,
@@ -77,6 +80,11 @@ export interface AssistGrant {
   apps: ReadonlySet<string>;
   /** The queue id of the message that asks for the task. */
   messageId: string;
+  /**
+   * The person asked for it (an action they pressed, or a card they approved): that is their yes
+   * to computer control for its turn, so the turn asks no session or app card of its own.
+   */
+  asked: boolean;
 }
 
 /** A grant as it is held: when it was given, and the turn its message was steered into, if any. */
@@ -97,9 +105,12 @@ export class AssistGrants {
     this.#now = now;
   }
   /** Give a chat a grant for the turn that answers `messageId`; it replaces any it held. */
-  record(threadId: string, grant: { pluginId: string; apps: readonly string[]; messageId: string }): void {
-    const { pluginId, apps, messageId } = grant;
-    this.#held.set(threadId, { pluginId, apps: new Set(apps), messageId, at: this.#now(), into: null });
+  record(
+    threadId: string,
+    grant: { pluginId: string; apps: readonly string[]; messageId: string; asked?: boolean },
+  ): void {
+    const { pluginId, apps, messageId, asked = false } = grant;
+    this.#held.set(threadId, { pluginId, apps: new Set(apps), messageId, asked, at: this.#now(), into: null });
   }
   /** The chat's grant while it lasts; null when it has none. */
   live(threadId: string): AssistGrant | null {
@@ -109,7 +120,7 @@ export class AssistGrants {
       this.#held.delete(threadId);
       return null;
     }
-    return { pluginId: held.pluginId, apps: held.apps, messageId: held.messageId };
+    return { pluginId: held.pluginId, apps: held.apps, messageId: held.messageId, asked: held.asked };
   }
   /**
    * The chat's grant for one session: only the turn that answers its message (the turn the message
@@ -132,6 +143,22 @@ export class AssistGrants {
   turnEnded(threadId: string, turn: string): void {
     const held = this.#held.get(threadId);
     if (held && (held.messageId === turn || held.into === turn)) this.#held.delete(threadId);
+  }
+}
+
+/**
+ * Follow the chat's queue records for assist messages: a message the log says reached a running
+ * turn (read in place, or by interrupting that turn and resuming it with the message in front)
+ * moves its grant to that turn. One handed to a build's lead moves nothing: a lead never clicks for
+ * the person.
+ */
+export function followAssistDeliveries(grants: AssistGrants, threadId: string, batch: readonly EventData[]): void {
+  for (const data of batch) {
+    const record = data.type === EventKind.Custom ? customRecord(data) : null;
+    if (record?.event_type !== CustomEvent.CoordinatorMessageDelivered) continue;
+    const { messageId, into, how } = record.payload;
+    const toTurn = typeof messageId === "string" && typeof into === "string" && how !== SteerDelivery.Lead;
+    if (toTurn) grants.steered(threadId, into, messageId);
   }
 }
 
@@ -183,6 +210,8 @@ export interface AssistHost {
   plugin(id: string): { name: string; bundled: boolean; apps: readonly string[] } | null;
   /** Whether computer control can run here: a desktop and its driver (a Mac's or a PC's). */
   desktopAvailable(): Promise<boolean>;
+  /** Whether the driver can see and move, waiting while the person allows it in System Settings. */
+  grantsReady(signal?: AbortSignal): Promise<boolean>;
   computerControlOn(): boolean;
   /** Settings → Permissions → computer control, turned on. */
   turnOnComputerControl(): Promise<void>;
@@ -240,8 +269,10 @@ export async function engineAssist(host: AssistHost, request: AssistRequest): Pr
       return refused(EngineAssistRefusal.Declined);
     await host.turnOnComputerControl();
   }
+  // macOS's own grants come next, while the person is here: the turn then starts able to click.
+  if (!(await host.grantsReady(signal))) return refused(EngineAssistRefusal.Declined);
   const messageId = host.messageId();
-  host.grants.record(threadId, { pluginId, apps: plugin.apps, messageId });
+  host.grants.record(threadId, { pluginId, apps: plugin.apps, messageId, asked: request.asked });
   try {
     await host.post(threadId, binding.project, MESSAGE.asks(plugin.name, task), messageId);
   } catch (error) {
@@ -289,6 +320,10 @@ export function coreAssistHost(core: StudioCore): AssistHost {
     desktopAvailable: async () => {
       const desktop = core.options.desktop;
       return desktop ? desktop.available() : false;
+    },
+    grantsReady: async (signal) => {
+      const desktop = core.options.desktop;
+      return desktop ? desktop.grantsReady(signal) : false;
     },
     computerControlOn: () => core.settings.computerControl,
     turnOnComputerControl: async () => {

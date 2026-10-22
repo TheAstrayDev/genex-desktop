@@ -5541,7 +5541,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "Genex 无法在这台电脑上点击 Roblox Studio。请在 Studio 中自己发布：",
   "Handing it to the agent…": "正在交给智能体…",
-  "If the chat asks to use computer control, answer it there.": "如果聊天中询问是否使用电脑控制，请在那里回答。",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "如果聊天或 macOS 请求权限，请允许：发布会自动继续。",
   "In Roblox Studio": "在 Roblox Studio 中",
   "Name on Roblox": "在 Roblox 上的名称",
   "On Roblox": "在 Roblox 上",

@@ -680,6 +680,84 @@ it("an assist's turn may drive the engine apps its grant names; the next turn an
   }
 });
 
+it("an assist the person pressed asks no further card and brings its app forward; one a plugin started by itself still asks", async () => {
+  const calls: string[] = [];
+  const fronted: string[] = [];
+  const toyEditor = { name: "Toy Editor", bundleId: "com.example.toy", pid: 7 };
+  const desktop = desktopControl({
+    findDriver: async () => "/fake/cua-driver",
+    connect: async () => ({
+      ...fakeDriver(calls),
+      focus: async () => ({ app: toyEditor, secure: false }),
+      bringToFront: async (app: string) => {
+        fronted.push(app);
+      },
+    }),
+    ownApp: () => false,
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    const asked = async (threadId: string) =>
+      (await core.store.listEvents(threadId))
+        .filter((event) => event.data.type === "custom" && event.data.event_type === "plugin_consent")
+        .map((event) => (event.data as { payload: { state: string; prompt: string } }).payload)
+        .filter((card) => card.state === "pending")
+        .map((card) => card.prompt);
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    await core.updateSettings({ computerControl: true });
+    const project = "desk-pressed";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const said: string[] = [];
+    const { engine } = desktopEngine(async (call) => {
+      said.push(await call({ action: "left_click", coordinate: "10,20" }));
+    });
+    core.engines.register(engine as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    const delegate = (messageId: string) =>
+      api[HostMethod.EngineDelegate]!({
+        engine: "fixture-delegate",
+        project,
+        threadId,
+        prompt: "go",
+        chatTurn: { messageId },
+      });
+
+    const grant = { pluginId: TOY_PLUGIN_ID, apps: ["com.example.toy"] };
+    assistGrants(core).record(threadId, { ...grant, messageId: "msg_pressed", asked: true });
+    await delegate("msg_pressed");
+    assert.match(said[0]!, /OK — left click at 10,20/);
+    assert.deepEqual(
+      await asked(threadId),
+      [],
+      "the press was the go-ahead: no session card and no card for the engine's editor",
+    );
+    assert.deepEqual(fronted, ["com.example.toy"], "the editor is brought forward for the turn that clicks in it");
+
+    assistGrants(core).record(threadId, { ...grant, messageId: "msg_own" });
+    await delegate("msg_own");
+    assert.match(said[1]!, /OK — left click at 10,20/);
+    const prompts = await asked(threadId);
+    assert.equal(prompts.length, 2, "an assist nobody pressed asks for the session and the app");
+    assert.deepEqual(fronted, ["com.example.toy"], "and brings nothing forward by itself");
+    assert.match(prompts[0]!, /see your screen/);
+    assert.match(prompts[1]!, /use Toy Editor/);
+  } finally {
+    await lite.close();
+  }
+});
+
 it("tells the embedded driver the release app's bundle id", async () => {
   const require = createRequire(import.meta.url);
   const { APP_BUNDLE_ID } = require("../../scripts/package-signing.cjs") as { APP_BUNDLE_ID: string };

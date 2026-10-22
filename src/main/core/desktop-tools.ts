@@ -66,6 +66,8 @@ export interface DesktopToolsDeps {
   maxActions?: number;
   /** Whether computer control is on in Settings now; asked before every call (on when absent). */
   enabled?: () => boolean;
+  /** Run once the driver is connected, before the session's first action; its failure stops nothing. */
+  started?: (driver: DesktopDriver) => Promise<void>;
 }
 
 /** The desktop tool for one session, and how to stop it. */
@@ -138,6 +140,7 @@ function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { 
       const connected = await connect(ticket);
       if (typeof connected === "string") return unusable(connected);
       driver = connected;
+      await deps.started?.(connected).catch(() => {});
       target = desktopTarget({
         driver,
         allowApp,

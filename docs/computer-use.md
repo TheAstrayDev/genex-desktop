@@ -247,7 +247,9 @@ stops 30 s after the last desktop session lets go (a quick next session reuses i
 shortcut and quitting stop it at once. On a Mac its grants are checked without a prompt; a daemon
 without them is restarted once (macOS keeps a process's old answer), and still without them Genex
 asks macOS itself: the Accessibility prompt, then System Settings at Screen Recording
-(`desktop-control-host.ts`).
+(`desktop-control-host.ts`). The sentence the person reads names the app macOS lists the grants
+under, the outermost `.app` the studio runs from (`hostAppName`): Genex once installed, Electron in
+a development build.
 
 On Windows the endpoint is a named pipe with a fresh random name, which the embedded daemon lets
 only the person's own account open (so no sandboxed agent, which runs as another account, can reach
@@ -296,7 +298,9 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   `cua-driver.exe` (x64) is taken from the zip by 7-Zip and ships as cua signed it (Cua AI, Inc.),
   which the packaged smoke checks. A development build takes it with `GENEX_VENDOR_CUA_DRIVER=1`, else
   runs an installed driver (`~/.local/bin/cua-driver` and the usual paths, or cua's Windows install
-  folder `%LOCALAPPDATA%\Programs\Cua\cua-driver\bin`), embedded the same way.
+  folder `%LOCALAPPDATA%\Programs\Cua\cua-driver\bin`), embedded the same way. On a Mac a live
+  `studio:dev` profile starts through `open` (`devLaunchCommand`), so Electron is its own responsible
+  app and its grants are Electron's, not those of the terminal or agent that ran the script.
   Moving to a newer driver: change both pins and the notices, then verify the web and desktop
   scenarios live on both systems.
 - **The setting.** Settings → Permissions → **Let agents control your computer** (`computerControl`
@@ -313,7 +317,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   `desktop.computer` and the seed's `tools/desktop-tools.ts`. Unattended sessions never hold it.
 - **Consent.** Nothing moves before the person answers a consent card in the chat (the studio's own,
   `studio-desktop`): once for the session, then once for each app the agent reaches. Inside a VM the
-  session's yes covers every app. A yes stands while the driver fails to connect (missing grants, no
+  session's yes covers every app. The turn answering an assist the person pressed (or approved on its
+  card) asks neither: that press was their yes, and the grant keeps the turn to the plugin's apps. A yes stands while the driver fails to connect (missing grants, no
   driver): the next call retries without a new card. A stop ends it, and the next call asks again.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; on Windows the same by
@@ -322,8 +327,10 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   app), the shell (Explorer, which is also the desktop and the taskbar, Start and Search: each can
   start any program) and the driver's own cursor overlay. Nothing is typed into a password field (macOS's secure input on a
   Mac, UI Automation's password flag on Windows; where neither can say, a text field labelled as a
-  password in the front window's tree, `AXTextField` or Windows' `Edit`). A click is checked against the app whose window is under the point, and a point no
-  window covers is refused, never put down to the app in front; a drag is checked at both ends, so
+  password in the front window's tree, `AXTextField` or Windows' `Edit`). A click is checked against the app whose window is under the point; on a Mac a point
+  above every listed window (the menu bar, an open menu) is the app macOS's accessibility hit test
+  names there (`mac-apps.ts`, which also reads `lsappinfo` in either form, macOS 27's included), and a
+  point nothing names is refused, never put down to the app in front; a drag is checked at both ends, so
   dropping onto a refused or unasked app moves nothing. A refusal ends the plan and its reason is the
   answer. `app_look`, which only looks and so needs no setting ([tool permissions](tool-permissions.md#looking-at-apps)),
   never looks at these apps or Genex's own windows either.
@@ -346,8 +353,10 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   <task>" to the game's chat and grants the turn answering that message (the turn it started, or the
   running turn it was steered into; never another turn of the chat building beside it) the
   plugin's declared apps until it ends, and never past 20 minutes; a session with no turn the host
-  can follow holds it for those 20 minutes. That chat's own session then works as below, with its session and app
-  cards. A computer with no driver (Linux, a development build without one) answers `unavailable`,
+  can follow holds it for those 20 minutes. That chat's own session then works as below; its session and app
+  cards are asked only when the plugin started the assist by itself (`asked` on the grant), and a
+  pressed assist's session starts by bringing the plugin's app to the front (`bring_to_front`), since
+  nothing else it may click (the Dock, Stage Manager) could. A computer with no driver (Linux, a development build without one) answers `unavailable`,
   and `game.engine.canAssist` tells a plugin so beforehand, so it shows its click path instead of the button. Roblox Studio's
   publishing is the one assist that is not a setup click ([plugins](plugins.md)): the person
   presses Publish to Roblox or Publish an update (no card: the press is the go-ahead), or approves the agent's `first-publish` card

@@ -10,7 +10,7 @@ import { desktopStopShortcut, stopShortcutWords } from "../../shared/computer-co
 import { t } from "../../shared/i18n.ts";
 import { type PluginBinding, StudioConsentSource } from "../../shared/plugins.ts";
 import { DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
-import type { DesktopApp } from "../../substrate/desktop-driver.ts";
+import type { DesktopApp, DesktopDriver } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
@@ -84,13 +84,16 @@ export async function desktopSessionTools(
     facetId: null,
     role: ScreenRole.Operator,
   };
+  const grants = assistGrants(core);
   const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<boolean> => {
+    // The person's press (or the card they approved) for this turn's assist already said yes; the
+    // engine-app guard keeps the turn to the grant's apps.
+    if (grants.forTurn(place.threadId, place.turn)?.asked) return true;
     const tool = { ...DESKTOP_CONSENT_TOOL, confirmation: consentPrompt(question, app) };
     const asked = app ? { app: app.name, bundleId: app.bundleId } : {};
     const answer = await x.pluginTools.requestConsent(DESKTOP_CONSENT_SOURCE, tool, asked, place.binding, place.signal);
     return answer.approved;
   };
-  const grants = assistGrants(core);
   // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,
   // read afresh on every action.
   const engineApps = (app: DesktopApp) =>
@@ -99,8 +102,16 @@ export async function desktopSessionTools(
       players: declaredPlayerApps(core.plugins.list()),
       granted: grants.forTurn(place.threadId, place.turn)?.apps ?? null,
     });
+  // The turn answering an assist the person pressed starts with the plugin's app in front, where the
+  // task's clicks go: nothing else it may click (the Dock, Stage Manager) could bring it there.
+  const started = async (driver: DesktopDriver) => {
+    const grant = grants.forTurn(place.threadId, place.turn);
+    const [app] = grant?.asked ? grant.apps : [];
+    if (app) await driver.bringToFront?.(app);
+  };
   const tools = desktop.toolsFor({
     enabled: () => computerControlOn(core),
+    started,
     engineApps,
     frameDir: path.join(core.layout.scratch, "desktop", safePathSegment(place.threadId)),
     ask,

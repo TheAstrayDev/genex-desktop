@@ -67,6 +67,10 @@ function assisting(answer: PluginEngineAssistAnswer = { started: true }) {
       flush: async () => {
         order.push("flush");
       },
+      toEdit: async () => {
+        order.push("edit");
+        return true;
+      },
     },
   };
 }
@@ -78,7 +82,11 @@ describe("publish-update hands the task to the game's chat", () => {
       const answer = await publishUpdate({ link: linkTo(true), name: "Sky Race" }, host.deps, asker);
       assert.equal(answer.started, true, answer.message);
       assert.deepEqual(host.tasks, [publishTask("Sky Race")]);
-      assert.deepEqual(host.order, ["flush", "assist"], "the script files reach Studio before it publishes");
+      assert.deepEqual(
+        host.order,
+        ["edit", "flush", "assist"],
+        "Studio is back at its editor and has the script files before it publishes",
+      );
       assert.match(answer.message, /publish/i);
     });
 
@@ -174,7 +182,7 @@ describe("first-publish publishes a place never on Roblox, under the game's name
       assert.equal(answer.started, true, answer.message);
       assert.equal(answer.name, "Sky Racers");
       assert.deepEqual(host.tasks, [firstPublishTask("Sky Racers")]);
-      assert.deepEqual(host.order, ["flush", "assist"]);
+      assert.deepEqual(host.order, ["edit", "flush", "assist"]);
       assert.match(answer.message, /Sky Racers/);
     });
 

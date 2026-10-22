@@ -5965,8 +5965,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "Genex ne peut pas cliquer dans Roblox Studio sur cet ordinateur. Publie-le toi-même dans Studio :",
   "Handing it to the agent…": "Transmission à l’agent…",
-  "If the chat asks to use computer control, answer it there.":
-    "Si le chat demande à utiliser le contrôle de l’ordinateur, réponds-y.",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "Si le chat ou macOS demande une autorisation, accepte : la publication continue toute seule.",
   "In Roblox Studio": "Dans Roblox Studio",
   "Name on Roblox": "Nom sur Roblox",
   "On Roblox": "Sur Roblox",

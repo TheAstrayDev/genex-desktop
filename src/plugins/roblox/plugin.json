@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "roblox",
-  "version": "0.1.9",
+  "version": "0.1.12",
   "icon": "icon.svg",
   "name": "Roblox Studio",
   "publisher": "Genex",
@@ -321,7 +321,7 @@
     {
       "name": "publish-result",
       "facts": ["roblox-project"],
-      "description": "Only in the turn that answers \"Roblox Studio asks: Publish …\": once Roblox Studio says the place is published, or you stopped for the person (an age, ID, two-step, terms or payment question, a sign-in, or a dialog you don't recognise), say so here, so the person's publishing card shows it. Call it once, at the end of that turn, and never otherwise.",
+      "description": "Only in the turn that answers \"Roblox Studio asks: Publish …\": once Roblox Studio says the place is published, or you stopped for the person (an age, ID, two-step, terms or payment question, a sign-in, or a dialog you don't recognise), say so here, so the person's publishing card shows it. Call it once, as soon as the publish went out or stopped, and never otherwise; after a publish, its answer says what the same turn does next (the game's cover).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -335,6 +335,15 @@
           }
         },
         "required": ["published"]
+      }
+    },
+    {
+      "name": "cover-pictures",
+      "facts": ["roblox-project"],
+      "description": "Make this game's cover for Roblox from Roblox Studio's viewport as it looks now: the game icon (512 × 512) and a thumbnail (1920 × 1080), saved in the game folder's .genex/roblox-cover/. Frame Studio's camera on the game's best view first. The answer gives both paths; upload them in Studio's Game Settings as the publish skill says. Nothing leaves the computer.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
       }
     },
     {

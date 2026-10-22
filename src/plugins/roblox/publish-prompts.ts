@@ -32,6 +32,8 @@ export const PUBLISH_PROMPTS = {
   AlreadyPublished: `This place is already on Roblox, so it has no first publish: call ${PUBLISH_UPDATE} to publish an update. Nothing was clicked.`,
   NoPlace: "This game doesn't build in a Roblox place yet, so there's nothing to publish.",
   ResultNoted: "Noted: the person's publishing card shows it. Say the same to them in one line.",
+  /** A publish that went out: the same turn, still holding Studio, gives the game its cover. */
+  PublishedNoted: `Noted: the person's publishing card shows it. Say the same to them in one line, then, in this same turn, give the game its cover as the publish skill says (frame Studio's view, ${agentTool(RobloxTool.CoverPictures)}, Game Settings › Basic Info): always after a first publish; after an update unless Basic Info already shows the game's own icon.`,
   NoAttempt:
     "No publish is under way for this game, so nothing was noted. Call this only in the turn that publishes, once Studio has published or you stopped for the person.",
 } as const;

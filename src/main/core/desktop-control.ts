@@ -44,12 +44,14 @@ export interface DesktopControlOptions {
   shutdown?: () => Promise<void>;
   /** The timer the daemon's idle stop waits on ({@link IDLE_SHUTDOWN_MS}); the answer cancels it. */
   later?: (ms: number, fire: () => void) => () => void;
+  /** Wait for this computer's own grants (a Mac's Accessibility and Screen Recording); absent where none are asked. */
+  awaitGrants?: (binary: string, signal?: AbortSignal) => Promise<boolean>;
 }
 
 /** One session's desktop: where its frames go, how its person is asked, and what its screen shows. */
 export type DesktopSessionDeps = Pick<
   DesktopToolsDeps,
-  "frameDir" | "frame" | "downscale" | "maxActions" | "enabled" | "engineApps"
+  "frameDir" | "frame" | "downscale" | "maxActions" | "enabled" | "engineApps" | "started"
 > & {
   ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<boolean>;
 };
@@ -127,6 +129,12 @@ export function desktopControl(options: DesktopControlOptions) {
     },
     /** How many desktop sessions are holding the computer now. */
     active: (): number => running.size,
+    /** Whether the driver can see and move here, waiting while the person gives its grants. */
+    grantsReady: async (signal?: AbortSignal): Promise<boolean> => {
+      const path = await binary();
+      if (!path) return false;
+      return options.awaitGrants ? options.awaitGrants(path, signal) : true;
+    },
     /** Stop every desktop session at once: the person's stop, or the app quitting. */
     stopAll: async (): Promise<void> => {
       const all = [...running];

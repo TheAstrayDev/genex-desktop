@@ -5977,7 +5977,7 @@ export const ROBLOX_PUBLISH_WORDS = {
   publishUpdate: t("Publish an update"),
   updateLine: t("Everyone who plays gets this version."),
   handing: t("Handing it to the agent…"),
-  chatAsks: t("If the chat asks to use computer control, answer it there."),
+  chatAsks: t("If the chat or macOS asks for permission, allow it: publishing goes on by itself."),
   progress: t("Publishing to Roblox"),
   stepAgent: t("To the agent"),
   stepStudio: t("In Roblox Studio"),
