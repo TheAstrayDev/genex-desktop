@@ -61,8 +61,8 @@ export default {
     "Ein Kometenhüter-Spiel, in dem du Eisbrocken in eine Umlaufbahn lenkst",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "Für dieses Spiel läuft schon ein Befehl. Warte, bis er fertig ist, oder stoppe ihn.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "Ein Befehl auf diesem Mac oder eine URL mit Anmeldung im Browser. Agenten in jedem Spiel können seine Tools nutzen.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "Ein Befehl auf diesem Computer oder eine URL mit Anmeldung im Browser. Agenten in jedem Spiel können seine Tools nutzen.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "Ein Konnektor nutzt bereits die ID „{id}“; entferne oder benenne diesen Konnektor um, bevor du dieses Plugin installierst",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -4202,7 +4202,7 @@ export default {
   "This plan is no longer waiting for approval.": "Dieser Plan wartet nicht mehr darauf, angenommen zu werden.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "Dieses Plugin hat keine Releases, daher nimmt Studio den neuesten Code. Es bleibt so installiert, bis du es aktualisierst.",
-  "This plugin runs trusted code on your Mac.": "Dieses Plugin führt vertrauenswürdigen Code auf deinem Mac aus.",
+  "This plugin runs trusted code on your computer.": "Dieses Plugin führt vertrauenswürdigen Code auf deinem Computer aus.",
   "This plugin's package is missing; remove the plugin and install it again":
     "Das Paket dieses Plugins fehlt; entferne das Plugin und installiere es neu",
   "This plugin’s plugin.json can’t be used.": "Die plugin.json dieses Plugins ist nicht verwendbar.",

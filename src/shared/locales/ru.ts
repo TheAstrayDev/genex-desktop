@@ -54,8 +54,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "Пастух комет: направляй ледяные глыбы на орбиту",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "Для этой игры уже выполняется команда. Дождись её завершения или останови её.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "Команда на этом Mac или URL со входом через браузер. Агенты в любой игре смогут пользоваться его инструментами.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "Команда на этом компьютере или URL со входом через браузер. Агенты в любой игре смогут пользоваться его инструментами.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "ID «{id}» уже занят коннектором — удали или переименуй этот коннектор, прежде чем устанавливать плагин",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -4085,7 +4085,7 @@ export default {
   "This plan is no longer waiting for approval.": "Этот план больше не ждёт одобрения.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "У этого плагина нет релизов, поэтому Studio берёт самый свежий код. Он останется таким, пока ты его не обновишь.",
-  "This plugin runs trusted code on your Mac.": "Этот плагин запускает доверенный код на твоём Mac.",
+  "This plugin runs trusted code on your computer.": "Этот плагин запускает доверенный код на твоём компьютере.",
   "This plugin's package is missing; remove the plugin and install it again":
     "Пакет этого плагина пропал; удали плагин и установи его снова",
   "This plugin’s plugin.json can’t be used.": "plugin.json этого плагина не подходит.",

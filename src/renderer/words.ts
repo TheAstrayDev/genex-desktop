@@ -4248,7 +4248,7 @@ export const PLUGINS_WORDS = {
   /** The MCP servers section before anyone has added one. */
   servers: {
     emptyTitle: t("Connect any MCP server"),
-    emptyText: t("A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools."),
+    emptyText: t("A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools."),
   },
   own: {
     title: t("Make a community plugin"),
@@ -4295,7 +4295,7 @@ export const PLUGINS_WORDS = {
     folders: t("Folders"),
     folder: (path: string, why: string) => `${path} — ${why}`,
     scan: t("Code scan"),
-    trusted: t("This plugin runs trusted code on your Mac."),
+    trusted: t("This plugin runs trusted code on your computer."),
     /** A plugin loaded from a folder, in place of `trusted`. */
     localAccess: t(
       "Loaded from a folder on this Mac. It runs with your access: its code isn't sandboxed. Each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.",

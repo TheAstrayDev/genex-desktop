@@ -48,8 +48,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "얼음 바위를 궤도로 몰아넣는 혜성 몰이 게임",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "이 게임에서 이미 명령이 실행 중이에요. 끝날 때까지 기다리거나 중지하세요.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "이 Mac의 명령이나 브라우저 로그인이 있는 URL. 모든 게임의 에이전트가 그 도구를 쓸 수 있어요.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "이 컴퓨터의 명령이나 브라우저 로그인이 있는 URL. 모든 게임의 에이전트가 그 도구를 쓸 수 있어요.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "이미 다른 커넥터가 ID “{id}” 사용 중이에요. 이 플러그인을 설치하기 전에 그 커넥터를 제거하거나 이름을 바꾸세요",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -4005,7 +4005,7 @@ export default {
   "This plan is no longer waiting for approval.": "이 계획은 더 이상 승인을 기다리지 않아요.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "이 플러그인에는 릴리스가 없어서 Studio가 최신 코드를 가져와요. 업데이트하기 전까지는 설치한 상태 그대로예요.",
-  "This plugin runs trusted code on your Mac.": "이 플러그인은 Mac에서 신뢰할 수 있는 코드를 실행해요.",
+  "This plugin runs trusted code on your computer.": "이 플러그인은 이 컴퓨터에서 신뢰할 수 있는 코드를 실행해요.",
   "This plugin's package is missing; remove the plugin and install it again":
     "이 플러그인의 패키지가 없어요. 플러그인을 제거하고 다시 설치하세요",
   "This plugin’s plugin.json can’t be used.": "이 플러그인의 plugin.json은 사용할 수 없어요.",

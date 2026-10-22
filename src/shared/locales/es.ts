@@ -63,8 +63,8 @@ export default {
     "Un juego de pastorear cometas donde guías rocas de hielo hasta su órbita",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "Ya hay un comando en marcha para este juego. Espera a que termine o detenlo.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "Un comando en este Mac o una URL con inicio de sesión en el navegador. Los agentes de todos tus juegos pueden usar sus herramientas.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "Un comando en este ordenador o una URL con inicio de sesión en el navegador. Los agentes de todos tus juegos pueden usar sus herramientas.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "Un conector ya usa el id “{id}”; quita o cambia el nombre de ese conector antes de instalar este plugin",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -4168,7 +4168,7 @@ export default {
   "This plan is no longer waiting for approval.": "Este plan ya no espera aprobación.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "Este plugin no tiene versiones publicadas, así que Studio toma el código más reciente. Se queda así hasta que lo actualices.",
-  "This plugin runs trusted code on your Mac.": "Este plugin ejecuta código de confianza en tu Mac.",
+  "This plugin runs trusted code on your computer.": "Este plugin ejecuta código de confianza en tu ordenador.",
   "This plugin's package is missing; remove the plugin and install it again":
     "Falta el paquete de este plugin; quita el plugin e instálalo de nuevo",
   "This plugin’s plugin.json can’t be used.": "El plugin.json de este plugin no se puede usar.",
