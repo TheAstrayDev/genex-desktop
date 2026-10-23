@@ -1388,6 +1388,31 @@ describe("steering a running Claude Code turn", () => {
     assert.equal(result.summary, "Published.");
   });
 
+  it("a resumed session nobody steers keeps its input open past a queued notice too", { timeout }, async () => {
+    const { fn } = steerableQuery(async function* ({ read }) {
+      const brief = await read();
+      yield steerInit();
+      yield { type: "result", subtype: "success", is_error: false, result: "", num_turns: 0, usage: {} };
+      let ended = false;
+      const ending = read().then((frame) => {
+        ended = frame === null;
+      });
+      yield lifecycle(brief ?? {}, "started");
+      yield toolUse("tu_1", "mcp__studio__desktop");
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(ended, false, "the brief's Genex tool calls answer over the input");
+      yield toolResult("tu_1");
+      yield said("Published.");
+      yield { type: "result", subtype: "success", is_error: false, result: "Published.", num_turns: 2, usage: {} };
+      await ending;
+      assert.equal(ended, true);
+    });
+    const engine = await engineWithLogin(fn);
+    const result = await engine.delegate({ prompt: "Publish the game", cwd: "/tmp/x", resume: "ses_steer" });
+    assert.equal(result.ok, true);
+    assert.equal(result.summary, "Published.");
+  });
+
   it("keeps the input open for a message taken during the final answer, and reports the last answer", {
     timeout,
   }, async () => {
