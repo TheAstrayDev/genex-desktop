@@ -72,10 +72,10 @@ export function alwaysLoaded(record: ScriptedClaude, tool: string): boolean {
 
 /** The text of the first frame a streaming-input session reads, as the SDK hands it to the CLI. */
 async function briefText(prompt: unknown): Promise<string> {
-  const first = await (prompt as AsyncIterable<{ message?: { content?: Array<{ text?: string }> } }>)
-    [Symbol.asyncIterator]()
-    .next();
-  return (first.value?.message?.content ?? []).map((part) => part.text ?? "").join("");
+  type Frame = { message?: { content?: Array<{ text?: string }> } };
+  const first: IteratorResult<Frame> = await (prompt as AsyncIterable<Frame>)[Symbol.asyncIterator]().next();
+  const parts = first.done ? [] : (first.value.message?.content ?? []);
+  return parts.map((part) => part.text ?? "").join("");
 }
 
 export function scriptedClaude(plan: ScriptedToolStep[]): ScriptedClaude {

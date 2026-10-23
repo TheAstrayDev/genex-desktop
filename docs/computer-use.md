@@ -266,11 +266,15 @@ cua's Windows window list holds windows a click passes through (windows on other
 transparent overlays such as a game overlay over the whole screen) and its app listing rescans every
 installed app, so the studio asks Windows itself through the window probe
 ([`windows-window-probe.ts`](../src/substrate/windows-window-probe.ts)): Windows PowerShell running a
-fixed script, handed over as `-EncodedCommand` (no file, so no execution policy), that uses only .NET's
+fixed script, handed over in an environment variable that a short `-EncodedCommand` runs (no file, so
+no execution policy; a command line holds at most 32,767 characters), that uses only .NET's
 UI Automation, Windows Forms, process reads and a few user32 calls declared in memory
 (Reflection.Emit): nothing compiled and no cmdlet, as a first cmdlet
 makes PowerShell prepare every installed module for first use (over 20 s on a fresh machine). It answers which app is in front
-and whether its focused field is a password field (UI Automation's `IsPassword`, or, for a Win32
+(the foreground window, as Windows itself says without asking its app) and whether its focused field
+is a password field, read on a runspace of its own and given 2 s, as UI Automation waits on the app
+and a busy one (Roblox Studio with its Publish dialog open) kept every keystroke waiting past the
+probe's limit; one that does not say in time leaves the tree fallback to look (UI Automation's `IsPassword`, or, for a Win32
 edit control, its own `ES_PASSWORD` style: .NET's UI Automation names a Windows Forms password box a
 Pane with no password flag; asked again a moment later when focus is on no text field, as
 Chromium's accessibility wakes on first asking), and which

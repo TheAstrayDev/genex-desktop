@@ -8,7 +8,8 @@
  * screen, and its app listing rescans every installed app.
  *
  * A host helper like the driver: Windows PowerShell (Microsoft's, on every Windows 10 and 11) runs a
- * fixed script, handed over as `-EncodedCommand` (no file, so no execution policy applies), outside
+ * fixed script, handed over in an environment variable that a short `-EncodedCommand` runs (no file,
+ * so no execution policy applies; a command line holds at most 32,767 characters), outside
  * the ProcessSandbox, using only .NET's own UI Automation, Windows Forms, process reads and a few
  * user32 calls declared in memory: nothing is compiled and no cmdlet runs, so no generated DLL,
  * no compiler and no first-use preparation of PowerShell's modules stand between it and its first
@@ -38,6 +39,8 @@ const EXIT_WAIT_MS = 2 * SECOND_MS;
 const MAX_STDERR_CHARS = 2_000;
 /** How long the helper waits before asking again for focus that is on no text field. */
 const FOCUS_SETTLE_MS = 250;
+/** How long UI Automation has to say whether the focused field is a password field; past it, the caller reads the window's tree. */
+const FOCUS_ASK_MS = 2 * SECOND_MS;
 /** How long a raised window has to take the foreground: a busy app (Roblox Studio) takes it late. */
 const RAISE_WAIT_MS = 2 * SECOND_MS;
 /** How often the helper looks whether a raised window is in front yet. */
@@ -155,6 +158,29 @@ function TopOf($node) {
   return $current
 }
 
+function AppOfProcess([int]$id) {
+  if ($id -le 0) { return @{ pid = 0 } }
+  try { $process = [System.Diagnostics.Process]::GetProcessById($id) } catch { return @{ pid = 0 } }
+  $name = ''
+  try { $name = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($process.MainModule.FileName).FileDescription } catch { }
+  return [ordered]@{ pid = $id; exe = $process.ProcessName + '.exe'; name = ([string]$name).Trim() }
+}
+
+function AppOfElement($node, [bool]$focus) {
+  if ($null -eq $node) { return @{ pid = 0 } }
+  $top = TopOf $node
+  $app = AppOfProcess ([int]$top.Current.ProcessId)
+  if ($app.pid -le 0) { return $app }
+  $app.window = [long]$top.Current.NativeWindowHandle
+  if ($focus) { $app.secure = SecureOf $node }
+  return $app
+}
+
+# What reads the focused field. It is defined here and again on a runspace of its own, where the
+# app in front is asked: UI Automation waits on that app, and a busy one (Roblox Studio with its
+# Publish dialog open) can keep it waiting for seconds.
+$FocusCode = @'
+$PSModuleAutoLoadingPreference = 'None'
 # Whether an element is a Win32 edit control, by its class.
 function IsWin32Edit($node) {
   try { return [string]$node.Current.ClassName -match $EditClass } catch { return $false }
@@ -188,24 +214,6 @@ function IsTextField($node) {
   return IsWin32Edit $node
 }
 
-function AppOfProcess([int]$id) {
-  if ($id -le 0) { return @{ pid = 0 } }
-  try { $process = [System.Diagnostics.Process]::GetProcessById($id) } catch { return @{ pid = 0 } }
-  $name = ''
-  try { $name = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($process.MainModule.FileName).FileDescription } catch { }
-  return [ordered]@{ pid = $id; exe = $process.ProcessName + '.exe'; name = ([string]$name).Trim() }
-}
-
-function AppOfElement($node, [bool]$focus) {
-  if ($null -eq $node) { return @{ pid = 0 } }
-  $top = TopOf $node
-  $app = AppOfProcess ([int]$top.Current.ProcessId)
-  if ($app.pid -le 0) { return $app }
-  $app.window = [long]$top.Current.NativeWindowHandle
-  if ($focus) { $app.secure = SecureOf $node }
-  return $app
-}
-
 # The focused element. An app whose accessibility wakes on first asking (Chromium, Electron) says its
 # window before its field: focus that is on no text field is asked for once more, a moment later.
 function Focused() {
@@ -215,6 +223,71 @@ function Focused() {
   $again = $Element::FocusedElement
   if ($null -eq $again) { return $node }
   return $again
+}
+'@
+. ([scriptblock]::Create($FocusCode))
+
+# The runspace the focused field is read on, with what its functions use.
+function FocusRunspace() {
+  $runspace = [runspacefactory]::CreateRunspace()
+  $runspace.Open()
+  foreach ($name in 'Element', 'Edit', 'EditClass', 'PasswordStyle', 'User32') {
+    $runspace.SessionStateProxy.SetVariable($name, $ExecutionContext.SessionState.PSVariable.GetValue($name))
+  }
+  $shell = [powershell]::Create()
+  $shell.Runspace = $runspace
+  [void]$shell.AddScript($FocusCode).Invoke()
+  $shell.Dispose()
+  return $runspace
+}
+$FocusReader = $null
+# The ask still waiting on a busy app, if any: a table, so the functions change it without a scope.
+$Focus = @{ Asked = $null }
+if ($null -ne $User32) { try { $FocusReader = FocusRunspace } catch { } }
+
+# Whether the focused field of a process is a password field, as UI Automation says within
+# ${FOCUS_ASK_MS} ms; null when it can't say in time, or focus is in another process. An ask still
+# waiting on a busy app is not asked again until it has answered.
+function FocusSecure([int]$id) {
+  if ($null -ne $Focus.Asked) {
+    if (-not $Focus.Asked.Handle.IsCompleted) { return $null }
+    $Focus.Asked.Shell.Dispose()
+    $Focus.Asked = $null
+  }
+  $shell = [powershell]::Create()
+  $shell.Runspace = $FocusReader
+  [void]$shell.AddScript('$node = Focused; $secure = SecureOf $node; $owner = 0; try { $owner = [int]$node.Current.ProcessId } catch { }; "$owner $secure"')
+  $handle = $shell.BeginInvoke()
+  if (-not $handle.AsyncWaitHandle.WaitOne(${FOCUS_ASK_MS})) {
+    $Focus.Asked = @{ Shell = $shell; Handle = $handle }
+    return $null
+  }
+  $said = ''
+  try {
+    $out = $shell.EndInvoke($handle)
+    if ($out.Count -gt 0) { $said = [string]$out[0] }
+  } catch { }
+  $shell.Dispose()
+  $parts = $said.Split(' ')
+  if ($parts.Length -ne 2 -or $parts[0] -ne [string]$id) { return $null }
+  if ($parts[1] -eq 'True') { return $true }
+  if ($parts[1] -eq 'False') { return $false }
+  return $null
+}
+
+# The app that holds the keyboard: the foreground window, as Windows itself says without asking its
+# app, and its focused field's password flag when UI Automation says it in time.
+function FrontApp() {
+  if ($null -eq $FocusReader) { return AppOfElement (Focused) $true }
+  $window = $User32::GetForegroundWindow()
+  if ($window -eq [IntPtr]::Zero) { return @{ pid = 0 } }
+  $owner = [uint32]0
+  [void]$User32::GetWindowThreadProcessId($window, [ref]$owner)
+  $app = AppOfProcess ([int]$owner)
+  if ($app.pid -le 0) { return $app }
+  $app.window = [long]$window
+  $app.secure = FocusSecure $app.pid
+  return $app
 }
 
 # The app a click at a point reaches, as Windows itself hit-tests it: the window there (click-through
@@ -279,7 +352,7 @@ function Raise([string]$exe) {
 
 function Ask([string]$line) {
   $parts = $line.Trim().Split(' ')
-  if ($parts[0] -eq 'front' -and $parts.Length -eq 1) { return AppOfElement (Focused) $true }
+  if ($parts[0] -eq 'front' -and $parts.Length -eq 1) { return FrontApp }
   if ($parts[0] -eq 'at' -and $parts.Length -eq 3 -and $null -ne $User32) {
     return AppAtPoint ([int]::Parse($parts[1], $Culture)) ([int]::Parse($parts[2], $Culture))
   }
@@ -347,13 +420,18 @@ export function windowsPowerShell(env: Record<string, string | undefined>): Prob
   return path.win32.join(env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
-/** The helper as Windows PowerShell runs it: no profile, no prompt, the script as an encoded command. */
+/** The variable that carries the helper's script: a command line holds at most 32,767 characters. */
+const SCRIPT_ENV = "GENEX_WINDOW_PROBE_SCRIPT";
+/** The encoded command: run the script {@link SCRIPT_ENV} carries, with no cmdlet (no module loads). */
+const SCRIPT_LOADER = `. ([scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:${SCRIPT_ENV}))))`;
+
+/** The helper as Windows PowerShell runs it: no profile, no prompt, a loader as the encoded command. */
 export function probeCommand(env: Record<string, string>): ProbeCommand {
-  const script = Buffer.from(WINDOW_PROBE_SCRIPT, "utf16le").toString("base64");
+  const loader = Buffer.from(SCRIPT_LOADER, "utf16le").toString("base64");
   return {
     command: windowsPowerShell(env),
-    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", script],
-    env,
+    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", loader],
+    env: { ...env, [SCRIPT_ENV]: Buffer.from(WINDOW_PROBE_SCRIPT, "utf8").toString("base64") },
   };
 }
 

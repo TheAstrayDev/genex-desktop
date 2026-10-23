@@ -33,6 +33,8 @@ after(async () => {
 
 /** The driver's physical screen in the stand-in's desktop: twice the stand-in's own view of it. */
 const SCREEN = { width: 2000, height: 1000 } as const;
+/** The longest command line, and environment variable, Windows starts a process with. */
+const WINDOWS_COMMAND_LINE_CHARS = 32_767;
 
 /** A probe over the stand-in, and what it logged: each start and each request. */
 async function standIn(flags: string[] = [], options: { requestMs?: number; startMs?: number } = {}) {
@@ -88,10 +90,21 @@ describe("the Windows window probe's answers", () => {
       "D:\\Win\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
     );
     assert.equal(windowsPowerShell({}), "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
-    const args = probeCommand({ SystemRoot: "C:\\Windows" }).args;
+    const { args, env } = probeCommand({ SystemRoot: "C:\\Windows" });
     assert.deepEqual(args.slice(0, -1), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
-    // No script file, so no execution policy applies; the command is the fixed script itself.
-    assert.equal(Buffer.from(args.at(-1)!, "base64").toString("utf16le"), WINDOW_PROBE_SCRIPT);
+    // No script file, so no execution policy applies: the command runs the fixed script the
+    // environment carries.
+    const loader = Buffer.from(args.at(-1)!, "base64").toString("utf16le");
+    assert.match(loader, /\$env:GENEX_WINDOW_PROBE_SCRIPT/);
+    assert.equal(Buffer.from(env.GENEX_WINDOW_PROBE_SCRIPT!, "base64").toString("utf8"), WINDOW_PROBE_SCRIPT);
+    assert.equal(env.SystemRoot, "C:\\Windows");
+  });
+
+  it("keeps its command line inside Windows' 32,767 characters, however long the script grows", () => {
+    // A longer script once made CreateProcess refuse PowerShell ("The filename or extension is too long").
+    const { command, args, env } = probeCommand({ SystemRoot: "C:\\Windows" });
+    assert.ok([command, ...args].join(" ").length < WINDOWS_COMMAND_LINE_CHARS / 4);
+    assert.ok(Math.max(...Object.values(env).map((value) => value.length)) < WINDOWS_COMMAND_LINE_CHARS);
   });
 });
 
