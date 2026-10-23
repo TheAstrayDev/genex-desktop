@@ -20,9 +20,12 @@ sandbox-runtime's socat bridges run until the last sandbox is disposed. Node run
 `after` hooks once the tests registered so far have ended, so the check also waits for tests a
 file registers after a top-level await (it follows `node:test`'s `node.test` trace).
 
-Each batch also runs with `TMPDIR`, `TMP` and `TEMP` set to a folder of its own (`/tmp/gt-…` off
-Windows, or in the inherited temp folder where `/tmp` is not writable), removed when the batch
-ends, so what a test leaves in the temp folder does not pile up.
+Each batch also runs with `TMPDIR`, `TMP` and `TEMP` set to a folder of its own (`/tmp/gt-<pid>-…`
+off Windows, or in the inherited temp folder where `/tmp` is not writable), removed when the batch
+ends, so what a test leaves in the temp folder does not pile up. A file run directly with
+`node --test` puts its `tmpDir`s in a `gt-<pid>-…` folder of its own the same way. A run killed
+before its cleanup leaves its folder: each batch first removes every `gt-` folder whose owner
+process is gone, or that sat unchanged for a day (`scripts/test-tmp.mjs`).
 
 CI partitions literal test groups with direct callbacks. Ordinary groups stay whole; the large
 `harness incidents` suite is split into direct test subtrees, with each test's runtime descendants
@@ -64,7 +67,8 @@ through the JS API imports `@typescript/typescript6`.
   a game link kept as the host keeps it, and stand-in programs for a plugin's build, tests and package.
 - `godot-fake-engine.ts`: a fake Mac with Godot apps where the test puts them, a runner that
   records each Godot job and answers with Godot's recorded words (`fixtures/godot-cli/`), and the
-  Godot plugin's backend on both in an open game, its host calls recorded.
+  Godot plugin's backend on both in an open game, its host calls recorded; and a fake Windows PC
+  (`fakeWindows`, `godotWindowsFixture`) whose host plays the sandbox jobs and the pinned Godot.
 - `unity-editor-stand-in.ts`: a Unity project folder, the descriptor Unity's Pipeline package
   keeps in it while an editor has it open, and a stand-in for that editor's HTTP server (scripted
   answers, every request recorded, a clock only `sleep` moves) as the Unity plugin's `PipelineDeps`;
@@ -174,8 +178,8 @@ file from the list for it. The informational fast-group report (a Windows dispat
 
 Tests that read local projects or open the network are skipped unless opted in:
 `STUDIO_LOCAL_FIXTURES=1` for local projects, `STUDIO_NETWORK_TESTS=1` for real network and
-local Ollama probes (on Windows also Local Blender's real download and a sandboxed job,
-`blender-windows-live.test.ts`), `STUDIO_GODOT_LIVE=1` for the Godot plugin against this Mac's own Godot
+local Ollama probes (on Windows also Local Blender's and Godot's real downloads and sandboxed
+jobs, `blender-windows-live.test.ts` and `godot-windows-live.test.ts`), `STUDIO_GODOT_LIVE=1` for the Godot plugin against this Mac's own Godot
 (`godot-live.test.ts`), `STUDIO_CLAUDE_CLI_TESTS=1` for the real Claude Code CLI against
 `fake-anthropic.ts` (`claude-studio-shell-cli.test.ts`, `claude-tool-loading.test.ts`),
 `STUDIO_CODEX_CLI_TESTS=1` for the real Codex CLI against `fake-openai-responses.ts`

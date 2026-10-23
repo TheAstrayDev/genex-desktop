@@ -1,6 +1,6 @@
 /**
- * The Publish dialog's platform rows: the web build as Publish sends it, and the Mac and Windows apps
- * the game folder holds, ready, built before the game's last change, or not made. A built app shows
+ * The Publish dialog's platform rows: the web build as Publish sends it, and the Mac, Windows and
+ * Linux apps the game folder holds, ready, built before the game's last change, or not made. A built app shows
  * "Coming soon" until genex.games takes apps, and its players are told they get the web version; an
  * app not made offers to ask the agent, in the game's own words.
  */
@@ -13,8 +13,15 @@ import type { GenexNativeRecord } from "../../src/shared/genex.ts";
 import { MINUTE_MS } from "../../src/shared/duration.ts";
 import { CoreFact } from "../../src/shared/project-facts.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
-import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../src/shared/publish-platforms.ts";
 import {
+  linuxBuildOf,
+  type PublishPlatform,
+  PublishPlatformState,
+  PublishTarget,
+} from "../../src/shared/publish-platforms.ts";
+import {
+  appsMadeOnly,
+  appsUpToDate,
   appsLabel,
   failureLines,
   gateByPlugin,
@@ -54,6 +61,19 @@ async function macApp(dir: string, name: string, at: number): Promise<void> {
   const program = path.join(bundle, "MacOS", "Game");
   await writeFile(program, header);
   await utimes(program, new Date(at), new Date(at));
+}
+
+/** A 64-bit x86 Linux program at `file`, written at `at`. */
+async function linuxProgram(file: string, at: number): Promise<void> {
+  const header = Buffer.alloc(64);
+  header.writeUInt32BE(0x7f454c46, 0);
+  header[4] = 2;
+  header[5] = 1;
+  header.writeUInt16LE(2, 16);
+  header.writeUInt16LE(0x3e, 18);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, header);
+  await utimes(file, new Date(at), new Date(at));
 }
 
 /** A source file of the game, last changed at `at`. */
@@ -148,6 +168,37 @@ describe("Publish's platform rows from the game folder", () => {
     assert.equal(changed.mac.state, PublishPlatformState.Stale, "a project setting is the game's");
   });
 
+  it("lists a Linux app beside the others, and sends it with Publish while it is not older than the game", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await source(root, "unity/Assets/Scripts/Player.cs", T0);
+    await mkdir(path.join(root, "unity", "Builds", "Linux", "Dust_Data"), { recursive: true });
+    await linuxProgram(path.join(root, "unity", "Builds", "Linux", "Dust.x86_64"), T0 + 10 * MINUTE_MS);
+    const core = coreWith("dust", root, []);
+    const rows = await publishPlatforms(core, "dust", true);
+    assert.deepEqual(
+      rows.map((row) => row.target),
+      [PublishTarget.Web, PublishTarget.Mac, PublishTarget.Windows, PublishTarget.Linux],
+    );
+    const linux = byTarget(rows).linux;
+    assert.deepEqual([linux?.state, linux?.arch, linux?.uploads], [PublishPlatformState.Ready, NativeArch.X64, true]);
+    assert.deepEqual(await publishedApps(core, "dust", true), ["unity/Builds/Linux/Dust.x86_64"]);
+    await source(root, "unity/Assets/Scripts/Player.cs", T0 + 30 * MINUTE_MS);
+    assert.equal(byTarget(await publishPlatforms(core, "dust", true)).linux?.state, PublishPlatformState.Stale);
+    assert.deepEqual(await publishedApps(core, "dust", true), []);
+  });
+
+  it("keeps an Unreal Linux package ready when only its own files are newer than its program", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await source(root, "Source/Dust/Dust.cpp", T0);
+    const pack = path.join(root, "Packaged", "Linux");
+    await linuxProgram(path.join(pack, "Dust", "Binaries", "Linux", "Dust-Linux-Shipping"), T0 + 10 * MINUTE_MS);
+    // Staging writes the paks and the starter after the program: they are the build's, not the game's.
+    await source(root, "Packaged/Linux/Dust/Content/Paks/Dust-Linux.pak", T0 + 20 * MINUTE_MS);
+    await source(root, "Packaged/Linux/Dust.sh", T0 + 20 * MINUTE_MS);
+    const rows = byTarget(await publishPlatforms(coreWith("dust", root, []), "dust", true));
+    assert.equal(rows.linux?.state, PublishPlatformState.Ready);
+  });
+
   it("refuses a game that is not in the library", async () => {
     const root = await tmpDir("publish-platforms-");
     const core = coreWith("dust", root, []);
@@ -182,6 +233,14 @@ const WINDOWS_READY: PublishPlatform = {
   builtAt: new Date(T0).toISOString(),
   uploads: true,
 };
+const LINUX: PublishPlatform = {
+  target: PublishTarget.Linux,
+  state: PublishPlatformState.Ready,
+  arch: NativeArch.X64,
+  bytes: 700 * 1024 ** 2,
+  builtAt: new Date(T0).toISOString(),
+  uploads: true,
+};
 const WINDOWS: PublishPlatform = {
   target: PublishTarget.Windows,
   state: PublishPlatformState.Missing,
@@ -210,6 +269,69 @@ describe("Publish's platform rows as the dialog says them", () => {
     assert.equal(sent?.end, PlatformEnd.None, "an app Publish sends offers nothing more");
   });
 
+  it("says where an Unreal game's app for another system is packaged, and offers no agent for it", () => {
+    const unreal = [{ id: CoreFact.UnrealProject, path: "unreal" }];
+    assert.equal(appsMadeOnly(unreal, "darwin"), PublishTarget.Mac);
+    assert.equal(appsMadeOnly(unreal, "win32"), PublishTarget.Windows);
+    assert.equal(appsMadeOnly([{ id: CoreFact.UnityProject, path: "unity" }], "darwin"), null, "Unity builds any");
+    const missingMac = { ...MAC, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null };
+    const staleLinux = { ...LINUX, state: PublishPlatformState.Stale };
+    const onMac = platformRows(
+      [WEB, missingMac, WINDOWS, staleLinux],
+      NOW,
+      undefined,
+      WebOffer.Unavailable,
+      PublishTarget.Mac,
+    );
+    assert.deepEqual(
+      onMac.slice(1).map((row) => [row.name, row.detail, row.end]),
+      [
+        ["Mac app", "Not made yet", PlatformEnd.Make],
+        ["Windows app", "Package it on a Windows PC", PlatformEnd.None],
+        ["Linux app", "Built before your last change", PlatformEnd.None],
+      ],
+    );
+    const onWindows = platformRows(
+      [missingMac, WINDOWS_READY],
+      NOW,
+      undefined,
+      WebOffer.Unavailable,
+      PublishTarget.Windows,
+    );
+    assert.deepEqual(
+      onWindows.map((row) => [row.detail, row.end]),
+      [
+        ["Package it on a Mac", PlatformEnd.None],
+        ["64-bit PCs · built 5 min ago", PlatformEnd.None],
+      ],
+      "this computer's own app goes as before",
+    );
+  });
+
+  it("names a Linux app, what it runs on and its players", () => {
+    const rows = platformRows([WEB, MAC, WINDOWS, LINUX, { ...LINUX, arch: NativeArch.Arm64 }], NOW);
+    assert.deepEqual(
+      rows.slice(3).map((row) => [row.name, row.detail]),
+      [
+        ["Linux app", "64-bit PCs · built 5 min ago"],
+        ["Linux app", "Arm PCs · built 5 min ago"],
+      ],
+    );
+    const missing = { ...LINUX, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null };
+    assert.equal(platformRows([missing], NOW)[0]?.end, PlatformEnd.Make);
+    assert.equal(
+      makeAppAsk(PublishTarget.Linux, "Dust Runners"),
+      "Make a Linux app of Dust Runners so I can publish it for Linux players.",
+    );
+    assert.equal(
+      reachLine([WEB, { ...MAC, uploads: true }, WINDOWS, LINUX]),
+      "Publish also sends the Mac and Linux apps. Windows players get the web version.",
+    );
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    assert.equal(appsLabel([noWeb, MAC, WINDOWS, LINUX]), "Publish Linux app");
+    assert.equal(reachLine([noWeb, MAC, WINDOWS, LINUX]), "Only Linux players can play it.");
+  });
+
   it("says when a build was made in words a person reads", () => {
     const at = (ms: number) => platformRows([{ ...MAC, builtAt: new Date(NOW - ms).toISOString() }], NOW)[0]?.detail;
     assert.equal(at(10_000), "Apple silicon and Intel · built just now");
@@ -235,7 +357,7 @@ describe("Publish's platform rows as the dialog says them", () => {
     );
     assert.equal(
       reachLine([{ ...WEB, state: PublishPlatformState.Missing }, MAC, WINDOWS]),
-      "Publishing Mac and Windows apps comes with the next Genex update.",
+      "Publishing Mac, Windows and Linux apps comes with the next Genex update.",
       "a game with no web build says why its press waits",
     );
   });
@@ -270,6 +392,29 @@ describe("Publish's platform rows as the dialog says them", () => {
       "Couldn’t send the Mac app: Couldn't get an upload token (HTTP 413).",
     ]);
     assert.deepEqual(failureLines([WEB, ready, WINDOWS], record({})), []);
+  });
+
+  it("has nothing new to send for a game whose apps are all on Genex already", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const ready = { ...MAC, uploads: true };
+    const live = { platform: "mac", arch: "universal", version: "1.0+3f2a9c1d0e4b", sizeBytes: 1 };
+    const native = (publishedAt: number, over: Partial<GenexNativeRecord> = {}): GenexNativeRecord => ({
+      supported: true,
+      sending: false,
+      sent: [{ ...live, publishedAt: new Date(publishedAt).toISOString() }],
+      failed: [],
+      ...over,
+    });
+    assert.equal(appsUpToDate([noWeb, ready, WINDOWS], native(T0 + MINUTE_MS)), true);
+    assert.equal(appsUpToDate([noWeb, ready, WINDOWS], native(T0 - MINUTE_MS)), false, "a newer build waits to go");
+    assert.equal(appsUpToDate([noWeb, ready, WINDOWS], native(T0 + MINUTE_MS, { sending: true })), false);
+    assert.equal(
+      appsUpToDate([noWeb, ready, WINDOWS_READY], native(T0 + MINUTE_MS)),
+      false,
+      "the Windows app is not sent",
+    );
+    assert.equal(appsUpToDate([WEB, ready], native(T0 + MINUTE_MS)), false, "a web game always publishes its build");
+    assert.equal(appsUpToDate([noWeb, ready], undefined), false, "never published");
   });
 
   it("publishes a game that has only apps as its apps, and says how its listing went", () => {
@@ -317,14 +462,17 @@ describe("Publish's platform rows as the dialog says them", () => {
     const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
     const noMac = { ...MAC, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null };
     assert.equal(nothingToPublish([noWeb, noMac, WINDOWS]), true);
-    assert.equal(reachLine([noWeb, noMac, WINDOWS]), "Make a Mac or Windows app first, then publish it here.");
+    assert.equal(reachLine([noWeb, noMac, WINDOWS]), "Make a Mac, Windows or Linux app first, then publish it here.");
     assert.equal(
       reachLine([noWeb, noMac, WINDOWS], false, WebOffer.Make),
-      "Make a web version or a Mac or Windows app first, then publish it here.",
+      "Make a web version or a Mac, Windows or Linux app first, then publish it here.",
       "a Unity or Godot game can start with its web version",
     );
     assert.equal(nothingToPublish([noWeb, MAC, WINDOWS]), true, "an app Studio cannot send yet");
-    assert.equal(reachLine([noWeb, MAC, WINDOWS]), "Publishing Mac and Windows apps comes with the next Genex update.");
+    assert.equal(
+      reachLine([noWeb, MAC, WINDOWS]),
+      "Publishing Mac, Windows and Linux apps comes with the next Genex update.",
+    );
     assert.equal(nothingToPublish([noWeb, { ...MAC, uploads: true }, WINDOWS]), false);
     assert.equal(nothingToPublish([WEB, noMac, WINDOWS]), false, "a web game publishes its web build");
   });
@@ -391,5 +539,26 @@ describe("Publish's platform rows as the dialog says them", () => {
       makeWebAsk("Simple Fast Tic Tac Toe"),
       "Make a web version of Simple Fast Tic Tac Toe so I can publish it on the web.",
     );
+  });
+});
+
+describe("what a Linux build ships", () => {
+  it("is a Unity or Godot program's own folder, and an Unreal package's root", () => {
+    assert.deepEqual(linuxBuildOf("unity/Builds/Linux/Dust.x86_64"), {
+      folder: "unity/Builds/Linux",
+      entry: "Dust.x86_64",
+    });
+    assert.deepEqual(linuxBuildOf("Packaged/Linux/Dust/Binaries/Linux/Dust-Linux-Shipping"), {
+      folder: "Packaged/Linux",
+      entry: "Dust/Binaries/Linux/Dust-Linux-Shipping",
+    });
+    assert.deepEqual(linuxBuildOf("Pack/Dust/Binaries/LinuxArm64/Dust"), {
+      folder: "Pack",
+      entry: "Dust/Binaries/LinuxArm64/Dust",
+    });
+  });
+
+  it("is nothing for a program at the game folder's root, whose folder would be the whole game", () => {
+    assert.equal(linuxBuildOf("Dust.x86_64"), null);
   });
 });

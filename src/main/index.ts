@@ -19,7 +19,6 @@ import { registerPerformanceIpc } from "./ipc/performance.ts";
 import {
   BrowserWindow,
   Menu,
-  MenuItem,
   Notification,
   app,
   autoUpdater,
@@ -74,6 +73,7 @@ import {
   FIRST_LAUNCH_STATUS,
   FIXTURE_GAME,
   FIXTURE_AGENTS_FAILURE,
+  FIXTURE_DATA_FOLDER,
   FIXTURE_SANDBOX_PROBLEM,
   FIXTURE_UPDATE_RELEASE,
   FixtureName,
@@ -156,23 +156,36 @@ import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
 import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
-import { buildHostsFor, networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import {
+  buildHostsFor,
+  mintedTicket,
+  networkRequest,
+  type PlayGallery,
+  playGallery,
+  type PlayWorld,
+  TicketDelivery,
+} from "./play/gallery.ts";
+import { relayHostsOf, startGenexGateway } from "./play/genex-gateway.ts";
 import { GAME_LINK_SCHEME, gameLinkIn, gameLinks } from "./play/game-links.ts";
 import { thisComputer } from "./play/native-host.ts";
 import { type InstallOutcome, type NativeInstaller, nativeInstalls } from "./play/native-installs.ts";
 import { checkNativeUpdates } from "./play/native-updates.ts";
 import { runTool } from "./play/native-unpack.ts";
-import { type NativeSessions, nativeSessions } from "./play/native-launch.ts";
+import { type GameGenex, type NativeSessions, type NativeSessionsDeps, nativeSessions } from "./play/native-launch.ts";
+import { nativePlays } from "./play/native-plays.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
+import { linuxGameWindows } from "./play/native-windows-linux.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
+import { spawnLinuxGame } from "../substrate/plugins/linux-game.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
 import { killProcessTree } from "../substrate/process-tree.ts";
 import { prepareNativeGamesFixture } from "./dev/fixture-native-games.ts";
 import { fixtureNativeFetch } from "./dev/fixture-native.ts";
-import { launchesOn, nativeAppOffer } from "../shared/play-native.ts";
+import { launchesOn, nativeAppOffer, NativePlatform } from "../shared/play-native.ts";
 import type { PlayViewerDeps } from "./play/viewer.ts";
 import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
+import { gitRemixReadiness, type RemixReadiness, readyFor, withReadyRemix } from "./play/remix-ready.ts";
 import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
@@ -194,10 +207,28 @@ import { routeStudioLink } from "./link-policy.ts";
 import { createLoginControllers, type SubscriptionEngine } from "./login-controllers.ts";
 import { createOpenRouterLogin } from "./openrouter-login.ts";
 import { openStudioLog } from "./logs.ts";
+import {
+  DATA_FOLDER_FILE,
+  DataLaunchKind,
+  defaultDataDir,
+  quitsAtOnce,
+  quitTakenLaunch,
+  thisDataLaunch,
+} from "./data-folder.ts";
+import { createDataFolderChoices, type DataFolderChoices } from "./data-folder-choice.ts";
+import { type DataFolderIpcDeps, registerDataFolderIpc } from "./ipc/data-folder.ts";
+import { freeBytes, measureData } from "../substrate/data-move.ts";
+import { lockDownFolder, windowsDriveFacts } from "../substrate/windows-drive.ts";
+import { type DataMoveOutcome, finishMove, removeLeftover, runDataMove } from "./data-move-launch.ts";
+import { DataFolderProblem } from "../shared/data-folder.ts";
 import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migration.ts";
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
 import { PLUGIN_PANEL_CSP } from "./plugin-panel-csp.ts";
 import { HttpStatus, textResponse } from "./page-serve.ts";
+import { applyMainLanguage, pageLanguageArguments, systemLanguages } from "./language.ts";
+import { appMenuTemplate } from "./app-menu.ts";
+import { intlLocale, t } from "../shared/i18n.ts";
+import { matchLocale, SYSTEM_LANGUAGE } from "../shared/locale.ts";
 import { GamePreview, registerGameScheme } from "./preview.ts";
 import { RunSummaryReader } from "./run-summary-reader.ts";
 import { registerRunSharingIpc } from "./ipc/run-sharing.ts";
@@ -209,28 +240,38 @@ import type { EvalCoreOptions, EvalLaunch } from "./smoke/eval-lane.ts";
 import { StudioCore, type StudioCoreOptions } from "./studio-core.ts";
 import { appLookAccess } from "./app-look-access.ts";
 import { layoutFor } from "./core/layout.ts";
+import { createProviderUsage, engineUsageSource } from "./core/provider-usage.ts";
 import { appLookRun, macAppLook, stubAppLook, unsupportedAppLook } from "../substrate/app-look.ts";
 import { TerminalService, type TerminalHost } from "./terminal-service.ts";
 import { windowControlsPainter } from "./window-chrome.ts";
-import { appUserModelId, installedWorkingDir, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
+import {
+  appUserModelId,
+  installedWorkingDir,
+  installRoot,
+  runSquirrelStep,
+  squirrelStartup,
+} from "./windows-install.ts";
+import { samePath } from "../substrate/paths.ts";
 import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../shared/boot.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { type Painter, paintWhileUsed } from "../substrate/paint-while-used.ts";
-import { longPath, takeBackSandboxEntries } from "../substrate/windows-sandbox.ts";
+import { ensureHostGit, longPath, takeBackSandboxEntries } from "../substrate/windows-sandbox.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { CustomEvent, customEventData } from "../shared/custom-events.ts";
 import { EVAL_LANE_EXIT } from "../shared/eval-lane.ts";
-import { EngineId } from "../shared/providers.ts";
+import { EngineId, SUBSCRIPTION_ENGINES } from "../shared/providers.ts";
 import { TerminalKind } from "../shared/terminal.ts";
 import {
   flagValue,
   hasFlag,
+  isNormalLaunch,
   linuxSecretStorageSwitches,
   quitsWhenLastWindowCloses,
   StudioFlag,
+  testLanguageSwitches,
   testLaunchChromiumSwitches,
 } from "./dev/launch-flags.ts";
 import { EventKind } from "../shared/event-log.ts";
@@ -271,37 +312,46 @@ const DEFAULT_BONSAI_MODEL = "bonsai-2:27b-pq2_0";
 /** A plugin's picture is an image: an SVG among them draws, but runs and fetches nothing. */
 const PLUGIN_ICON_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
-/** What the user reads in the app's own dialogs, and why a start-up step refuses. */
+/**
+ * What the user reads in the app's own dialogs (functions: main's language is set after start and
+ * changes at runtime), and why a start-up or developer step refuses (English: logs and developers).
+ */
 const MESSAGE = {
   devLaunchRefused: "Developer launch requires a developer build and owned launch configuration",
-  couldNotStart: "The studio could not start",
-  quit: "Quit",
-  linkNotOpened: "That link could not be opened",
-  pluginUnavailable: "Plugin unavailable",
-  quitDuringRun: "An unattended run is active. Quit and end it?",
-  restartDuringRun: "An unattended run is active. Relaunch to update and end it?",
-  restart: "Relaunch",
-  keepRunning: "Keep running",
-  quitWithResume: (time: string) => `A paused build will resume on its own at ${time}. Quit and cancel the resume?`,
+  couldNotStart: () => t("The studio could not start"),
+  quit: () => t("Quit"),
+  linkNotOpened: () => t("That link could not be opened"),
+  pluginUnavailable: () => t("Plugin unavailable"),
+  quitDuringRun: () => t("An unattended run is active. Quit and end it?"),
+  restartDuringRun: () => t("An unattended run is active. Relaunch to update and end it?"),
+  restart: () => t("Relaunch"),
+  keepRunning: () => t("Keep running"),
+  quitWithResume: (time: string) =>
+    t("A paused build will resume on its own at {time}. Quit and cancel the resume?", { time }),
   restartWithResume: (time: string) =>
-    `A paused build will resume on its own at ${time}. Relaunch to update and cancel the resume?`,
-  cancel: "Cancel",
-  checkForUpdates: "Check for Updates…",
-  download: "Download",
-  later: "Later",
-  ok: "OK",
+    t("A paused build will resume on its own at {time}. Relaunch to update and cancel the resume?", { time }),
+  cancel: () => t("Cancel"),
+  download: () => t("Download"),
+  later: () => t("Later"),
+  ok: () => t("OK"),
   coreNotStarted: "the studio core has not started",
   noGameView: "the studio window has no game view",
   shutdownUnfinished: (steps: string[]) => `shutdown did not finish: ${steps.join(", ")}`,
   hydrationTimeout: "renderer hydration timeout",
   pageGone: (cause: string) => `studio window renderer gone (${cause})`,
+  // Written into the Studio chat's log, which keeps its English.
   pageReloaded: (cause: string) => `The studio window stopped unexpectedly (${cause}) and was reloaded.`,
   pageKeepsStopping: (cause: string) => `The studio window keeps stopping (${cause}); it was not reloaded again.`,
-  keepsCrashing: "The studio window keeps crashing",
-  keepsCrashingDetail: "Work in progress continues in the background.",
-  reload: "Reload",
+  keepsCrashing: () => t("The studio window keeps crashing"),
+  keepsCrashingDetail: () => t("Work in progress continues in the background."),
+  reload: () => t("Reload"),
+  dataFolderStillMissing: (dir: string) => t("{folder} is still not there.", { folder: dir }),
+  moveStopped: () => t("A file was in use, or the drive refused it. Close other apps, then try again."),
   startTookTooLong: (minutes: number) =>
-    `The protected workspace was still starting after ${minutes} minutes. Genex keeps trying and opens by itself if it finishes; Try again restarts Genex.`,
+    t(
+      "The protected workspace was still starting after {minutes, plural, one {# minute} other {# minutes}}. Genex keeps trying and opens by itself if it finishes; Try again restarts Genex.",
+      { minutes },
+    ),
 } as const;
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -363,6 +413,10 @@ if (developerBuildUnlaunched || developerLaunchUnbacked) {
 }
 /** The normal profile's data folder, read before a developer or test launch moves userData. */
 const normalProfileData = app.getPath("userData");
+/** Electron's own default data folder, which holds the record of where the person moved the data. */
+const defaultData = defaultDataDir(app.getPath("appData"), app.getName());
+/** What `boot.ts` decided about this launch's data: in place, moved, to move now, or missing. */
+const dataLaunch = thisDataLaunch(defaultData);
 const dev =
   devLaunchConfig !== undefined && __STUDIO_DEV_BUILD__
     ? (await import("./dev/launch-context.ts")).initializeLaunch(__STUDIO_DEV_BUILD__, devLaunchConfig)
@@ -446,6 +500,13 @@ configureCodingClis(
     : {},
 );
 const fixtureNativePolicy = fixtureProviders || isSmoke;
+// A test or fixture launch reads the English its checks were written in, whatever the Mac speaks,
+// unless a fixture asks to be seen in another of the app's languages.
+for (const [name, value] of testLanguageSwitches(
+  fixtureNativePolicy || isSelfTest,
+  fixtureProviders ? process.env.STUDIO_FIXTURE_LANGUAGE : undefined,
+))
+  app.commandLine.appendSwitch(name, value);
 /**
  * Where Play talks to genex.games in this launch: genex.games itself, or a local or test copy that a
  * development profile names (`play/origins.ts`); never in a packaged app, and never in a fixture
@@ -628,8 +689,26 @@ function subscription(id: string): SubscriptionEngine | null {
   return null;
 }
 
+/** The subscriptions' plan limits, one live state the renderer is pushed (`core/provider-usage.ts`). */
+const providerUsage = createProviderUsage({
+  engines: SUBSCRIPTION_ENGINES,
+  source: (id) => {
+    if (!core?.engines.has(id)) return null;
+    return engineUsageSource(core.engines.get(id), subscription(id)?.accounts ?? null);
+  },
+  push: (reports) => pushUiEvent({ type: UiEvent.ProviderUsage, payload: { reports } }),
+});
+
+/** A sign-in, account switch or recheck may change a plan already shown: read it again. */
+function followEngineChanges(event: UiEvent): void {
+  if (event.type === UiEvent.EnginesChanged) void providerUsage.refreshShown().catch(() => {});
+}
+
 function pushUiEvent(event: UiEvent): void {
   evalLaneUiTap?.(event);
+  followEngineChanges(event);
+  if (event.type === UiEvent.SettingsChanged)
+    void applyMainLanguage(event.payload.language).then((changed) => changed && languageChanged());
   if (event.type !== UiEvent.HarnessLog) harnessLogBatch.flush();
   if (event.type === UiEvent.HarnessStatus) {
     const all = event.payload?.all;
@@ -801,6 +880,7 @@ async function createCore(userData: string): Promise<StudioCore> {
   performanceRecorder.mark("core-start");
   await studio.init();
   performanceRecorder.mark("core-ready");
+  if (await applyMainLanguage(studio.settings.language)) languageChanged();
   wirePlugins(studio);
   return studio;
 }
@@ -879,6 +959,7 @@ function studioWindowOptions(): Electron.BrowserWindowConstructorOptions {
     ...windowTitle(),
     webPreferences: {
       preload: path.join(distRoot, "preload", "preload.cjs"),
+      additionalArguments: pageLanguageArguments(),
       ...(dev ? { backgroundThrottling: false } : {}),
       contextIsolation: true,
       sandbox: true,
@@ -1071,12 +1152,15 @@ function watchNativeUpdates(studio: StudioCore): void {
 function playSessionsFor(studio: StudioCore): NativeSessions | null {
   const installs = playInstallsFor(studio);
   if (!installs) return null;
+  // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
+  const linux = process.platform === StudioPlatform.Linux;
+  const windows = linux ? linuxGameWindows() : { hasWindow: hasGameWindow, show: showGameWindow };
   nativeLauncher ??= nativeSessions({
     root: studio.layout.installedGames,
     record: (slug) => installs.record(slug),
-    spawn: spawnNativeGame,
-    hasWindow: hasGameWindow,
-    show: showGameWindow,
+    spawn: linux ? spawnLinuxGame : spawnNativeGame,
+    hasWindow: windows.hasWindow,
+    show: windows.show,
     kill: (pid, signal) => process.kill(pid, signal),
     killTree: (pid) => killProcessTree(pid),
     probe: psProbe(),
@@ -1085,8 +1169,39 @@ function playSessionsFor(studio: StudioCore): NativeSessions | null {
     played: (slug) => installs.played(slug),
     ended: (slug) => installs.sweep(slug),
     log: (line) => studioLog.write("main", line),
+    // A fixture launch has no Genex to reach: its games stay offline, and their plays uncounted.
+    ...(fixtureNativePolicy
+      ? {}
+      : { genex: (slug: string) => openGameGenex(studio, slug), presence: playsFor(studio) }),
   });
   return nativeLauncher;
+}
+
+/** Where a native game's plays go: genex.games, once its window is on screen (`main/play/native-plays.ts`). */
+function playsFor(studio: StudioCore): NonNullable<NativeSessionsDeps["presence"]> {
+  const account = genexAccountFor(studio);
+  const plays = nativePlays({
+    root: studio.layout.installedGames,
+    request: networkRequest(globalThis.fetch, playOrigin.api),
+    token: account.token,
+    refused: account.refused,
+    log: (line) => studioLog.write("main", line),
+  });
+  return { started: (slug) => void plays.report(slug), ended: () => undefined };
+}
+
+/**
+ * A native game's way to Genex while it plays: its own gateway to Genex's API and relays, and a
+ * single-use sign-in ticket for it while the person's Genex account is unlocked (a guest otherwise).
+ */
+async function openGameGenex(studio: StudioCore, slug: string): Promise<GameGenex> {
+  const gateway = await startGenexGateway({
+    api: playOrigin.api,
+    relay: relayHostsOf(new URL(playOrigin.api).hostname),
+  });
+  const ticket = mintedTicket(await playCatalogFor(studio).ticket(slug, TicketDelivery.Desktop));
+  const env = { GENEX_API_URL: gateway.apiUrl, ...(ticket ? { GENEX_EMBED_TICKET: ticket } : {}) };
+  return { ports: gateway.ports, env, close: gateway.close };
 }
 
 /**
@@ -1096,7 +1211,9 @@ function playSessionsFor(studio: StudioCore): NativeSessions | null {
 async function prepareNativeGames(studio: StudioCore): Promise<void> {
   const host = thisComputer();
   if (!host || !launchesOn(host)) return;
-  if (fixtureProviders && dev?.fixture === FixtureName.NativeGames) {
+  // The fixture's builds are Mac apps, made with the Mac's own tools.
+  const macFixture = host.platform === NativePlatform.Mac && dev?.fixture === FixtureName.NativeGames;
+  if (fixtureProviders && macFixture) {
     await prepareNativeGamesFixture({
       dir: path.join(userDataRoot, "fixture-native"),
       root: studio.layout.installedGames,
@@ -1223,6 +1340,25 @@ function mentionSourcesFor(core: () => StudioCore): MentionSources {
   };
 }
 
+/** Whether a game's source holds a game, kept across launches; made on first use. */
+let playRemixReadiness: RemixReadiness | undefined;
+
+/**
+ * Whether each named game's source holds a game, so Play shows its card's Remix: genex.games' git
+ * for a real launch, yes for every game of a fixture launch's (its remix is a local stand-in).
+ */
+function playRemixReadyFor(studio: StudioCore): (slugs: readonly unknown[]) => Promise<Record<string, boolean>> {
+  const readiness = playRemixReadinessFor(studio);
+  return (slugs) => readyFor(slugs, readiness, playCatalogFor(studio));
+}
+
+/** Whether one source holds a game: genex.games' git, or yes for a fixture launch's stand-ins. */
+function playRemixReadinessFor(studio: StudioCore): Pick<RemixReadiness, "ready"> {
+  if (fixtureNativePolicy) return { ready: async () => true };
+  playRemixReadiness ??= gitRemixReadiness(path.join(userDataRoot, "play-remix-ready.json"), studio.layout.scratch);
+  return playRemixReadiness;
+}
+
 /** A Play game's public source as a new game of the person's own; answers its library name. */
 function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
   return remixGame(world, {
@@ -1240,6 +1376,7 @@ function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
       if (game) await studio.builds.ensure({ project: name, dir: game.dir, shape: game.shape, guarded: true });
     },
     progress: (progress) => pushUiEvent({ type: UiEvent.PlayRemix, payload: { slug: world.slug, ...progress } }),
+    log: (message) => studioLog.write("main", message),
   });
 }
 
@@ -1289,7 +1426,8 @@ function signInToGenex(studio: StudioCore): void {
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
-    gallery: playCatalogFor(studio),
+    // The viewer's Remix shows only for a game whose source holds a game, as a card's does.
+    gallery: withReadyRemix(playCatalogFor(studio), playRemixReadinessFor(studio)),
     emit: (payload) => pushUiEvent({ type: UiEvent.PlayViewer, payload }),
     openExternal: (url) => {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);
@@ -1300,6 +1438,7 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
     barPage: path.join(distRoot, "renderer", "play-bar.html"),
     barPreload: path.join(distRoot, "preload", "play-bar.cjs"),
+    barArguments: pageLanguageArguments,
     comments: playCommentsFor(studio),
     ...(playInstallsFor(studio) ? { nativeApp: nativeAppFor(studio) } : {}),
     coin: playCoinFor(studio),
@@ -1449,7 +1588,7 @@ async function openOutside(studio: StudioCore, win: BrowserWindow, raw: string):
   await dialog
     .showMessageBox(win, {
       type: "warning",
-      message: MESSAGE.linkNotOpened,
+      message: MESSAGE.linkNotOpened(),
       detail: `${raw}\n\n${problem}`,
     })
     .catch(() => {});
@@ -1562,9 +1701,9 @@ function recoverPage(win: BrowserWindow, cause: string, step: PageRecovery): voi
 async function askAfterCrashes(): Promise<void> {
   const { response } = await dialog.showMessageBox({
     type: "error",
-    message: MESSAGE.keepsCrashing,
-    detail: MESSAGE.keepsCrashingDetail,
-    buttons: [MESSAGE.reload, MESSAGE.quit],
+    message: MESSAGE.keepsCrashing(),
+    detail: MESSAGE.keepsCrashingDetail(),
+    buttons: [MESSAGE.reload(), MESSAGE.quit()],
     defaultId: 0,
     cancelId: 0,
   });
@@ -1643,6 +1782,60 @@ function bootFeedbackSources(): FeedbackSources {
   };
 }
 
+/** The data folder's channels: the real choices, or the data-folder fixture's stand-ins. */
+function dataFolderIpc(studio: StudioCore): DataFolderIpcDeps {
+  if (!fixtureProviders || dev?.fixture !== FixtureName.DataFolder)
+    return { choices: dataFolderChoices(studio), window: () => window };
+  return { choices: fixtureDataFolder(), window: () => window, pick: async () => FIXTURE_DATA_FOLDER.picked };
+}
+
+/**
+ * The data-folder fixture: Storage shows a Windows data folder as movable, a pick finds the
+ * stand-in drive good, and Move and restart shows the start window moving the files. Nothing is
+ * read, written or moved.
+ */
+function fixtureDataFolder(): DataFolderChoices {
+  const { current, to, bytes, done } = FIXTURE_DATA_FOLDER;
+  return {
+    state: () => ({ dir: current, movable: true, failed: null, kept: [] }),
+    choose: async () => ({ ok: true, to, bytes }),
+    move: async () => {
+      bootGate.moving({ to, done, total: bytes });
+      setImmediate(() => void reshowBoot());
+      return { ok: true, to, bytes };
+    },
+  };
+}
+
+/** Settings → Storage's data folder: the person's own launch on Windows may move it, with Genex restarting to do so. */
+function dataFolderChoices(studio: StudioCore) {
+  const windows = process.platform === StudioPlatform.Windows;
+  return createDataFolderChoices({
+    platform: process.platform,
+    normal: isNormalLaunch(process.argv),
+    defaultDir: defaultData,
+    dataDir: userDataRoot,
+    occupied: async () => [
+      studio.layout.gamesRoot,
+      ...(await studio.games.list()).map((game) => game.dir),
+      installRoot(process.execPath),
+    ],
+    // What a quit would ask about (a run, a paused build's planned resume), or a reply under way.
+    busy: () => quitPrompt(true) !== null || studio.budget.userInFlight > 0,
+    drive: windows ? windowsDriveFacts : async () => null,
+    lockDown: windows ? lockDownFolder : async () => {},
+    measure: () => measureData(userDataRoot, samePath(userDataRoot, defaultData) ? [DATA_FOLDER_FILE] : []),
+    free: freeBytes,
+    // After the answer reaches the window: quitting stops the core, the relaunch moves the files.
+    restart: () =>
+      setImmediate(() => {
+        app.relaunch();
+        app.quit();
+      }),
+    log: (line) => studioLog.write("main", line),
+  });
+}
+
 /** The coding-CLI installs Settings offers: busy while a sign-in, a run or a turn is under way. */
 function cliInstalls(studio: StudioCore) {
   return createCliInstalls({
@@ -1687,12 +1880,14 @@ function playIpcDeps(studio: StudioCore): PlayIpcDeps {
   return {
     gallery: playCatalogFor(studio),
     remix: (world) => remixPlayGame(studio, world),
+    remixReady: playRemixReadyFor(studio),
     viewer: () => playView,
     ...playAccountFor(studio),
     manage: playManageFor(studio),
     web: playOrigin.web,
     share: popShareMenu,
     installs: () => playInstallsFor(studio),
+    here: () => thisComputer() ?? null,
     sessions: () => playSessionsFor(studio),
     reveal: (file) => shell.showItemInFolder(file),
     gameLinks: gameLinkQueue,
@@ -1733,7 +1928,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });
   registerStorageIpc(handle, { core: studio });
   registerJobsIpc(handle, { core: studio, openExternal: (url) => shell.openExternal(url) });
-  registerModelsIpc(handle, { core: studio, subscription, pushUiEvent, openRouterLogin });
+  registerModelsIpc(handle, { core: studio, subscription, pushUiEvent, openRouterLogin, usage: providerUsage });
   registerPreviewIpc(handle, {
     core: studio,
     preview: () => preview,
@@ -1773,6 +1968,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   });
   registerCliInstallIpc(handle, cliInstalls(studio));
   registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel, web: playOrigin.web });
+  registerDataFolderIpc(handle, dataFolderIpc(studio));
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, playIpcDeps(studio));
   const { library } = playAccountFor(studio);
@@ -1790,10 +1986,22 @@ async function main(): Promise<void> {
     await runSelfTestAndExit();
     return;
   }
+  if (quitsAtOnce(dataLaunch)) {
+    await quitTakenLaunch({
+      ready: () => app.whenReady(),
+      tell: async (message, button) => {
+        await dialog.showMessageBox({ type: "info", message, buttons: [button] });
+      },
+      exit: (code) => app.exit(code),
+    });
+    return;
+  }
   if (!claimTheMac()) return;
   answerGameLinks();
   await app.whenReady();
   performanceRecorder.mark("app-ready");
+  // The computer's language until the core reads the saved choice.
+  await applyMainLanguage(SYSTEM_LANGUAGE);
   const bootHandle = createIpcHandle(ipcMain, { fixture: fixtureNativePolicy, isStudioUi: isStudioWindow });
   registerBootIpc(bootHandle, {
     gate: bootGate,
@@ -1811,7 +2019,8 @@ async function main(): Promise<void> {
       arch: process.arch,
     }),
   });
-  addCheckForUpdatesMenuItem();
+  setAppMenu();
+  if (await settleDataFolder()) return;
   // Before the core: a start that fails, waits on Set up or never ends (a Windows start can take
   // minutes) still finds the release that fixes it, and its screen offers the relaunch.
   setTimeout(checkForUpdates, firstCheckDelay(process.argv)).unref();
@@ -1821,6 +2030,105 @@ async function main(): Promise<void> {
     return;
   }
   if (!dev) app.on("activate", reopenWindow);
+}
+
+/**
+ * A launch that moves Genex's data, or cannot find it, does only that: the start window shows the
+ * move, then Genex starts again; or it names the missing folder, with Try again and Quit. True
+ * when this launch was one of those.
+ */
+async function settleDataFolder(): Promise<boolean> {
+  if (dataLaunch.kind === DataLaunchKind.Move) {
+    await moveDataAndRestart(dataLaunch.from, dataLaunch.to);
+    return true;
+  }
+  if (dataLaunch.kind === DataLaunchKind.Missing) {
+    await waitForDataFolder(dataLaunch.dir);
+    return true;
+  }
+  // Only the person's own launch tends the normal profile's record: a developer, test or smoke
+  // launch runs on a folder of its own and must never repair or clean up the real one.
+  if (!isNormalLaunch(process.argv)) return false;
+  if (dataLaunch.kind === DataLaunchKind.Moved || dataLaunch.kind === DataLaunchKind.Default) {
+    const log = (line: string) => studioLog.write("main", line);
+    // A move Genex closed after recording repairs its links before anything reads them, and only
+    // then may what it left in the old folder go.
+    await finishMove(defaultData, dataLaunch.dir, { log, ...hostGitForMoves() }).catch((error: unknown) =>
+      log(`data folder: finishing the move failed: ${errorMessage(error)}`),
+    );
+    void removeLeftover(defaultData, dataLaunch.dir, log);
+  }
+  return false;
+}
+
+/** The host's own Git for repairing build copies after a move (Windows); elsewhere the PATH's. */
+function hostGitForMoves(): { hostGit?: () => Promise<boolean> } {
+  return process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {};
+}
+
+/** Move the data with the start window showing how far, then start Genex again; quitting waits for it. */
+async function moveDataAndRestart(from: string, to: string): Promise<void> {
+  bootGate.moving({ to, done: 0, total: 0 });
+  const win = await createSetupWindow();
+  let moving = true;
+  // Closing the window must not stop a copy half-way; once the move is over it may close.
+  win.on("close", (event) => {
+    if (moving) event.preventDefault();
+  });
+  const lines: string[] = [];
+  const log = (line: string) => {
+    lines.push(line);
+    studioLog.write("main", line);
+  };
+  const outcome = await runDataMove({
+    from,
+    to,
+    defaultDir: defaultData,
+    progress: (progress) => bootGate.moving(progress),
+    log,
+    ...hostGitForMoves(),
+  }).catch((error: unknown): DataMoveOutcome => {
+    log(`data folder: the move stopped: ${errorMessage(error)}`);
+    return { moved: false, problem: DataFolderProblem.Failed, stranded: [] };
+  });
+  moving = false;
+  // The lines go in the log of the folder Genex now starts from, where a report reads them. A move
+  // that stopped part-way writes nothing in either folder: the next start carries it on.
+  const logDir = moveLogDir(outcome, from, to);
+  if (logDir) {
+    const kept = openStudioLog(path.join(logDir, "logs"), { home: app.getPath("home") });
+    for (const line of lines) kept.write("main", line);
+  }
+  const restart = async () => {
+    app.relaunch();
+    app.exit(0);
+  };
+  // Part of the data in each folder, or a move that ended without saying: no restart into it on
+  // its own (that could repeat for ever); the window offers Try again, which carries it on, and Quit.
+  if (!outcome.moved && outcome.stranded) bootGate.moveStopped(to, MESSAGE.moveStopped(), restart);
+  else await restart();
+}
+
+/** The data folder a moving launch's log lines go to: the one Genex starts from, or none while the move is unfinished. */
+function moveLogDir(outcome: DataMoveOutcome, from: string, to: string): string | null {
+  if (outcome.moved) return to;
+  return outcome.stranded ? null : from;
+}
+
+/** Name the missing data folder with Try again (Genex starts again once it is there) and Quit. */
+async function waitForDataFolder(dir: string): Promise<void> {
+  studioLog.write("main", `data folder: ${dir} is not there`);
+  holdOnMissingData(dir);
+  window = await createSetupWindow();
+}
+
+/** The start window names the missing folder; Try again starts Genex again once it is there. */
+function holdOnMissingData(dir: string): void {
+  bootGate.dataMissing(dir, async () => {
+    if (!existsSync(dir)) throw new Error(MESSAGE.dataFolderStillMissing(dir));
+    app.relaunch();
+    app.exit(0);
+  });
 }
 
 /** Is `event` from the studio window's own top frame (not a plugin page or a game)? */
@@ -1871,24 +2179,33 @@ function checkForUpdates(): void {
 }
 
 /**
- * Check for Updates… in the default menu: the app menu after About on macOS, Help elsewhere.
- * Electron's default menu stays as it is otherwise.
+ * Redraw what main drew in the old language: the menu, and the studio pages it keeps loaded (Play's
+ * bar). The studio window reloads itself when it switches.
  */
-function addCheckForUpdatesMenuItem(): void {
-  const menu = Menu.getApplicationMenu();
-  if (!menu) return;
-  const host = process.platform === "darwin" ? menu.items[0] : menu.items.find((item) => item.role === "help");
-  if (!host?.submenu) return;
-  const item = new MenuItem({ label: MESSAGE.checkForUpdates, click: () => void answerUpdateCheck() });
-  host.submenu.insert(process.platform === "darwin" ? 1 : host.submenu.items.length, item);
-  Menu.setApplicationMenu(menu);
+function languageChanged(): void {
+  setAppMenu();
+  playView?.languageChanged();
+}
+
+/**
+ * The application menu in the active language (`app-menu.ts`): Electron's default menu with Check
+ * for Updates… after About on macOS and in Help elsewhere.
+ */
+function setAppMenu(): void {
+  const template = appMenuTemplate({
+    platform: process.platform,
+    appName: app.name,
+    checkForUpdates: () => void answerUpdateCheck(),
+    macLanguage: matchLocale(systemLanguages()),
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 /** The menu's Check for Updates: ask, then say what it found and offer the one next step. */
 async function answerUpdateCheck(): Promise<void> {
   const note = updateCheckNote(await updateChecker.check());
-  const actLabel = note.act === UpdateAction.Download ? MESSAGE.download : MESSAGE.restart;
-  const buttons = note.act ? [actLabel, MESSAGE.later] : [MESSAGE.ok];
+  const actLabel = note.act === UpdateAction.Download ? MESSAGE.download() : MESSAGE.restart();
+  const buttons = note.act ? [actLabel, MESSAGE.later()] : [MESSAGE.ok()];
   const { response } = await dialog.showMessageBox({ message: note.message, detail: note.detail, buttons });
   if (response !== 0 || !note.act) return;
   if (note.act === UpdateAction.Download) updates.download();
@@ -1916,10 +2233,13 @@ function quitPrompt(relaunch: boolean): { message: string; keep: string } | null
   const resumeAt = core?.autoResumeAt ?? null;
   const question = quitQuestion({ runActive: keepAwake.held, resumeAt, confirmed: quitConfirmed });
   if (question === QuitQuestion.RunActive)
-    return { message: relaunch ? MESSAGE.restartDuringRun : MESSAGE.quitDuringRun, keep: MESSAGE.keepRunning };
+    return {
+      message: relaunch ? MESSAGE.restartDuringRun() : MESSAGE.quitDuringRun(),
+      keep: MESSAGE.keepRunning(),
+    };
   if (question !== QuitQuestion.ResumePending || resumeAt === null) return null;
-  const time = new Date(resumeAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return { message: relaunch ? MESSAGE.restartWithResume(time) : MESSAGE.quitWithResume(time), keep: MESSAGE.cancel };
+  const time = new Date(resumeAt).toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" });
+  return { message: relaunch ? MESSAGE.restartWithResume(time) : MESSAGE.quitWithResume(time), keep: MESSAGE.cancel() };
 }
 
 /**
@@ -1936,7 +2256,7 @@ async function confirmUpdateRestart(): Promise<boolean> {
     const { response } = await dialog.showMessageBox({
       type: "warning",
       message: prompt.message,
-      buttons: [MESSAGE.restart, prompt.keep],
+      buttons: [MESSAGE.restart(), prompt.keep],
       defaultId: 1,
       cancelId: 1,
     });
@@ -2181,6 +2501,7 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     showFixtureAgentsFailure(userData);
     const view = requirePreview();
     if (dev && __STUDIO_DEV_BUILD__) devRuntime = await startDevRuntime(dev, studio, win, view);
+    await showFixtureDataMissing();
     return { core: studio, window: win, preview: view };
   } catch (err) {
     failStartup(err);
@@ -2202,6 +2523,13 @@ function showFixtureAgentsFailure(userData: string): void {
   showAgentsFailure(FIXTURE_AGENTS_FAILURE, async () => announceReady(userData));
 }
 
+/** The data-missing fixture: over a started studio, the window shows the stand-in drive's folder as missing. */
+async function showFixtureDataMissing(): Promise<void> {
+  if (!fixtureProviders || dev?.fixture !== FixtureName.DataMissing) return;
+  holdOnMissingData(FIXTURE_DATA_FOLDER.to);
+  await reshowBoot();
+}
+
 /** The game view `createWindow` attached; every started window has one. */
 function requirePreview(): GamePreview {
   if (!preview) throw new Error(MESSAGE.noGameView);
@@ -2220,14 +2548,14 @@ async function servePluginPanel(studio: StudioCore, request: Request): Promise<R
       },
     });
   } catch {
-    return textResponse(HttpStatus.NotFound, MESSAGE.pluginUnavailable);
+    return textResponse(HttpStatus.NotFound, MESSAGE.pluginUnavailable());
   }
 }
 
 /** A plugin's picture, as an image only: navigated to, it runs nothing and is never sniffed as anything else. */
 async function servePluginIcon(studio: StudioCore, id: string): Promise<Response> {
   const icon = await studio.plugins.icon(id);
-  if (!icon) return textResponse(HttpStatus.NotFound, MESSAGE.pluginUnavailable);
+  if (!icon) return textResponse(HttpStatus.NotFound, MESSAGE.pluginUnavailable());
   return new Response(new Uint8Array(icon.bytes), {
     headers: {
       "Content-Type": icon.type,
@@ -2355,7 +2683,7 @@ function reportStartupFailure(err: unknown): void {
     console.error("Renderer startup diagnostics", JSON.stringify(rendererConsole.slice(-20)));
     return;
   }
-  dialog.showErrorBox(MESSAGE.couldNotStart, (err as Error).stack ?? String(err));
+  dialog.showErrorBox(MESSAGE.couldNotStart(), (err as Error).stack ?? String(err));
 }
 
 /** The smoke, or one of the acceptance runs its flags choose; the exit code. */
@@ -2447,7 +2775,7 @@ app.on("before-quit", async (event) => {
       const { response } = await dialog.showMessageBox({
         type: "warning",
         message: prompt.message,
-        buttons: [MESSAGE.quit, prompt.keep],
+        buttons: [MESSAGE.quit(), prompt.keep],
         defaultId: 1,
         cancelId: 1,
       });

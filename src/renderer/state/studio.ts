@@ -17,6 +17,7 @@ import type { ComposerSendOptions } from "../../shared/composer.ts";
 import type { GameUpdate } from "../../shared/game-library.ts";
 import { HarnessState } from "../../shared/protocol.ts";
 import type { GameName } from "../../shared/game-project.ts";
+import { t } from "../../shared/i18n.ts";
 import type { Bootstrap, ConversationRecord, GameProject, StudioApi } from "../../shared/studio-api.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { shouldWelcome } from "../onboarding/state.ts";
@@ -58,6 +59,7 @@ import {
 } from "./launch.ts";
 import { createLayoutStore, stageViewChosen, type LayoutStore } from "./layout.ts";
 import { createModelPickerStore, type ModelPickerStore } from "./model-picker.ts";
+import { createProviderUsageStore, type ProviderUsageStore, usageReported } from "./provider-usage.ts";
 import {
   createLibraryStore,
   delegationChanged,
@@ -92,6 +94,8 @@ import {
   harnessDown,
   isGameThread,
   projectOf,
+  Room,
+  roomOf,
   stageProjectSet,
   statusBootstrapped,
   personFirstReported,
@@ -113,7 +117,9 @@ export const EVENT_POLL_MS = 3 * SECOND_MS;
 /** What a launch says when it stops before making a game. */
 const MESSAGE = {
   outOfUsage: (why: string) =>
-    `${why.replace(/[\s.]+$/, "")}. No game was made: send it again after the reset, from another account or with another model.`,
+    t("{why}. No game was made: send it again after the reset, from another account or with another model.", {
+      why: why.replace(/[\s.]+$/, ""),
+    }),
 } as const;
 
 /** An agent screen that went away. */
@@ -155,6 +161,8 @@ export interface Studio {
   readonly launch: LaunchStore;
   /** Which subscription models the model picker lists, as set in Settings. */
   readonly modelPicker: ModelPickerStore;
+  /** The subscriptions' plan limits as main keeps and pushes them (`provider-usage.ts`). */
+  readonly providerUsage: ProviderUsageStore;
   /** A new version of the app waiting for a restart. */
   readonly update: UpdateStore;
   /** Whether the open studio's agents started, and the sidebar's Try again and report when not. */
@@ -235,6 +243,7 @@ interface Stores {
   readonly layout: LayoutStore;
   readonly launch: LaunchStore;
   readonly modelPicker: ModelPickerStore;
+  readonly providerUsage: ProviderUsageStore;
   readonly update: UpdateStore;
   readonly agentsStart: AgentsStartStore;
 }
@@ -269,6 +278,7 @@ function createStores(
     layout: createLayoutStore(storage),
     launch: createLaunchStore(),
     modelPicker: createModelPickerStore(storage),
+    providerUsage: createProviderUsageStore(api),
     update: createUpdateStore(),
     agentsStart: createAgentsStartStore(api),
   };
@@ -292,16 +302,22 @@ interface StageFollower {
   threadsChanged(): void;
   /** Run a change that loads the preview itself, so the follower leaves that one change alone. */
   whileLoading(project: string, change: () => void): void;
+  /** Main says what Live loaded (`preview.identity`): the game it holds, none after a failed load. */
+  liveLoaded(identity: { project: string | null; error: string | null } | null | undefined): void;
+  /** Whether Live still holds this game's page from before: going back to it needs no new load. */
+  holds(project: string): boolean;
 }
 
 /**
  * The preview follows the game on the stage: whenever it changes to a game, main is asked to
  * load it. A command that loads the preview itself (opening a game) says so, and the follower
- * leaves that one change alone.
+ * leaves that one change alone. Live keeps its page while the stage is out of sight (home, Play),
+ * paused, so a game it still holds comes back as it was left rather than loading from the start.
  */
 function stageFollower(api: StudioApi, threads: ThreadsStore, storage: KeyValueStorage | null): StageFollower {
   let followed: string | null = projectOf(threads.getState());
   let loading: string | null = null;
+  let held: string | null = null;
   let lastGame = threads.getState().lastGameThreadId;
   const follow = (): void => {
     const project = projectOf(threads.getState());
@@ -309,7 +325,7 @@ function stageFollower(api: StudioApi, threads: ThreadsStore, storage: KeyValueS
     followed = project;
     if (!project) return;
     writeText(STORAGE_KEYS.reviewProject, project, storage);
-    if (project !== loading) void api.loadPreview(project);
+    if (project !== loading && project !== held) void api.loadPreview(project);
   };
   const rememberLastGame = (): void => {
     const next = threads.getState().lastGameThreadId;
@@ -328,6 +344,10 @@ function stageFollower(api: StudioApi, threads: ThreadsStore, storage: KeyValueS
       change();
       loading = null;
     },
+    liveLoaded(identity) {
+      held = identity && !identity.error ? identity.project : null;
+    },
+    holds: (project) => held === project,
   };
 }
 
@@ -381,10 +401,13 @@ function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage |
 
 /** The events that change a store directly, beyond the reads they ask for. */
 function applyUiEvent(
-  { agentScreens, threads, layout, library, update, play, agentsStart }: Stores,
+  { agentScreens, threads, layout, library, update, play, agentsStart, providerUsage }: Stores,
   event: UiEvent,
 ): void {
   switch (event.type) {
+    case UiEvent.ProviderUsage:
+      providerUsage.setState((state) => usageReported(state, event.payload.reports), true);
+      break;
     case UiEvent.PlayViewer:
       // The bar's Remix closed the viewer: the copy is made of the game it showed, as a card's is.
       if (remixClosed(play.getState().viewer, event.payload)) void play.remixViewed();
@@ -479,6 +502,11 @@ async function enterProject(
   { beforeOpen, open = (select) => select() }: OpenHooks = {},
 ): Promise<ConversationRecord | null> {
   const { api, stores, storage, notify } = ctx;
+  // Opening the game already on the stage reloads it, as the sidebar always did; coming back to the
+  // game Live still holds (from home, Play or Studio) shows it as it was left.
+  const threadsNow = stores.threads.getState();
+  const onStage = roomOf(threadsNow) === Room.Build && projectOf(threadsNow) === name;
+  const reload = onStage || !ctx.follower.holds(name);
   let record: ConversationRecord;
   try {
     record = await api.threadForGame(name);
@@ -497,6 +525,10 @@ async function enterProject(
     }),
   );
   writeText(STORAGE_KEYS.reviewProject, name, storage);
+  if (!reload) {
+    void stores.library.refreshGames();
+    return record;
+  }
   void api
     .loadPreview(name)
     .then(() => stores.library.refreshGames())
@@ -505,7 +537,7 @@ async function enterProject(
 }
 
 /** Untitled game: what a game is called when even naming it failed. */
-const UNTITLED_GAME = "Untitled game";
+const UNTITLED_GAME = t("Untitled game");
 let launches = 0;
 
 /**
@@ -592,6 +624,7 @@ function startStores(ctx: StudioContext, bootstrap: () => Promise<void>, timers:
     for (const record of previous.records) if (!ids.has(record.id)) stores.eventLog.forgetThread(record.id);
   });
   const off = api.onEvent((event) => {
+    if (event.type === UiEvent.PreviewIdentity) follower.liveLoaded(event.payload);
     applyUiEvent(stores, event);
     refreshAfter(stores, event);
   });

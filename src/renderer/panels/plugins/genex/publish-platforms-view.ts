@@ -52,6 +52,23 @@ export function webOfferFor(facts: readonly FactRef[]): WebOffer {
   return facts.some((fact) => fact.id === CoreFact.UnrealProject) ? WebOffer.Unavailable : WebOffer.Quiet;
 }
 
+/** The rows of each computer's own system, in `process.platform` spelling. */
+const HOST_TARGET: Readonly<Record<string, PublishTarget>> = {
+  darwin: PublishTarget.Mac,
+  win32: PublishTarget.Windows,
+  linux: PublishTarget.Linux,
+};
+
+/**
+ * The only system a game's apps are made on here, or null when the agent makes any: an Unreal game
+ * is packaged on the system it is for (Unreal makes no Mac app on Windows, nor a Windows or Linux one
+ * on a Mac), so the other rows say where it is made instead of offering "Make with agent".
+ */
+export function appsMadeOnly(facts: readonly FactRef[], hostPlatform: string): PublishTarget | null {
+  if (!facts.some((fact) => fact.id === CoreFact.UnrealProject)) return null;
+  return HOST_TARGET[hostPlatform] ?? null;
+}
+
 /** One platform's row as the dialog draws it. */
 export interface PlatformRow {
   target: PublishTarget;
@@ -63,7 +80,7 @@ export interface PlatformRow {
   end: PlatformEnd;
 }
 
-type NativeTarget = typeof PublishTarget.Mac | typeof PublishTarget.Windows;
+type NativeTarget = Exclude<PublishTarget, typeof PublishTarget.Web>;
 
 const isNative = (row: PublishPlatform): row is PublishPlatform & { target: NativeTarget } =>
   row.target !== PublishTarget.Web;
@@ -107,15 +124,27 @@ function webWords(row: PublishPlatform, offer: WebOffer): { detail: string; end:
   return { detail, end: PlatformEnd.None };
 }
 
+/** Whether a native row is an app this computer can't make (`appsMadeOnly`) and has none ready to send. */
+const madeElsewhere = (row: PublishPlatform, madeOnly: PublishTarget | null): boolean =>
+  madeOnly !== null && row.target !== madeOnly && row.state !== PublishPlatformState.Ready;
+
+/** A native row this computer can't make: where it is made while missing, else why it is old; no press. */
+const elsewhereWords = (row: PublishPlatform & { target: NativeTarget }, now: number) => ({
+  detail: row.state === PublishPlatformState.Missing ? WORDS.elsewhere[row.target] : nativeDetail(row, now),
+  end: PlatformEnd.None,
+});
+
 /**
  * The rows in the order they come, each as words; `native` is how the last Publish's apps went,
- * `webOffer` what a game with no web version is offered for one.
+ * `webOffer` what a game with no web version is offered for one, `madeOnly` the one system this
+ * computer makes the game's apps for (`appsMadeOnly`).
  */
 export function platformRows(
   platforms: readonly PublishPlatform[],
   now: number,
   native?: GenexNativeRecord,
   webOffer: WebOffer = WebOffer.Quiet,
+  madeOnly: PublishTarget | null = null,
 ): PlatformRow[] {
   return platforms.map((row) => {
     if (!isNative(row))
@@ -126,13 +155,15 @@ export function platformRows(
         size: null,
         state: row.state,
       };
+    const words = madeElsewhere(row, madeOnly)
+      ? elsewhereWords(row, now)
+      : { detail: nativeDetail(row, now), end: nativeEnd(row, native) };
     return {
       target: row.target,
       name: WORDS.name[row.target],
-      detail: nativeDetail(row, now),
+      ...words,
       size: row.bytes > 0 && row.state !== PublishPlatformState.Missing ? sizeWords(row.bytes) : null,
       state: row.state,
-      end: nativeEnd(row, native),
     };
   });
 }
@@ -144,7 +175,7 @@ export function platformRows(
 export const listsPlatforms = (platforms: readonly PublishPlatform[], engineGame: boolean): boolean =>
   engineGame || platforms.some((row) => isNative(row) && row.state !== PublishPlatformState.Missing);
 
-/** The players of the apps Publish sends: "Mac", "Windows". */
+/** The players of the apps Publish sends: "Mac", "Windows", "Linux". */
 const sendingPlayers = (platforms: readonly PublishPlatform[]): string[] =>
   platforms.filter((row) => isNative(row) && row.uploads).map((row) => playersOf(row.target));
 
@@ -160,7 +191,7 @@ const APP_ENGINE_FACTS: ReadonlySet<string> = new Set([
   CoreFact.UnrealProject,
 ]);
 
-/** Whether a game is made in an engine that builds Mac and Windows apps (it gets Publish for them). */
+/** Whether a game is made in an engine that builds Mac, Windows and Linux apps (it gets Publish for them). */
 export const makesApps = (facts: readonly FactRef[]): boolean => facts.some((fact) => APP_ENGINE_FACTS.has(fact.id));
 
 /** The main press of a game with only apps: "Publish Mac app", "Publish Mac and Windows apps". */
@@ -178,6 +209,17 @@ export function listingLine(
   if (!onlyApps(platforms) || !native || native.sending || native.sent.length === 0) return null;
   if (native.listing?.state === GenexListingState.Held) return WORDS.held;
   return native.listing ? null : WORDS.notListed;
+}
+
+/**
+ * Whether Publish has nothing new to send for a game with only apps: every app it would send is on
+ * Genex already, built no later than it went. Its press would only send them again, so it is hidden.
+ */
+export function appsUpToDate(platforms: readonly PublishPlatform[], native: GenexNativeRecord | undefined): boolean {
+  if (!onlyApps(platforms) || !native || native.sending) return false;
+  return platforms
+    .filter((row) => isNative(row) && row.uploads)
+    .every((row) => sendEnd(row, native) === PlatformEnd.Sent);
 }
 
 /** Whether the game has no web build. */
@@ -238,7 +280,7 @@ export function failureLines(platforms: readonly PublishPlatform[], native: Gene
     });
 }
 
-/** The players a native row is for: "Mac", "Windows". */
+/** The players a native row is for: "Mac", "Windows", "Linux". */
 const playersOf = (target: PublishTarget): string => (target === PublishTarget.Web ? "" : WORDS.players[target]);
 
 /** What "Make with agent" sends through the game's chat for a platform. */

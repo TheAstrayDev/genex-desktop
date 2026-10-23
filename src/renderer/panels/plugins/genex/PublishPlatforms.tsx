@@ -1,9 +1,9 @@
 /**
- * The Publish dialog's platforms (canvas board "Publish"): the web, Mac and Windows rows read from
+ * The Publish dialog's platforms (canvas board "Publish"): the web, Mac, Windows and Linux rows read from
  * the game folder, each with what its build runs on, when it was built and its size. An app not made
  * yet, and a Unity or Godot game's web version, offers "Make with agent", which sends the ask through
  * the game's chat at once and keeps the dialog open, the row then saying it was asked; an Unreal
- * game's web row says it has none. A ready app goes with Publish once its web build is
+ * game's web row says it has none, and its rows for other systems say where they are packaged. A ready app goes with Publish once its web build is
  * public: the line under the rows says so, and its row then says it is being sent, is on Genex, or
  * was not sent (with why, under the rows). While Studio's Genex CLI cannot send apps, a built one
  * says "Coming soon" and its players get the web version. A web game with no app shows none of this.
@@ -11,13 +11,16 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import type { GenexNativeRecord } from "../../../../shared/genex.ts";
+import { t } from "../../../../shared/i18n.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { composeInChat } from "../../../compose-in-chat.ts";
+import { hostPlatform } from "../../../platform.ts";
 import { useLibrary } from "../../../state/hooks.ts";
 import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { PUBLISH_PLATFORM_WORDS } from "../../../words.ts";
 import {
+  appsMadeOnly,
   failureLines,
   listingLine,
   listsPlatforms,
@@ -39,6 +42,7 @@ const MARK: Readonly<Record<PublishTarget, IconName>> = {
   [PublishTarget.Web]: "globe",
   [PublishTarget.Mac]: "apple",
   [PublishTarget.Windows]: "windows",
+  [PublishTarget.Linux]: "linux",
 };
 
 /** The game folder's platforms, read once as the dialog opens; null until read or when unreadable. */
@@ -62,9 +66,9 @@ export function usePublishPlatforms(project: string): PublishPlatform[] | null {
 /** The quiet words a row ends with, by what it says: each with its words for a screen reader. */
 const NOTE: Partial<Record<PlatformEnd, { text: string; label: (name: string) => string }>> = {
   [PlatformEnd.Soon]: { text: WORDS.soon, label: WORDS.soonLabel },
-  [PlatformEnd.Sending]: { text: WORDS.sending, label: (name) => `${name}: ${WORDS.sending}` },
+  [PlatformEnd.Sending]: { text: WORDS.sending, label: (name) => t("{name}: {state}", { name, state: WORDS.sending }) },
   [PlatformEnd.Sent]: { text: WORDS.sent, label: WORDS.sentLabel },
-  [PlatformEnd.Failed]: { text: WORDS.failed, label: (name) => `${name}: ${WORDS.failed}` },
+  [PlatformEnd.Failed]: { text: WORDS.failed, label: (name) => t("{name}: {state}", { name, state: WORDS.failed }) },
 };
 
 /** The agent's presses a row may end with: making an app, or building one again. */
@@ -183,7 +187,7 @@ export function PublishPlatforms({
   return (
     <div className="genex-publish-platforms" data-genex-publish-platforms>
       <ul aria-label={WORDS.label}>
-        {platformRows(platforms, Date.now(), native, webOffer).map((row) => (
+        {platformRows(platforms, Date.now(), native, webOffer, appsMadeOnly(facts ?? [], hostPlatform())).map((row) => (
           <Row key={row.target} row={row} asked={asked.has(row.target)} onMake={make} />
         ))}
       </ul>
