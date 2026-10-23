@@ -81,9 +81,11 @@ to Roblox.
    well, frame a better view and call it again.
 3. Read the game's ids through the Roblox Studio connection (`return game.GameId, game.PlaceId`) and
    open `https://create.roblox.com/dashboard/creations/experiences/<GameId>/places/<PlaceId>/icon`
-   in the person's browser (Genex asks them for that app). Studio is in front now: click a visible
-   part of the browser's window first and take a screenshot; type the address only once the browser
-   is in front, never into Studio (its viewport takes letters as camera keys). A sign-in page there
+   in the person's browser: Genex asks them for that app on a card when you first use it, in this
+   turn, whatever an earlier turn was told, so use it rather than handing them the steps. Studio is
+   in front now: click a visible part of the browser's window first and take a screenshot; type the
+   address only once the browser is in front, never into Studio (its viewport takes letters as
+   camera keys). A sign-in page there
    is a stop (rules above).
 4. On **Icon**, upload the icon and save. On **Thumbnails** (in the page's sidebar), add the
    thumbnail, tick it **Active** and save. In each file dialog, go straight to the path the answer
