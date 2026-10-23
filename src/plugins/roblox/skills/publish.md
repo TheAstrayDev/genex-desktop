@@ -27,7 +27,8 @@ the turn with `publish-result` (below), so the card shows how it ended.
   Stop button don't mean a test runs. If a test really runs, end it yourself with Studio's Stop
   (Shift+F5 with Studio in front, or the Test tab's Stop button) and go on. Wait while Studio opens or reloads the place (its window title
   names the place once it is ready), and close what Studio itself puts in the way: a tip, a "what's
-  new" note, the Start Page, a panel over the menu bar.
+  new" note, the Start Page, a panel over the menu bar, and the "Auto Recovery File Found" question
+  after a crash (click **Ignore**: Studio keeps the recovery file in its AutoSaves folder).
 - **Real pointer clicks with Studio in front.** Studio's menus report their items as disabled to
   accessibility and its dialogs have no accessibility actions: bring the window of this game's
   place to the front (its title names the place), then click with the pointer and type into the
