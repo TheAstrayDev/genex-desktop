@@ -58,9 +58,11 @@ connection's `execute_luau`:
 1. Read that time once before you publish.
 2. In Studio's menu bar, click **File**, then **Publish to Roblox**.
 3. If Studio asks to confirm, confirm the publish; anything else is a stop (rules above).
-4. Read the time again every few seconds for up to a minute. Once it is later than the first one,
-   the update is on Roblox: call `publish-result` with `published: true`, then say so in one line.
-   If it never changes, it was not published: say so (below), and never click Publish twice.
+4. Read the time again every few seconds for up to half a minute. Once it is later than the first
+   one, the update is on Roblox: call `publish-result` with `published: true`, then say so in one
+   line. If it hasn't changed, call `publish-result` with `published: false` and what you saw: that
+   time moves only when Studio saves, so Genex also reads Studio's own log of the publish, and its
+   answer says whether the update went through. Go by that answer, and never click Publish twice.
 5. If the game still has Roblox's default icon (its Creator Hub **Icon** page shows none of its
    own), give the game its cover (below); leave a cover it already has.
 

@@ -17,6 +17,9 @@ const YOURSELF = `Tell the person they can publish it themselves in Studio: ${PU
  */
 const END_TURN = `this chat's message "Roblox Studio asks: Publish …" hands ${PUBLISH_CLICK_PATH} to the turn that answers it, with computer control. If that message is already in front of you in this turn, you are that turn: click it now with the desktop tool, as the publish skill says. Otherwise end this turn now and don't click anything yourself.`;
 
+/** The cover step after a publish that went out. */
+const COVER = `in this same turn, give the game its cover as the publish skill says (frame Studio's view, ${agentTool(RobloxTool.CoverPictures)}, then the game's Creator Hub page in the browser): always after a first publish; after an update unless the game already has its own icon.`;
+
 export const PUBLISH_PROMPTS = {
   Started: `The person's OK is recorded: ${END_TURN}`,
   FirstStarted: (name: string) =>
@@ -33,7 +36,9 @@ export const PUBLISH_PROMPTS = {
   NoPlace: "This game doesn't build in a Roblox place yet, so there's nothing to publish.",
   ResultNoted: "Noted: the person's publishing card shows it. Say the same to them in one line.",
   /** A publish that went out: the same turn, still holding Studio, gives the game its cover. */
-  PublishedNoted: `Noted: the person's publishing card shows it. Say the same to them in one line, then, in this same turn, give the game its cover as the publish skill says (frame Studio's view, ${agentTool(RobloxTool.CoverPictures)}, then the game's Creator Hub page in the browser): always after a first publish; after an update unless the game already has its own icon.`,
+  PublishedNoted: `Noted: the person's publishing card shows it. Say the same to them in one line, then, ${COVER}`,
+  /** A publish the agent could not confirm, which Studio's own log shows went out. */
+  LoggedPublished: `Studio's own log shows this publish went through after the click, so it is on Roblox, and the person's publishing card now says it is published. Tell them so in one line (not that it is unconfirmed), then, ${COVER}`,
   NoAttempt:
     "No publish is under way for this game, so nothing was noted. Call this only in the turn that publishes, once Studio has published or you stopped for the person.",
 } as const;

@@ -6,7 +6,7 @@
  * A publish the chat never took leaves no record, and the record is read only as Genex wrote it.
  */
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import type { PluginEngineAssistAnswer } from "../../src/plugin-sdk/index.d.ts";
@@ -27,6 +27,7 @@ import {
   type RobloxPublishState,
   robloxGameUrl,
 } from "../../src/shared/roblox-publish.ts";
+import { PUBLISHED_MARK } from "../../src/plugins/roblox/studio-logs.ts";
 import { hostFor, makeGame, robloxMac } from "../helpers/roblox-mac.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -200,6 +201,35 @@ describe("publish-status and publish-result through the backend", () => {
     assert.equal(after.attempt?.phase, RobloxPublishPhase.Stopped);
     assert.equal(after.attempt?.detail, detail);
   });
+
+  it(
+    "an update the agent couldn't confirm is published once Studio's log says it went through after the press",
+    ON_A_MAC,
+    async () => {
+      for (const logged of [true, false]) {
+        const { mac, host, backend, status } = await linkedGame(true);
+        const logs = path.join(mac.deps.home, "Library", "Logs", "Roblox");
+        await mkdir(logs, { recursive: true });
+        const line = (time: number) => `${new Date(time).toISOString()},13726.228516,1ca8,6,Debug ${PUBLISHED_MARK}\n`;
+        const log = path.join(logs, "0.744.0.7441077_20261023T133155Z_Studio_24D01_last.log");
+        await writeFile(log, line(mac.deps.now() - 60_000));
+        await backend.action?.(RobloxAction.PublishUpdate, {}, host.context);
+        if (logged) await appendFile(log, line(mac.deps.now() + 2_000));
+        const detail = "Roblox's update time hadn't changed after a minute.";
+        const said = String(await backend.tool?.(RobloxTool.PublishResult, { published: false, detail }, host.context));
+        const after = await status();
+        if (logged) {
+          assert.match(said, /cover-pictures/, "it goes on to the cover");
+          assert.equal(after.attempt?.phase, RobloxPublishPhase.Published);
+          assert.equal(after.attempt?.detail, undefined, "the doubt is not shown on a published card");
+        } else {
+          assert.doesNotMatch(said, /cover/, "a publish from before the press proves nothing");
+          assert.equal(after.attempt?.phase, RobloxPublishPhase.Stopped);
+          assert.equal(after.attempt?.detail, detail);
+        }
+      }
+    },
+  );
 
   it("stops once the chat's turn ended without the agent's word, and says to look in the chat", ON_A_MAC, async () => {
     let underWay = true;

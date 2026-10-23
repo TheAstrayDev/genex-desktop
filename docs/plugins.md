@@ -1537,8 +1537,10 @@ shows Genex's **Publish** (when no other Publish does), whose card (`RobloxPubli
 press and then follows the publish through `publish-status`: handed to the agent, in Studio, on
 Roblox, with the game's page once it is there. The publish under way is recorded
 (`publish-attempts/<game>.json`) when the chat takes it; the agent ends it with `publish-result`
-(published, or stopped with what Roblox asked, one plain line), a first publish also ends once Genex
-links the published place, and one never ended stops once the chat's turn that clicks it has ended
+(published, or stopped with what Roblox asked, one plain line; a publish it could not confirm is
+published when Studio's own log records one that went through since the press, `studio-logs.ts`,
+because Roblox's `Updated` time of a Team Create place moves with Studio's saves, not its
+publishes), a first publish also ends once Genex links the published place, and one never ended stops once the chat's turn that clicks it has ended
 (`game.engine.assisting`, saying to read the chat), or after 20 minutes. A place never published gets
 **Publish to Roblox** (`first-publish`, native, with a name field filled with the game's title; the
 agent's `first-publish {name}`, whose card shows the name in a field the person may edit,

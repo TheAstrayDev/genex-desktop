@@ -124,7 +124,7 @@ import { insertAsset } from "./insert-asset.ts";
 import { checkModelTool, importModel } from "./model-import.ts";
 import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
 import { type PlaceTarget, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
-import { signInWatch, studioLogFolder } from "./studio-logs.ts";
+import { publishedSince, signInWatch, studioLogFolder } from "./studio-logs.ts";
 import { attemptNow, endAttempt, readAttempt, writeAttempt } from "./publish-attempt.ts";
 import { RobloxPublishKind, RobloxPublishPhase, type RobloxPublishState } from "../../shared/roblox-publish.ts";
 import {
@@ -1088,14 +1088,24 @@ async function assistUnderWay(context: PluginContext): Promise<boolean> {
 
 /**
  * The publishing turn's word on how its publish ended, for Studio's publishing card: published, or
- * stopped with what Roblox asked the person. Only a publish under way is ended.
+ * stopped with what Roblox asked the person. A publish the agent could not confirm is published when
+ * Studio's own log records one that went through since the press. Only a publish under way is ended.
  */
 async function publishResult(deps: RobloxDeps, context: PluginContext, args: Record<string, unknown>) {
   if (!context.project) return PUBLISH_PROMPTS.NoAttempt;
   const storage = await context.host(PluginService.StorageRoot);
-  const end = { published: args.published === true, detail: args.detail };
+  const said = args.published === true;
+  const pressed = await readAttempt(storage, context.project);
+  const logged = !said && pressed !== undefined && (await studioLogged(deps, pressed.at));
+  const end = logged ? { published: true } : { published: said, detail: args.detail };
   if (!(await endAttempt(storage, context.project, end, deps.now()))) return PUBLISH_PROMPTS.NoAttempt;
-  return end.published ? PUBLISH_PROMPTS.PublishedNoted : PUBLISH_PROMPTS.ResultNoted;
+  if (logged) return PUBLISH_PROMPTS.LoggedPublished;
+  return said ? PUBLISH_PROMPTS.PublishedNoted : PUBLISH_PROMPTS.ResultNoted;
+}
+
+/** Whether Studio's log on this computer records a publish that went through since `since`. */
+function studioLogged(deps: RobloxDeps, since: number): Promise<boolean> {
+  return publishedSince(studioLogFolder(deps.platform, deps.env, deps.home), since).catch(() => false);
 }
 
 /**
