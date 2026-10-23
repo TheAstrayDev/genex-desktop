@@ -11,6 +11,8 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import type { PluginEngineAssistAnswer } from "../../src/plugin-sdk/index.d.ts";
 import { createRobloxBackend, RobloxAction, RobloxTool } from "../../src/plugins/roblox/backend.ts";
+import { noMomentServices } from "../../src/plugins/roblox/moment-ops.ts";
+import { PUBLISH_FLUSH_MS } from "../../src/plugins/roblox/publish.ts";
 import {
   attemptNow,
   endAttempt,
@@ -145,6 +147,28 @@ describe("publish-status and publish-result through the backend", () => {
       const again = String(await backend.tool?.(RobloxTool.PublishResult, { published: false }, host.context));
       assert.match(again, /No publish is under way/);
       assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Published, "a second word changes nothing");
+    },
+  );
+
+  it(
+    "a pressed publish sends the scripts within a limit, so a busy Studio never holds the press",
+    ON_A_MAC,
+    async () => {
+      for (const published of [true, false]) {
+        const { mac, host } = await linkedGame(published);
+        const flushes: Array<number | undefined> = [];
+        mac.deps.moments = {
+          ...noMomentServices(mac.deps.now),
+          flush: async (_game, timeoutMs) => {
+            flushes.push(timeoutMs);
+          },
+        };
+        const backend = createRobloxBackend(mac.deps);
+        const action = published ? RobloxAction.PublishUpdate : RobloxAction.FirstPublish;
+        const pressed = (await backend.action?.(action, {}, host.context)) as { started: boolean };
+        assert.equal(pressed.started, true);
+        assert.deepEqual(flushes, [PUBLISH_FLUSH_MS], action);
+      }
     },
   );
 

@@ -54,6 +54,7 @@ import { createProbes, type ProbeLuauFile, RobloxProbe } from "./probes.ts";
 import {
   firstPublish,
   firstPublishName,
+  PUBLISH_FLUSH_MS,
   type PublishAnswer,
   PublishAsker,
   type PublishDeps,
@@ -956,7 +957,7 @@ function publishDeps(deps: RobloxDeps, services: MomentServices, context: Plugin
   const game = context.project ?? "";
   const answer: PublishDeps = {
     assist: (task) => context.host(PluginService.GameEngineAssist, { task }),
-    flush: () => services.flush(game),
+    flush: () => services.flush(game, PUBLISH_FLUSH_MS),
     toEdit: () =>
       backToEdit({
         studio: deps.studio,

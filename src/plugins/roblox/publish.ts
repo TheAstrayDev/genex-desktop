@@ -22,11 +22,18 @@ import type {
   PluginEngineLink,
   PluginReview,
 } from "../../plugin-sdk/index.d.ts";
+import { SECOND_MS } from "../../shared/duration.ts";
 import { PUBLISH_PROMPTS } from "./publish-prompts.ts";
 import { MESSAGE, PUBLISH_CLICK_PATH } from "./words.ts";
 
 export { PUBLISH_CLICK_PATH };
 
+/**
+ * How long a publish waits for the game's changed scripts to reach Studio before handing over: a
+ * busy Studio (or one still reconciling after a restart) would otherwise hold the press past the
+ * plugin call's own deadline, and the publish goes on with what Studio has.
+ */
+export const PUBLISH_FLUSH_MS = 15 * SECOND_MS;
 /** A place name at most this long goes into the task whole; a longer one is cut, so the task stays one short line. */
 const MAX_TASK_NAME_CHARS = 60;
 /** The longest name Roblox takes for a new game. */
