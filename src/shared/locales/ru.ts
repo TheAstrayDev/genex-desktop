@@ -4965,6 +4965,8 @@ export default {
   "only https links open from the studio": "из Studio открываются только ссылки https",
   "only you see these": "видишь только ты",
   open: "открыть",
+  "offer themes and show a labelled panel under New Chat while enabled":
+    "предлагать темы и показывать подписанную панель под полем нового чата, пока плагин включён",
   "open a game folder inside the one you picked, not a path": "открой папку игры внутри выбранной, а не путь",
   "open sign-in in your browser": "открывать вход в браузере",
   "open sign-in pages in your browser": "открывать страницы входа в браузере",

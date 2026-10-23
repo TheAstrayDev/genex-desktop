@@ -5061,6 +5061,8 @@ export default {
   "only https links open from the studio": "seuls les liens https s’ouvrent depuis Studio",
   "only you see these": "visibles uniquement par toi",
   open: "ouvrir",
+  "offer themes and show a labelled panel under New Chat while enabled":
+    "proposer des thèmes et afficher un panneau identifié sous Nouveau chat tant que le plugin est activé",
   "open a game folder inside the one you picked, not a path":
     "ouvre un dossier de jeu à l’intérieur de celui que tu as choisi, pas un chemin",
   "open sign-in in your browser": "ouvrir la connexion dans ton navigateur",

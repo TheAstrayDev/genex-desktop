@@ -4710,6 +4710,8 @@ export default {
   "only https links open from the studio": "Studio 只能打开 https 链接",
   "only you see these": "仅你可见",
   open: "打开",
+  "offer themes and show a labelled panel under New Chat while enabled":
+    "提供主题，并在启用期间在“新聊天”下方显示带标签的面板",
   "open a game folder inside the one you picked, not a path": "请打开所选文件夹内的游戏文件夹，而不是路径",
   "open sign-in in your browser": "在浏览器中打开登录页面",
   "open sign-in pages in your browser": "在浏览器中打开登录页面",

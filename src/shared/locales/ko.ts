@@ -4875,6 +4875,8 @@ export default {
   "only https links open from the studio": "Studio에서는 https 링크만 열려요",
   "only you see these": "나만 볼 수 있어요",
   open: "열기",
+  "offer themes and show a labelled panel under New Chat while enabled":
+    "테마를 제공하고 활성화된 동안 새 채팅 아래에 이름이 표시된 패널을 표시",
   "open a game folder inside the one you picked, not a path": "경로가 아니라 고른 폴더 안의 게임 폴더를 여세요",
   "open sign-in in your browser": "브라우저에서 로그인 열기",
   "open sign-in pages in your browser": "브라우저에서 로그인 페이지 열기",

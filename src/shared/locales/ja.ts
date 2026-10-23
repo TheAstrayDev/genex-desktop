@@ -4987,6 +4987,8 @@ export default {
   "only https links open from the studio": "Studioから開けるのはhttpsリンクだけです",
   "only you see these": "あなただけに表示",
   open: "開く",
+  "offer themes and show a labelled panel under New Chat while enabled":
+    "テーマを提供し、有効な間は「新しいチャット」の下にラベル付きパネルを表示する",
   "open a game folder inside the one you picked, not a path":
     "パスではなく、選んだフォルダー内のゲームフォルダーを開いてください",
   "open sign-in in your browser": "ブラウザでサインイン画面を開く",
