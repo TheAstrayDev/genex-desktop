@@ -1,8 +1,8 @@
 /** What `cover-pictures` tells the agent that called it: where the cover's pictures are, or why there are none. */
 
-/** Where the pictures go in Studio, as the publish skill walks it. */
+/** Where the pictures go, as the publish skill walks it: Studio's Game Settings no longer take them. */
 const UPLOAD =
-  "Upload them in Roblox Studio as the publish skill says: Home › Game Settings › Basic Info, the icon under Game Icon and the thumbnail under Thumbnails, then Save. In the file dialog, go to the path directly (⌘⇧G on a Mac, the file name field on Windows), paste it and press Return.";
+  "Upload them on the game's Creator Hub page in the person's browser, as the publish skill says: https://create.roblox.com/dashboard/creations/experiences/<game.GameId>/places/<game.PlaceId>/icon for the icon, then Thumbnails in its sidebar for the thumbnail (ticked Active), saving each. In the file dialog, go to the path directly (⌘⇧G on a Mac, the file name field on Windows), paste it and press Return.";
 
 export const COVER_PROMPTS = {
   Made: (icon: string, thumbnail: string) =>

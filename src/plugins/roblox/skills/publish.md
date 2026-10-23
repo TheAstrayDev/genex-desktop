@@ -61,13 +61,15 @@ connection's `execute_luau`:
 4. Read the time again every few seconds for up to a minute. Once it is later than the first one,
    the update is on Roblox: call `publish-result` with `published: true`, then say so in one line.
    If it never changes, it was not published: say so (below), and never click Publish twice.
-5. If **Game Settings › Basic Info** shows Roblox's default picture as the game icon, give the game
-   its cover (below); leave a cover it already has.
+5. If the game still has Roblox's default icon (its Creator Hub **Icon** page shows none of its
+   own), give the game its cover (below); leave a cover it already has.
 
 ## The game's cover
 
 Roblox shows a grey placeholder until a game has its own icon and thumbnail, and Studio's publish
-sets neither. Only Studio's Game Settings take them (no API does without the person's keys).
+sets neither. Only the game's Creator Hub page takes them now (Studio's Game Settings no longer
+have them, and no API does without the person's keys), in the browser where the person is signed in
+to Roblox.
 
 1. Frame Studio's viewport on the game's most telling view: move Studio's camera there (a short
    script setting `workspace.CurrentCamera.CFrame` through the Roblox Studio connection), with
@@ -75,13 +77,16 @@ sets neither. Only Studio's Game Settings take them (no API does without the per
    its rooms, its players' space), never only sky or an empty baseplate.
 2. Call `cover-pictures`. Look at the icon and the thumbnail it answers; if they don't show the game
    well, frame a better view and call it again.
-3. In Studio, open **Home › Game Settings**, then **Basic Info**.
-4. Under **Game Icon**, upload the icon; under **Thumbnails**, add the thumbnail. In the file dialog,
-   go straight to the path the answer gave (⌘⇧G on a Mac, the file name field on Windows), paste it
-   and press Return, then open it.
-5. Click **Save**, and say in one line that the cover is set (Roblox reviews new pictures before it
-   shows them). If Studio refuses a picture or asks anything else, stop (rules above) and say what it
-   showed; the game stays published either way.
+3. Read the game's ids through the Roblox Studio connection (`return game.GameId, game.PlaceId`) and
+   open `https://create.roblox.com/dashboard/creations/experiences/<GameId>/places/<PlaceId>/icon`
+   in the person's browser (Genex asks them for that app). A sign-in page there is a stop (rules
+   above).
+4. On **Icon**, upload the icon and save. On **Thumbnails** (in the page's sidebar), add the
+   thumbnail, tick it **Active** and save. In each file dialog, go straight to the path the answer
+   gave (⌘⇧G on a Mac, the file name field on Windows), paste it and press Return, then open it.
+5. Say in one line that the cover is set (Roblox reviews new pictures before it shows them, so the
+   game page keeps its placeholder a while). If Creator Hub refuses a picture or asks anything else,
+   stop (rules above) and say what it showed; the game stays published either way.
 
 ## If it fails or stops
 

@@ -1553,8 +1553,9 @@ The same turn then gives the game its cover on Roblox, which Studio's publish ne
 first publish, or an update while the game still shows Roblox's default icon): `cover-pictures`
 (`cover-pictures.ts`) makes Studio's viewport into the game icon (512 × 512) and a thumbnail
 (1920 × 1080) in the game's `.genex/roblox-cover/` (a centred crop, scaled by `sips` or PowerShell;
-a link there is refused or replaced, never followed), and the agent uploads both in Studio's Game
-Settings › Basic Info, as the `publish` skill says.
+a link there is refused or replaced, never followed), and the agent uploads both on the game's
+Creator Hub page (Icon, then Thumbnails ticked Active) in the person's browser, as the `publish` skill
+says: Studio's Game Settings no longer take them.
 
 **After a publish** (`relink.ts`) Genex links the game to the published place by itself: Studio
 reopens a newly published place under its name ("<name> (placeId: N)"), which the game's link no

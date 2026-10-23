@@ -1,6 +1,6 @@
 /**
  * A Roblox game's cover for Roblox itself: Studio's viewport made into the game icon and a
- * thumbnail in the game's `.genex/roblox-cover/`, for the agent to upload in Studio's Game Settings.
+ * thumbnail in the game's `.genex/roblox-cover/`, for the agent to upload on the game's Creator Hub page.
  * The pictures are made by the system's own tools (`sips`, PowerShell), stood in for here; the
  * folder they go in is the game's own, never one a link leads out of.
  */
@@ -135,7 +135,11 @@ describe("cover-pictures", () => {
     const said = await coverPictures({ bound: () => true, shot: async () => shot, folder: game, make });
     assert.match(said, /icon\.png/);
     assert.match(said, /thumbnail\.png/);
-    assert.match(said, /Game Settings/);
+    assert.match(
+      said,
+      /create\.roblox\.com/,
+      "the pictures go on the game's Creator Hub page, where Roblox takes them now",
+    );
     const unbound = await coverPictures({ bound: () => false, shot: async () => shot, folder: game, make });
     assert.match(unbound, /isn't connected/);
     const blank = await coverPictures({ bound: () => true, shot: async () => null, folder: game, make });

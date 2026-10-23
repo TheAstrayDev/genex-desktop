@@ -1,9 +1,9 @@
 /**
  * A Roblox game's cover for Roblox itself: Studio's viewport made into the game icon (512 × 512)
- * and a thumbnail (1920 × 1080), the sizes Roblox's Game Settings take. Each is the picture's
+ * and a thumbnail (1920 × 1080), the sizes Roblox's Creator Hub takes. Each is the picture's
  * centred crop to its shape, scaled with what the system already has: `sips` on a Mac,
  * PowerShell's System.Drawing on Windows. Both go in the game's `.genex/roblox-cover/`, which the
- * agent uploads from in Studio's Game Settings: Roblox takes a game's icon through no API that works
+ * agent uploads from on the game's Creator Hub page: Roblox takes a game's icon through no API that works
  * without the person's own keys, which Genex never asks for. The viewport's picture waits in a
  * private temporary folder, removed after; the cover folder is the game's own, never one a link
  * leads out of, and a picture that is a link is replaced, never written through.
@@ -43,7 +43,7 @@ export interface PictureSize {
   height: number;
 }
 
-/** The size Roblox's Game Settings take for each picture. */
+/** The size Roblox's Creator Hub takes for each picture. */
 export const COVER_SIZES = {
   [CoverPicture.Icon]: { width: 512, height: 512 },
   [CoverPicture.Thumbnail]: { width: 1920, height: 1080 },
