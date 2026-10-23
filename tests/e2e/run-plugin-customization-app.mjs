@@ -84,9 +84,11 @@ try {
   const page = await app.firstWindow({ timeout: 60000 });
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1280, 900));
   page.setDefaultTimeout(15000);
-  // The first window can precede the app bootstrap. Use the existing owned-start budget,
-  // then inspect onboarding only after the Home tree and its dialogs have mounted.
-  await page.locator("[data-home] .home-title").waitFor({ state: "visible", timeout: 60000 });
+  // Main reloads once to seed the model, then opens the fixture game after its harness starts.
+  // Wait for that final navigation before choosing Home, so startup cannot move us away later.
+  await page
+    .locator('[data-studio-state][data-room="build"][data-project="fixture-game"]')
+    .waitFor({ state: "visible", timeout: 60000 });
   const welcome = page.getByRole("dialog", { name: "Welcome to Genex", exact: true });
   if (await welcome.isVisible()) {
     await page.locator('[data-onboarding-action="next"]').click();
