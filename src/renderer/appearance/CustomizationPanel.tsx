@@ -1,14 +1,12 @@
 /** Mount a plugin's declared panel inside the New Chat box without file pickers or action approvals. */
 import { useEffect, useState } from "react";
+import { t } from "../../shared/i18n.ts";
 import type { PluginPanelDocument } from "../../shared/plugins.ts";
 import { usePlugins } from "../state/hooks.ts";
 import { PluginPanelHost } from "../panels/PluginPanelHost.tsx";
 import { Button } from "../ui/Button.tsx";
-const MESSAGE = {
-  Failed: "The plugin panel could not be loaded.",
-  Loading: "Loading plugin panel…",
-  Retry: "Try again",
-} as const;
+import { Pending } from "../ui/Pending.tsx";
+import { SkeletonLines } from "../ui/Skeleton.tsx";
 /** Only host-reviewed settings panels can be selected by a saved customization profile. */
 export function CustomizationPanel({ id, panel }: { id: string; panel: string }) {
   const plugin = usePlugins((state) => state.list.find((entry) => entry.manifest.id === id) ?? null);
@@ -36,17 +34,15 @@ export function CustomizationPanel({ id, panel }: { id: string; panel: string })
   if (failed)
     return (
       <div className="new-chat-plugin-status">
-        <p role="alert">{MESSAGE.Failed}</p>
-        <Button variant="outline" onClick={() => setAttempt((previous) => previous + 1)}>
-          {MESSAGE.Retry}
-        </Button>
+        <p role="alert">{t("The plugin panel could not be loaded.")}</p>
+        <Button onClick={() => setAttempt((previous) => previous + 1)}>{t("Try again")}</Button>
       </div>
     );
   if (!document)
     return (
-      <p className="new-chat-plugin-status" role="status" aria-busy="true">
-        {MESSAGE.Loading}
-      </p>
+      <Pending label={t("Loading plugin panel…")} className="new-chat-plugin-status">
+        <SkeletonLines widths={["56%", "100%", "78%"]} className="new-chat-plugin-placeholder" />
+      </Pending>
     );
   return (
     <PluginPanelHost

@@ -59,6 +59,41 @@ registry.cancel();
 execFileSync(process.execPath, ["scripts/build.mjs", `--dev-build=${buildId}`], { stdio: "inherit" });
 const launch = path.join(owner.root, "launch.json");
 await writeFile(launch, JSON.stringify({ version: 1, profileId: id, ownerId: owner.ownerId, buildId }));
+// Hold only this disposable plugin's IPC read. The real handler still supplies the recovered document;
+// no renderer markup, application styles or ordinary profile behavior are replaced for screenshots.
+const reviewMain = path.join(out, "review-main.cjs");
+await writeFile(
+  reviewMain,
+  `const { ipcMain } = require("electron");
+const { pathToFileURL } = require("node:url");
+const review = globalThis.customizationPanelReview = {
+  requests: 0,
+  held: null,
+  hold() {
+    if (this.held) throw new Error("A panel read is already held");
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    this.held = { promise, resolve };
+  },
+  finish(failed) {
+    if (!this.held) throw new Error("No panel read is held");
+    const held = this.held;
+    this.held = null;
+    held.resolve(failed);
+  }
+};
+const handle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (channel, listener) => handle(channel, async (event, payload) => {
+  if (channel === "studio:plugins.panel" && payload?.id === ${JSON.stringify(pluginId)} && payload?.panel === "notes") {
+    review.requests++;
+    if (review.held && await review.held.promise)
+      return { ok: false, error: "Disposable panel read failed" };
+  }
+  return listener(event, payload);
+});
+import(pathToFileURL(${JSON.stringify(path.join(root, `.studio-dev/builds/${buildId}/main/main.mjs`))}).href);
+`,
+);
 let app;
 const checks = [];
 const check = (name, actual) => {
@@ -69,10 +104,7 @@ const check = (name, actual) => {
 try {
   app = await electron.launch({
     executablePath: resolveElectron(),
-    args: fixtureElectronArgs([
-      path.join(root, `.studio-dev/builds/${buildId}/main/main.mjs`),
-      `--studio-dev-launch=${launch}`,
-    ]),
+    args: fixtureElectronArgs([reviewMain, `--studio-dev-launch=${launch}`]),
     env: fixtureElectronEnv(),
     timeout: 60000,
   });
@@ -166,7 +198,62 @@ try {
     await page.keyboard.press("Escape");
     await page.getByTestId("settings-dialog").waitFor({ state: "hidden" });
     await page.locator("[data-home]").waitFor({ state: "visible" });
+    await page.locator("[data-home] .home-title").click();
     await page.screenshot({ path: path.join(out, `home-${mode}.png`) });
+    await page.evaluate(({ id, profile }) => window.studio.pluginSetCustomization(id, profile), {
+      id: pluginId,
+      profile,
+    });
+    await page.locator("[data-new-chat-plugin]").waitFor({ state: "hidden" });
+    await app.evaluate(() => globalThis.customizationPanelReview.hold());
+    await page.evaluate(({ id, profile }) => window.studio.pluginSetCustomization(id, profile), {
+      id: pluginId,
+      profile: { ...profile, newChat: { panel: "notes", height: 240 } },
+    });
+    const pending = page.locator("[data-new-chat-plugin] [data-pending=shape]");
+    await expect(pending).toHaveAttribute("aria-busy", "true");
+    await expect(pending).toHaveCSS("opacity", "1");
+    check(`Home shows a native skeleton in ${mode} mode`, (await pending.locator(".skeleton").count()) > 0);
+    const loading = await geometry();
+    await page.screenshot({ path: path.join(out, `panel-loading-${mode}.png`) });
+    await app.evaluate(() => globalThis.customizationPanelReview.finish(true));
+    await expect(page.locator("[data-new-chat-plugin] [role=alert]")).toHaveText(
+      "The plugin panel could not be loaded.",
+    );
+    check(
+      `failed panel keeps its iframe unmounted in ${mode} mode`,
+      (await page.locator("[data-new-chat-plugin] iframe").count()) === 0,
+    );
+    const failed = await geometry();
+    await page.screenshot({ path: path.join(out, `panel-failed-${mode}.png`) });
+    // StrictMode may repeat the initial mount; measure the update's one retry after that settles.
+    const requestsBeforeRetry = await app.evaluate(() => {
+      globalThis.customizationPanelReview.hold();
+      return globalThis.customizationPanelReview.requests;
+    });
+    await page.getByRole("button", { name: "Try again", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(pending).toHaveAttribute("aria-busy", "true");
+    await expect
+      .poll(() => app.evaluate(() => globalThis.customizationPanelReview.requests))
+      .toBe(requestsBeforeRetry + 1);
+    check(
+      `keyboard retry requests only the same panel once in ${mode} mode`,
+      (await app.evaluate(() => globalThis.customizationPanelReview.requests)) === requestsBeforeRetry + 1,
+    );
+    await app.evaluate(() => globalThis.customizationPanelReview.finish(false));
+    await expect(page.frameLocator("[data-new-chat-plugin] iframe").locator("body")).toHaveCSS(
+      "background-color",
+      mode === "light" ? "rgb(255, 255, 255)" : "rgb(17, 17, 17)",
+    );
+    const recovered = await geometry();
+    check(
+      `loading, failure and recovery preserve Home geometry in ${mode} mode`,
+      [loading, failed, recovered].every(
+        (state) => Math.abs(before.title - state.title) < 1 && Math.abs(before.prompt - state.prompt) < 1,
+      ),
+    );
+    await page.screenshot({ path: path.join(out, `panel-recovered-${mode}.png`) });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.locator("#settings-tab-appearance").click();
   }
@@ -204,6 +291,7 @@ try {
     JSON.stringify(
       {
         checks,
+        source: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
         before,
         after,
         short,

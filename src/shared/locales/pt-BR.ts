@@ -2088,6 +2088,7 @@ export default {
   "Loading game": "Carregando o jogo",
   "Loading local model": "Carregando o modelo local",
   "Loading models…": "Carregando modelos…",
+  "Loading plugin panel…": "Carregando o painel do plugin…",
   "Loading more…": "Carregando mais…",
   "Loading preview…": "Carregando prévia…",
   "Loading terminal…": "Carregando terminal…",
@@ -3897,6 +3898,7 @@ export default {
   "The plan is ready — waiting for your go-ahead": "O plano está pronto — esperando seu sinal verde",
   "The plan opens here; each part appears as it is named.":
     "O plano abre aqui; cada parte aparece assim que recebe um nome.",
+  "The plugin panel could not be loaded.": "Não foi possível carregar o painel do plugin.",
   "The plugin was not reinstalled": "O plugin não foi reinstalado",
   "The protected workspace was still starting after {minutes, plural, one {# minute} other {# minutes}}. Genex keeps trying and opens by itself if it finishes; Try again restarts Genex.":
     "O espaço de trabalho protegido ainda estava iniciando depois de {minutes, plural, one {# minuto} other {# minutos}}. O Genex continua tentando e abre sozinho se terminar; “Tentar de novo” reinicia o Genex.",

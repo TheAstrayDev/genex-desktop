@@ -88,8 +88,9 @@ its opaque frame and SDK bridge, with no active project. Actions and file picker
 automatically loaded slot, so opening Home cannot trigger approval or native dialogs. Those operations
 remain available in the plugin's ordinary panels. The slot's height never shifts Home's title or composer.
 Appearance changes notify open panels to read their current theme context again.
-The host shows loading feedback while a panel document is requested. A failed request offers
-**Try again** inside the same bounded slot; late responses cannot revive a withdrawn panel.
+The host uses Genex's delayed content skeleton while a panel document is requested. A failed request
+offers the standard **Try again** button inside the same bounded slot; late responses cannot revive
+a withdrawn panel. Loading, failure and recovery keep the same reserved height.
 For example:
 
 ```js

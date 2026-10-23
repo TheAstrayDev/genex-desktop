@@ -1916,6 +1916,7 @@ export default {
   "Loading game": "正在加载游戏",
   "Loading local model": "正在加载本地模型",
   "Loading models…": "正在加载模型…",
+  "Loading plugin panel…": "正在加载插件面板…",
   "Loading more…": "正在加载更多…",
   "Loading preview…": "正在加载预览…",
   "Loading terminal…": "正在加载终端…",
@@ -3630,6 +3631,7 @@ export default {
   "The plan could not be prepared.": "无法准备计划。",
   "The plan is ready — waiting for your go-ahead": "计划已就绪——等待你确认",
   "The plan opens here; each part appears as it is named.": "计划会在这里打开；每个部分命名后就会出现。",
+  "The plugin panel could not be loaded.": "无法加载插件面板。",
   "The plugin was not reinstalled": "插件未重新安装",
   "The protected workspace was still starting after {minutes, plural, one {# minute} other {# minutes}}. Genex keeps trying and opens by itself if it finishes; Try again restarts Genex.":
     "受保护的工作区在 {minutes, plural, other {# 分钟}}后仍在启动。Genex 会继续尝试，启动完成后会自动打开；点“重试”会重新启动 Genex。",

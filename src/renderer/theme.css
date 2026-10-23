@@ -8585,14 +8585,20 @@ p.usage-divider {
   flex-direction: column;
   align-items: center;
   justify-content: safe center;
-  gap: 8px;
+  gap: 12px;
   height: 100%;
   margin: 0;
-  padding: 12px;
+  padding: 24px;
   overflow-y: auto;
   color: var(--muted-foreground);
-  font-size: var(--t-xs);
+  font-size: var(--t-sm);
   text-align: center;
+}
+.new-chat-plugin-status p {
+  margin: 0;
+}
+.new-chat-plugin-placeholder {
+  width: min(100%, 300px);
 }
 
 .appearance-native-editors {

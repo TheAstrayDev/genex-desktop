@@ -153,6 +153,7 @@ await js('customizationFixture.holdPanel()');
 await frame.executeJavaScript('document.querySelector("#apply").click()');
 await until(()=>js('!!document.querySelector("[data-new-chat-plugin]")'));
 check('pending panel has an accessible loading state',await js('document.querySelector(".new-chat-plugin-content [role=status]")?.getAttribute("aria-busy")==="true"'));
+check('pending panel uses the shared content skeleton',await js('!!document.querySelector(".new-chat-plugin-content [data-pending=shape] .skeleton[aria-hidden]")'));
 await js('document.querySelector("[data-new-chat-plugin]").scrollIntoView({block:"center"})');
 fs.writeFileSync(${JSON.stringify(path.join(out, "panel-loading.png"))},(await wc.capturePage()).toPNG());
 await js('customizationFixture.finishPanel(true)');
