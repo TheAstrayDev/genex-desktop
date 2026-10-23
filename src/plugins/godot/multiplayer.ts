@@ -15,7 +15,8 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { type AppRunner, downloadFile } from "../../substrate/app-install.ts";
-import { readJsonForUpdate, writeFileNoFollow } from "../../substrate/fsx.ts";
+import { writeFileNoFollow } from "../../substrate/fsx.ts";
+import { GENEX_API_URL } from "../../substrate/genex-game-settings.ts";
 import { addonFolderState, assertNoLink, installAddonFolder, withAutoloadOf } from "./genex-addon.ts";
 import { PROJECT_FILE } from "./game-project.ts";
 
@@ -23,7 +24,10 @@ import { PROJECT_FILE } from "./game-project.ts";
 export const MULTIPLAYER_ADDON_FOLDER = "addons/genex_multiplayer";
 export const MULTIPLAYER_AUTOLOAD = "GenexMultiplayer";
 const MULTIPLAYER_SCRIPT = "genex_multiplayer.gd";
-/** The Genex SDK commit `addon/genex_multiplayer` is a copy of (`sdks/godot/addons/genex_multiplayer`). */
+/**
+ * The Genex SDK commit `addon/genex_multiplayer` is a copy of (`sdks/godot/addons/genex_multiplayer`),
+ * plus `identity.gd` taking Genex's API from the launcher's `GENEX_API_URL` (Play's gateway).
+ */
 export const MULTIPLAYER_ADDON_SOURCE = "me-ai-org/genex-demo@8cd1477a2a120937a1c79fc1c98b99cef3fcc145";
 
 /** Where the Colyseus GDExtension lives in a project. */
@@ -53,6 +57,9 @@ const ZIP_ROOT = "addons/colyseus";
 /** The plugin storage folder holding the checked release and what was unpacked from it. */
 const STORAGE_FOLDER = "multiplayer";
 const UNZIP = "/usr/bin/unzip";
+/** Windows's own folder when its environment names none; its `tar` (bsdtar) reads a zip. */
+const WINDOWS_ROOT = "C:\\Windows";
+const WINDOWS_TAR = ["System32", "tar.exe"];
 const UNZIP_MS = 2 * MINUTE_MS;
 
 /** The page file the Web preset loads the SDK's bridge from, beside the exported page. */
@@ -64,31 +71,7 @@ export const BRIDGE_LICENSES_FILE = "genex-multiplayer-bridge.LICENSES.md";
 const GENEX_SECTION = "[genex]";
 export const GenexSetting = { Slug: "slug", ApiUrl: "api_url" } as const;
 export type GenexSetting = (typeof GenexSetting)[keyof typeof GenexSetting];
-/** Genex's API, where a native player signs in, unless the game names another. */
-export const GENEX_API_URL = "https://api.genex.games";
-/** A Genex project's slug as Genex names one. */
-const SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
-
-/** Where a template-less game keeps its Genex settings (`substrate/genex-game-manifest.ts` reads them at publish). */
-const GENEX_SETTINGS_FILE = "genex.json";
-/** The matchmaking a publish sends, as the Genex SDK documents it. */
-const MATCHMAKING_PRESETS: ReadonlySet<string> = new Set(["open", "duel", "arena", "teams", "private"]);
-const WIN_CONDITIONS: ReadonlySet<string> = new Set([
-  "lastStanding",
-  "firstToScore",
-  "highScoreInTime",
-  "firstToFinish",
-]);
-const MAX_MATCHMAKING_KNOBS = 16;
-const KNOB_NAME = /^[a-zA-Z][a-zA-Z0-9]{0,39}$/;
-
 const MESSAGE = {
-  BadSlug: (slug: string) => `"${slug}" isn't a Genex project's slug: lowercase letters, digits and dashes.`,
-  BadPreset: (preset: string) => `matchmaking.preset is one of open, duel, arena, teams or private, not "${preset}".`,
-  BadWin: (win: string) =>
-    `matchmaking.winCondition is lastStanding, firstToScore, highScoreInTime or firstToFinish, not "${win}".`,
-  BadKnobs: `matchmaking.config holds at most ${MAX_MATCHMAKING_KNOBS} numbers, by name (maxPlayers, minPlayers, …).`,
-  BadMatchmaking: "matchmaking is an object: {preset, winCondition?, config?}.",
   Checksum: "The Colyseus Godot release Genex downloaded isn't the one it pins, so it was not used.",
 } as const;
 
@@ -106,8 +89,6 @@ export type MultiplayerState = {
 };
 
 const textOf = (file: string) => readFile(file, "utf8").catch(() => null);
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** A Godot settings string literal. */
 export const godotString = (text: string) => `"${text.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
@@ -201,37 +182,6 @@ export async function multiplayerState(project: string, source: string): Promise
   };
 }
 
-/** A slug as given, checked; undefined when none was. */
-export function slugArg(value: unknown): string | undefined {
-  if (value === undefined || value === "") return undefined;
-  const slug = typeof value === "string" ? value.trim() : "";
-  if (!SLUG.test(slug)) throw new MultiplayerError(MESSAGE.BadSlug(String(value)));
-  return slug;
-}
-
-/** The numeric knobs of a matchmaking block, checked. */
-function knobsOf(config: unknown): Record<string, number> | undefined {
-  if (config === undefined) return undefined;
-  if (!isRecord(config)) throw new MultiplayerError(MESSAGE.BadKnobs);
-  const entries = Object.entries(config);
-  const valid = (name: string, value: unknown) => KNOB_NAME.test(name) && Number.isFinite(value);
-  if (entries.length > MAX_MATCHMAKING_KNOBS || !entries.every(([name, value]) => valid(name, value)))
-    throw new MultiplayerError(MESSAGE.BadKnobs);
-  return Object.fromEntries(entries) as Record<string, number>;
-}
-
-/** A matchmaking block as given, checked and rebuilt from its known fields; undefined when none was. */
-export function matchmakingArg(value: unknown): Record<string, unknown> | undefined {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) throw new MultiplayerError(MESSAGE.BadMatchmaking);
-  const preset = String(value.preset ?? "");
-  if (!MATCHMAKING_PRESETS.has(preset)) throw new MultiplayerError(MESSAGE.BadPreset(preset));
-  const win = value.winCondition;
-  if (win !== undefined && !WIN_CONDITIONS.has(String(win))) throw new MultiplayerError(MESSAGE.BadWin(String(win)));
-  const config = knobsOf(value.config);
-  return { preset, ...(win === undefined ? {} : { winCondition: win }), ...(config ? { config } : {}) };
-}
-
 /** The addon, its autoload and the game's Genex project into the project. Answers the addon files kept as `.mine`. */
 export async function installMultiplayer(
   project: string,
@@ -250,14 +200,6 @@ export async function installMultiplayer(
   return kept;
 }
 
-/** The game's matchmaking into its `genex.json`; every other key stays. */
-export async function writeMatchmaking(gameDir: string, matchmaking: Record<string, unknown>): Promise<void> {
-  const file = path.join(gameDir, GENEX_SETTINGS_FILE);
-  await assertNoLink(file);
-  const current = (await readJsonForUpdate<Record<string, unknown>>(file)) ?? {};
-  await writeFileNoFollow(file, `${JSON.stringify({ ...current, matchmaking }, null, 2)}\n`);
-}
-
 /** What fetching the Colyseus release reaches: the network and the `unzip` program. */
 export type ColyseusFetchDeps = { fetch: typeof fetch; run: AppRunner };
 /** A Colyseus Godot release: its version, where it downloads from and its archive's sha256. */
@@ -271,6 +213,23 @@ async function sha256Of(file: string): Promise<string> {
 }
 
 /**
+ * The program that unpacks `entries` of a zip into a folder that exists: a Mac's `unzip`, or
+ * Windows's own `tar` by its full path under SystemRoot, so neither PATH nor the current folder
+ * stands in (Git's `tar` would read `C:` as a host).
+ */
+export function unzipCall(
+  zip: string,
+  entries: readonly string[],
+  into: string,
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv = process.env,
+): { command: string; args: string[] } {
+  if (platform !== "win32") return { command: UNZIP, args: ["-q", "-o", zip, ...entries, "-d", into] };
+  const root = env.SystemRoot && path.win32.isAbsolute(env.SystemRoot) ? env.SystemRoot : WINDOWS_ROOT;
+  return { command: path.win32.join(root, ...WINDOWS_TAR), args: ["-xf", zip, "-C", into, ...entries] };
+}
+
+/**
  * The pinned Colyseus release, unpacked once into the plugin's storage: downloaded, checked against
  * its sha256 and only then unpacked (the files a project takes, no debug builds). Answers the
  * unpacked `addons/colyseus` folder. A download that isn't the pinned release is removed, never used.
@@ -280,6 +239,7 @@ export async function colyseusRelease(
   storage: string,
   signal: AbortSignal,
   release: ColyseusRelease = COLYSEUS_GODOT,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<string> {
   const folder = path.join(storage, STORAGE_FOLDER, `colyseus-godot-${release.version}`);
   const unpacked = path.join(folder, "unpacked");
@@ -296,7 +256,9 @@ export async function colyseusRelease(
   }
   await rename(partial, zip);
   const entries = [...COLYSEUS_FILES, ...Object.values(COLYSEUS_LIBRARIES)].map((name) => `${ZIP_ROOT}/${name}`);
-  await deps.run(UNZIP, ["-q", "-o", zip, ...entries, "-d", unpacked], UNZIP_MS, signal);
+  await mkdir(unpacked, { recursive: true });
+  const unzip = unzipCall(zip, entries, unpacked, platform);
+  await deps.run(unzip.command, unzip.args, UNZIP_MS, signal);
   await rm(zip, { force: true });
   return ready;
 }

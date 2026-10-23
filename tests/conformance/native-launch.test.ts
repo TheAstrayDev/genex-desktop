@@ -6,6 +6,8 @@
  * install is read-only, the person's Library and the network are out of reach.
  */
 import assert from "node:assert/strict";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { EventEmitter } from "node:events";
 import { mkdir, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -17,7 +19,12 @@ import type { InstallRecord } from "../../src/main/play/native-installs.ts";
 import { GAME_QUIT_GRACE_MS, type GameProcess, nativeSessions } from "../../src/main/play/native-launch.ts";
 import { hasGameWindow, showGameWindow } from "../../src/main/play/native-windows.ts";
 import { psProbe, type JobClock } from "../../src/substrate/job-process.ts";
-import { type NativeGameRequest, spawnNativeGame } from "../../src/substrate/plugins/native-process.ts";
+import {
+  gameGenexEnv,
+  type NativeGameRequest,
+  nativeSandboxProfile,
+  spawnNativeGame,
+} from "../../src/substrate/plugins/native-process.ts";
 import {
   LaunchFailure,
   NativeArch,
@@ -94,8 +101,19 @@ async function until(done: () => boolean): Promise<void> {
 }
 
 /** A launcher over a temporary folder with fakes for every outside call. */
+/** A ticket the fake Genex mints: no log line may carry it. */
+const TICKET = "tk_secret_0123456789abcdef";
+
 async function rig(
-  options: { installed?: string[]; windowAfter?: number; spawnFails?: boolean; record?: Partial<InstallRecord> } = {},
+  options: {
+    installed?: string[];
+    windowAfter?: number;
+    spawnFails?: boolean;
+    record?: Partial<InstallRecord>;
+    genex?: "open" | "fails";
+    /** The game ends as it is brought forward, and bringing it forward returns only once its end is handled. */
+    endsOnShow?: boolean;
+  } = {},
 ) {
   const root = await realpath(await tmpDir("native-launch-"));
   const games: FakeGame[] = [];
@@ -104,13 +122,27 @@ async function rig(
   const killed: number[] = [];
   const played: string[] = [];
   const ended: string[] = [];
+  const reported: string[] = [];
   const logs: string[] = [];
   const pushes: NativeSession[][] = [];
   const starts = new Map<number, string>();
   const requests: NativeGameRequest[] = [];
   let looks = 0;
+  const gateways = { opened: [] as string[], closed: 0 };
+  const genex = async (slug: string) => {
+    if (options.genex === "fails") throw new Error(`no free port for ${slug}`);
+    gateways.opened.push(slug);
+    return {
+      ports: [41000, 41001],
+      env: { GENEX_API_URL: "http://127.0.0.1:41000", GENEX_EMBED_TICKET: TICKET },
+      close: async () => {
+        gateways.closed++;
+      },
+    };
+  };
   const clock = heldClock();
   const sessions = nativeSessions({
+    ...(options.genex ? { genex } : {}),
     root,
     record: async (slug) =>
       (options.installed ?? ["dust-runners"]).includes(slug) ? { ...record(slug), ...options.record } : null,
@@ -130,6 +162,9 @@ async function rig(
     },
     show: async (pid) => {
       shown.push(pid);
+      if (!options.endsOnShow) return;
+      games.find((game) => game.pid === pid)?.exit(0);
+      await until(() => ended.length > 0);
     },
     kill: (pid, signal) => {
       signals.push([pid, signal]);
@@ -146,14 +181,34 @@ async function rig(
     ended: async (slug) => {
       ended.push(slug);
     },
+    presence: {
+      started: (slug) => reported.push(`started ${slug}`),
+      ended: (slug) => reported.push(`ended ${slug}`),
+    },
     log: (line) => logs.push(line),
   });
-  return { sessions, root, games, shown, signals, killed, played, ended, logs, pushes, clock, starts, requests };
+  return {
+    sessions,
+    root,
+    games,
+    shown,
+    signals,
+    killed,
+    played,
+    ended,
+    reported,
+    logs,
+    pushes,
+    clock,
+    starts,
+    requests,
+    gateways,
+  };
 }
 
 describe("native game sessions", () => {
   it("starts a game, finds its window, brings it forward and counts it as played", async () => {
-    const { sessions, games, shown, played, pushes, clock } = await rig({ windowAfter: 1 });
+    const { sessions, games, shown, played, reported, pushes, clock } = await rig({ windowAfter: 1 });
     await sessions.launch("dust-runners");
     assert.equal(sessions.sessions()[0]?.phase, NativeSessionPhase.Starting);
     await settle();
@@ -165,7 +220,11 @@ describe("native game sessions", () => {
     }
     assert.deepEqual(shown, [games[0]?.pid]);
     assert.deepEqual(played, ["dust-runners"]);
+    assert.deepEqual(reported, ["started dust-runners"], "genex.games hears of the play once its window is up");
     assert.ok(pushes.some((state) => state[0]?.phase === NativeSessionPhase.Running));
+    games[0]?.exit(0);
+    await until(() => reported.length === 2);
+    assert.deepEqual(reported, ["started dust-runners", "ended dust-runners"]);
   });
 
   it("opens a game full screen with its engine's own argument, and in a window when its app asks for one", async () => {
@@ -218,7 +277,7 @@ describe("native game sessions", () => {
   });
 
   it("fails a game that quits before its window, logging its last words, not showing them", async () => {
-    const { sessions, games, logs } = await rig({ windowAfter: 1000 });
+    const { sessions, games, logs, reported } = await rig({ windowAfter: 1000 });
     await sessions.launch("dust-runners");
     games[0]?.stderr.write("dyld: Library not loaded: @rpath/UnityPlayer.dylib\n");
     games[0]?.exit(6);
@@ -227,8 +286,46 @@ describe("native game sessions", () => {
     assert.equal(failed?.phase, NativeSessionPhase.Failed);
     assert.equal(failed?.failure, LaunchFailure.QuitEarly);
     assert.match(logs.join("\n"), /UnityPlayer\.dylib/);
+    assert.deepEqual(reported, [], "a game that never showed a window was not played");
     await sessions.quit("dust-runners");
     assert.deepEqual(sessions.sessions(), [], "a failure is forgotten when dismissed");
+  });
+
+  it("reports a game's start before its end, even when it ends as it is brought forward", async () => {
+    const { sessions, reported, clock } = await rig({ windowAfter: 1, endsOnShow: true });
+    await sessions.launch("dust-runners");
+    while (reported.length < 2) {
+      clock.fire();
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+    }
+    assert.deepEqual(reported, ["started dust-runners", "ended dust-runners"]);
+  });
+
+  it("counts a game still up a minute on as played, though no window of it was seen", async () => {
+    const { sessions, played, reported, clock } = await rig({ windowAfter: Number.POSITIVE_INFINITY });
+    await sessions.launch("dust-runners");
+    while (sessions.sessions()[0]?.phase !== NativeSessionPhase.Running) {
+      clock.fire();
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+    }
+    assert.deepEqual(played, ["dust-runners"]);
+    assert.deepEqual(reported, ["started dust-runners"]);
+  });
+
+  it("never brings forward, plays or counts a game quit while it starts, even as its window appears", async () => {
+    const { sessions, games, shown, played, reported, clock } = await rig({ windowAfter: 1 });
+    await sessions.launch("dust-runners");
+    await settle();
+    const quitting = sessions.quit("dust-runners");
+    clock.fire();
+    await settle();
+    await settle();
+    games[0]?.exit(0);
+    await quitting;
+    assert.deepEqual(shown, []);
+    assert.deepEqual(played, []);
+    assert.deepEqual(reported, []);
+    assert.deepEqual(sessions.sessions(), [], "a quit is no failure");
   });
 
   it("fails a game that is not installed or whose sandbox does not start, and leaves no folder", async () => {
@@ -274,6 +371,113 @@ describe("native game sessions", () => {
   });
 });
 
+describe("a native game's way to Genex", () => {
+  it("gives a game its gateway's ports, Genex's address and ticket and its own name on Genex, and closes the gateway once it ends", async () => {
+    const { sessions, games, requests, gateways } = await rig({ genex: "open" });
+    await sessions.launch("dust-runners");
+    assert.deepEqual(requests[0]?.genex, {
+      ports: [41000, 41001],
+      env: { GENEX_API_URL: "http://127.0.0.1:41000", GENEX_EMBED_TICKET: TICKET, GENEX_GAME: "dust-runners" },
+    });
+    assert.equal(gateways.closed, 0, "open while it plays");
+    games[0]?.exit(0);
+    await until(() => gateways.closed === 1);
+  });
+
+  it("closes the gateway when the game's sandbox doesn't start", async () => {
+    const { sessions, gateways } = await rig({ genex: "open", spawnFails: true });
+    await sessions.launch("dust-runners");
+    assert.equal(sessions.sessions()[0]?.failure, LaunchFailure.StartFailed);
+    assert.deepEqual(gateways, { opened: ["dust-runners"], closed: 1 });
+  });
+
+  it("plays a game offline when its gateway can't open, and logs no ticket", async () => {
+    const { sessions, requests, logs } = await rig({ genex: "fails" });
+    await sessions.launch("dust-runners");
+    assert.equal(requests.length, 1, "it still starts");
+    assert.equal(requests[0]?.genex, undefined, "with no network at all");
+    assert.ok(
+      logs.some((line) => line.includes("dust-runners")),
+      "the reason is logged",
+    );
+    assert.ok(!logs.some((line) => line.includes(TICKET)));
+  });
+});
+
+describe("what a game's sandbox and environment take of its way to Genex", () => {
+  const good = {
+    GENEX_API_URL: "http://127.0.0.1:41000",
+    GENEX_EMBED_TICKET: "t".repeat(32),
+    GENEX_GAME: "dust-runners",
+  };
+
+  it("passes Genex's address, ticket and the game's name on as they are", () => {
+    assert.deepEqual(gameGenexEnv(good), good);
+    assert.deepEqual(gameGenexEnv({ GENEX_API_URL: good.GENEX_API_URL }), { GENEX_API_URL: good.GENEX_API_URL });
+  });
+
+  it("drops an address that isn't its gateway's, and a ticket that isn't one", () => {
+    const addresses = [
+      "https://api.genex.games",
+      "http://127.0.0.1:80",
+      "http://127.0.0.1:41000/api",
+      "http://localhost:41000",
+      "http://127.0.0.1:41000@evil.test",
+      "http://127.0.0.2:41000",
+      "http://127.0.0.1:99999",
+    ];
+    for (const address of addresses)
+      assert.deepEqual(gameGenexEnv({ ...good, GENEX_API_URL: address }), {}, `${address}: nothing at all`);
+    const tickets = [
+      "short",
+      "has space in it 0123456789",
+      "line\nbreak0123456789abcdef",
+      "$(rm -rf ~)0123456789abcdef",
+    ];
+    for (const ticket of tickets)
+      assert.deepEqual(
+        gameGenexEnv({ ...good, GENEX_EMBED_TICKET: ticket }),
+        { GENEX_API_URL: good.GENEX_API_URL, GENEX_GAME: good.GENEX_GAME },
+        `${ticket}: a guest`,
+      );
+    assert.deepEqual(gameGenexEnv(undefined), {});
+  });
+
+  it("drops a game name Genex would never give", () => {
+    const names = [
+      "",
+      "Dust-Runners",
+      "-dust",
+      "dust runners",
+      "dust\nrunners",
+      "$(rm -rf ~)",
+      "d".repeat(101),
+      "../dust",
+    ];
+    const { GENEX_GAME: _, ...rest } = good;
+    for (const name of names)
+      assert.deepEqual(gameGenexEnv({ ...good, GENEX_GAME: name }), rest, `${JSON.stringify(name)}: no name`);
+  });
+
+  it("names only unprivileged local ports in its profile, after the network is denied", () => {
+    const profile = (genexPorts: number[]) =>
+      nativeSandboxProfile({
+        binaryRoot: "/Applications/Game.app",
+        reads: [],
+        writes: [],
+        denied: [],
+        gpu: true,
+        game: { bundleId: "games.genex.play.dust", bundleName: "Dust", userTemp: "/private/var/folders/x", genexPorts },
+      });
+    const lines = profile([41000, 80, 70000, 1.5, Number.NaN, 41001]).split("\n");
+    const deny = lines.indexOf("(deny network*)");
+    const allow = lines.findIndex((line) => line.startsWith("(allow network-outbound"));
+    assert.ok(deny >= 0 && allow > deny, "the allow narrows the deny, after it");
+    assert.equal(lines[allow], '(allow network-outbound (remote ip "localhost:41000") (remote ip "localhost:41001"))');
+    assert.ok(!profile([]).includes("network-outbound"), "no gateway, no network at all");
+  });
+});
+
 describe("quitting Genex", () => {
   it("ends every native game as one of its steps, first", async () => {
     let ended = 0;
@@ -304,7 +508,12 @@ const LIVE = process.env.STUDIO_NATIVE_LIVE === "1" ? false : "opens a game wind
 type Probe = Record<string, unknown> & { step: string };
 
 /** Install the fixture app as `slug` would be, and run its `--probe` in the game sandbox. */
-async function probeInSandbox(root: string, slug: string, cache: string): Promise<Probe[]> {
+async function probeInSandbox(
+  root: string,
+  slug: string,
+  cache: string,
+  more: Pick<NativeGameRequest, "genex"> & { args?: string[] } = {},
+): Promise<Probe[]> {
   const versionDir = path.join(root, slug, "1.0");
   await mkdir(versionDir, { recursive: true });
   const app = await buildFixtureApp(
@@ -324,7 +533,8 @@ async function probeInSandbox(root: string, slug: string, cache: string): Promis
     scratch,
     bundleId: `games.genex.play.${slug}`,
     bundleName: "Probe Game",
-    args: ["--probe"],
+    args: ["--probe", ...(more.args ?? [])],
+    ...(more.genex ? { genex: more.genex } : {}),
   });
   let out = "";
   child.stdout.on("data", (chunk: Buffer) => {
@@ -357,6 +567,39 @@ describe("the game sandbox on this Mac", { skip: SKIP }, () => {
       assert.equal(step(second, "save").plays, 2, "its save is there next time");
       assert.equal(step(second, "defaults").before, 1, "and so are its preferences");
     } finally {
+      await rm(path.join(process.env.HOME ?? "", "Library", "Preferences", `games.genex.play.${slug}.plist`), {
+        force: true,
+      });
+    }
+  });
+
+  it("reaches only its Genex gateway's ports, and is told the gateway and that a ticket waits", async () => {
+    const root = await realpath(await tmpDir("native-sandbox-genex-"));
+    const slug = `genex-${process.pid}`;
+    const listening = async (body: string) => {
+      const server = http.createServer((_req, res) => res.writeHead(200).end(body));
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      return { server, port: (server.address() as AddressInfo).port };
+    };
+    const gateway = await listening("gateway");
+    const other = await listening("other");
+    try {
+      const lines = await probeInSandbox(root, slug, path.join(root, ".program"), {
+        args: [`--other-port=${other.port}`],
+        genex: {
+          ports: [gateway.port],
+          env: { GENEX_API_URL: `http://127.0.0.1:${gateway.port}`, GENEX_EMBED_TICKET: "t".repeat(32) },
+        },
+      });
+      const step = (name: string): Probe => lines.find((line) => line.step === name) ?? { step: name };
+      assert.equal(step("genex").status, 200, "its gateway answers");
+      assert.equal(step("genex").api, `http://127.0.0.1:${gateway.port}`);
+      assert.equal(step("genex").ticket, true, "the ticket is in its environment");
+      assert.equal(step("other-local").reached, false, "another port of this Mac stays out");
+      assert.equal(step("network").reached, false, "and so does the internet");
+    } finally {
+      gateway.server.close();
+      other.server.close();
       await rm(path.join(process.env.HOME ?? "", "Library", "Preferences", `games.genex.play.${slug}.plist`), {
         force: true,
       });

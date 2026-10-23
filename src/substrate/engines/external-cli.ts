@@ -40,6 +40,8 @@ export interface DiscoveryOptions {
   signal?: AbortSignal;
   /** The operating system whose file names and launchers apply; the host's by default. */
   platform?: NodeJS.Platform;
+  /** Each try's allowance for one `--version`/`--help` probe ({@link PROBE_TIMEOUTS_MS} by default). */
+  probeTimeoutsMs?: readonly number[];
 }
 /** The executable each coding CLI installs as. */
 const CLI_BINARY = {
@@ -80,9 +82,15 @@ const OPENCODE_FLAGS: Record<OpenCodeDialect, string[]> = {
   [OpenCodeDialect.V1]: ["--format", "--session", "--model", "--agent", "--file", "--variant", "--pure", "--dir"],
   [OpenCodeDialect.V2]: ["--format", "--session", "--model", "--file", "--standalone"],
 };
-/** How long reading the login shell's PATH, and each `--version`/`--help` probe, may take. */
+/** How long reading the login shell's PATH may take. */
 const LOGIN_PATH_TIMEOUT_MS = 8 * SECOND_MS;
-const PROBE_TIMEOUT_MS = 8 * SECOND_MS;
+/**
+ * Each try's allowance for a `--version`/`--help` probe. A probe that runs out of time is asked once
+ * more with the longer one: a CLI's first start just after it was installed or updated waits while
+ * Windows scans the new program, and on a slow PC (2 CPUs) that took more than 8 s, so a working
+ * CLI was called incompatible.
+ */
+const PROBE_TIMEOUTS_MS = [8 * SECOND_MS, 45 * SECOND_MS] as const;
 /** A probe keeps the last this-many characters of what the CLI printed. */
 const PROBE_OUTPUT_CHARS = 32_768;
 /** How long a discovery result serves UI and model-list reads. */
@@ -107,7 +115,7 @@ const MESSAGE = {
   UnknownProvider: "Unknown coding provider",
   SettingsUninitialized: "Coding CLI settings are not initialized",
   Stopped: "Stopped",
-  ProbeTimedOut: `CLI diagnostic timed out after ${PROBE_TIMEOUT_MS / SECOND_MS} seconds`,
+  ProbeTimedOut: (ms: number) => `CLI diagnostic timed out after ${ms / SECOND_MS} seconds`,
   NoVersion: "CLI did not report a version",
   MissingOptions: (missing: string[]) => `Required CLI options are unavailable: ${missing.join(", ")}`,
   OpenCodeUnreadable: "Genex can't tell which OpenCode version this is. Install a released OpenCode, then check again.",
@@ -118,6 +126,16 @@ const MESSAGE = {
 } as const;
 
 const diagnostics = new Map<string, { at: number; value: CliInstallation }>();
+/** Unsigned UI readers can share discovery without sharing another caller's Stop signal. */
+const diagnosticReads = new Map<string, Promise<CliInstallation>>();
+/** Only the latest request for a selection may replace its cached diagnostic. */
+const diagnosticOwners = new Map<string, symbol>();
+const discoveryGenerations = new Map<CodingProvider, number>();
+let answersRevision = 0;
+
+function discoveryGeneration(provider: CodingProvider): number {
+  return discoveryGenerations.get(provider) ?? 0;
+}
 /**
  * The login shell's PATH, read once and shared by every discovery: a login shell takes seconds to
  * start (2.1–2.3 s on a developer's Mac), and every session start discovers its CLI.
@@ -142,9 +160,19 @@ export function invalidateCodingCli(provider?: CodingProvider): void {
   void keepAnswers();
 }
 function forget(provider?: CodingProvider): void {
-  for (const key of diagnostics.keys()) if (!provider || key.startsWith(`${provider}:`)) diagnostics.delete(key);
-  for (const key of answered.keys()) if (!provider || key.startsWith(`${provider}\0`)) answered.delete(key);
+  const providers = provider ? [provider] : (Object.keys(CLI_BINARY) as CodingProvider[]);
+  for (const id of providers) discoveryGenerations.set(id, discoveryGeneration(id) + 1);
+  forgetEntries(diagnostics, provider, ":");
+  forgetEntries(diagnosticReads, provider, ":");
+  forgetEntries(diagnosticOwners, provider, ":");
+  forgetEntries(answered, provider, "\0");
+  answersRevision++;
   loginPathRead = null;
+}
+
+/** Drop only the invalidated provider's entries, or the whole cache when settings are replaced. */
+function forgetEntries<T>(entries: Map<string, T>, provider: CodingProvider | undefined, delimiter: string): void {
+  for (const key of entries.keys()) if (!provider || key.startsWith(`${provider}${delimiter}`)) entries.delete(key);
 }
 /** Where the answers are kept, beside the overrides; none before the app configures discovery. */
 function answersFile(): string | undefined {
@@ -160,13 +188,15 @@ let answersRead: Promise<void> = Promise.resolve();
 /** Read the answers a previous launch kept, after any write still on its way. */
 function loadAnswers(): void {
   const file = answersFile();
-  answersRead = file ? answersWrite.catch(() => {}).then(() => readKeptAnswers(file)) : Promise.resolve();
+  const revision = answersRevision;
+  answersRead = file ? answersWrite.catch(() => {}).then(() => readKeptAnswers(file, revision)) : Promise.resolve();
 }
 /** The kept answers, beside any learned meanwhile; a missing or damaged file keeps none. */
-async function readKeptAnswers(file: string): Promise<void> {
+async function readKeptAnswers(file: string, revision: number): Promise<void> {
   try {
     const kept: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (typeof kept !== "object" || kept === null) return;
+    const staleOrInvalid = revision !== answersRevision || typeof kept !== "object" || kept === null;
+    if (staleOrInvalid) return;
     for (const [identity, answers] of Object.entries(kept))
       if (isAnswers(answers) && !answered.has(identity)) answered.set(identity, answers);
   } catch {
@@ -249,12 +279,34 @@ function within(file: string, root: string): boolean {
   const rel = path.relative(root, file);
   return !rel || (!rel.startsWith(`..${path.sep}`) && rel !== ".." && !path.isAbsolute(rel));
 }
+/** A probe that ran out of its allowance, which a longer one may still answer. */
+class ProbeTimeout extends Error {}
+
+/** One probe, asked again with the next allowance each time it runs out of time; the last timeout throws. */
 async function probe(
   file: string,
   args: string[],
   env: NodeJS.ProcessEnv,
-  signal: AbortSignal | undefined,
-  platform: NodeJS.Platform,
+  context: Pick<CheckContext, "signal" | "platform" | "probeTimeoutsMs">,
+): Promise<string> {
+  const allowances = context.probeTimeoutsMs.length > 0 ? context.probeTimeoutsMs : PROBE_TIMEOUTS_MS;
+  for (const [i, timeoutMs] of allowances.entries()) {
+    try {
+      return await probeOnce(file, args, env, context, timeoutMs);
+    } catch (error) {
+      const last = i === allowances.length - 1;
+      if (last || !(error instanceof ProbeTimeout)) throw error;
+    }
+  }
+  throw new ProbeTimeout(MESSAGE.ProbeTimedOut(0));
+}
+
+async function probeOnce(
+  file: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  { signal, platform }: Pick<CheckContext, "signal" | "platform">,
+  timeoutMs: number,
 ): Promise<string> {
   signal?.throwIfAborted();
   const launch = commandLaunch(file, args, platform);
@@ -280,8 +332,8 @@ async function probe(
     else signal?.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(() => {
       stop();
-      reject(new Error(MESSAGE.ProbeTimedOut));
-    }, PROBE_TIMEOUT_MS);
+      reject(new ProbeTimeout(MESSAGE.ProbeTimedOut(timeoutMs)));
+    }, timeoutMs);
     for (const stream of [child.stdout, child.stderr])
       stream?.on("data", (chunk) => {
         output = (output + chunk).slice(-PROBE_OUTPUT_CHARS);
@@ -425,6 +477,7 @@ export async function discoverCodingCli(
   options: DiscoveryOptions = {},
 ): Promise<CliInstallation> {
   providerId(provider);
+  const generation = discoveryGeneration(provider);
   const platform = options.platform ?? process.platform;
   const home = options.home ?? os.homedir();
   const parent = options.env ?? process.env;
@@ -453,7 +506,9 @@ export async function discoverCodingCli(
   let first: CodingCliStatus | undefined;
   for (const selected of found) {
     const checked: CodingCliStatus = { ...status, path: selected };
-    await checkSelectedCli(provider, selected, { dirs, env, signal: options.signal, platform }, checked);
+    const probeTimeoutsMs = options.probeTimeoutsMs ?? PROBE_TIMEOUTS_MS;
+    const context = { dirs, env, signal: options.signal, platform, generation, probeTimeoutsMs };
+    await checkSelectedCli(provider, selected, context, checked);
     if (checked.state === CodingCliState.Ready) return { status: checked, env };
     first ??= checked;
   }
@@ -559,6 +614,8 @@ interface CheckContext {
   env: NodeJS.ProcessEnv;
   signal: AbortSignal | undefined;
   platform: NodeJS.Platform;
+  generation: number;
+  probeTimeoutsMs: readonly number[];
 }
 
 /** Whether the chosen CLI can run here and speaks what we need; the verdict lands in `status`. */
@@ -681,20 +738,20 @@ async function checkCliCapabilities(
   context: CheckContext,
   status: CodingCliStatus,
 ): Promise<void> {
-  const { signal, platform } = context;
+  const { platform } = context;
   // M6: a version and a help text need no credential; the CLI is asked with none.
   const probeEnv = childEnv(context.env, { base: "contractor", vendor: CLI_BINARY[provider] });
   const identity = await cliIdentity(provider, file, platform);
   await answersRead;
   const known = identity ? answered.get(identity) : undefined;
-  status.version =
-    known?.version ?? (await probe(file, ["--version"], probeEnv, signal, platform)).split("\n")[0]?.trim();
+  status.version = known?.version ?? (await probe(file, ["--version"], probeEnv, context)).split("\n")[0]?.trim();
   if (!status.version) throw new Error(MESSAGE.NoVersion);
   const required = requiredFlags(provider, status.version);
-  const help = known?.help ?? (await probe(file, HELP_ARGS[provider], probeEnv, signal, platform));
+  const help = known?.help ?? (await probe(file, HELP_ARGS[provider], probeEnv, context));
   const missing = required.filter((flag) => !help.includes(flag));
   if (missing.length) throw new Error(MESSAGE.MissingOptions(missing));
-  if (identity && !known) {
+  const keepNewAnswer = identity && !known && context.generation === discoveryGeneration(provider);
+  if (keepNewAnswer) {
     answered.set(identity, { version: status.version, help });
     // A discovery ends with its answers on disk, never with a write still landing in the folder.
     await keepAnswers();
@@ -722,11 +779,48 @@ export async function resolveCodingCli(
 ): Promise<CliInstallation> {
   providerId(provider);
   signal?.throwIfAborted();
+  const generation = discoveryGeneration(provider);
   const selected = override ?? (await overrides())[provider];
-  const key = `${provider}:${selected ?? "automatic"}`;
+  const key = `${provider}:${override === undefined ? "saved" : "explicit"}:${selected ?? "automatic"}`;
   const cached = diagnostics.get(key);
   const cacheFresh = cached !== undefined && Date.now() - cached.at < DIAGNOSTIC_CACHE_MS;
-  if (!refresh && cacheFresh) return { status: { ...cached.value.status }, env: { ...cached.value.env } };
+  const current = generation === discoveryGeneration(provider);
+  const useCache = !refresh && cacheFresh && current;
+  if (useCache) return copyInstallation(cached.value);
+  const shared = !refresh && signal === undefined && current;
+  const existing = shared ? diagnosticReads.get(key) : undefined;
+  if (existing) return copyInstallation(await existing);
+  const owner = Symbol();
+  if (current) {
+    diagnosticOwners.set(key, owner);
+    diagnosticReads.delete(key);
+  }
+  const read = resolveUncachedCli(provider, override, selected, signal).then((value) => {
+    const latest = diagnosticOwners.get(key) === owner && generation === discoveryGeneration(provider);
+    if (latest) diagnostics.set(key, { at: Date.now(), value });
+    return value;
+  });
+  if (shared) diagnosticReads.set(key, read);
+  try {
+    return copyInstallation(await read);
+  } finally {
+    if (diagnosticReads.get(key) === read) diagnosticReads.delete(key);
+    if (diagnosticOwners.get(key) === owner) diagnosticOwners.delete(key);
+  }
+}
+
+/** Keep cached and shared answers private from consumers that adjust their status or environment. */
+function copyInstallation(value: CliInstallation): CliInstallation {
+  return { status: { ...value.status }, env: { ...value.env } };
+}
+
+/** One uncached discovery, including fallback only for a broken persisted override. */
+async function resolveUncachedCli(
+  provider: CodingProvider,
+  override: string | undefined,
+  selected: string | undefined,
+  signal: AbortSignal | undefined,
+): Promise<CliInstallation> {
   let value = await discoverCodingCli(provider, { ...discoveryDefaults, override: selected, signal });
   // A persisted override that stopped working (moved, deleted, outdated) must not strand the user:
   // Settings has no path picker, so an automatic installation that works takes over.
@@ -737,8 +831,7 @@ export async function resolveCodingCli(
     if (automatic.status.state === CodingCliState.Ready || value.status.state === CodingCliState.InvalidPath)
       value = automatic;
   }
-  diagnostics.set(key, { at: Date.now(), value });
-  return { status: { ...value.status }, env: { ...value.env } };
+  return value;
 }
 export async function requireCodingCli(
   provider: CodingProvider,

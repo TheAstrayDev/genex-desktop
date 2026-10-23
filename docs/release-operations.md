@@ -78,7 +78,7 @@ runner serial) beside the end-to-end suites, while the packages build; only the 
 waits for both, and a failed shard re-runs alone. When Check's macOS `fast` job already passed on
 the same commit (its push to `main`, or a dispatch), the release reuses it and skips its own fast
 shards (`scripts/release-fast-evidence.mjs`); otherwise it runs them. The serial rig shards balance by the file
-times the newest earlier release left (`scripts/release-durations.mjs`), by source bytes without one. An urgent fix may skip the regression with the repository
+times the newest earlier release left (`scripts/release-durations.mjs`), by source bytes without one; the short harness shards queue after them (they wait on `linux-static`) so long rig shards never start last. An urgent fix may skip the regression with the repository
 variable `RELEASE_REGRESSION=skip` (the builds then start after validation); dispatch a build-only
 run on `main` after publication to run it, and unset the variable. Build-only dispatches use the `candidate` environment
 and receive no signing secrets. Draft upload requires verified macOS signing plus the macOS and
