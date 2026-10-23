@@ -274,8 +274,10 @@ and whether its focused field is a password field (UI Automation's `IsPassword`,
 edit control, its own `ES_PASSWORD` style: .NET's UI Automation names a Windows Forms password box a
 Pane with no password flag; asked again a moment later when focus is on no text field, as
 Chromium's accessibility wakes on first asking), and which
-app a click at a point reaches (the element there, up to its top-level window), with its window's
-handle so the tree fallback skips cua's slow window list. It also brings an app forward by its
+app a click at a point reaches (Windows' own hit test, `WindowFromPoint` up to the top-level window,
+which asks nothing of that app, so a busy one such as Roblox Studio with a menu open cannot stall it
+as UI Automation's `FromPoint` did), with its window's handle so the tree fallback skips cua's slow
+window list. It also brings an app forward by its
 executable (`raise`, the PC's `bring_to_front`: the newest responding window, restored if minimized,
 with an Alt tap when Windows refuses a background process the foreground). It says its view of the primary screen
 when ready, and click points are scaled to it, whatever DPI awareness PowerShell has. An app is its

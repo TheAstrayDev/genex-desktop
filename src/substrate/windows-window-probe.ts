@@ -2,8 +2,8 @@
  * What Windows itself says about the desktop, for computer control on a PC: the app that holds the
  * keyboard and whether its focused field is a password field (UI Automation's `IsPassword`, or a
  * Win32 edit control's own password style, which .NET's UI Automation does not read), and the app
- * a click at a screen point reaches (UI Automation's element at that point, up to its top-level
- * window, as the click lands in that window). cua's window list cannot say either: it lists windows
+ * a click at a screen point reaches (Windows' own hit test, up to the top-level window, as the
+ * click lands in that window; UI Automation's element there when user32 could not be declared). cua's window list cannot say either: it lists windows
  * on other virtual desktops and transparent overlays (a game overlay over the whole screen) as on
  * screen, and its app listing rescans every installed app.
  *
@@ -115,6 +115,8 @@ $Imports = @(
   @('SetForegroundWindow', [bool], @([IntPtr])),
   @('GetForegroundWindow', [IntPtr], @()),
   @('GetWindowThreadProcessId', [uint32], @([IntPtr], [uint32].MakeByRefType())),
+  @('WindowFromPoint', [IntPtr], @([long])),
+  @('GetAncestor', [IntPtr], @([IntPtr], [int])),
   @('keybd_event', [void], @([byte], [byte], [uint32], [UIntPtr]))
 )
 try {
@@ -127,6 +129,7 @@ try {
   $User32 = $type.CreateType()
 } catch { }
 $RestoreWindow = 9
+$RootWindow = 2
 $AltKey = 0x12
 $KeyUp = 2
 
@@ -214,6 +217,24 @@ function Focused() {
   return $again
 }
 
+# The app a click at a point reaches, as Windows itself hit-tests it: the window there (click-through
+# overlays pass the point on), up to its top-level window. Nothing is asked of that window's app, so
+# a busy one (Roblox Studio with a menu open) cannot stall the answer as UI Automation's FromPoint
+# does. The point is in UI Automation's points, Windows Forms' scaled; POINT goes by value as one
+# 64-bit value, x in its low half.
+function AppAtPoint([int]$x, [int]$y) {
+  $wx = [long][math]::Round($x / $scaleX)
+  $wy = [long][math]::Round($y / $scaleY)
+  $window = $User32::WindowFromPoint(($wy -shl 32) -bor ($wx -band [long]4294967295))
+  if ($window -eq [IntPtr]::Zero) { return @{ pid = 0 } }
+  $top = $User32::GetAncestor($window, $RootWindow)
+  $owner = [uint32]0
+  [void]$User32::GetWindowThreadProcessId($top, [ref]$owner)
+  $app = AppOfProcess ([int]$owner)
+  if ($app.pid -gt 0) { $app.window = [long]$top }
+  return $app
+}
+
 # The newest responding process of an executable that has a window, or null.
 function WindowedProcess([string]$exe) {
   if ($exe -notmatch '^[\w.-]{1,124}\.exe$') { return $null }
@@ -259,6 +280,9 @@ function Raise([string]$exe) {
 function Ask([string]$line) {
   $parts = $line.Trim().Split(' ')
   if ($parts[0] -eq 'front' -and $parts.Length -eq 1) { return AppOfElement (Focused) $true }
+  if ($parts[0] -eq 'at' -and $parts.Length -eq 3 -and $null -ne $User32) {
+    return AppAtPoint ([int]::Parse($parts[1], $Culture)) ([int]::Parse($parts[2], $Culture))
+  }
   if ($parts[0] -eq 'at' -and $parts.Length -eq 3) {
     $point = [System.Windows.Point]::new([int]::Parse($parts[1], $Culture), [int]::Parse($parts[2], $Culture))
     return AppOfElement ($Element::FromPoint($point)) $false
