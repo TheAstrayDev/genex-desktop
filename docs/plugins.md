@@ -1300,7 +1300,10 @@ person's sign-in must work. Studio joins a fresh StudioMCP a moment after it sta
 to that Studio: `studio_id` is filled from the binding file `studio.json` the backend keeps in the
 connection's folder (`{studioId, session, at}`, believed for `BINDING_MAX_AGE_MS`), or with no file
 yet from the game's linked place matched by name; two matching Studios, a stale binding and a call
-naming another Studio are refused in plain words. `studio-tools.ts` gives each of StudioMCP 0.743's
+naming another Studio are refused in plain words. Each listing of Studio's tools is kept in
+`studio-tools.json` there, and a listing Studio does not answer (busy, or still starting after a
+restart) offers the last one, so a turn never loses `execute_luau` and a call says what Studio
+answers. `studio-tools.ts` gives each of StudioMCP 0.743's
 30 tools a class: the reads pass with no card (the manifest's `reads`), `execute_luau` passes as a
 write (Edit unless the agent names another data model) with `agent-busy.json` kept around it, once
 its code passes `luau-screen.ts`: code that names Creator Store inserts, uploads, publishing, the
