@@ -119,6 +119,19 @@ describe("the Windows window probe's helper (a stand-in process)", () => {
     );
   });
 
+  it("brings an app forward by its executable's name, and never asks for a name that isn't one", async () => {
+    const { probe, logged } = await standIn();
+    assert.equal((await probe.raise("notepad.exe"))?.pid, 40);
+    assert.equal(await probe.raise("calc.exe"), null, "no window of it: nothing raised");
+    for (const hostile of ["", "notepad.exe\nfront", "a b.exe", "..\\cmd.exe", "x".repeat(300)])
+      assert.equal(await probe.raise(hostile), null, JSON.stringify(hostile));
+    assert.deepEqual(
+      (await logged()).flatMap((entry) => (entry.request ? [entry.request] : [])),
+      ["raise notepad.exe", "raise calc.exe"],
+      "only plain executable names reach the helper",
+    );
+  });
+
   it("ends a helper that does not answer in time, and starts a fresh one for the next request", async () => {
     const { probe, logged } = await standIn(["--hang", "front"], { requestMs: 200 });
     await assert.rejects(probe.front(), /did not answer "front" in time/);

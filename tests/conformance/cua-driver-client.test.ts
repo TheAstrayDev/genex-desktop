@@ -345,6 +345,7 @@ describe("cua-driver on Windows", () => {
     front?: () => ProbedApp | null;
     at?: (x: number, y: number) => ProbedApp | null;
     process?: (pid: number) => ProbedApp | null;
+    raise?: (exe: string) => ProbedApp | null;
     tree?: CuaAnswer;
   }) {
     const windows = [
@@ -391,6 +392,10 @@ describe("cua-driver on Windows", () => {
         return probed.at?.(x, y) ?? null;
       },
       process: async (pid) => probed.process?.(pid) ?? null,
+      raise: async (exe) => {
+        asked.push(`raise ${exe}`);
+        return probed.raise?.(exe) ?? null;
+      },
       close: async () => {
         closed = true;
       },
@@ -482,6 +487,21 @@ describe("cua-driver on Windows", () => {
     );
     for (const keys of [["ctrl", "s"], ["alt", "f4"], ["shift", "tab"], ["escape"], ["a"], ["F5"]])
       await fake.driver.press(keys);
+  });
+
+  it("brings an app forward through Windows itself, by its executable, never through the driver", async () => {
+    const studio: ProbedApp = {
+      pid: 50,
+      exe: "RobloxStudioBeta.exe",
+      name: "Roblox Studio",
+      secure: null,
+      window: 5001,
+    };
+    const fake = windowsDriver({ raise: (exe) => (exe === "robloxstudiobeta.exe" ? studio : null) });
+    assert.ok(fake.driver.bringToFront, "a PC's driver can bring an app forward");
+    await fake.driver.bringToFront("robloxstudiobeta.exe");
+    assert.deepEqual(fake.asked, ["raise robloxstudiobeta.exe"]);
+    assert.deepEqual(fake.calls, [], "the driver's own list and bring_to_front are not used");
   });
 
   it("presses forward delete by Windows' name for it, leaves every other key as it is, and closes its probe", async () => {
@@ -627,6 +647,7 @@ describe("cua-driver over a real MCP connection (a stand-in driver process)", ()
       front: async () => null,
       at: async () => null,
       process: async () => null,
+      raise: async () => null,
       close: async () => {
         probed = "closed";
       },
@@ -655,6 +676,7 @@ describe("cua-driver over a real MCP connection (a stand-in driver process)", ()
       front: async () => null,
       at: async () => null,
       process: async () => null,
+      raise: async () => null,
       close: async () => {
         closed = true;
       },

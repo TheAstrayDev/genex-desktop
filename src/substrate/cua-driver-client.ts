@@ -563,7 +563,11 @@ export function cuaDriver(
     },
     focus: () => reads.focus(),
     appAt: (x, y) => reads.appAt((x * screen.width) / picture.width, (y * screen.height) / picture.height),
-    ...(options.windows ? {} : { bringToFront: (app: string) => bringAppToFront(call, app) }),
+    bringToFront: async (app: string) => {
+      // Windows raises by executable through its own probe: the driver's bring_to_front is the Mac's.
+      if (options.windows) await options.windows.raise(app);
+      else await bringAppToFront(call, app);
+    },
     // move_cursor takes no delivery mode, and a desktop target is its own scope.
     move: (x, y) => call("move_cursor", { target: DESKTOP, x, y }).then(() => undefined),
     click: async (x, y, o) =>

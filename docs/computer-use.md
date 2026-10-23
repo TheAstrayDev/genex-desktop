@@ -267,7 +267,7 @@ transparent overlays such as a game overlay over the whole screen) and its app l
 installed app, so the studio asks Windows itself through the window probe
 ([`windows-window-probe.ts`](../src/substrate/windows-window-probe.ts)): Windows PowerShell running a
 fixed script, handed over as `-EncodedCommand` (no file, so no execution policy), that uses only .NET's
-UI Automation, Windows Forms, process reads and user32's `GetWindowLongW` declared in memory
+UI Automation, Windows Forms, process reads and a few user32 calls declared in memory
 (Reflection.Emit): nothing compiled and no cmdlet, as a first cmdlet
 makes PowerShell prepare every installed module for first use (over 20 s on a fresh machine). It answers which app is in front
 and whether its focused field is a password field (UI Automation's `IsPassword`, or, for a Win32
@@ -275,7 +275,9 @@ edit control, its own `ES_PASSWORD` style: .NET's UI Automation names a Windows 
 Pane with no password flag; asked again a moment later when focus is on no text field, as
 Chromium's accessibility wakes on first asking), and which
 app a click at a point reaches (the element there, up to its top-level window), with its window's
-handle so the tree fallback skips cua's slow window list. It says its view of the primary screen
+handle so the tree fallback skips cua's slow window list. It also brings an app forward by its
+executable (`raise`, the PC's `bring_to_front`: the newest responding window, restored if minimized,
+with an Alt tap when Windows refuses a background process the foreground). It says its view of the primary screen
 when ready, and click points are scaled to it, whatever DPI awareness PowerShell has. An app is its
 executable in lower case (`windowsAppId`: `notepad.exe`), shown by its file description (Notepad); a
 window no process can be read for is no app, which is refused. A probe that cannot start (PowerShell
@@ -358,7 +360,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   follow holds it for those 20 minutes. `game.engine.assisting` tells the plugin whether that turn
   still runs. That chat's own session then works as below; its session and app
   cards are asked only when the plugin started the assist by itself (`asked` on the grant), and a
-  pressed assist's session starts by bringing the plugin's app to the front (`bring_to_front`), since
+  pressed assist's session starts by bringing the plugin's app to the front (`bring_to_front`, or the
+window probe's `raise` on a PC), since
   nothing else it may click (the Dock, Stage Manager) could. A computer with no driver (Linux, a development build without one) answers `unavailable`,
   and `game.engine.canAssist` tells a plugin so beforehand, so it shows its click path instead of the button. Roblox Studio's
   publishing is the one assist that is not a setup click ([plugins](plugins.md)): the person
