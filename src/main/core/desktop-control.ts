@@ -51,7 +51,7 @@ export interface DesktopControlOptions {
 /** One session's desktop: where its frames go, how its person is asked, and what its screen shows. */
 export type DesktopSessionDeps = Pick<
   DesktopToolsDeps,
-  "frameDir" | "frame" | "downscale" | "maxActions" | "enabled" | "engineApps" | "started"
+  "frameDir" | "frame" | "downscale" | "maxActions" | "enabled" | "engineApps" | "keepInFront"
 > & {
   ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<boolean>;
 };

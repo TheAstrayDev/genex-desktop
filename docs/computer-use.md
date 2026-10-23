@@ -361,7 +361,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   still runs. That chat's own session then works as below; its session and app
   cards are asked only when the plugin started the assist by itself (`asked` on the grant), and a
   pressed assist's session starts by bringing the plugin's app to the front (`bring_to_front`, or the
-window probe's `raise` on a PC), since
+window probe's `raise` on a PC), and again before an action that finds Genex in front of it (the
+app reopened behind Genex), since
   nothing else it may click (the Dock, Stage Manager) could. A computer with no driver (Linux, a development build without one) answers `unavailable`,
   and `game.engine.canAssist` tells a plugin so beforehand, so it shows its click path instead of the button. Roblox Studio's
   publishing is the one assist that is not a setup click ([plugins](plugins.md)): the person

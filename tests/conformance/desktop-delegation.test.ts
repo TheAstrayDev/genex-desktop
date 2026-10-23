@@ -680,6 +680,72 @@ it("an assist's turn may drive the engine apps its grant names; the next turn an
   }
 });
 
+it("a pressed assist brings its app forward again whenever Genex has come in front of it", async () => {
+  const calls: string[] = [];
+  const fronted: string[] = [];
+  const toyEditor = { name: "Toy Editor", bundleId: "com.example.toy", pid: 7 };
+  const studio = { name: "Genex", bundleId: "com.genex.studio", pid: 1 };
+  let front = toyEditor;
+  const desktop = desktopControl({
+    findDriver: async () => "/fake/cua-driver",
+    connect: async () => ({
+      ...fakeDriver(calls),
+      focus: async () => ({ app: front, secure: false }),
+      appAt: async () => front,
+      bringToFront: async (app: string) => {
+        fronted.push(app);
+        front = toyEditor;
+      },
+    }),
+    ownApp: (app) => app.bundleId === studio.bundleId,
+  });
+  const lite = await coreLite({ desktop });
+  try {
+    const { core } = lite;
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    await core.updateSettings({ computerControl: true });
+    const project = "desk-refront";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const said: string[] = [];
+    const { engine } = desktopEngine(async (call) => {
+      said.push(await call({ action: "left_click", coordinate: "10,20" }));
+      // The editor reopened behind Genex (Windows flashes its taskbar button instead of raising it).
+      front = studio;
+      said.push(await call({ action: "left_click", coordinate: "30,40" }));
+      said.push(await call({ action: "left_click", coordinate: "50,60" }));
+    });
+    core.engines.register(engine as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    assistGrants(core).record(threadId, {
+      pluginId: TOY_PLUGIN_ID,
+      apps: ["com.example.toy"],
+      messageId: "msg_pressed",
+      asked: true,
+    });
+    await api[HostMethod.EngineDelegate]!({
+      engine: "fixture-delegate",
+      project,
+      threadId,
+      prompt: "go",
+      chatTurn: { messageId: "msg_pressed" },
+    });
+    assert.deepEqual(
+      fronted,
+      ["com.example.toy", "com.example.toy"],
+      "once when the session starts, once more when Genex covered it, and not while the editor stays in front",
+    );
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("click")),
+      ["click 10,20", "click 30,40", "click 50,60"],
+      "every click reached the editor",
+    );
+  } finally {
+    await lite.close();
+  }
+});
+
 it("an assist the person pressed asks no further card and brings its app forward; one a plugin started by itself still asks", async () => {
   const calls: string[] = [];
   const fronted: string[] = [];

@@ -10,7 +10,7 @@ import { desktopStopShortcut, stopShortcutWords } from "../../shared/computer-co
 import { t } from "../../shared/i18n.ts";
 import { type PluginBinding, StudioConsentSource } from "../../shared/plugins.ts";
 import { DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
-import type { DesktopApp, DesktopDriver } from "../../substrate/desktop-driver.ts";
+import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
@@ -103,15 +103,16 @@ export async function desktopSessionTools(
       granted: grants.forTurn(place.threadId, place.turn)?.apps ?? null,
     });
   // The turn answering an assist the person pressed starts with the plugin's app in front, where the
-  // task's clicks go: nothing else it may click (the Dock, Stage Manager) could bring it there.
-  const started = async (driver: DesktopDriver) => {
+  // task's clicks go, and gets it back when it reopens behind Genex: nothing else it may click (the
+  // Dock, Stage Manager, a PC's taskbar) could bring it there.
+  const keepInFront = () => {
     const grant = grants.forTurn(place.threadId, place.turn);
     const [app] = grant?.asked ? grant.apps : [];
-    if (app) await driver.bringToFront?.(app);
+    return app ?? null;
   };
   const tools = desktop.toolsFor({
     enabled: () => computerControlOn(core),
-    started,
+    keepInFront,
     engineApps,
     frameDir: path.join(core.layout.scratch, "desktop", safePathSegment(place.threadId)),
     ask,
