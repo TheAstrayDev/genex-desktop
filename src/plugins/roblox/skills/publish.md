@@ -50,11 +50,18 @@ the turn with `publish-result` (below), so the card shows how it ended.
 
 ## An update
 
-1. In Studio's menu bar, click **File**, then **Publish to Roblox**.
-2. If Studio asks to confirm, confirm the publish; anything else is a stop (rules above).
-3. Wait until Studio says it has published, call `publish-result` with `published: true`, then say
-   so in one line.
-4. If **Game Settings › Basic Info** shows Roblox's default picture as the game icon, give the game
+Studio publishes an update of a published place without a dialog (at most a brief notice that is
+easy to miss), so Roblox's own record of the place is the proof, read through the Roblox Studio
+connection's `execute_luau`:
+`return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Updated`.
+
+1. Read that time once before you publish.
+2. In Studio's menu bar, click **File**, then **Publish to Roblox**.
+3. If Studio asks to confirm, confirm the publish; anything else is a stop (rules above).
+4. Read the time again every few seconds for up to a minute. Once it is later than the first one,
+   the update is on Roblox: call `publish-result` with `published: true`, then say so in one line.
+   If it never changes, it was not published: say so (below), and never click Publish twice.
+5. If **Game Settings › Basic Info** shows Roblox's default picture as the game icon, give the game
    its cover (below); leave a cover it already has.
 
 ## The game's cover
