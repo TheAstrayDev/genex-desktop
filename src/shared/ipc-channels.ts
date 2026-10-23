@@ -62,6 +62,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:game.archive": "archiveGame",
   "studio:storage": "storageSpace",
   "studio:storage.free": "freeStorage",
+  "studio:data-folder": "dataFolder",
+  "studio:data-folder.choose": "chooseDataFolder",
+  "studio:data-folder.move": "moveDataFolder",
   "studio:game.engine.undo": "undoEngineLink",
   "studio:jobs.stop": "stopJob",
   "studio:app-look.open-settings": "openPrivacySettings",
@@ -179,6 +182,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.search": "playSearch",
   "studio:play.catalog": "playCatalog",
   "studio:play.remix": "playRemix",
+  "studio:play.remix-ready": "playRemixReady",
   "studio:play.online": "playOnline",
   "studio:play.open": "playOpen",
   "studio:play.game": "playGame",
@@ -233,6 +237,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:rollback": "rollback",
   "studio:selfchange.undo": "undoChange",
   "studio:preview.load": "loadPreview",
+  "studio:preview.web-build": "loadWebBuild",
   "studio:build.preview": "buildPreview",
   "studio:preview.screens": "agentScreens",
   "studio:run.still": "readRunStill",
@@ -326,6 +331,9 @@ export interface StudioInvokePayloads {
   "studio:game.archive": { project: string };
   "studio:storage": { project?: string };
   "studio:storage.free": { project?: string };
+  "studio:data-folder": undefined;
+  "studio:data-folder.choose": undefined;
+  "studio:data-folder.move": undefined;
   "studio:game.engine.undo": Arg<"undoEngineLink", 0>;
   "studio:jobs.stop": { project: string; jobId: string };
   "studio:app-look.open-settings": { pane: Arg<"openPrivacySettings", 0> };
@@ -375,8 +383,8 @@ export interface StudioInvokePayloads {
   "studio:plugins.choose-file": { id: string; request: Arg<"pluginChooseFile", 1> };
   "studio:plugins.genex-publish-review": { project: string };
   "studio:plugins.genex-publish-platforms": { project: string };
-  "studio:plugins.genex-publish": { project: string; review: ExportReview; title?: string };
-  "studio:plugins.genex-publish-apps": { project: string; title?: string };
+  "studio:plugins.genex-publish": { project: string; review: ExportReview; title?: string; remix?: boolean };
+  "studio:plugins.genex-publish-apps": { project: string; title?: string; remix?: boolean };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };
   "studio:plugins.lookup-github": { link: string; version?: GithubVersion };
@@ -444,6 +452,7 @@ export interface StudioInvokePayloads {
   "studio:play.search": { query: string; shelf: PlayShelf };
   "studio:play.catalog": undefined;
   "studio:play.remix": { slug: string };
+  "studio:play.remix-ready": { slugs: string[] };
   "studio:play.online": { slugs: string[] };
   "studio:play.open": { slug: string; title: string };
   "studio:play.game": { slug: string };
@@ -491,6 +500,7 @@ export interface StudioInvokePayloads {
   "studio:rollback": { snapshotId: string };
   "studio:selfchange.undo": { snapshotId: string };
   "studio:preview.load": { project: string };
+  "studio:preview.web-build": { project: string };
   "studio:build.preview": Arg<"buildPreview", 0>;
   "studio:preview.screens": undefined;
   "studio:run.still": { file: string; maxPx?: number };

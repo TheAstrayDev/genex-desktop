@@ -184,6 +184,13 @@ const FIXTURE_SAFE = [
   // What freeing space deletes, and deleting it: git in the games' folders, Genex's own copies.
   "studio:storage",
   "studio:storage.free",
+  // Where Genex keeps its files, and moving them. Only the person's own launch on Windows opens the
+  // picker or moves anything: a developer or test launch answers with its own folder, says it
+  // cannot move it, and reads nothing of the normal profile's (the data-folder fixture answers with
+  // stand-ins and moves nothing).
+  "studio:data-folder",
+  "studio:data-folder.choose",
+  "studio:data-folder.move",
   "studio:game.engine.undo",
   // Stops a process this profile's own agent started; nothing outside the profile changes.
   "studio:jobs.stop",
@@ -210,6 +217,8 @@ const FIXTURE_SAFE = [
   // The count on Studio's own Dock icon; it reaches nothing outside this app.
   "studio:badge",
   "studio:preview.load",
+  // Loads a game's own web build into its own Live, as opening the game does: nothing outside the app.
+  "studio:preview.web-build",
   "studio:preview.screens",
   "studio:preview.bounds",
   // A picture of the app's own game view for its own stage: nothing outside the app is reached.
@@ -297,6 +306,8 @@ const FIXTURE_SAFE = [
   // A remix writes a new game into the profile's own games folder; a fixture launch's copy is a
   // local stand-in (`play/remix.ts` `fixtureClone`), so no socket opens.
   "studio:play.remix",
+  // Whether a game's source holds a game: a fixture launch answers yes from memory, so no socket opens.
+  "studio:play.remix-ready",
   "studio:play.online",
   "studio:play.open",
   "studio:play.close",

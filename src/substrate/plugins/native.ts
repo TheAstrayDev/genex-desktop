@@ -178,7 +178,7 @@ function profileRuntimeRoot(binary: string): string | null {
 
 /** The state a finished native process leaves its job in. */
 function jobStateFor(result: { code: number | null; reason: string }): NativeJobState {
-  if (result.reason === NativeEndReason.Cancelled) return NativeJobState.Interrupted;
+  if (result.reason === NativeEndReason.Cancelled) return NativeJobState.Cancelled;
   return result.code === 0 && result.reason === NativeEndReason.Exit ? NativeJobState.Completed : NativeJobState.Failed;
 }
 
@@ -915,7 +915,8 @@ export class PluginNativeServices {
     }
     const timeoutMs = args.background ? recipe.timeoutMs : Math.min(recipe.timeoutMs, NATIVE_JOB_TIMEOUT_MS);
     const withdrawn = generation !== (this.#rootGenerations.get(root) ?? 0);
-    if (this.#stopped || invocation.signal.aborted || withdrawn) this.#stopJob(active, NativeJobState.Interrupted);
+    if (this.#stopped || withdrawn) this.#stopJob(active, NativeJobState.Interrupted);
+    if (!args.background && invocation.signal.aborted) this.#stopJob(active, NativeJobState.Cancelled);
     const execution = {
       background: args.background === true,
       manifest,
@@ -941,14 +942,18 @@ export class PluginNativeServices {
   async #finishJob(execution: JobExecution, save: () => Promise<void>, release?: () => Promise<void>): Promise<void> {
     const { record, signal, dirs } = execution;
     const active = this.#active.get(dirs.jobDir);
+    let prepared = false;
     try {
-      await this.#prepareAndExecute(execution);
+      const { binary, argv } = await this.#prepareJob(execution);
+      prepared = true;
+      await this.#execute(execution, binary, argv);
     } catch (e) {
       record.state = NativeJobState.Failed;
       if (signal.aborted && !(e instanceof NativeCleanupError))
-        record.state = active?.stopState ?? NativeJobState.Interrupted;
+        record.state = active?.stopState ?? NativeJobState.Cancelled;
       record.reason = errorMessage(e);
-      if (!execution.background && !signal.aborted) throw e;
+      const foregroundPreparationFailure = !execution.background && !prepared && !signal.aborted;
+      if (foregroundPreparationFailure) throw e;
     } finally {
       const aborted = record.state === NativeJobState.Interrupted || record.state === NativeJobState.Cancelled;
       if (aborted && active?.stopState) record.state = active.stopState;
@@ -961,7 +966,8 @@ export class PluginNativeServices {
       }
     }
   }
-  async #prepareAndExecute(execution: JobExecution): Promise<void> {
+  /** Resolve the runtime and stage its declared inputs before handing the job to a worker. */
+  async #prepareJob(execution: JobExecution): Promise<{ binary: string; argv: string[] }> {
     const { recipe, runtime, directory, root, dirs, record, args, binding, signal } = execution;
     signal.throwIfAborted();
     const inputs = await resolveInputs(recipe, args.inputs, binding);
@@ -981,7 +987,7 @@ export class PluginNativeServices {
     record.inputs = identities;
     const argv = await jobArgv(recipe, directory, inputs, dirs, args.values);
     signal.throwIfAborted();
-    await this.#execute(recipe, status.path, argv, directory, root, dirs, record, signal);
+    return { binary: status.path, argv };
   }
   /** A new job's folders, made: under its record's folder, or on Windows its work under the granted work folder. */
   async #jobDirs(jobs: string, id: string): Promise<JobDirs> {
@@ -1014,16 +1020,8 @@ export class PluginNativeServices {
     return status;
   }
   /** Run the confined process, then collect and deliver its declared outputs into the record. */
-  async #execute(
-    recipe: PluginNativeJob,
-    binary: string,
-    argv: string[],
-    directory: string,
-    root: string,
-    dirs: JobDirs,
-    record: PluginNativeResult,
-    signal: AbortSignal,
-  ): Promise<void> {
+  async #execute(execution: JobExecution, binary: string, argv: string[]): Promise<void> {
+    const { recipe, directory, root, dirs, record, signal } = execution;
     const binaryRoot = runtimeRoot(binary);
     const request = {
       binary,

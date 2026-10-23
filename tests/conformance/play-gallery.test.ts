@@ -14,6 +14,7 @@ import {
   PlayRoute,
   playGallery,
   SignInNeeded,
+  TicketDelivery,
   TicketStatus,
   toFeedPage,
   toPlayGame,
@@ -413,6 +414,21 @@ describe("Play gallery calls", () => {
       assert.deepEqual(await rig(answer).gallery.ticket("lost-cathedral"), { status: TicketStatus.NotMinted }, name);
     assert.deepEqual(await gallery.ticket("../x"), { status: TicketStatus.NotMinted });
     assert.equal(calls.length, 1, "a slug that is not a game is never sent");
+  });
+
+  it("mints a desktop ticket for a game Play starts on this computer, and a refusal plays as a guest", async () => {
+    // The desktop delivery signs the player in without a per-game question; a refusal of any
+    // kind, the phone app's consent answer included, is a guest this once.
+    const { gallery, calls } = rig(() => ok({ ticket: "N1" }));
+    assert.deepEqual(await gallery.ticket("lost-cathedral", TicketDelivery.Desktop), {
+      status: TicketStatus.Minted,
+      ticket: "N1",
+    });
+    assert.deepEqual(calls[0]?.body, { slug: "lost-cathedral", delivery: "desktop", channel: "production" });
+    const refused = rig(() => ({ status: 403, body: { error: "consent_required", projectId: "cm1" } }));
+    assert.deepEqual(await refused.gallery.ticket("lost-cathedral", TicketDelivery.Desktop), {
+      status: TicketStatus.NotMinted,
+    });
   });
 
   it("reads the search catalog once however many searches wait on it", async () => {

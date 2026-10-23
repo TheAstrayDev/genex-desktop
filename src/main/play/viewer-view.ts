@@ -42,6 +42,7 @@ import { closePage, closeWithWindow, dropGameView } from "./view-drop.ts";
 import { isPurchaseWindow, wirePurchaseCapture } from "./purchase-window.ts";
 import type { PlayMicStore } from "./mic-store.ts";
 import { playViewer, type PlayViewer, type PlayViewerDeps } from "./viewer.ts";
+import { t } from "../../shared/i18n.ts";
 
 /** Each studio window's Play views, for the development control (`dev/runtime.ts`). */
 const viewsOf = new WeakMap<BrowserWindow, PlayViews>();
@@ -73,6 +74,18 @@ const SERVER_ERROR = 500;
  * plugin instead. A user-origin rule, so not even the popover's inline `!important` styles win.
  */
 const HIDE_GUEST_POPOVER = "[data-genex-guest-popover]{display:none !important}";
+/**
+ * The browser's own focus ring on a game's canvas once the game takes the keyboard (a canvas focused by
+ * script matches :focus-visible): a line along the game's edges that tells the player nothing, since the
+ * game is all the view shows. Keys still reach the game; only the canvas's outline goes, and every other
+ * focus ring on the page stays. User-origin, so no page rule brings it back.
+ */
+const HIDE_GAME_FOCUS_RING = "canvas:focus{outline:none !important}";
+/**
+ * The bar's Full screen, as the game's own: its page asks for full screen as if the player had pressed
+ * a button in it, so Esc and the bar's return take the same path as a game's own full screen.
+ */
+const REQUEST_FULL_SCREEN = "document.documentElement.requestFullscreen().catch(() => undefined)";
 /** Where each system keeps its microphone privacy switch for apps. */
 const MIC_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
   darwin: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
@@ -80,9 +93,9 @@ const MIC_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
 };
 /** The mic menu's words. */
 const MESSAGE = {
-  micMenu: "Microphone",
-  systemDefault: "System default",
-  noNames: "Your microphones are listed once the mic is on",
+  micMenu: () => t("Microphone"),
+  systemDefault: () => t("System default"),
+  noNames: () => t("Your microphones are listed once the mic is on"),
 } as const;
 
 /** The studio window and what the viewer reaches through it. */
@@ -103,6 +116,8 @@ export interface PlayViewDeps {
   /** The bar's layer: its page (`dist/renderer/play-bar.html`) and its preload (`dist/preload/play-bar.cjs`). */
   barPage: string;
   barPreload: string;
+  /** The bar page's `additionalArguments` (the computer's languages, `main/language.ts`); none when absent. */
+  barArguments?: () => string[];
   /** The game's comments on genex.games. */
   comments: PlayComments;
   /** A web game's native app on this computer, for the bar's pill; absent where Genex plays no native game. */
@@ -214,11 +229,11 @@ function showMicMenu(
     click: () => choose(device),
   });
   const template: MenuItemConstructorOptions[] = [
-    { label: MESSAGE.micMenu, enabled: false },
-    item(MESSAGE.systemDefault, null),
+    { label: MESSAGE.micMenu(), enabled: false },
+    item(MESSAGE.systemDefault(), null),
     ...names.map((name) => item(name, name)),
   ];
-  if (devices.length === 0) template.push({ type: "separator" }, { label: MESSAGE.noNames, enabled: false });
+  if (devices.length === 0) template.push({ type: "separator" }, { label: MESSAGE.noNames(), enabled: false });
   Menu.buildFromTemplate(template).popup({ window: win, ...at });
 }
 
@@ -284,7 +299,13 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps, lost: () => void, hear
   const made = (): WebContentsView => {
     if (view && !view.webContents.isDestroyed()) return view;
     const layer = new WebContentsView({
-      webPreferences: { preload: deps.barPreload, sandbox: true, contextIsolation: true, nodeIntegration: false },
+      webPreferences: {
+        preload: deps.barPreload,
+        additionalArguments: deps.barArguments?.() ?? [],
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
     });
     layer.setBackgroundColor(TRANSPARENT);
     layer.setVisible(false);
@@ -324,6 +345,10 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps, lost: () => void, hear
     },
     warm: (): void => {
       if (!win.isDestroyed()) made();
+    },
+    reload: (): void => {
+      const contents = view?.webContents;
+      if (contents && !contents.isDestroyed()) contents.reload();
     },
     /** The viewer's news, for the bar's page. */
     tell: (event: PlayViewerEvent): void => {
@@ -393,7 +418,9 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
     });
     contents.on("render-process-gone", () => mine() && events.failed());
     contents.on("dom-ready", () => {
-      if (!contents.isDestroyed()) void contents.insertCSS(HIDE_GUEST_POPOVER, { cssOrigin: "user" }).catch(() => {});
+      if (contents.isDestroyed()) return;
+      for (const css of [HIDE_GUEST_POPOVER, HIDE_GAME_FOCUS_RING])
+        void contents.insertCSS(css, { cssOrigin: "user" }).catch(() => {});
     });
     contents.on("before-input-event", (_event, input) => events.key(input));
     void contents.loadURL(url).catch(() => {});
@@ -407,6 +434,11 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
     },
     hide: (): void => current?.setVisible(false),
     focus: (): void => current?.webContents.focus(),
+    fullScreen: (): void => {
+      const contents = current?.webContents;
+      if (contents && !contents.isDestroyed())
+        void contents.executeJavaScript(REQUEST_FULL_SCREEN, true).catch(() => undefined);
+    },
     close,
     /** Tell the game's page to open the microphone or close it; an opening is what the gate lets through. */
     mic: (command: PlayMicCommand): void => {
