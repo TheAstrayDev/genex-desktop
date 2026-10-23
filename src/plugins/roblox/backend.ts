@@ -1070,9 +1070,19 @@ async function publishStatus(
   if (remote) state.placeId = remote.placeId;
   else if (place.link) state.name = firstPublishName(place);
   if (!context.project) return state;
-  const recorded = await readAttempt(await context.host(PluginService.StorageRoot), context.project);
-  if (recorded) state.attempt = attemptNow(recorded, Boolean(remote), deps.now());
+  const storage = await context.host(PluginService.StorageRoot);
+  const recorded = await readAttempt(storage, context.project);
+  if (!recorded) return state;
+  const assisting = recorded.phase === RobloxPublishPhase.Publishing ? await assistUnderWay(context) : true;
+  state.attempt = attemptNow(recorded, Boolean(remote), deps.now(), assisting);
+  // Ended with its turn: recorded so, and a word from the agent after that changes nothing.
+  if (!assisting) await writeAttempt(storage, context.project, state.attempt).catch(() => undefined);
   return state;
+}
+
+/** Whether the game's chat still runs the turn this plugin's assist started; true when the host can't say. */
+async function assistUnderWay(context: PluginContext): Promise<boolean> {
+  return context.host(PluginService.GameEngineAssisting).catch(() => true);
 }
 
 /**

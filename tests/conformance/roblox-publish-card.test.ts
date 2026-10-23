@@ -32,13 +32,20 @@ const ON_A_MAC = { skip: process.platform === "win32" && "the fake Mac helper is
 const REMOTE = { placeId: "7781440219", universeId: "2650912" };
 const GAME = "sky-race";
 
-/** A game whose place file is linked, published on Roblox or never, over a host whose assist answers `answer`. */
-async function linkedGame(published: boolean, answer: PluginEngineAssistAnswer = { started: true }) {
+/**
+ * A game whose place file is linked, published on Roblox or never, over a host whose assist answers
+ * `answer` and says whether the chat's assist is still under way (`assisting`; unanswered when absent).
+ */
+async function linkedGame(
+  published: boolean,
+  answer: PluginEngineAssistAnswer = { started: true },
+  assisting?: () => boolean,
+) {
   const mac = await robloxMac();
   const game = await makeGame(mac, GAME, "Sky Race");
   const file = path.join(game.directory, "sky-race.rbxlx");
   await writeFile(file, "<roblox/>");
-  const host = hostFor(mac, game, { assist: () => answer });
+  const host = hostFor(mac, game, { assist: () => answer, ...(assisting ? { assisting } : {}) });
   await host.context.host(
     "game.engine.link" as never,
     { project: file, ...(published ? { remote: REMOTE } : {}) } as never,
@@ -168,6 +175,26 @@ describe("publish-status and publish-result through the backend", () => {
     const after = await status();
     assert.equal(after.attempt?.phase, RobloxPublishPhase.Stopped);
     assert.equal(after.attempt?.detail, detail);
+  });
+
+  it("stops once the chat's turn ended without the agent's word, and says to look in the chat", ON_A_MAC, async () => {
+    let underWay = true;
+    const { host, backend, status } = await linkedGame(true, { started: true }, () => underWay);
+    await backend.action?.(RobloxAction.PublishUpdate, {}, host.context);
+    assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Publishing, "while its turn runs");
+    underWay = false;
+    const after = await status();
+    assert.equal(after.attempt?.phase, RobloxPublishPhase.Stopped);
+    assert.ok(after.attempt?.detail, "the card says why");
+    const late = String(await backend.tool?.(RobloxTool.PublishResult, { published: true }, host.context));
+    assert.match(late, /No publish is under way/, "the record ended with the turn");
+  });
+
+  it("a first publish Roblox has is published even after its turn ended", ON_A_MAC, async () => {
+    const { host, backend, status, file } = await linkedGame(false, { started: true }, () => false);
+    await backend.action?.(RobloxAction.FirstPublish, { name: "Sky Racers" }, host.context);
+    await host.context.host("game.engine.link" as never, { project: file, remote: REMOTE } as never);
+    assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Published);
   });
 
   it("a publish the chat never took leaves no record", ON_A_MAC, async () => {

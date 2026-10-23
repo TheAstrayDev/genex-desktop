@@ -23,6 +23,7 @@
  * - **Where it can't run.** A computer with no desktop driver (Linux, or a development build
  *   without one): `unavailable`, and the plugin shows its click path instead.
  */
+import type { ComposerSendOptions } from "../../shared/composer.ts";
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
@@ -146,17 +147,26 @@ export class AssistGrants {
   }
 }
 
+/** The queue's records that end a message: its turn answered it (or failed), or it was taken back. */
+const MESSAGE_ENDS: ReadonlySet<string> = new Set([
+  CustomEvent.CoordinatorMessageHandled,
+  CustomEvent.CoordinatorMessageRemoved,
+]);
+
 /**
  * Follow the chat's queue records for assist messages: a message the log says reached a running
  * turn (read in place, or by interrupting that turn and resuming it with the message in front)
  * moves its grant to that turn. One handed to a build's lead moves nothing: a lead never clicks for
- * the person.
+ * the person. A message answered or taken back ends its grant, also for a turn that never opened
+ * computer control (one that failed before it could click).
  */
 export function followAssistDeliveries(grants: AssistGrants, threadId: string, batch: readonly EventData[]): void {
   for (const data of batch) {
     const record = data.type === EventKind.Custom ? customRecord(data) : null;
-    if (record?.event_type !== CustomEvent.CoordinatorMessageDelivered) continue;
+    if (!record) continue;
     const { messageId, into, how } = record.payload;
+    if (MESSAGE_ENDS.has(record.event_type) && typeof messageId === "string") grants.turnEnded(threadId, messageId);
+    if (record.event_type !== CustomEvent.CoordinatorMessageDelivered) continue;
     const toTurn = typeof messageId === "string" && typeof into === "string" && how !== SteerDelivery.Lead;
     if (toTurn) grants.steered(threadId, into, messageId);
   }
@@ -249,6 +259,15 @@ export async function assistAvailable(host: AssistHost, pluginId: string): Promi
 }
 
 /**
+ * Whether the game's chat still runs the turn `pluginId`'s assist started: its grant lasts until
+ * that turn ends (answered, failed or taken back) or {@link ASSIST_GRANT_MAX_MS} is up.
+ */
+export async function assistUnderWay(host: AssistHost, pluginId: string, binding: PluginBinding): Promise<boolean> {
+  const threadId = binding.threadId ?? (await host.gameChat(binding.project));
+  return host.grants.live(threadId)?.pluginId === pluginId;
+}
+
+/**
  * Hand a setup task to the game's chat (module comment). Every refusal comes before anything
  * changes: no card, no setting, no grant and no message.
  */
@@ -308,6 +327,27 @@ function consentOf(card: AssistCard) {
   };
 }
 
+/** The provider choice a chat remembers from its last message. */
+type ChatChoiceMeta = { lastEngine?: string; lastModel?: string; lastEffort?: string } | undefined;
+
+/**
+ * The model the task's turn runs on: the one the chat last used, or the first ready subscription
+ * for a chat that has used none. A message sent without one would run on the local model.
+ */
+async function chatChoice(
+  core: StudioCore,
+  threadId: string,
+): Promise<Pick<ComposerSendOptions, "engine" | "model" | "effort">> {
+  const record = await core.store.getRecord(threadId).catch(() => null);
+  const meta = record?.metadata as ChatChoiceMeta;
+  if (!meta?.lastEngine) return { engine: await core.defaultDelegatedEngine() };
+  return {
+    engine: meta.lastEngine,
+    ...(meta.lastModel ? { model: meta.lastModel } : {}),
+    ...(meta.lastEffort ? { effort: meta.lastEffort } : {}),
+  };
+}
+
 /** The real host: the core's plugins, settings, consent cards and chat. */
 export function coreAssistHost(core: StudioCore): AssistHost {
   return {
@@ -335,8 +375,10 @@ export function coreAssistHost(core: StudioCore): AssistHost {
       const answer = await core.requestConsent(source, tool, args, binding, signal, undefined, { afresh: true });
       return answer.approved;
     },
-    post: (threadId, project, text, messageId) =>
-      core.sendUserMessage(text, { thread: threadId, project, clientId: messageId }),
+    post: async (threadId, project, text, messageId) => {
+      const choice = await chatChoice(core, threadId);
+      await core.sendUserMessage(text, { thread: threadId, project, clientId: messageId, ...choice });
+    },
     grants: assistGrants(core),
     messageId: () => `msg_${shortId("assist")}`,
   };

@@ -350,10 +350,13 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   moment or an observer, and never while the chat's own assist is under way: `in-assist`, since
   the turn answering it does the clicking); a plugin from a folder or the marketplace shows the task on a card first, and with the setting off the studio's
   card `studio-computer-setting` offers to turn it on for every chat. It posts "<plugin> asks:
-  <task>" to the game's chat and grants the turn answering that message (the turn it started, or the
-  running turn it was steered into; never another turn of the chat building beside it) the
-  plugin's declared apps until it ends, and never past 20 minutes; a session with no turn the host
-  can follow holds it for those 20 minutes. That chat's own session then works as below; its session and app
+  <task>" to the game's chat, on the model that chat last used (the first ready subscription for a
+  chat that has used none, never the local default), and grants the turn answering that message
+  (the turn it started, or the running turn it was steered into; never another turn of the chat
+  building beside it) the plugin's declared apps until it ends (the queue records its message
+  answered, failed or taken back), and never past 20 minutes; a session with no turn the host can
+  follow holds it for those 20 minutes. `game.engine.assisting` tells the plugin whether that turn
+  still runs. That chat's own session then works as below; its session and app
   cards are asked only when the plugin started the assist by itself (`asked` on the grant), and a
   pressed assist's session starts by bringing the plugin's app to the front (`bring_to_front`), since
   nothing else it may click (the Dock, Stage Manager) could. A computer with no driver (Linux, a development build without one) answers `unavailable`,

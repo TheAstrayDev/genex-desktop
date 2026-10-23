@@ -26,6 +26,7 @@ import {
   declaredPlayerApps,
   engineAppIds,
   engineAssist,
+  assistUnderWay,
   followAssistDeliveries,
 } from "../../src/main/core/desktop-assist.ts";
 import { CustomEvent, customEventData } from "../../src/shared/custom-events.ts";
@@ -314,6 +315,33 @@ describe("an assist's grant", () => {
     assert.equal(grants.forTurn("chat-1", "msg_running"), null, "another message's delivery moves nothing");
     followAssistDeliveries(grants, "chat-1", [delivered("msg_running", SteerDelivery.Interrupt)]);
     assert.ok(grants.forTurn("chat-1", "msg_running"), "the turn resumed with the message in front holds it");
+  });
+
+  it("ends when the queue says its message was answered or taken back, even by a turn that never clicked", () => {
+    const handled = (messageId: string) => customEventData(CustomEvent.CoordinatorMessageHandled, { messageId });
+    const grants = new AssistGrants(() => 0);
+    grants.record("chat-1", grant);
+    followAssistDeliveries(grants, "chat-1", [handled("msg_other")]);
+    assert.ok(grants.live("chat-1"), "another message answered leaves it");
+    followAssistDeliveries(grants, "chat-1", [handled("msg_a")]);
+    assert.equal(grants.live("chat-1"), null, "its turn ended, failed or not");
+    grants.record("chat-1", grant);
+    followAssistDeliveries(grants, "chat-1", [
+      customEventData(CustomEvent.CoordinatorMessageRemoved, { messageId: "msg_a" }),
+    ]);
+    assert.equal(grants.live("chat-1"), null, "taken back before it was answered");
+  });
+
+  it("is under way for its plugin in its game's chat until its turn ends", async () => {
+    const fake = fakeHost();
+    const project = { project: "toy", directory: "/games/toy" };
+    assert.equal(await assistUnderWay(fake.host, "toy-engine", project), false, "nothing asked yet");
+    fake.host.grants.record("chat-of-game", grant);
+    assert.equal(await assistUnderWay(fake.host, "toy-engine", project), true, "found through the game's chat");
+    assert.equal(await assistUnderWay(fake.host, "someone-else", project), false, "another plugin's never");
+    assert.equal(await assistUnderWay(fake.host, "toy-engine", { ...project, threadId: "chat-2" }), false);
+    fake.host.grants.turnEnded("chat-of-game", "msg_a");
+    assert.equal(await assistUnderWay(fake.host, "toy-engine", project), false);
   });
 
   it("drives the engine's app only in the turn that answers its message, never in a build turn running beside it", () => {

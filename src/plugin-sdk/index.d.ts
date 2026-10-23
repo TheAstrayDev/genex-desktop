@@ -748,6 +748,12 @@ export interface PluginHostCall {
    * Offer Do it for me only when it answers true, and the click path otherwise.
    */
   (method: "game.engine.canAssist"): Promise<boolean>;
+  /**
+   * `game-engine`: whether the bound game's chat still runs the turn your Do it for me started:
+   * false once that turn has ended (answered, failed or taken back), or after 20 minutes. Use it to
+   * end a progress display the agent never ended. Throws where the host has no assists.
+   */
+  (method: "game.engine.assisting"): Promise<boolean>;
 }
 
 /** `game.engine.assist`'s task: what the chat is asked to click, in plain words. */

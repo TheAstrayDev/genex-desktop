@@ -24,8 +24,8 @@ the turn with `publish-result` (below), so the card shows how it ended.
   brings Studio back to its editor before handing you the publish. Read Studio's mode only from the
   Roblox Studio connection's `get_studio_state` ("Current Studio Mode: Edit" is editing): a
   NetworkClient in Explorer (a place edited from Roblox has one while editing) and the Test tab's red
-  Stop button don't mean a test runs. If a test really runs, end it with `start_stop_play`
-  (`is_start: false`) and go on. Wait while Studio opens or reloads the place (its window title
+  Stop button don't mean a test runs. If a test really runs, end it yourself with Studio's Stop
+  (Shift+F5 with Studio in front, or the Test tab's Stop button) and go on. Wait while Studio opens or reloads the place (its window title
   names the place once it is ready), and close what Studio itself puts in the way: a tip, a "what's
   new" note, the Start Page, a panel over the menu bar.
 - **Real pointer clicks with Studio in front.** Studio's menus report their items as disabled to

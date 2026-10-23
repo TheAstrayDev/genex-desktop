@@ -1535,7 +1535,8 @@ press and then follows the publish through `publish-status`: handed to the agent
 Roblox, with the game's page once it is there. The publish under way is recorded
 (`publish-attempts/<game>.json`) when the chat takes it; the agent ends it with `publish-result`
 (published, or stopped with what Roblox asked, one plain line), a first publish also ends once Genex
-links the published place, and one never ended stops after 20 minutes. A place never published gets
+links the published place, and one never ended stops once the chat's turn that clicks it has ended
+(`game.engine.assisting`, saying to read the chat), or after 20 minutes. A place never published gets
 **Publish to Roblox** (`first-publish`, native, with a name field filled with the game's title; the
 agent's `first-publish {name}`, whose card shows the name in a field the person may edit,
 `confirmationInput`): "Publish this place to Roblox as a new game named "<name>"…",
@@ -1839,6 +1840,9 @@ Available services are capability checked and scoped to the calling plugin:
   on this computer: a desktop with its driver, and apps its `engine.apps` declares here (computer
   control that is off still counts, since its card offers to turn it on). It asks nothing and
   needs no bound game; offer Do it for me only when it answers true, and the click path otherwise.
+- `game.engine.assisting` (capability `game-engine`): whether the bound game's chat still runs the
+  turn the plugin's Do it for me started: false once the queue records its message answered (or
+  failed) or taken back, or after 20 minutes. Roblox's publishing card ends with it.
 - `sandbox.run {program, args, reads, writes, scratchEnv?, env?, timeoutMs}` / `sandbox.result {id}` /
   `sandbox.stop {id}` (capability `game-engine`, `substrate/plugins/sandbox-jobs.ts`): a long job of
   the plugin's (Unreal's package on Windows) run in the studio's ProcessSandbox. `sandbox.run` checks
