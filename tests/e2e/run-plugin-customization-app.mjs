@@ -224,6 +224,24 @@ try {
       `failed panel keeps its iframe unmounted in ${mode} mode`,
       (await page.locator("[data-new-chat-plugin] iframe").count()) === 0,
     );
+    await page.evaluate(({ id, profile }) => window.studio.pluginSetCustomization(id, profile), {
+      id: pluginId,
+      profile: { ...profile, newChat: { panel: "notes", height: 96 } },
+    });
+    await expect(page.locator(".new-chat-plugin-content")).toHaveCSS("height", "96px");
+    check(
+      `minimum-height failure fits the native retry in ${mode} mode`,
+      await page
+        .locator(".new-chat-plugin-status")
+        .evaluate(
+          (el) => el.scrollHeight <= el.clientHeight && el.querySelector("button").getBoundingClientRect().height >= 32,
+        ),
+    );
+    await page.evaluate(({ id, profile }) => window.studio.pluginSetCustomization(id, profile), {
+      id: pluginId,
+      profile: { ...profile, newChat: { panel: "notes", height: 240 } },
+    });
+    await expect(page.locator(".new-chat-plugin-content")).toHaveCSS("height", "240px");
     const failed = await geometry();
     await page.screenshot({ path: path.join(out, `panel-failed-${mode}.png`) });
     // StrictMode may repeat the initial mount; measure the update's one retry after that settles.

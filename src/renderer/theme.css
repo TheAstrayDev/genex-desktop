@@ -8588,7 +8588,7 @@ p.usage-divider {
   gap: 12px;
   height: 100%;
   margin: 0;
-  padding: 24px;
+  padding: 12px 24px;
   overflow-y: auto;
   color: var(--muted-foreground);
   font-size: var(--t-sm);
