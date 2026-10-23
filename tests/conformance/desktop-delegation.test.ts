@@ -13,6 +13,7 @@ import { it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { assistGrants } from "../../src/main/core/desktop-assist.ts";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
+import { engineAppRefusal } from "../../src/main/core/desktop-target.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { UiEvent, type UiEvent as UiEventData } from "../../src/shared/ui-events.ts";
@@ -819,6 +820,87 @@ it("an assist the person pressed asks no further card and brings its app forward
     assert.deepEqual(fronted, ["com.example.toy"], "and brings nothing forward by itself");
     assert.match(prompts[0]!, /see your screen/);
     assert.match(prompts[1]!, /use Toy Editor/);
+  } finally {
+    await lite.close();
+  }
+});
+
+it("a pressed assist asks the person, on a card, for an app outside its grant, and refuses another engine's editor", async () => {
+  const calls: string[] = [];
+  const toyEditor = { name: "Toy Editor", bundleId: "com.example.toy", pid: 7 };
+  const browser = { name: "Microsoft Edge", bundleId: "msedge.exe", pid: 8 };
+  let under = toyEditor;
+  const desktop = desktopControl({
+    findDriver: async () => "/fake/cua-driver",
+    connect: async () => ({
+      ...fakeDriver(calls),
+      focus: async () => ({ app: under, secure: false }),
+      appAt: async () => under,
+      bringToFront: async () => {},
+    }),
+    ownApp: () => false,
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    await core.updateSettings({ computerControl: true });
+    const project = "desk-pressed-browser";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const said: string[] = [];
+    const { engine } = desktopEngine(async (call) => {
+      said.push(await call({ action: "left_click", coordinate: "10,20" }));
+      // The game's page in the person's browser, for its cover.
+      under = browser;
+      said.push(await call({ action: "left_click", coordinate: "30,40" }));
+      said.push(await call({ action: "left_click", coordinate: "50,60" }));
+    });
+    core.engines.register(engine as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    assistGrants(core).record(threadId, {
+      pluginId: TOY_PLUGIN_ID,
+      apps: ["com.example.toy"],
+      messageId: "msg_pressed",
+      asked: true,
+    });
+    await api[HostMethod.EngineDelegate]!({
+      engine: "fixture-delegate",
+      project,
+      threadId,
+      prompt: "go",
+      chatTurn: { messageId: "msg_pressed" },
+    });
+    const prompts = (await core.store.listEvents(threadId))
+      .filter((event) => event.data.type === "custom" && event.data.event_type === "plugin_consent")
+      .map((event) => (event.data as { payload: { state: string; prompt: string } }).payload)
+      .filter((card) => card.state === "pending")
+      .map((card) => card.prompt);
+    assert.equal(prompts.length, 1, "one card, for the browser: the press already covered the editor");
+    assert.match(prompts[0]!, /use Microsoft Edge/);
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("click")),
+      ["click 10,20", "click 30,40", "click 50,60"],
+      "the browser, once allowed, takes its clicks",
+    );
+    assert.equal(
+      engineAppRefusal(
+        { name: "Other Editor", bundleId: "com.example.other", pid: 9 },
+        { declared: new Set(["com.example.toy", "com.example.other"]), granted: new Set(["com.example.toy"]) },
+      ),
+      "Other Editor is not one of the apps this setup step may use",
+      "another engine's editor stays out of the assist",
+    );
   } finally {
     await lite.close();
   }

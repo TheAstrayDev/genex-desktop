@@ -86,9 +86,11 @@ export async function desktopSessionTools(
   };
   const grants = assistGrants(core);
   const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<boolean> => {
-    // The person's press (or the card they approved) for this turn's assist already said yes; the
-    // engine-app guard keeps the turn to the grant's apps.
-    if (grants.forTurn(place.threadId, place.turn)?.asked) return true;
+    // The person's press (or the card they approved) for this turn's assist already said yes to the
+    // session and the grant's apps; any other app (their browser, for the game's page) is asked.
+    const grant = grants.forTurn(place.threadId, place.turn);
+    const covered = !app || (app.bundleId !== null && grant?.apps.has(app.bundleId) === true);
+    if (grant?.asked && covered) return true;
     const tool = { ...DESKTOP_CONSENT_TOOL, confirmation: consentPrompt(question, app) };
     const asked = app ? { app: app.name, bundleId: app.bundleId } : {};
     const answer = await x.pluginTools.requestConsent(DESKTOP_CONSENT_SOURCE, tool, asked, place.binding, place.signal);

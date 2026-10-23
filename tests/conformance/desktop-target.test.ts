@@ -361,11 +361,19 @@ describe("the engine-app guard", () => {
     assert.deepEqual(asked, ["Toy Editor"], "the person's per-app card still asks");
   });
 
-  it("refuses every app outside the grant while an assist runs", async () => {
-    const { done, calls, refused } = await guarded(EDITOR, new Set(["com.example.toy"]));
-    assert.equal(done.applied, 0);
-    assert.deepEqual(calls, []);
-    assert.match(refused[0]!.message, /TextEdit is not one of the apps this setup step may use/);
+  it("leaves an app outside the grant to the person's card while an assist runs", async () => {
+    const { done, calls, asked } = await guarded(EDITOR, new Set(["com.example.toy"]));
+    assert.equal(done.applied, 1);
+    assert.deepEqual(calls, ["click 5,5 left×1"]);
+    assert.deepEqual(asked, ["TextEdit"], "the person is asked about it, as outside an assist");
+  });
+
+  it("refuses an engine's editor the assist was not granted, and an app it cannot name", async () => {
+    const other: DesktopApp = { name: "Other Editor", bundleId: "com.example.other", pid: 12 };
+    const rule = { declared: new Set([...declared, "com.example.other"]), granted: new Set(["com.example.toy"]) };
+    assert.match(String(engineAppRefusal(other, rule)), /Other Editor is not one of the apps this setup step may use/);
+    const unnamed: DesktopApp = { name: "Unknown", bundleId: null, pid: 13 };
+    assert.match(String(engineAppRefusal(unnamed, rule)), /not one of the apps this setup step may use/);
   });
 
   it("still never drives the studio or system settings, even when a grant names them", async () => {

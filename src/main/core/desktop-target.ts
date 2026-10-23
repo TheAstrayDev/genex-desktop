@@ -141,13 +141,16 @@ export interface EngineAppRule {
 
 /**
  * Why the engine-app guard refuses an app, or null: an app an engine's games are played in always;
- * during an assist every app outside its grant; outside one, every engine's editor. The apps the
- * studio never drives are refused before this.
+ * every engine's editor but the ones an assist was granted. Any other app is the person's to allow
+ * (an assist's own step may need their browser, for a game's page), so it is left to their card.
+ * The apps the studio never drives are refused before this.
  */
 export function engineAppRefusal(app: DesktopApp, rule: EngineAppRule): string | null {
   const id = app.bundleId;
   if (id !== null && rule.players?.has(id)) return MESSAGE.playerApp(appName(app));
-  if (rule.granted) return id !== null && rule.granted.has(id) ? null : MESSAGE.outsideAssist(appName(app));
+  if (id !== null && rule.granted?.has(id)) return null;
+  const editor = id === null || rule.declared.has(id);
+  if (rule.granted && editor) return MESSAGE.outsideAssist(appName(app));
   return id !== null && rule.declared.has(id) ? MESSAGE.engineApp(appName(app)) : null;
 }
 

@@ -346,7 +346,9 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   (`engine.apps.mac` or `engine.apps.windows`, its editor) are refused in plain words ("use the engine's own tools", and a
   setup click or a publish goes through its plugin's tool) before
   the person is asked about them, unless the chat holds that plugin's setup assist; the tool's own
-  description says so too. While an assist holds the chat, every app outside its grant is refused.
+  description says so too. While an assist holds the chat, every editor outside its grant is refused;
+  any other app (the person's browser, for a published game's Creator Hub page) is asked on its card,
+  as the press covered only the grant's apps.
   The apps the studio never drives stay refused whatever a grant names (`engineAppRefusal`), and so
   do the apps an enabled engine's games are played in (`engine.playerApps`, such as Roblox's
   player): no agent plays in a live server, not even in a setup assist.
