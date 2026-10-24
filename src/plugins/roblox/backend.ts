@@ -625,6 +625,22 @@ async function setUpThenOpen(deps: RobloxDeps, context: PluginContext): Promise<
   return { ...answer, reopened: true, message: `${answer.message} ${opened.message}` };
 }
 
+/**
+ * A new game's place, written and opened, with Genex's helper added first while Studio is still
+ * closed: added after, it would take a Restart Studio (and its save prompt) before the build starts.
+ */
+async function newGameSetUp<T>(deps: RobloxDeps, context: PluginContext, create: () => Promise<T>): Promise<T> {
+  const closed = (await locateStudio(deps)).installed && !(await studioRunning(deps));
+  if (closed && !(await setUpIn(deps, await context.host(PluginService.StorageRoot)))) await runSetup(deps, context);
+  return create();
+}
+
+/** The panel's New Roblox game, titled as the press says, set up first like the agent's. */
+function createAction(deps: RobloxDeps, context: PluginContext, args: Record<string, unknown>) {
+  const title = typeof args.title === "string" ? { title: args.title } : {};
+  return newGameSetUp(deps, context, () => createGame(deps, context, { snapshot: true, ...title }));
+}
+
 /** What Set it up for me runs next. Never leaves the backend. */
 const ForMeStep = {
   GetStudio: "get-studio",
@@ -1286,8 +1302,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxAction.QuitStudio]: (_args, context) => quitStudioAction(deps, context),
     [RobloxAction.Places]: (_args, context) => listPlaces(deps, context, scan),
     [RobloxAction.UsePlace]: (args, context) => usePlace(deps, context, args, scan),
-    [RobloxAction.Create]: (args, context) =>
-      createGame(deps, context, { snapshot: true, ...(typeof args.title === "string" ? { title: args.title } : {}) }),
+    [RobloxAction.Create]: (args, context) => createAction(deps, context, args),
     [RobloxAction.Setup]: (_args, context) => setupAction(deps, context),
     [RobloxAction.UndoSetup]: (_args, context) => undoAction(deps, context),
     [RobloxAction.RestartStudio]: (_args, context) => restartStudio(deps, context),
@@ -1306,7 +1321,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxTool.LuauFinish]: async (_args, context) => (context.hook ? luauFinishAt(deps, luau, context) : {}),
     [RobloxTool.UseProject]: async (args, context) => (await usePlaceNamed(deps, context, args.project)).message,
     [RobloxTool.ShowSteps]: async (_args, context) => showSteps(context, (await steps(deps, context, slot.job)).open),
-    [RobloxTool.NewGame]: (_args, context) => newGameTool(deps, context),
+    [RobloxTool.NewGame]: (_args, context) => newGameSetUp(deps, context, () => newGameTool(deps, context)),
     [RobloxTool.EngineStatus]: () => engineStatus(deps),
     [RobloxTool.OpenForRun]: atMoment((ops) => openForRun(ops)),
     [RobloxTool.SavePlace]: atMoment(savePlaceAt),
