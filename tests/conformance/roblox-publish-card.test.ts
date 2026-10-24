@@ -251,6 +251,41 @@ describe("publish-status and publish-result through the backend", () => {
     assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Published);
   });
 
+  it(
+    "a first publish the agent stopped is published once the person finished it in Studio after the press",
+    ON_A_MAC,
+    async () => {
+      for (const logged of [true, false]) {
+        const { mac, host, backend, status, file } = await linkedGame(false);
+        const logs = path.join(mac.deps.home, "Library", "Logs", "Roblox");
+        await mkdir(logs, { recursive: true });
+        const line = (time: number) => `${new Date(time).toISOString()},13726.228516,1ca8,6,Debug ${PUBLISHED_MARK}\n`;
+        const log = path.join(logs, "0.744.0.7441077_20261024T133155Z_Studio_24D01_last.log");
+        await writeFile(log, line(mac.deps.now() - 60_000));
+        await backend.action?.(RobloxAction.FirstPublish, { name: "Sky Racers" }, host.context);
+        const detail = "Roblox Studio showed Save failed after Create.";
+        await backend.tool?.(RobloxTool.PublishResult, { published: false, detail }, host.context);
+        assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Stopped);
+        // The person pressed Studio's Retry: Studio published, and Genex linked the game to the place.
+        if (logged) await appendFile(log, line(mac.deps.now() + 2_000));
+        await host.context.host("game.engine.link" as never, { project: file, remote: REMOTE } as never);
+        const after = await status();
+        if (logged) {
+          assert.equal(after.attempt?.phase, RobloxPublishPhase.Published);
+          assert.equal(after.attempt?.detail, undefined, "the stop's words are not shown on a published card");
+          assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Published, "and it stays so");
+        } else {
+          assert.equal(
+            after.attempt?.phase,
+            RobloxPublishPhase.Stopped,
+            "a publish from before the press proves nothing",
+          );
+          assert.equal(after.attempt?.detail, detail);
+        }
+      }
+    },
+  );
+
   it("a publish the chat never took leaves no record", ON_A_MAC, async () => {
     const { host, backend, status } = await linkedGame(true, { started: false, reason: "declined" });
     const answer = (await backend.action?.(RobloxAction.PublishUpdate, {}, host.context)) as { started: boolean };

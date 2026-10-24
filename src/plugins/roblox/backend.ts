@@ -126,7 +126,12 @@ import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from
 import { type PlaceTarget, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import { publishedSince, signInWatch, studioLogFolder } from "./studio-logs.ts";
 import { attemptNow, endAttempt, readAttempt, writeAttempt } from "./publish-attempt.ts";
-import { RobloxPublishKind, RobloxPublishPhase, type RobloxPublishState } from "../../shared/roblox-publish.ts";
+import {
+  type RobloxPublishAttempt,
+  RobloxPublishKind,
+  RobloxPublishPhase,
+  type RobloxPublishState,
+} from "../../shared/roblox-publish.ts";
 import {
   type LocateDeps,
   locateStudio,
@@ -1090,11 +1095,26 @@ async function publishStatus(
   const storage = await context.host(PluginService.StorageRoot);
   const recorded = await readAttempt(storage, context.project);
   if (!recorded) return state;
+  if (await finishedInStudio(deps, recorded, Boolean(remote))) {
+    state.attempt = { phase: RobloxPublishPhase.Published, kind: recorded.kind, at: recorded.at };
+    if (recorded.name) state.attempt.name = recorded.name;
+    await writeAttempt(storage, context.project, state.attempt).catch(() => undefined);
+    return state;
+  }
   const assisting = recorded.phase === RobloxPublishPhase.Publishing ? await assistUnderWay(context) : true;
   state.attempt = attemptNow(recorded, Boolean(remote), deps.now(), assisting);
   // Ended with its turn: recorded so, and a word from the agent after that changes nothing.
   if (!assisting) await writeAttempt(storage, context.project, state.attempt).catch(() => undefined);
   return state;
+}
+
+/**
+ * Whether a first publish the agent stopped was finished by the person in Studio (its Retry after
+ * Roblox's "Save failed"): Roblox has the place now, and Studio's log records a publish since the press.
+ */
+async function finishedInStudio(deps: RobloxDeps, attempt: RobloxPublishAttempt, onRoblox: boolean) {
+  const stoppedFirst = attempt.phase === RobloxPublishPhase.Stopped && attempt.kind === RobloxPublishKind.First;
+  return stoppedFirst && onRoblox && (await studioLogged(deps, attempt.at));
 }
 
 /** Whether the game's chat still runs the turn this plugin's assist started; true when the host can't say. */
