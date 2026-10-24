@@ -94,7 +94,7 @@ const MESSAGE = {
   untilSatisfiedPromised: (ceiling: string) =>
     `It finishes when the required outcomes are verified, with a safety stop by about ${ceiling} — keep the app open and the computer awake. `,
   planWindow:
-    "Your Claude plan's window can pause it partway; it waits out the reset and resumes itself, or one tap on Resume.",
+    "Your plan's usage limit can pause it partway; it waits out the reset and resumes itself, or one tap on Resume.",
   connectionFirst:
     " Your game doesn't have the studio's connection yet, so the first thing this build does is add it — without it nothing can tell whether a change made the game better.",
 } as const;
