@@ -406,3 +406,89 @@ describe("the engine-app guard", () => {
     );
   });
 });
+
+/**
+ * Bringing an app to the front by name: how the agent reaches the person's browser behind a
+ * full-screen editor, since the taskbar is the shell and never driven. The app is held to a click's
+ * rules: the apps the studio never drives and an engine's editor outside its assist are refused
+ * before the person is asked, and an app they decline is never raised.
+ */
+describe("bringing an app to the front", () => {
+  const EDGE: DesktopApp = { name: "Microsoft Edge", bundleId: "msedge.exe", pid: 51 };
+  const ROBLOX_STUDIO = "robloxstudiobeta.exe";
+
+  /** A driver whose raise puts a running app in front, and records it. */
+  function raisingDriver(running: DesktopApp[]) {
+    const fake = fakeDriver();
+    let front: DesktopApp | null = EDITOR;
+    fake.driver.focus = async () => ({ app: front, secure: false });
+    fake.driver.bringToFront = async (id) => {
+      fake.calls.push(`raise ${id}`);
+      front = running.find((app) => app.bundleId === id) ?? front;
+    };
+    return fake;
+  }
+
+  /** A target over a raising driver, with the engine guard reading Roblox Studio as declared. */
+  async function fronting(allowed: string[], granted: ReadonlySet<string> | null = null) {
+    const fake = raisingDriver([EDGE]);
+    const asked: string[] = [];
+    const target = desktopTarget({
+      driver: fake.driver,
+      allowApp: async (app) => {
+        asked.push(app.bundleId ?? app.name);
+        return allowed.includes(app.bundleId ?? "");
+      },
+      ownApp: (app) => app.bundleId === STUDIO.bundleId,
+      engineApps: (app) => engineAppRefusal(app, { declared: new Set([ROBLOX_STUDIO]), granted }),
+      frontSettleMs: 0,
+    });
+    return { target, calls: fake.calls, asked };
+  }
+
+  it("brings an app the person allows in front of the others", async () => {
+    const { target, calls, asked } = await fronting(["msedge.exe"]);
+    assert.equal(await target.front?.("msedge.exe"), null);
+    assert.deepEqual(calls, ["raise msedge.exe"]);
+    assert.deepEqual(asked, ["msedge.exe"], "the person is asked about the app before it moves");
+  });
+
+  it("reads a Windows executable in any case, as Windows does", async () => {
+    const { target, calls } = await fronting(["msedge.exe"]);
+    assert.equal(await target.front?.("MSEdge.EXE"), null);
+    assert.deepEqual(calls, ["raise msedge.exe"]);
+  });
+
+  it("says when the app did not come forward (it is not running), and opens nothing", async () => {
+    const { target, calls } = await fronting(["chrome.exe"]);
+    assert.match(String(await target.front?.("chrome.exe")), /chrome\.exe did not come to the front/);
+    assert.deepEqual(calls, ["raise chrome.exe"]);
+  });
+
+  const refusedApps: Array<{ name: string; app: string; why: RegExp; asked?: string[] }> = [
+    { name: "the shell (Explorer, the taskbar)", app: "explorer.exe", why: /never driven/ },
+    { name: "the shell in capitals", app: "EXPLORER.EXE", why: /never driven/ },
+    { name: "a password manager", app: "1password.exe", why: /never driven/ },
+    { name: "the studio itself", app: STUDIO.bundleId ?? "", why: /never driven/ },
+    { name: "system settings on a Mac", app: "com.apple.systempreferences", why: /never driven/ },
+    { name: "an engine's editor outside its assist", app: ROBLOX_STUDIO, why: /game engine's editor/ },
+    { name: "a path instead of an app", app: "C:\\Windows\\explorer.exe", why: /names no app/ },
+    { name: "a relative path", app: "../../tools/evil.exe", why: /names no app/ },
+    { name: "nothing at all", app: "  ", why: /names no app/ },
+    { name: "an app the person declines", app: "msedge.exe", why: /did not allow/, asked: ["msedge.exe"] },
+  ];
+  for (const row of refusedApps) {
+    it(`refuses ${row.name}, and nothing is raised`, async () => {
+      const { target, calls, asked } = await fronting([]);
+      assert.match(String(await target.front?.(row.app)), row.why);
+      assert.deepEqual(calls, [], "the driver raised nothing");
+      assert.deepEqual(asked, row.asked ?? [], "a refused app is never put to the person");
+    });
+  }
+
+  it("brings an engine's editor forward inside an assist that was granted it", async () => {
+    const { target, calls } = await fronting([ROBLOX_STUDIO], new Set([ROBLOX_STUDIO]));
+    assert.match(String(await target.front?.(ROBLOX_STUDIO)), /did not come to the front/);
+    assert.deepEqual(calls, [`raise ${ROBLOX_STUDIO}`], "the grant lets the raise through");
+  });
+});

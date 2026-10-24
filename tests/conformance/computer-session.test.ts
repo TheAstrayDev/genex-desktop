@@ -444,3 +444,33 @@ describe("computer session — why a game refused", () => {
     );
   });
 });
+
+describe("computer session — bringing an app to the front", () => {
+  it("hands bring_to_front to a target that can, says why when it could not, and refuses it elsewhere", async () => {
+    const { target, calls } = fakeTarget();
+    const desk: ComputerTarget = {
+      ...target,
+      caps: { ...BROWSER_CAPABILITIES, apps: true },
+      front: async (app) => {
+        calls.push(`front:${app}`);
+        return app === "msedge.exe" ? null : `${app} did not come to the front`;
+      },
+    };
+    const { s } = await session({ target: desk });
+    assert.match(
+      text(await s.run("computer", { action: "bring_to_front", text: "msedge.exe" })),
+      /^OK — bring msedge\.exe to the front/,
+    );
+    assert.match(
+      text(await s.run("computer", { action: "bring_to_front", text: "chrome.exe" })),
+      /bring_to_front did not happen: chrome\.exe did not come to the front/,
+    );
+    assert.match(text(await s.run("computer", { action: "bring_to_front" })), /bring_to_front needs text=<app>/);
+    assert.deepEqual(calls, ["front:msedge.exe", "front:chrome.exe"]);
+    const plain = await session();
+    assert.match(
+      text(await plain.s.run("computer", { action: "bring_to_front", text: "msedge.exe" })),
+      /not available/,
+    );
+  });
+});

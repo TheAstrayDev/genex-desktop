@@ -306,12 +306,27 @@ describe("computer tool — built from what the target can do", () => {
   it("offers a browser game every verb but named game actions, which only a Play Protocol game declares", () => {
     assert.deepEqual(
       computerActionsFor(BROWSER_CAPABILITIES),
-      // Flipped on purpose (web pages): the web verbs are the desktop's, never a game window's.
-      COMPUTER_ACTIONS.filter((action) => action !== "act" && !action.startsWith("web_")),
+      // Flipped on purpose (web pages, then bringing an app forward): the web verbs and
+      // bring_to_front are the desktop's, never a game window's.
+      COMPUTER_ACTIONS.filter(
+        (action) => action !== "act" && !action.startsWith("web_") && action !== "bring_to_front",
+      ),
     );
     const browser = computerToolDefinition({ role: "builder", capabilities: BROWSER_CAPABILITIES });
     assert.deepEqual(browser, computerToolDefinition({ role: "builder" }));
     assert.ok("surface" in browser.parameters.properties);
+  });
+
+  it("offers the desktop bring_to_front, says what it takes, and asks for the app it names", () => {
+    assert.ok(computerActionsFor(DESKTOP_CAPABILITIES).includes("bring_to_front"));
+    const description = computerToolDefinition({ role: "operator", capabilities: DESKTOP_CAPABILITIES }).description;
+    assert.match(description, /bring_to_front text=<app>/);
+    assert.match(description, /msedge\.exe/);
+    const missing = parseComputerArgs({ action: "bring_to_front" });
+    assert.deepEqual(missing, {
+      ok: false,
+      error: "bring_to_front needs text=<app>: its executable on Windows (msedge.exe) or bundle id on a Mac",
+    });
   });
 
   it("never offers a verb the target lacks, and says so instead of failing silently", () => {

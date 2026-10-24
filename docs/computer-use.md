@@ -340,7 +340,10 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   names there (`mac-apps.ts`, which also reads `lsappinfo` in either form, macOS 27's included), and a
   point nothing names is refused, never put down to the app in front; a drag is checked at both ends, so
   dropping onto a refused or unasked app moves nothing. A refusal ends the plan and its reason is the
-  answer. `app_look`, which only looks and so needs no setting ([tool permissions](tool-permissions.md#looking-at-apps)),
+  answer. Since the taskbar and Dock are the shell, `bring_to_front text=<app>` (an executable on
+  Windows, a bundle id on a Mac) raises a running app the agent cannot click, such as the person's
+  browser behind a full-screen editor: it is held to a click's rules and card first, opens nothing,
+  and answers whether the app is now in front. `app_look`, which only looks and so needs no setting ([tool permissions](tool-permissions.md#looking-at-apps)),
   never looks at these apps or Genex's own windows either.
 - **Never building or play-testing.** The apps an enabled engine plugin declares for this system
   (`engine.apps.mac` or `engine.apps.windows`, its editor) are refused in plain words ("use the engine's own tools", and a

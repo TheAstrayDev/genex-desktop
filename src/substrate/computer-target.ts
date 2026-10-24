@@ -107,6 +107,11 @@ export interface ComputerTarget {
   /** Web pages by their structure, where the target declares `dom`. */
   web?: TargetWeb;
   /**
+   * Bring a running app's window in front of the others, where the target declares `apps`: null once
+   * it is in front, else why it is not (refused, declined, or it did not come forward).
+   */
+  front?(app: string): Promise<string | null>;
+  /**
    * Address this player (1 to `caps.players`) with every later look, input and state read, where
    * the target plays several at once.
    */

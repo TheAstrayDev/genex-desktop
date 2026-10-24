@@ -90,10 +90,18 @@ export const COMPUTER_HOST_ACTIONS = [
   "web_read",
   "web_click",
   "web_type",
+  "bring_to_front",
 ] as const;
 
 /** The actions the session itself treats specially, by name: a wait, a batch and a reload. */
-export const ComputerVerb = { Wait: "wait", Batch: "batch", Reload: "reload", Act: "act", Look: "look" } as const;
+export const ComputerVerb = {
+  Wait: "wait",
+  Batch: "batch",
+  Reload: "reload",
+  Act: "act",
+  Look: "look",
+  BringToFront: "bring_to_front",
+} as const;
 
 /** The web page verbs: a page read and driven by its structure, in a separate, clean browser. */
 export const WebVerb = { Open: "web_open", Read: "web_read", Click: "web_click", Type: "web_type" } as const;
@@ -422,6 +430,7 @@ const ACTION_NEEDS: Partial<Record<ComputerAction, (request: ComputerRequest) =>
   web_open: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.webOpenNeedsUrl),
   web_click: (r) => (r.ref ? null : COMPUTER_ARG_PROBLEM.webNeedsRef(r.action)),
   web_type: (r) => (r.ref && r.text !== undefined ? null : COMPUTER_ARG_PROBLEM.webTypeNeedsRefAndText),
+  bring_to_front: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.frontNeedsApp),
 };
 
 /** The amounts an action falls back to when it names none. */
@@ -588,6 +597,7 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
   web_read: (caps) => caps.dom,
   web_click: (caps) => caps.dom,
   web_type: (caps) => caps.dom,
+  bring_to_front: (caps) => caps.apps === true,
 };
 
 /** Can this target carry out this action? */
@@ -714,6 +724,7 @@ const ACTION_DEED: Record<ComputerAction, ScreenDeed> = {
   web_read: ScreenDeed.Look,
   web_click: ScreenDeed.Click,
   web_type: ScreenDeed.Type,
+  bring_to_front: ScreenDeed.Load,
 };
 
 /** A computer action as the agent's screen shows it: its deed, and the keys of a press. */
@@ -773,6 +784,10 @@ function describeStudioAction(request: ComputerRequest): string {
       return `look ${Math.round(request.dx ?? 0)},${Math.round(request.dy ?? 0)}`;
     case "act":
       return `act ${request.text}${request.duration ? ` ${request.duration}s` : ""}`;
+    case "bring_to_front":
+      return `bring ${String(request.text ?? "")
+        .trim()
+        .slice(0, MAX_CAPTION_TEXT_CHARS)} to the front`;
     default:
       return describeWebAction(request);
   }

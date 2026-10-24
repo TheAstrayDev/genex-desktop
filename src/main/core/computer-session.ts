@@ -408,6 +408,18 @@ async function act(ctx: ActionContext): Promise<LiveToolResult> {
   return observed(ctx, `${head}. ${await helpers.afterMove(ctx)}${ctx.noteLine}`, true);
 }
 
+/** A running app's window brought in front of the others by name: the answer says where things stand after. */
+async function bringToFront(ctx: ActionContext): Promise<LiveToolResult> {
+  const { request, target, helpers } = ctx;
+  if (!target.front) return COMPUTER_ARG_PROBLEM.unsupported(request.action, "");
+  const why = await target.front(String(request.text ?? "").trim());
+  if (why) {
+    ctx.record.failed = why;
+    return COMPUTER_ARG_PROBLEM.frontCouldNot(why);
+  }
+  return observed(ctx, `OK — ${ctx.caption}. ${await helpers.afterMove(ctx)}${ctx.noteLine}`, true);
+}
+
 const HOST_ACTIONS: Record<ComputerHostAction, HostActionHandler> = {
   screenshot: look,
   camera: look,
@@ -430,6 +442,7 @@ const HOST_ACTIONS: Record<ComputerHostAction, HostActionHandler> = {
   web_read: web,
   web_click: web,
   web_type: web,
+  bring_to_front: bringToFront,
 };
 
 function isHostAction(action: string): action is ComputerHostAction {
@@ -486,7 +499,10 @@ function centre(size: { width: number; height: number }): { x: number; y: number
 function movesOf(request: ComputerRequest): number {
   if (request.action === ComputerVerb.Batch) return request.steps?.length ?? 0;
   const moving =
-    request.action === ComputerVerb.Wait || request.action === ComputerVerb.Act || WEB_MOVES.has(request.action);
+    request.action === ComputerVerb.Wait ||
+    request.action === ComputerVerb.Act ||
+    request.action === ComputerVerb.BringToFront ||
+    WEB_MOVES.has(request.action);
   return isHostAction(request.action) && !moving ? 0 : 1;
 }
 

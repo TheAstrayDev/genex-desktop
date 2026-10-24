@@ -88,10 +88,12 @@ to Roblox.
    separate, clean browser is signed in to nothing, so Creator Hub only asks for a sign-in there).
    Genex asks the person for that app on a card when you first use it, in this
    turn, whatever an earlier turn was told, so use it rather than handing them the steps. Studio is
-   in front now: click a visible part of the browser's window first and take a screenshot; type the
-   address only once the browser is in front, never into Studio (its viewport takes letters as
-   camera keys). A sign-in page there
-   is a stop (rules above).
+   in front now, often over the whole screen: bring the browser forward with the desktop tool's
+   `bring_to_front` (`msedge.exe` on Windows unless the person's browser is another, its bundle id on
+   a Mac), or click a visible part of its window, and take a screenshot. The taskbar and Dock are
+   never driven, and Alt+Tab only lands back in Studio. Type the address only once the browser is in
+   front, never into Studio (its viewport takes letters as camera keys). If no browser is open, or a
+   sign-in page shows there, that is a stop (rules above).
 4. On **Icon**, upload the icon and save. On **Thumbnails** (in the page's sidebar), add the
    thumbnail, tick it **Active** and save. In each file dialog, go straight to the path the answer
    gave (⌘⇧G on a Mac, the file name field on Windows), paste it and press Return, then open it.
