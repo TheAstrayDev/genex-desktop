@@ -41,8 +41,11 @@ the turn with `publish-result` (below), so the card shows how it ended.
    one: that would overwrite another game).
 3. In **Name**, replace whatever is there with the exact name the task gives.
 4. Leave **Description** empty and every other field as it is.
-5. Click **Create** (or **Publish**). Wait until the dialog closes and Studio's window title shows
-   the new name.
+5. Click **Create** (or **Publish**). Wait until the dialog closes and Studio reloads the place from
+   Roblox (its window title names the place again; that can be Roblox's place name, not the game's).
+   If the dialog shows **Save failed** with a **Retry** button, Roblox's server dropped the request:
+   click **Retry** once (Studio sends the same publish again; it creates no second game). A second
+   **Save failed** is a stop (below).
 6. Call `publish-result` with `published: true`, then say in one line that it is published under
    that name. Genex links this game to the published place by itself; don't press anything in
    Genex's panel for it.
