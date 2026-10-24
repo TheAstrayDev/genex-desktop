@@ -344,9 +344,9 @@ test("a live games root under a .claude folder is warned about, through a link t
   }
 });
 
-test("a fixture profile's build counts React commits for its checks; a live profile's does not", () => {
+test("a fixture profile's build counts React commits for its checks; a live profile's carries computer control's driver instead", () => {
   assert.deepEqual(devBuildArgs("b-1", "fixture"), ["scripts/build.mjs", "--dev-build=b-1", "--commit-counts"]);
-  assert.deepEqual(devBuildArgs("b-2", "live"), ["scripts/build.mjs", "--dev-build=b-2"]);
+  assert.deepEqual(devBuildArgs("b-2", "live"), ["scripts/build.mjs", "--dev-build=b-2", "--vendor-cua-driver"]);
 });
 
 test("a live profile on a Mac starts through macOS's launcher, so Electron holds its own Accessibility and Screen Recording", () => {

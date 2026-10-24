@@ -304,7 +304,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   `dist/resources/cua-driver` with cua's license and notices (`build/cua-driver/`). On macOS it is
   thinned to the app's architecture and the packager signs it with the app's identity; on Windows
   `cua-driver.exe` (x64) is taken from the zip by 7-Zip and ships as cua signed it (Cua AI, Inc.),
-  which the packaged smoke checks. A development build takes it with `GENEX_VENDOR_CUA_DRIVER=1`, else
+  which the packaged smoke checks. A development build takes it with `--vendor-cua-driver` (every live `studio:dev` profile passes it) or
+  `GENEX_VENDOR_CUA_DRIVER=1`, else
   runs an installed driver (`~/.local/bin/cua-driver` and the usual paths, or cua's Windows install
   folder `%LOCALAPPDATA%\Programs\Cua\cua-driver\bin`), embedded the same way. On a Mac a live
   `studio:dev` profile starts through `open` (`devLaunchCommand`), so Electron is its own responsible

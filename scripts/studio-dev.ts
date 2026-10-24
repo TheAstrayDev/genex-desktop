@@ -128,11 +128,12 @@ function liveNotes(owner: any, launched: boolean) {
 
 /**
  * How an owned build is built: a fixture profile's also counts React commits for its checks; a
- * live one does not, since profiling every render slows the app a person is using.
+ * live one does not, since profiling every render slows the app a person is using, and carries the
+ * bundled cua-driver instead, so computer control works there as in a release.
  */
 export function devBuildArgs(buildId: string, providers: string): string[] {
   const args = ["scripts/build.mjs", `--dev-build=${buildId}`];
-  return providers === "fixture" ? [...args, "--commit-counts"] : args;
+  return providers === "fixture" ? [...args, "--commit-counts"] : [...args, "--vendor-cua-driver"];
 }
 
 /** macOS's launcher, which starts an app as LaunchServices does. */
