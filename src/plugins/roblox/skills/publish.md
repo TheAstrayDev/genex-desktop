@@ -84,7 +84,9 @@ to Roblox.
    well, frame a better view and call it again.
 3. Read the game's ids through the Roblox Studio connection (`return game.GameId, game.PlaceId`) and
    open `https://create.roblox.com/dashboard/creations/experiences/<GameId>/places/<PlaceId>/icon`
-   in the person's browser: Genex asks them for that app on a card when you first use it, in this
+   in the person's own browser window, with pointer clicks and typing (never `web_open`: its
+   separate, clean browser is signed in to nothing, so Creator Hub only asks for a sign-in there).
+   Genex asks the person for that app on a card when you first use it, in this
    turn, whatever an earlier turn was told, so use it rather than handing them the steps. Studio is
    in front now: click a visible part of the browser's window first and take a screenshot; type the
    address only once the browser is in front, never into Studio (its viewport takes letters as
