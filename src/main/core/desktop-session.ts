@@ -14,7 +14,13 @@ import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
-import { assistGrants, assistPageRefusal, declaredEngineApps, declaredPlayerApps } from "./desktop-assist.ts";
+import {
+  assistGrants,
+  assistOpensPages,
+  assistPageRefusal,
+  declaredEngineApps,
+  declaredPlayerApps,
+} from "./desktop-assist.ts";
 import { engineAppRefusal } from "./desktop-target.ts";
 import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 
@@ -100,12 +106,15 @@ export async function desktopSessionTools(
   };
   // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,
   // read afresh on every action.
-  const engineApps = (app: DesktopApp) =>
-    engineAppRefusal(app, {
+  const engineApps = (app: DesktopApp) => {
+    const grant = grants.forTurn(place.threadId, place.turn);
+    return engineAppRefusal(app, {
       declared: declaredEngineApps(core.plugins.list()),
       players: declaredPlayerApps(core.plugins.list()),
-      granted: grants.forTurn(place.threadId, place.turn)?.apps ?? null,
+      granted: grant?.apps ?? null,
+      others: grant ? assistOpensPages(grant, core.plugins.list()) : false,
     });
+  };
   // The turn answering an assist the person pressed starts with the plugin's app in front, where the
   // task's clicks go, and gets it back when it reopens behind Genex: nothing else it may click (the
   // Dock, Stage Manager, a PC's taskbar) could bring it there.

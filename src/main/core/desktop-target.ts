@@ -213,21 +213,33 @@ export interface EngineAppRule {
   granted: ReadonlySet<string> | null;
   /** The apps every enabled engine's games are played in (`engine.playerApps`): never driven. */
   players?: ReadonlySet<string>;
+  /**
+   * During an assist, whether an app outside its grant that is no engine's editor is the person's to
+   * allow on their card (its engine opens pages in their browser, `engine.pages`) rather than refused.
+   */
+  others?: boolean;
 }
 
 /**
  * Why the engine-app guard refuses an app, or null: an app an engine's games are played in always;
- * every engine's editor but the ones an assist was granted. Any other app is the person's to allow
- * (an assist's own step may need their browser, for a game's page), so it is left to their card.
- * The apps the studio never drives are refused before this.
+ * during an assist every app outside its grant, except that an assist whose engine opens pages
+ * (`others`) leaves an app that is no engine's editor to the person's card (its step needs their
+ * browser, for a game's page); outside one, every engine's editor. The apps the studio never drives
+ * are refused before this.
  */
 export function engineAppRefusal(app: DesktopApp, rule: EngineAppRule): string | null {
   const id = app.bundleId;
   if (id !== null && rule.players?.has(id)) return MESSAGE.playerApp(appName(app));
+  if (rule.granted) return assistAppRefusal(app, rule);
+  return id !== null && rule.declared.has(id) ? MESSAGE.engineApp(appName(app)) : null;
+}
+
+/** During an assist: its granted apps go ahead, and the person's card decides only where `others` lets it. */
+function assistAppRefusal(app: DesktopApp, rule: EngineAppRule): string | null {
+  const id = app.bundleId;
   if (id !== null && rule.granted?.has(id)) return null;
   const editor = id === null || rule.declared.has(id);
-  if (rule.granted && editor) return MESSAGE.outsideAssist(appName(app));
-  return id !== null && rule.declared.has(id) ? MESSAGE.engineApp(appName(app)) : null;
+  return rule.others && !editor ? null : MESSAGE.outsideAssist(appName(app));
 }
 
 /** One refusal, the shape `refusals()` reports. */

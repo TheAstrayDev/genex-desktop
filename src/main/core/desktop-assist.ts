@@ -313,6 +313,12 @@ export function assistPageRefusal(
   return pages.includes(address.hostname) ? null : PAGE_MESSAGE.notDeclared(pages);
 }
 
+/** Whether an assist's engine opens pages in the person's browser (`engine.pages`), so its step may need their browser. */
+export function assistOpensPages(grant: Pick<AssistGrant, "pluginId">, plugins: readonly PagePlugin[]): boolean {
+  const owner = livePlugins(plugins).find((plugin) => plugin.manifest.id === grant.pluginId);
+  return (owner?.manifest.engine?.pages?.length ?? 0) > 0;
+}
+
 /** What the agent reads when a page is refused. */
 const PAGE_MESSAGE = {
   noGrant: "open_page opens a page only in the turn that answers an engine's task (such as Publish to Roblox)",

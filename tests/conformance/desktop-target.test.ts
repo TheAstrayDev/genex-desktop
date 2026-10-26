@@ -328,7 +328,7 @@ describe("the engine-app guard", () => {
   const declared = new Set(["com.example.toy"]);
 
   /** A target whose guard reads the declared apps and the chat's live assist grant (null: none). */
-  async function guarded(under: DesktopApp, granted: ReadonlySet<string> | null) {
+  async function guarded(under: DesktopApp, granted: ReadonlySet<string> | null, others = false) {
     const fake = fakeDriver({ under });
     const asked: string[] = [];
     const target = desktopTarget({
@@ -338,7 +338,7 @@ describe("the engine-app guard", () => {
         return true;
       },
       ownApp: (app) => app.bundleId === STUDIO.bundleId,
-      engineApps: (app) => engineAppRefusal(app, { declared, granted }),
+      engineApps: (app) => engineAppRefusal(app, { declared, granted, others }),
     });
     await target.screenshot({ quality: 80, surface: "auto" as never });
     const done = await target.input([{ type: "click", x: 10, y: 10, px: true }]);
@@ -361,11 +361,14 @@ describe("the engine-app guard", () => {
     assert.deepEqual(asked, ["Toy Editor"], "the person's per-app card still asks");
   });
 
-  it("leaves an app outside the grant to the person's card while an assist runs", async () => {
-    const { done, calls, asked } = await guarded(EDITOR, new Set(["com.example.toy"]));
+  it("leaves an app outside the grant to the person's card while an assist whose engine opens pages runs", async () => {
+    const { done, calls, asked } = await guarded(EDITOR, new Set(["com.example.toy"]), true);
     assert.equal(done.applied, 1);
     assert.deepEqual(calls, ["click 5,5 left×1"]);
     assert.deepEqual(asked, ["TextEdit"], "the person is asked about it, as outside an assist");
+    const strict = await guarded(EDITOR, new Set(["com.example.toy"]));
+    assert.equal(strict.done.applied, 0, "an assist whose engine opens no pages refuses it");
+    assert.match(strict.refused[0]?.message ?? "", /not one of the apps this setup step may use/);
   });
 
   it("refuses an engine's editor the assist was not granted, and an app it cannot name", async () => {

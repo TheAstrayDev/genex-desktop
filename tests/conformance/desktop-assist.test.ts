@@ -21,6 +21,7 @@ import {
   AssistGrants,
   type AssistHost,
   assistAvailable,
+  assistOpensPages,
   assistPageRefusal,
   assistGrants,
   declaredEngineApps,
@@ -499,6 +500,13 @@ describe("the pages an assist may open in the person's browser", () => {
   };
   const plugins = [kiln, other];
   const grant = { pluginId: "kiln" };
+
+  it("lets an assist reach the person's browser only when its engine opens pages", () => {
+    assert.equal(assistOpensPages(grant, plugins), true);
+    const bare = { ...kiln, manifest: { ...kiln.manifest, engine: { ...kiln.manifest.engine, pages: [] } } };
+    assert.equal(assistOpensPages(grant, [bare]), false);
+    assert.equal(assistOpensPages(grant, [{ ...kiln, enabled: false }]), false, "a disabled engine opens none");
+  });
 
   it("opens a page of a host the assist's own engine declares, in the turn that holds its grant", () => {
     assert.equal(assistPageRefusal(new URL("https://create.kiln.dev/dashboard/1/icon"), grant, plugins), null);
