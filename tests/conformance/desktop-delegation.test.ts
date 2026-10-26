@@ -6,7 +6,7 @@
  * and the driver stops with the session or when the setting is turned off.
  */
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { cp, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { it } from "node:test";
@@ -825,7 +825,18 @@ it("an assist the person pressed asks no further card and brings its app forward
   }
 });
 
-it("a pressed assist asks the person, on a card, for an app outside its grant, and refuses another engine's editor", async () => {
+/** The toy engine plugin copied with pages its engine opens in the person's browser, as Roblox's Creator Hub. */
+async function toyPluginWithPages(): Promise<string> {
+  const dir = path.join(await tmpDir("toy-pages-"), "toy-engine-plugin");
+  await cp(TOY_PLUGIN, dir, { recursive: true });
+  const file = path.join(dir, "plugin.json");
+  const manifest = JSON.parse(await readFile(file, "utf8")) as { engine: Record<string, unknown> };
+  manifest.engine.pages = ["create.example.dev"];
+  await writeFile(file, JSON.stringify(manifest, null, 2));
+  return dir;
+}
+
+it("a pressed assist whose engine opens pages asks the person, on a card, for an app outside its grant, and refuses another engine's editor", async () => {
   const calls: string[] = [];
   const toyEditor = { name: "Toy Editor", bundleId: "com.example.toy", pid: 7 };
   const browser = { name: "Microsoft Edge", bundleId: "msedge.exe", pid: 8 };
@@ -852,7 +863,7 @@ it("a pressed assist asks the person, on a card, for an app outside its grant, a
   try {
     const { core } = lite;
     answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
-    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.installLocal(await toyPluginWithPages(), PluginSourceKind.Local, []);
     await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
     await core.updateSettings({ computerControl: true });
     const project = "desk-pressed-browser";
