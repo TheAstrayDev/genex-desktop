@@ -409,6 +409,7 @@ describe("cua-driver on Windows", () => {
     at?: (x: number, y: number) => ProbedApp | null;
     process?: (pid: number) => ProbedApp | null;
     raise?: (exe: string) => ProbedApp | null;
+    running?: (exe: string) => ProbedApp | null;
     tree?: CuaAnswer;
   }) {
     const windows = [
@@ -455,6 +456,7 @@ describe("cua-driver on Windows", () => {
         return probed.at?.(x, y) ?? null;
       },
       process: async (pid) => probed.process?.(pid) ?? null,
+      running: async (exe) => probed.running?.(exe) ?? null,
       raise: async (exe) => {
         asked.push(`raise ${exe}`);
         return probed.raise?.(exe) ?? null;
@@ -565,6 +567,24 @@ describe("cua-driver on Windows", () => {
     await fake.driver.bringToFront("robloxstudiobeta.exe");
     assert.deepEqual(fake.asked, ["raise robloxstudiobeta.exe"]);
     assert.deepEqual(fake.calls, [], "the driver's own list and bring_to_front are not used");
+  });
+
+  it("says which named app runs, by its executable: a name no process has is no app", async () => {
+    const studio: ProbedApp = {
+      pid: 50,
+      exe: "RobloxStudioBeta.exe",
+      name: "Roblox Studio",
+      secure: null,
+      window: null,
+    };
+    const fake = windowsDriver({ running: (exe) => (exe === "robloxstudiobeta.exe" ? studio : null) });
+    assert.ok(fake.driver.runningApp, "a PC's driver checks a name against what runs");
+    assert.deepEqual(await fake.driver.runningApp("RobloxStudioBeta.exe"), {
+      name: "Roblox Studio",
+      bundleId: "robloxstudiobeta.exe",
+      pid: 50,
+    });
+    assert.equal(await fake.driver.runningApp("robloxstudio.exe"), null, "a guessed name runs nothing");
   });
 
   it("presses forward delete by Windows' name for it, leaves every other key as it is, and closes its probe", async () => {
@@ -711,6 +731,7 @@ describe("cua-driver over a real MCP connection (a stand-in driver process)", ()
       at: async () => null,
       process: async () => null,
       raise: async () => null,
+      running: async () => null,
       close: async () => {
         probed = "closed";
       },
@@ -740,6 +761,7 @@ describe("cua-driver over a real MCP connection (a stand-in driver process)", ()
       at: async () => null,
       process: async () => null,
       raise: async () => null,
+      running: async () => null,
       close: async () => {
         closed = true;
       },

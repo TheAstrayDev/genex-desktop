@@ -520,6 +520,14 @@ function probedApp(probed: ProbedApp | null): DesktopApp | null {
 }
 
 /**
+ * The running app an executable's name stands for on a PC, windowed or not: a guessed name no
+ * process has (robloxstudio.exe for RobloxStudioBeta.exe) is none, so nothing is asked about it.
+ */
+function windowsRunningApp(probe: WindowsProbe) {
+  return async (name: string): Promise<DesktopApp | null> => probedApp(await probe.running(name.toLowerCase()));
+}
+
+/**
  * What Windows says about its desktop, through the window probe: the app in front and its focused
  * field, the app a click at a point reaches, a process's app. An app the probe cannot read (no
  * process, no executable) is no app, which the target refuses. Only the front window's tree comes
@@ -612,7 +620,7 @@ export function cuaDriver(
     focus: () => reads.focus(),
     appAt: (x, y) => reads.appAt((x * screen.width) / picture.width, (y * screen.height) / picture.height),
     ...(options.windows
-      ? {}
+      ? { runningApp: windowsRunningApp(options.windows) }
       : {
           runningApp: (name: string) => runningMacApp(call, name),
           appWindows: (app: string) => appWindows(call, app),
