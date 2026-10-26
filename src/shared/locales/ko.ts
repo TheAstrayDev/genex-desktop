@@ -135,8 +135,6 @@ export default {
     "Genex 새 버전 다운로드가 끝났어요. 클릭하면 지금 다시 시작해요. 안 하면 다음에 종료할 때 설치돼요.",
   "A new version of Genex is downloading.": "Genex 새 버전을 다운로드하고 있어요.",
   "A new version of Genex is ready and may fix this.": "Genex 새 버전이 준비됐어요. 이 문제가 해결될 수도 있어요.",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "Studio의 Plugins 폴더에 더 새로운 Genex 도우미가 이미 있어서 Genex가 그대로 뒀어요.",
   "A night-vision security camera, its timestamp burned in": "타임스탬프가 박힌 야간 투시 보안 카메라",
   "A ninja who can only move when the music plays": "음악이 나올 때만 움직일 수 있는 닌자",
   "A note for every part": "모든 파트에 남길 메모",
@@ -6000,4 +5998,17 @@ export default {
   "They ask before each app.": "에이전트는 앱마다 먼저 물어봐요.",
   "Turn on computer control?": "컴퓨터 제어를 켤까요?",
   "{plugin} asks: {task}": "{plugin}의 요청: {task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "아이콘과 썸네일을 추가해요. 없으면 Roblox가 회색 사각형을 보여줘요.",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "게임 내용에 대한 Roblox의 질문에 답하면 연령 등급을 받아요.",
+  "Make the game public, so anyone can play it.": "게임을 공개하면 누구나 플레이할 수 있어요.",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "지금은 나만 열 수 있어요. Creator Hub에서 이걸 마칠 때까지 Roblox는 새 게임을 비공개로 둬요:",
+  "Open Creator Hub": "Creator Hub 열기",
+  "Studio hasn't loaded the Genex helper": "Studio가 Genex 도우미를 불러오지 않았어요",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "도우미를 추가하기 전에 Studio가 이미 열려 있어서 스크립트가 아직 전달되지 않아요. 「Studio 다시 시작」을 누르면 도우미를 불러와요.",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "Genex 도우미가 이미 Studio의 Plugins 폴더에 있어서 Genex가 그대로 두었어요.",
 } satisfies LocaleCatalog;

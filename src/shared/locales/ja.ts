@@ -134,8 +134,6 @@ export default {
   "A new version of Genex is downloading.": "Genexの新しいバージョンをダウンロードしています。",
   "A new version of Genex is ready and may fix this.":
     "Genexの新しいバージョンの準備ができました。これで直るかもしれません。",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "StudioのPluginsフォルダーにはもっと新しいGenexヘルパーがあるので、Genexはそのままにしました。",
   "A night-vision security camera, its timestamp burned in": "タイムスタンプが焼き付いた、暗視モードの防犯カメラ",
   "A ninja who can only move when the music plays": "音楽が鳴っているときだけ動ける忍者",
   "A note for every part": "すべてのパートへのメモ",
@@ -6133,4 +6131,17 @@ export default {
   "They ask before each app.": "エージェントはアプリごとに先に確認します。",
   "Turn on computer control?": "コンピューター操作をオンにしますか？",
   "{plugin} asks: {task}": "{plugin}からの依頼：{task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "アイコンとサムネイルを追加しよう。ないとRobloxは灰色の四角を表示するよ。",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "ゲームの内容についてのRobloxの質問に答えると、年齢区分がつくよ。",
+  "Make the game public, so anyone can play it.": "ゲームを公開すると、だれでも遊べるようになるよ。",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "今はあなただけが開けるよ。Creator Hubでこれを終えるまで、Robloxは新しいゲームを非公開にしておくよ：",
+  "Open Creator Hub": "Creator Hubを開く",
+  "Studio hasn't loaded the Genex helper": "StudioがGenexヘルパーを読み込んでいません",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "ヘルパーを追加する前からStudioが開いていたので、スクリプトがまだ届いていないよ。「Studioを再起動」でヘルパーを読み込むよ。",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "GenexヘルパーはすでにStudioのPluginsフォルダーにあったので、Genexはそのままにしたよ。",
 } satisfies LocaleCatalog;

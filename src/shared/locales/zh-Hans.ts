@@ -128,8 +128,6 @@ export default {
     "Genex 新版本已下载。点击立即重启，否则会在你下次退出时安装。",
   "A new version of Genex is downloading.": "正在下载 Genex 新版本。",
   "A new version of Genex is ready and may fix this.": "新版 Genex 已就绪，可能会修复这个问题。",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "Studio 的 Plugins 文件夹里已有更新版本的 Genex 辅助插件，所以 Genex 保留了它。",
   "A night-vision security camera, its timestamp burned in": "夜视监控摄像头画面，烙着时间戳",
   "A ninja who can only move when the music plays": "只有音乐响起时才能移动的忍者",
   "A note for every part": "给所有部分的备注",
@@ -5798,4 +5796,16 @@ export default {
   "They ask before each app.": "它们会在每个应用前先问你。",
   "Turn on computer control?": "要开启电脑控制吗？",
   "{plugin} asks: {task}": "{plugin} 请求：{task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.": "添加图标和缩略图，否则 Roblox 会显示灰色方块。",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "回答 Roblox 关于游戏内容的问题，游戏才能获得年龄分级。",
+  "Make the game public, so anyone can play it.": "把游戏设为公开，所有人就都能玩了。",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "现在只有你能打开它。在 Creator Hub 完成这些之前，Roblox 会让新游戏保持私密：",
+  "Open Creator Hub": "打开 Creator Hub",
+  "Studio hasn't loaded the Genex helper": "Studio 还没有加载 Genex 辅助插件",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "添加辅助插件前 Studio 就已经打开了，所以你的脚本还到不了它那里。「重启 Studio」会加载辅助插件。",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "Genex 辅助插件已经在 Studio 的 Plugins 文件夹里了，所以 Genex 没有动它。",
 } satisfies LocaleCatalog;

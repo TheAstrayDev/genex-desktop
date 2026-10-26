@@ -169,8 +169,6 @@ export default {
     "Ya se descargó una nueva versión de Genex. Haz clic para reiniciar ahora, o se instalará la próxima vez que salgas.",
   "A new version of Genex is downloading.": "Se está descargando una nueva versión de Genex.",
   "A new version of Genex is ready and may fix this.": "Hay una nueva versión de Genex lista que puede solucionarlo.",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "Ya hay un complemento de Genex más nuevo en la carpeta Plugins de Studio, así que Genex lo dejó.",
   "A night-vision security camera, its timestamp burned in":
     "Una cámara de seguridad con visión nocturna y la hora grabada encima",
   "A ninja who can only move when the music plays": "Un ninja que solo puede moverse cuando suena la música",
@@ -6230,4 +6228,17 @@ export default {
   "They ask before each app.": "Preguntan antes de cada app.",
   "Turn on computer control?": "¿Activar el control del equipo?",
   "{plugin} asks: {task}": "{plugin} pide: {task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "Añade un icono y una miniatura, o Roblox mostrará un cuadro gris.",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "Responde las preguntas de Roblox sobre lo que hay en el juego para que reciba una clasificación por edad.",
+  "Make the game public, so anyone can play it.": "Haz público el juego para que cualquiera pueda jugarlo.",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "Por ahora solo tú puedes abrirlo. Roblox mantiene privado un juego nuevo hasta que termines esto en Creator Hub:",
+  "Open Creator Hub": "Abrir Creator Hub",
+  "Studio hasn't loaded the Genex helper": "Studio no ha cargado el complemento de Genex",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "Studio ya estaba abierto antes de añadir el complemento, así que tus scripts todavía no le llegan. «Reiniciar Studio» lo carga.",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "El complemento de Genex ya estaba en la carpeta Plugins de Studio, así que Genex lo dejó como estaba.",
 } satisfies LocaleCatalog;
