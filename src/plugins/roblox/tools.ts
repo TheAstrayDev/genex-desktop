@@ -28,6 +28,7 @@ export const RobloxTool = {
   StudioState: "studio-state",
   StudioCrashNote: "studio-crash-note",
   TeamNote: "team-note",
+  CloseAfterPublish: "close-after-publish",
   PlayOpen: EnginePlayTool.Open,
   PlayInput: EnginePlayTool.Input,
   PlayShot: EnginePlayTool.Shot,

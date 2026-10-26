@@ -353,7 +353,9 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   (`shell.openExternal`), only in the turn holding an assist's grant and only on a host the grant's
   engine declares (`engine.pages`, exactly); credentials, ports and other schemes are refused.
   Assist grants live in `assist-grants.json` in the profile's own data, so a Publish pressed before
-  Genex quits (macOS asks to reopen it for Screen Recording) still holds for the retried turn. `app_look`, which only looks and so needs no setting ([tool permissions](tool-permissions.md#looking-at-apps)),
+  Genex quits (macOS asks to reopen it for Screen Recording) still holds for the retried turn. When
+  a grant's turn ends, Genex brings its own window back to the front, so the person sees the
+  publish is done. `app_look`, which only looks and so needs no setting ([tool permissions](tool-permissions.md#looking-at-apps)),
   never looks at these apps or Genex's own windows either.
 - **Never building or play-testing.** The apps an enabled engine plugin declares for this system
   (`engine.apps.mac` or `engine.apps.windows`, its editor) are refused in plain words ("use the engine's own tools", and a

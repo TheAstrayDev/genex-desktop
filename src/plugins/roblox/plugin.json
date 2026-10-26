@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "roblox",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "icon": "icon.svg",
   "name": "Roblox Studio",
   "publisher": "Genex",
@@ -532,6 +532,15 @@
       }
     },
     {
+      "name": "close-after-publish",
+      "audience": "harness",
+      "description": "For Genex only: as a turn ends, closes the game's Roblox Studio when that turn published it, as the person asked.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "team-note",
       "audience": "harness",
       "description": "For Genex only: at a turn's start, who else is in this place in Team Create, when that changed.",
@@ -849,6 +858,7 @@
   "hooks": [
     { "on": "run.prepare", "tool": "open-for-run", "facts": ["roblox-project"] },
     { "on": "turn.start", "tool": "team-note", "facts": ["roblox-project"] },
+    { "on": "turn.end", "tool": "close-after-publish", "facts": ["roblox-project"] },
     { "on": "checkpoint.before", "tool": "save-place", "facts": ["roblox-project"], "messages": true },
     { "on": "checkpoint.after", "tool": "hero-shots", "facts": ["roblox-project"] },
     { "on": "restore.before", "tool": "save-place", "facts": ["roblox-project"] },

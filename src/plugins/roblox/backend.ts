@@ -123,6 +123,7 @@ import {
 import { insertAsset } from "./insert-asset.ts";
 import { checkModelTool, importModel } from "./model-import.ts";
 import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
+import { closePlaceStudios, markClose, takeClose } from "./studio-close.ts";
 import { type PlaceTarget, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import { publishedSince, signInWatch, studioLogFolder } from "./studio-logs.ts";
 import { attemptNow, endAttempt, readAttempt, writeAttempt } from "./publish-attempt.ts";
@@ -1142,8 +1143,22 @@ async function publishResult(
   const logged = !said && pressed !== undefined && (await studioLogged(deps, pressed.at));
   const end = logged ? { published: true } : { published: said, detail: args.detail };
   if (!(await endAttempt(storage, context.project, end, deps.now()))) return PUBLISH_PROMPTS.NoAttempt;
+  if (end.published) await markClose(storage, context.project, deps.now());
   if (logged) return PUBLISH_PROMPTS.LoggedPublished;
   return said ? PUBLISH_PROMPTS.PublishedNoted : PUBLISH_PROMPTS.ResultNoted;
+}
+
+/**
+ * `close-after-publish` at a turn's end: the game's Studio closed when this turn published it, as
+ * the person asked, whatever the agent closed itself. Quiet either way.
+ */
+async function closeAfterPublish(deps: RobloxDeps, context: PluginContext): Promise<Record<string, never>> {
+  if (!context.project) return {};
+  const storage = await context.host(PluginService.StorageRoot);
+  if (!(await takeClose(storage, context.project, deps.now()))) return {};
+  const link = await linkHere(context);
+  if (link) await closePlaceStudios(deps, { file: link.project, placeId: link.remote?.placeId });
+  return {};
 }
 
 /** Whether Studio's log on this computer records a publish that went through since `since`. */
@@ -1356,6 +1371,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxTool.StudioState]: atMoment((ops) => studioStateAt(ops)),
     [RobloxTool.StudioCrashNote]: async (_args, context) => (context.hook ? crashAnswer() : {}),
     [RobloxTool.TeamNote]: atMoment((ops) => teamNoteAt(ops)),
+    [RobloxTool.CloseAfterPublish]: async (_args, context) => (context.hook ? closeAfterPublish(deps, context) : {}),
     ...playHandlers(deps, services),
     ...askFirstHandlers(deps, services),
     ...modelHandlers(deps, services),

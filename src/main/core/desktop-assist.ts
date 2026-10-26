@@ -145,6 +145,7 @@ export class AssistGrants {
   readonly #now: () => number;
   readonly #file: string | null;
   readonly #held: Map<string, HeldGrant>;
+  readonly #ended = new Set<(threadId: string) => void>();
   constructor(now: () => number = Date.now, file: string | null = null) {
     this.#now = now;
     this.#file = file;
@@ -210,6 +211,12 @@ export class AssistGrants {
     if (!held || (held.messageId !== turn && held.into !== turn)) return;
     this.#held.delete(threadId);
     this.#save();
+    for (const listener of this.#ended) listener(threadId);
+  }
+  /** Hear each grant's turn end (the person's app comes back to the front); returns the stop. */
+  onEnded(listener: (threadId: string) => void): () => void {
+    this.#ended.add(listener);
+    return () => this.#ended.delete(listener);
   }
 }
 

@@ -294,6 +294,22 @@ describe("an assist's grant", () => {
     assert.equal(grants.live("chat-1"), null);
   });
 
+  it("tells its listeners when its turn ends, once, so Genex comes back to the front", () => {
+    const grants = new AssistGrants(() => 0);
+    const ended: string[] = [];
+    const stop = grants.onEnded((threadId) => ended.push(threadId));
+    grants.record("chat-1", grant);
+    grants.turnEnded("chat-1", "msg_earlier");
+    assert.deepEqual(ended, [], "another turn's end is not its end");
+    grants.turnEnded("chat-1", "msg_a");
+    grants.turnEnded("chat-1", "msg_a");
+    assert.deepEqual(ended, ["chat-1"]);
+    stop();
+    grants.record("chat-1", grant);
+    grants.turnEnded("chat-1", "msg_a");
+    assert.deepEqual(ended, ["chat-1"], "a listener that stopped hears nothing more");
+  });
+
   it("ends with the turn its message was steered into", () => {
     const grants = new AssistGrants(() => 0);
     grants.record("chat-1", grant);
