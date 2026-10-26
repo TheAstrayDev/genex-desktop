@@ -170,7 +170,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `toolbar[]` | 2 | Up to 4 buttons in the stage strip; see below |
 | `mcpServers[]` | 2 | Up to 4 MCP servers the plugin ships, run by the host as connectors the plugin owns, each (API 3) with `facts`; see below |
 | `detect[]` | 3 | Up to 8 `{fact, files, notUnder?}` rules that recognise the plugin's kinds of project by their files; see [Project facts](#project-facts) |
-| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?, playerApps?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
+| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?, playerApps?, pages?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
 | `workspace` | 3 | `{facts?, ignore?, copySkip?}`: what history and writers' copies leave out of a folder holding the plugin's facts; see [Workspace rules](#workspace-rules) |
 | `assets` | 3 | `{facts?, folders, formats?}`: where the assets of a folder holding the plugin's facts live (1–8 folders inside the fact's folder or `.`, up to 32 lowercase extensions without the dot) |
 | `workerTypes[]` | 3 | Up to 16 `{id, description, tools, isolation}`: the kinds of worker a lead may start while the plugin is on; see [Worker types](#worker-types) |
@@ -1304,7 +1304,10 @@ person's sign-in must work. Studio joins a fresh StudioMCP a moment after it sta
 to that Studio: `studio_id` is filled from the binding file `studio.json` the backend keeps in the
 connection's folder (`{studioId, session, at}`, believed for `BINDING_MAX_AGE_MS`), or with no file
 yet from the game's linked place matched by name; two matching Studios, a stale binding and a call
-naming another Studio are refused in plain words. `studio-tools.ts` gives each of StudioMCP 0.743's
+naming another Studio are refused in plain words. Each listing of Studio's tools is kept in
+`studio-tools.json` there, and a listing Studio does not answer (busy, or still starting after a
+restart) offers the last one, so a turn never loses `execute_luau` and a call says what Studio
+answers. `studio-tools.ts` gives each of StudioMCP 0.743's
 30 tools a class: the reads pass with no card (the manifest's `reads`), `execute_luau` passes as a
 write (Edit unless the agent names another data model) with `agent-busy.json` kept around it, once
 its code passes `luau-screen.ts`: code that names Creator Store inserts, uploads, publishing, the
@@ -1536,7 +1539,9 @@ Import 3D.
 
 **Publishing** (`publish.ts`, the `publish` skill). No Studio or plugin API publishes a place, and
 Open Cloud's place publishing takes API keys Genex never asks for, so publishing is a Do it for me:
-the game's changed script files go to Studio first, then the game's chat is handed the task through
+Studio is brought back to its editor first (`studio-edit.ts`: a play test that `get_studio_state`
+reports is ended with `start_stop_play` and waited out), the game's changed script files go to
+Studio, then the game's chat is handed the task through
 `game.engine.assist`, and the turn that answers it (the agent's own turn when the message joins it)
 clicks File › Publish to Roblox in Studio itself, as the `publish` skill says. The person's press is
 their go-ahead: the actions ask on no card, while the agent's tools still do. A Roblox game's strip
@@ -1544,8 +1549,11 @@ shows Genex's **Publish** (when no other Publish does), whose card (`RobloxPubli
 press and then follows the publish through `publish-status`: handed to the agent, in Studio, on
 Roblox, with the game's page once it is there. The publish under way is recorded
 (`publish-attempts/<game>.json`) when the chat takes it; the agent ends it with `publish-result`
-(published, or stopped with what Roblox asked, one plain line), a first publish also ends once Genex
-links the published place, and one never ended stops after 20 minutes. A place never published gets
+(published, or stopped with what Roblox asked, one plain line; a publish it could not confirm is
+published when Studio's own log records one that went through since the press, `studio-logs.ts`,
+because Roblox's `Updated` time of a Team Create place moves with Studio's saves, not its
+publishes), a first publish also ends once Genex links the published place, and one never ended stops once the chat's turn that clicks it has ended
+(`game.engine.assisting`, saying to read the chat), or after 20 minutes. A place never published gets
 **Publish to Roblox** (`first-publish`, native, with a name field filled with the game's title; the
 agent's `first-publish {name}`, whose card shows the name in a field the person may edit,
 `confirmationInput`): "Publish this place to Roblox as a new game named "<name>"…",
@@ -1558,6 +1566,16 @@ first links a place just published by hand): "Publish <place> to Roblox: File �
 in its Roblox Studio window…". Each answers the other's case with the right tool, clicking nothing.
 The place block keeps Studio's click path under either button, and where Genex can't click (no
 driver, Windows, or the person said no), the answer and the block give it instead.
+The same turn then gives the game its cover on Roblox, which Studio's publish never sets (after a
+first publish, or an update while the game still shows Roblox's default icon): `cover-pictures`
+(`cover-pictures.ts`) makes Studio's viewport into the game icon (512 × 512) and a thumbnail
+(1920 × 1080) in the game's `.genex/roblox-cover/` (a centred crop, scaled by `sips` or PowerShell;
+a link there is refused or replaced, never followed), and the agent uploads both on the game's
+Creator Hub page (Icon, then Thumbnails ticked Active) in the person's browser, as the `publish` skill
+says: Studio's Game Settings no longer take them. The answer names the folder and each picture's
+file name apart, so a file dialog opens the folder first and the picture is picked by name. Once all
+is done the turn closes what it opened: its Creator Hub tabs (and a browser it started with
+`open_page`), then the game's Studio window, saving rather than discarding.
 
 **After a publish** (`relink.ts`) Genex links the game to the published place by itself: Studio
 reopens a newly published place under its name ("<name> (placeId: N)"), which the game's link no
@@ -1568,7 +1586,7 @@ it; a hand-over the chat refused leaves none. Where Genex can't click, the panel
 once per Studio holding the game when it shows Studio's clicks, never again as the panel keeps
 looking. With no Studio holding the game nothing is noted, and only a note that names one follows
 a reopening by name. The panel's status,
-every Genex moment and each publish call then ask the Studios that could be the game's whether
+every Genex moment, each publish call and `publish-result` (before the turn closes Studio) then ask the Studios that could be the game's whether
 Roblox has their place now: the noted Studio, the one bound now, and, once no open Studio still
 holds the game's own unpublished place, one whose place carries the noted name. With no note, the
 Studio the game's helper was last connected from is asked within `LOST_STUDIO_MS` (10 minutes) of
@@ -1588,6 +1606,7 @@ so the person's Studio stays open when a run ends.
 | --- | --- | --- |
 | `open-for-run` at `run.prepare` | quiet once the helper is connected and answers; opens the place (`open-studio`'s way) and waits up to `OPEN_WAIT_MS` (3 minutes) for its helper (a note names the place); blocks with the step when Studio isn't set up, the game has no place, the helper doesn't answer (a dialog may be open) or never connects | — |
 | `team-note` at `turn.start` | notes who else is in a Team Create place, only when that changed | same |
+| `close-after-publish` at `turn.end` | — | once per publish `publish-result` recorded on Roblox (within `CLOSE_MARK_MS`, 30 minutes), quits each Studio whose command line opened the game's place (its file or its published place id; `studio-close.ts`, a Mac only), as the person asked; another place's Studio stays open and Studio's save question stays theirs; quiet |
 | `save-place` at `checkpoint.before` (`messages: true`) | sends the script sync's pending file changes, then has the helper export what changed into `.genex/place/` (up to 2 minutes); blocks while Studio isn't connected or the export fails | the same within the message's wait (`SAVE_PLACE_CHAT_MAX_MS`: the flush and `PLACE_EXPORT_MAX_MS`); never blocks, notes what it saved or why the checkpoint holds the scripts only |
 | `hero-shots` at `checkpoint.after` | Studio's `screen_capture` of the game's Studio as one `viewport` picture | nothing |
 | `save-place` at `restore.before` | the same export, so the newer state is saved first (Bring back newer version); blocks when it fails; notes that going back undoes the edits of others in Team Create | same |
@@ -1843,6 +1862,9 @@ Available services are capability checked and scoped to the calling plugin:
   on this computer: a desktop with its driver, and apps its `engine.apps` declares here (computer
   control that is off still counts, since its card offers to turn it on). It asks nothing and
   needs no bound game; offer Do it for me only when it answers true, and the click path otherwise.
+- `game.engine.assisting` (capability `game-engine`): whether the bound game's chat still runs the
+  turn the plugin's Do it for me started: false once the queue records its message answered (or
+  failed) or taken back, or after 20 minutes. Roblox's publishing card ends with it.
 - `sandbox.run {program, args, reads, writes, scratchEnv?, env?, timeoutMs}` / `sandbox.result {id}` /
   `sandbox.stop {id}` (capability `game-engine`, `substrate/plugins/sandbox-jobs.ts`): a long job of
   the plugin's (Unreal's package on Windows) run in the studio's ProcessSandbox. `sandbox.run` checks
@@ -2598,7 +2620,10 @@ The manifest is refused unless:
   tool refuses them outside its `game.engine.assist` turns, and those turns may drive only them;
 - `playerApps`, when present, has `apps`' shape and names the apps the engine's published games are
   played in by everyone (Roblox's player app): while the plugin is on, the `desktop` tool refuses
-  them always, an assist turn included, so no agent plays in a live server.
+  them always, an assist turn included, so no agent plays in a live server;
+- `pages`, when present, lists 1–4 distinct lowercase web hosts (never an address, a port or a path)
+  the engine's assist turn may open in the person's own browser with the desktop tool's `open_page`
+  (https only, exact host); Roblox declares `create.roblox.com` for the cover step of Publish.
 
 Unknown keys are dropped and the rest kept in a fixed order. `engineCatalog` lists the declared
 engines by id, the first declaration of an id winning. `parseEngineRemote` reads a published game's

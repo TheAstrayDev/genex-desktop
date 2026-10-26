@@ -61,8 +61,8 @@ export default {
     "Um jogo de pastorear cometas onde você guia pedras de gelo até a órbita",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "Já tem um comando rodando para este jogo. Espere terminar ou pare o comando.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "Um comando neste Mac ou uma URL com login no navegador. Os agentes de todos os jogos podem usar as ferramentas dele.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "Um comando neste computador ou uma URL com login no navegador. Os agentes de todos os jogos podem usar as ferramentas dele.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "Um conector já usa o id “{id}”; remova ou renomeie esse conector antes de instalar este plugin",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -4257,7 +4257,7 @@ export default {
   "This plan is no longer waiting for approval.": "Este plano não está mais esperando aprovação.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "Este plugin não tem versões publicadas, então o Studio pega o código mais recente. Ele fica assim até você atualizar.",
-  "This plugin runs trusted code on your Mac.": "Este plugin roda código confiável no seu Mac.",
+  "This plugin runs trusted code on your computer.": "Este plugin roda código confiável no seu computador.",
   "This plugin's package is missing; remove the plugin and install it again":
     "O pacote deste plugin sumiu; remova o plugin e instale-o de novo",
   "This plugin’s plugin.json can’t be used.": "O plugin.json deste plugin não pode ser usado.",
@@ -6051,8 +6051,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "O Genex não consegue clicar no Roblox Studio neste computador. Publique você mesmo no Studio:",
   "Handing it to the agent…": "Passando para o agente…",
-  "If the chat asks to use computer control, answer it there.":
-    "Se o chat pedir para usar o controle do computador, responda lá.",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "Se o chat ou o macOS pedir permissão, permita: a publicação continua sozinha.",
   "In Roblox Studio": "No Roblox Studio",
   "Name on Roblox": "Nome no Roblox",
   "On Roblox": "No Roblox",

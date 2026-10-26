@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "roblox",
-  "version": "0.1.10",
+  "version": "0.1.29",
   "icon": "icon.svg",
   "name": "Roblox Studio",
   "publisher": "Genex",
@@ -27,7 +27,8 @@
     "projectInFolder": false,
     "play": { "players": 8, "clock": "none", "pointer": true, "state": true },
     "apps": { "mac": ["com.Roblox.RobloxStudio"], "windows": ["RobloxStudioBeta.exe"] },
-    "playerApps": { "mac": ["com.roblox.RobloxPlayer"], "windows": ["RobloxPlayerBeta.exe"] }
+    "playerApps": { "mac": ["com.roblox.RobloxPlayer"], "windows": ["RobloxPlayerBeta.exe"] },
+    "pages": ["create.roblox.com"]
   },
   "tools": [
     {
@@ -321,7 +322,7 @@
     {
       "name": "publish-result",
       "facts": ["roblox-project"],
-      "description": "Only in the turn that answers \"Roblox Studio asks: Publish …\": once Roblox Studio says the place is published, or you stopped for the person (an age, ID, two-step, terms or payment question, a sign-in, or a dialog you don't recognise), say so here, so the person's publishing card shows it. Call it once, at the end of that turn, and never otherwise.",
+      "description": "Only in the turn that answers \"Roblox Studio asks: Publish …\": once Roblox Studio says the place is published, or you stopped for the person (an age, ID, two-step, terms or payment question, a sign-in, or a dialog you don't recognise), say so here, so the person's publishing card shows it. Call it once, as soon as the publish went out or stopped, and never otherwise; after a publish, its answer says what the same turn does next (the game's cover).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -335,6 +336,15 @@
           }
         },
         "required": ["published"]
+      }
+    },
+    {
+      "name": "cover-pictures",
+      "facts": ["roblox-project"],
+      "description": "Make this game's cover for Roblox from Roblox Studio's viewport as it looks now: the game icon (512 × 512) and a thumbnail (1920 × 1080), saved in the game folder's .genex/roblox-cover/. Frame Studio's camera on the game's best view first. The answer gives both paths; upload them in Studio's Game Settings as the publish skill says. Nothing leaves the computer.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
       }
     },
     {
@@ -516,6 +526,15 @@
       "name": "studio-crash-note",
       "audience": "harness",
       "description": "For Genex only: when Roblox Studio closed under a run, asks the person to reopen it. Genex never closes or force-quits Studio.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "close-after-publish",
+      "audience": "harness",
+      "description": "For Genex only: as a turn ends, closes the game's Roblox Studio when that turn published it, as the person asked.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -839,6 +858,7 @@
   "hooks": [
     { "on": "run.prepare", "tool": "open-for-run", "facts": ["roblox-project"] },
     { "on": "turn.start", "tool": "team-note", "facts": ["roblox-project"] },
+    { "on": "turn.end", "tool": "close-after-publish", "facts": ["roblox-project"] },
     { "on": "checkpoint.before", "tool": "save-place", "facts": ["roblox-project"], "messages": true },
     { "on": "checkpoint.after", "tool": "hero-shots", "facts": ["roblox-project"] },
     { "on": "restore.before", "tool": "save-place", "facts": ["roblox-project"] },

@@ -4270,7 +4270,7 @@ export const PLUGINS_WORDS = {
   /** The MCP servers section before anyone has added one. */
   servers: {
     emptyTitle: t("Connect any MCP server"),
-    emptyText: t("A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools."),
+    emptyText: t("A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools."),
   },
   own: {
     title: t("Make a community plugin"),
@@ -4317,7 +4317,7 @@ export const PLUGINS_WORDS = {
     folders: t("Folders"),
     folder: (path: string, why: string) => `${path} — ${why}`,
     scan: t("Code scan"),
-    trusted: t("This plugin runs trusted code on your Mac."),
+    trusted: t("This plugin runs trusted code on your computer."),
     /** A plugin loaded from a folder, in place of `trusted`. */
     localAccess: t(
       "Loaded from a folder on this Mac. It runs with your access: its code isn't sandboxed. Each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.",
@@ -6203,7 +6203,7 @@ export const ROBLOX_PUBLISH_WORDS = {
   publishUpdate: t("Publish an update"),
   updateLine: t("Everyone who plays gets this version."),
   handing: t("Handing it to the agent…"),
-  chatAsks: t("If the chat asks to use computer control, answer it there."),
+  chatAsks: t("If the chat or macOS asks for permission, allow it: publishing goes on by itself."),
   progress: t("Publishing to Roblox"),
   stepAgent: t("To the agent"),
   stepStudio: t("In Roblox Studio"),

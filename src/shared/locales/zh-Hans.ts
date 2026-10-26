@@ -48,8 +48,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "引导冰岩进入轨道的彗星放牧游戏",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "此游戏已有命令在运行。请等待它完成或将其停止。",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "这台 Mac 上的命令，或通过浏览器登录的 URL。所有游戏中的智能体都能使用它的工具。",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "这台电脑上的命令，或通过浏览器登录的 URL。所有游戏中的智能体都能使用它的工具。",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "已有连接器使用 ID“{id}”；请先移除或重命名该连接器，再安装此插件",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -3952,7 +3952,7 @@ export default {
   "This plan is no longer waiting for approval.": "该计划已不再等待批准。",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "此插件没有发布版本，所以 Studio 会获取最新代码。在你更新之前，它会保持安装时的状态。",
-  "This plugin runs trusted code on your Mac.": "此插件会在你的 Mac 上运行受信任的代码。",
+  "This plugin runs trusted code on your computer.": "此插件会在你的电脑上运行受信任的代码。",
   "This plugin's package is missing; remove the plugin and install it again":
     "这个插件的包不见了；请移除插件后重新安装",
   "This plugin’s plugin.json can’t be used.": "此插件的 plugin.json 无法使用。",
@@ -5645,7 +5645,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "Genex 无法在这台电脑上点击 Roblox Studio。请在 Studio 中自己发布：",
   "Handing it to the agent…": "正在交给智能体…",
-  "If the chat asks to use computer control, answer it there.": "如果聊天中询问是否使用电脑控制，请在那里回答。",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "如果聊天或 macOS 请求权限，请允许：发布会自动继续。",
   "In Roblox Studio": "在 Roblox Studio 中",
   "Name on Roblox": "在 Roblox 上的名称",
   "On Roblox": "在 Roblox 上",
