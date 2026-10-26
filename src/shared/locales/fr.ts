@@ -608,8 +608,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "Créé en une session. Son travail n’a pas été ajouté à ton build.",
   Bundled: "Intégré",
-  "Buy credits": "Acheter des crédits",
-  "Buy credits on genex.games": "Acheter des crédits sur genex.games",
   "By <maker>{name}</maker>": "Par <maker>{name}</maker>",
   "By {author}": "Par {author}",
   "Bypass permissions": "Ignorer les autorisations",
@@ -5446,7 +5444,6 @@ export default {
   "{added} of {total} parts added": "{added} sur {total} parties ajoutées",
   "{added} of {total} parts added · {working} working": "{added} sur {total} parties ajoutées · {working} en cours",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "{amount} crédits, ouvrir Crédits",
   "{amount} more needed": "Il manque {amount}",
   "{app} settings": "Réglages de {app}",
   "{brand} doesn’t share limits for this plan": "{brand} ne partage pas les limites de ce forfait",
@@ -6209,6 +6206,14 @@ export default {
   "Ask for changes": "Demander des modifications",
   "Ask for changes below": "Demande des modifications ci-dessous",
   Shop: "Boutique",
+  "Character preview": "Aperçu du personnage",
+  "Finished character": "Personnage terminé",
+  "Get Genex credits on genex.games": "Obtenir des crédits Genex sur genex.games",
+  "Make the {kind} with Genex now.": "Fais-le maintenant avec Genex : {kind}.",
+  "Make the {kind} with Genex now: {prompt}": "Fais-le maintenant avec Genex : {kind} — {prompt}",
+  "Not enough credits": "Pas assez de crédits",
+  "{count, plural, other {# need credits}}":
+    "{count, plural, one {# a besoin de crédits} other {# ont besoin de crédits}}",
   "Agents in any chat can then ask to use your apps.":
     "Les agents de n’importe quel chat pourront alors demander à utiliser tes apps.",
   "It asks before each app.": "Il demande avant chaque app.",

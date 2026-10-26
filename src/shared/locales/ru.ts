@@ -575,8 +575,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "Собрано за одну сессию. Работа не попала в твою сборку.",
   Bundled: "Встроенный",
-  "Buy credits": "Купить кредиты",
-  "Buy credits on genex.games": "Купить кредиты на genex.games",
   "By <maker>{name}</maker>": "Автор: <maker>{name}</maker>",
   "By {author}": "Автор: {author}",
   "Bypass permissions": "Обойти разрешения",
@@ -5340,7 +5338,6 @@ export default {
   "{added} of {total} parts added": "Добавлено частей: {added} из {total}",
   "{added} of {total} parts added · {working} working": "Добавлено частей: {added} из {total} · в работе: {working}",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "Кредиты: {amount}, открыть «Кредиты»",
   "{amount} more needed": "Не хватает: {amount}",
   "{app} settings": "Настройки {app}",
   "{brand} doesn’t share limits for this plan": "{brand} не показывает лимиты для этого плана",
@@ -6143,6 +6140,14 @@ export default {
   "Ask for changes": "Попросить изменения",
   "Ask for changes below": "Попроси изменения ниже",
   Shop: "Магазин",
+  "Character preview": "Превью персонажа",
+  "Finished character": "Готовый персонаж",
+  "Get Genex credits on genex.games": "Получить кредиты Genex на genex.games",
+  "Make the {kind} with Genex now.": "Сделай с Genex сейчас: {kind}.",
+  "Make the {kind} with Genex now: {prompt}": "Сделай с Genex сейчас: {kind} — {prompt}",
+  "Not enough credits": "Не хватает кредитов",
+  "{count, plural, other {# need credits}}":
+    "{count, plural, one {Ждут кредитов: #} few {Ждут кредитов: #} many {Ждут кредитов: #} other {Ждут кредитов: #}}",
   "Agents in any chat can then ask to use your apps.":
     "Тогда агенты в любом чате смогут просить доступ к твоим приложениям.",
   "It asks before each app.": "Он спросит перед каждым приложением.",

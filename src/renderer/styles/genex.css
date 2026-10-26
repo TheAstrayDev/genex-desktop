@@ -185,9 +185,6 @@
   font: 500 15px / 1 var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
-.genex-connect-credits[data-warn] .genex-connect-balance {
-  color: var(--orange);
-}
 .genex-connect-credits > button {
   margin-inline-start: 4px;
 }

@@ -1,11 +1,13 @@
 /**
  * The Genex account at the foot of the sidebar, in Play and in Create, always in the same place.
- * Signed in: its avatar, its name, and beside it the credits in Create, which open Credits, or the
- * coin it may spend in Play, which opens Get Nex (the friends are listed under the games); a Pro's
- * name has a PRO tag, and under the pointer their row lights up
+ * Signed in: its avatar, its name, and in Play beside it the coin it may spend, which opens Get Nex
+ * (the friends are listed under the games). Credits never sit here: building runs on the person's
+ * own plan, so the credits Genex tools spend show where they are spent. A Pro's name has a PRO tag,
+ * and under the pointer their row lights up
  * with their nameplate: the moving art behind the name and sparkles on the face (`nameplate/`).
- * The name opens a menu: Profile, Friends, Credits, Coin, Nameplate (Pro), Account settings and
- * Sign out. Offline it shows the account as last time, the Offline mark where the credits were. Signed
+ * The name opens a menu: Profile, Friends, Genex credits (Get credits under them once none are
+ * left), Coin, Account settings and Sign out. Offline it shows the account as last time, with the
+ * Offline mark beside it. Signed
  * out it signs in in the browser; while that waits it says so, with a way to cancel; and once
  * genex.games ends a sign-in it shows the account dimmed, to sign in again. The account is the
  * app's: the Genex plugin being on or off changes nothing here.
@@ -30,7 +32,8 @@ import {
 import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { useOnline } from "../ui/use-online.ts";
-import { ACCOUNT_WORDS, PLAY_WORDS } from "../words.ts";
+import { PLAY_WORDS } from "../words.ts";
+import { useGetCredits } from "./use-get-credits.ts";
 import { CoinMark } from "./CoinMark.tsx";
 import { CreditsShard, ScrambleNumber } from "./CreditsShard.tsx";
 import { formatCount, PlateEnd, plateEnd, PlateState, plateState } from "./play-model.ts";
@@ -55,21 +58,45 @@ export const joinedWhen = (iso: string | null): string | null =>
 /** Settings › Genex account, where the account's avatar, name and balance are. */
 const openAccountSettings = (): void => openSettings(SettingsSection.Account);
 
-/** The credits as the menu shows them: the last balance read, or nothing before one was. */
+/** The menu's balances in the reader's own digit grouping: whole, never shortened. */
+const CREDITS_NUMBER = new Intl.NumberFormat(intlLocale());
+
+/** The credits as the menu shows them: the whole last balance read, or nothing before one was. */
 function creditsWords(credits: { balance: number | null; unlimited: boolean } | null): string | null {
   if (credits?.unlimited) return WORDS.creditsUnlimited;
-  return credits?.balance == null ? null : formatCount(credits.balance);
+  return credits?.balance == null ? null : CREDITS_NUMBER.format(credits.balance);
 }
 
-/** The account's credits, as last read; they open the Genex plugin's Credits tab, where credits are spent. */
+/** None left: a balance read as zero (or less) on an account that is not unlimited. */
+const noneLeft = (credits: { balance: number | null; unlimited: boolean } | null): boolean =>
+  credits !== null && !credits.unlimited && credits.balance !== null && credits.balance <= 0;
+
+/**
+ * The account's Genex credits, as last read; they open the Genex plugin's Credits tab. With none
+ * left, Get credits under them, in genex.games' own dress.
+ */
 function Credits(): JSX.Element {
-  const amount = creditsWords(usePeople((s) => s.credits));
+  const credits = usePeople((s) => s.credits);
+  const getCredits = useGetCredits();
+  const amount = creditsWords(credits);
   return (
-    <DropdownMenuItem data-profile-menu="credits" onSelect={() => openGenexPage(GenexTab.Credits)}>
-      <CreditsShard size={16} />
-      <span className="flex-1">{WORDS.credits}</span>
-      {amount !== null && <span className="profile-menu-value">{amount}</span>}
-    </DropdownMenuItem>
+    <>
+      <DropdownMenuItem data-profile-menu="credits" onSelect={() => openGenexPage(GenexTab.Credits)}>
+        <CreditsShard size={16} />
+        <span className="flex-1">{WORDS.credits}</span>
+        {amount !== null && <span className="profile-menu-value">{amount}</span>}
+      </DropdownMenuItem>
+      {noneLeft(credits) && (
+        <DropdownMenuItem
+          data-profile-menu="get-credits"
+          className="credits-cta profile-menu-cta"
+          aria-label={WORDS.getCreditsLabel}
+          onSelect={getCredits}
+        >
+          {WORDS.getCredits}
+        </DropdownMenuItem>
+      )}
+    </>
   );
 }
 
@@ -79,7 +106,7 @@ const getCoin = (): void =>
     .api.storeGetCoin()
     .catch(() => undefined);
 
-/** The coin the account may spend, once read; it opens Get Nex. */
+/** The coin the account may spend, once read, whole like the credits above it; it opens Get Nex. */
 function Coins(): JSX.Element | null {
   const coins = usePeople((s) => s.coins);
   if (coins === null) return null;
@@ -87,7 +114,7 @@ function Coins(): JSX.Element | null {
     <DropdownMenuItem data-profile-menu="coins" onSelect={getCoin}>
       <CoinMark size={16} />
       <span className="flex-1">{WORDS.coins}</span>
-      <span className="profile-menu-value">{formatCount(coins)}</span>
+      <span className="profile-menu-value">{CREDITS_NUMBER.format(coins)}</span>
     </DropdownMenuItem>
   );
 }
@@ -128,12 +155,6 @@ function PlateMenu({
       </DropdownMenuItem>
       <Credits />
       <Coins />
-      {me.pro && (
-        <DropdownMenuItem data-profile-menu="nameplate" onSelect={openAccountSettings}>
-          <Icon name="sparkle" />
-          {ACCOUNT_WORDS.nameplate}
-        </DropdownMenuItem>
-      )}
       <DropdownMenuSeparator />
       <DropdownMenuItem data-profile-menu="account" onSelect={openAccountSettings}>
         <Icon name="settings" />
@@ -144,29 +165,6 @@ function PlateMenu({
         {WORDS.signOut}
       </DropdownMenuItem>
     </DropdownMenuContent>
-  );
-}
-
-/** The credits beside the name, as last read; they open the Genex plugin's Credits tab, as the menu's Credits does. */
-function PlateCredits(): JSX.Element | null {
-  const amount = creditsWords(usePeople((s) => s.credits));
-  if (amount === null) return null;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className="plate-end plate-credits"
-          data-profile-credits
-          aria-label={WORDS.creditsLabel(amount)}
-          onClick={() => openGenexPage(GenexTab.Credits)}
-        >
-          <CreditsShard size={12} />
-          <ScrambleNumber text={amount} />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{WORDS.credits}</TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -192,13 +190,13 @@ function PlateCoins({ coins }: { coins: number }): JSX.Element {
   );
 }
 
-/** Beside the name: the Offline mark, the coin in Play or the credits in Create (`plateEnd`). */
+/** Beside the name: the Offline mark, or the coin in Play (`plateEnd`); credits show only where they are spent. */
 function PlateEndSlot({ offline, play }: { offline: boolean; play: boolean }): JSX.Element | null {
   const coins = usePeople((s) => s.coins);
   const end = plateEnd({ offline, play, coins });
   if (end === PlateEnd.Offline) return <OfflineSlot />;
   if (end === PlateEnd.Coins && coins !== null) return <PlateCoins coins={coins} />;
-  return <PlateCredits />;
+  return null;
 }
 
 /** The coin is read again as Play opens, as the purchase sheet closes and as the window comes back to Play. */

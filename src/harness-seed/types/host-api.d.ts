@@ -569,7 +569,7 @@ export interface ProjectAsset {
 export type MakingKind = 'character' | 'creature' | 'model' | 'rigged-model' | 'animation' | 'image' | 'texture' | 'video' | 'sound-effect' | 'music' | 'voice';
 // ↑ src/shared/asset-making.ts
 
-export type MakingPhase = 'queued' | 'making' | 'review' | 'not-fetched' | 'not-in-game' | 'failed' | 'stopped' | 'unsure';
+export type MakingPhase = 'queued' | 'making' | 'review' | 'not-fetched' | 'not-in-game' | 'failed' | 'stopped' | 'unsure' | 'needs-credits';
 // ↑ src/shared/asset-making.ts
 
 /**
@@ -593,6 +593,8 @@ export interface MakingJob {
   operation?: string;
   /** It delivered files earlier that the game no longer holds. */
   delivered?: boolean;
+  /** What it costs in Genex credits, as Genex quoted or charged it (after refunds); absent when unknown. */
+  credits?: number;
 }
 // ↑ src/shared/asset-making.ts
 
