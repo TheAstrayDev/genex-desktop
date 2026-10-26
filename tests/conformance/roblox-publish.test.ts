@@ -26,7 +26,7 @@ import {
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
 import { assistGrants, engineAppIds } from "../../src/main/core/desktop-assist.ts";
 import { toEntries } from "../../src/renderer/chat-entries.ts";
-import { ConsentChoice, consentChoices, consentTitle } from "../../src/renderer/chat/consent-card.ts";
+import { consentChoices, consentTitle } from "../../src/renderer/chat/consent-card.ts";
 import {
   ENGINE_ASSIST_TASK_MAX_CHARS,
   EngineAssistRefusal,
@@ -542,9 +542,9 @@ describe("the agent's card and the assist turn, through a real core with a fake 
     assert.ok(card);
     assert.equal(consentTitle(card), manifest.tools.find((tool) => tool.name === "publish-update")?.confirmation);
     assert.deepEqual(
-      consentChoices(card).map((choice) => choice.id),
-      [ConsentChoice.Once, ConsentChoice.Decline],
-      "no Always allow",
+      consentChoices(card).map((choice) => choice.label),
+      ["Allow once", "Allow in this chat", "Don't allow"],
+      "a yes for this chat, never Always allow",
     );
   });
 
