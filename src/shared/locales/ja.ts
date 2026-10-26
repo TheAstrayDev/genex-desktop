@@ -534,6 +534,8 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "{title}の{players}アプリをもう一度ビルドしてください。公開したいです。",
   "Build updated": "ビルドを更新しました",
+  "Build with the Cursor plan you already have.": "すでに契約しているCursorのプランでつくります。",
+  "Build with the Grok account you already have.": "すでに持っているGrokアカウントでつくります。",
   "Build with workers": "ワーカーとつくる",
   Building: "制作中",
   "Building the game": "ゲームをビルド中",
@@ -782,10 +784,13 @@ export default {
     "Codexのスキル検出が終了しました。更新して、もう一度試してください。",
   "Codex skill discovery timed out. Refresh to retry.":
     "Codexのスキル検出がタイムアウトしました。更新して、もう一度試してください。",
+  "Connect Cursor": "Cursorを接続",
+  "Connect Grok Build": "Grok Buildを接続",
   "Cursor didn't answer. Check the installation, then try again.":
     "Cursorが応答しませんでした。インストールを確認して、もう一度試してください。",
   "Cursor is unavailable": "Cursorを利用できません",
   "Cursor isn't installed on this computer.": "このコンピューターにCursorがインストールされていません。",
+  "Cursor ready": "Cursor準備完了",
   "Cursor sign-in": "Cursorへのサインイン",
   "Cursor {version}, {count, plural, other {# model(s)}}": "Cursor {version}、モデル{count, plural, other {#個}}",
   "Cursor's CLI forgets this computer's sign-in": "CursorのCLIがこのコンピューターのサインインを忘れます",
@@ -798,6 +803,7 @@ export default {
     "Grok Buildが応答しませんでした。インストールを確認してから、もう一度お試しください。",
   "Grok Build isn't installed on this Mac.": "このMacにGrok Buildがインストールされていません。",
   "Grok Build isn't signed in.": "Grok Buildにサインインしていません。",
+  "Grok Build ready": "Grok Build準備完了",
   "Grok Build sign-in": "Grok Buildのサインイン",
   "Grok Build {version}, {count, plural, one {# model} other {# models}}":
     "Grok Build {version}、モデル{count, plural, other {#個}}",
@@ -1646,6 +1652,8 @@ export default {
   Nex: "Nex",
   "Not signed in to Cursor.": "Cursorにサインインしていません。",
   "Runs on your Grok account": "Grokアカウントで動作",
+  "Setting up Cursor…": "Cursorをセットアップ中…",
+  "Setting up Grok Build…": "Grok Buildをセットアップ中…",
   "Sign in again…": "もう一度サインイン…",
   "Sign in to Cursor from Settings › Model Providers.": "設定 › モデルプロバイダーからCursorにサインインしてください。",
   "Sign in to Grok from Settings › Model Providers.": "設定 › モデルプロバイダーからGrokにサインインしてください。",

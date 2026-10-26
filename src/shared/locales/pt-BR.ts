@@ -592,6 +592,8 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "Crie de novo o app de {title} para {players} para eu poder publicar.",
   "Build updated": "Build atualizado",
+  "Build with the Cursor plan you already have.": "Crie com o plano do Cursor que você já tem.",
+  "Build with the Grok account you already have.": "Crie com a conta do Grok que você já tem.",
   "Build with workers": "Crie com ajudantes",
   Building: "Criando",
   "Building the game": "Criando o jogo",
@@ -841,10 +843,13 @@ export default {
     "A busca de habilidades do Codex foi fechada. Atualize para tentar de novo.",
   "Codex skill discovery timed out. Refresh to retry.":
     "A busca de habilidades do Codex demorou demais. Atualize para tentar de novo.",
+  "Connect Cursor": "Conectar Cursor",
+  "Connect Grok Build": "Conectar Grok Build",
   "Cursor didn't answer. Check the installation, then try again.":
     "O Cursor não respondeu. Confira a instalação e tente de novo.",
   "Cursor is unavailable": "O Cursor está indisponível",
   "Cursor isn't installed on this computer.": "O Cursor não está instalado neste computador.",
+  "Cursor ready": "Cursor pronto",
   "Cursor sign-in": "Login do Cursor",
   "Cursor {version}, {count, plural, other {# model(s)}}":
     "Cursor {version}, {count, plural, one {# modelo} other {# modelos}}",
@@ -858,6 +863,7 @@ export default {
     "O Grok Build não respondeu. Verifique a instalação e tente de novo.",
   "Grok Build isn't installed on this Mac.": "O Grok Build não está instalado neste Mac.",
   "Grok Build isn't signed in.": "O Grok Build não está conectado.",
+  "Grok Build ready": "Grok Build pronto",
   "Grok Build sign-in": "Login do Grok Build",
   "Grok Build {version}, {count, plural, one {# model} other {# models}}":
     "Grok Build {version}, {count, plural, one {# modelo} other {# modelos}}",
@@ -1701,6 +1707,8 @@ export default {
   Nex: "Nex",
   "Not signed in to Cursor.": "Você não entrou no Cursor.",
   "Runs on your Grok account": "Funciona com sua conta do Grok",
+  "Setting up Cursor…": "Instalando o Cursor…",
+  "Setting up Grok Build…": "Instalando o Grok Build…",
   "Sign in again…": "Entrar de novo…",
   "Sign in to Cursor from Settings › Model Providers.": "Entre no Cursor em Configurações › Provedores de modelos.",
   "Sign in to Grok from Settings › Model Providers.": "Entre no Grok em Configurações › Provedores de modelos.",

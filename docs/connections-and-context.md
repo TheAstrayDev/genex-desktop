@@ -228,7 +228,8 @@ delegated engine, metered like OpenCode (`billing: "metered"`): it runs on whate
 is, so only the person's pick runs it. Grok keeps its sign-in in its home (`$GROK_HOME`, default
 `~/.grok`); Sign in runs `grok login` in a terminal inside its Settings row (Open sign-in page,
 as for OpenCode), which signs in to the person's Grok account in the browser, and Genex never reads
-it. An xAI key the person's shell exports never reaches the CLI (`childEnv` vendor `grok`), so a
+it. First launch offers it in its "or use" row, with the same Install and Sign in on its own screen
+(`CliScreen.tsx`); signed in, it counts as something to build with. An xAI key the person's shell exports never reaches the CLI (`childEnv` vendor `grok`), so a
 session never turns into a per-token bill behind their back; a key put in Grok's own config still
 runs, and a result is then billed `api` (`_x.ai/auth/info` says `xai.api_key`), else `subscription`.
 
@@ -284,7 +285,8 @@ Beta tag beside its name in Settings and its group in the picker). Settings show
 OpenCode and Grok Build: Install, Sign in (`cursor-agent login` in a terminal inside the row, which
 opens the browser and prints the page for Open sign-in page; `studio:cursor.signin`, native), and
 once connected Check connection, Sign in again, Sign out (`cursor-agent logout`,
-`studio:cursor.signout`, native) and Update. The engine is Ready once `cursor-agent status --format json` says `isAuthenticated` and
+`studio:cursor.signout`, native) and Update. First launch's "or use" row offers it with its Beta
+tag, as Grok Build: Install and Sign in on its own screen. The engine is Ready once `cursor-agent status --format json` says `isAuthenticated` and
 `cursor-agent models` lists a model; the picker shows the CLI's default (`auto`) and the first three
 it lists, the rest under Older models.
 

@@ -530,6 +530,8 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "{title}의 {players} 앱을 다시 빌드해 주세요. 게시하고 싶어요.",
   "Build updated": "빌드가 업데이트됐어요",
+  "Build with the Cursor plan you already have.": "이미 있는 Cursor 요금제로 만들어요.",
+  "Build with the Grok account you already have.": "이미 있는 Grok 계정으로 만들어요.",
   "Build with workers": "작업자와 함께 만들기",
   Building: "만드는 중",
   "Building the game": "게임 빌드 중",
@@ -771,10 +773,13 @@ export default {
   "Codex skill discovery closed. Refresh to retry.": "Codex 스킬 검색이 종료됐어요. 새로 고침해서 다시 시도하세요.",
   "Codex skill discovery timed out. Refresh to retry.":
     "Codex 스킬 검색 시간이 초과됐어요. 새로 고침해서 다시 시도하세요.",
+  "Connect Cursor": "Cursor 연결",
+  "Connect Grok Build": "Grok Build 연결",
   "Cursor didn't answer. Check the installation, then try again.":
     "Cursor가 응답하지 않았어요. 설치를 확인한 뒤 다시 시도해 주세요.",
   "Cursor is unavailable": "Cursor를 사용할 수 없어요",
   "Cursor isn't installed on this computer.": "이 컴퓨터에 Cursor가 설치되어 있지 않아요.",
+  "Cursor ready": "Cursor 준비됨",
   "Cursor sign-in": "Cursor 로그인",
   "Cursor {version}, {count, plural, other {# model(s)}}": "Cursor {version}, 모델 {count, plural, other {#개}}",
   "Cursor's CLI forgets this computer's sign-in": "Cursor CLI가 이 컴퓨터의 로그인을 지워요",
@@ -787,6 +792,7 @@ export default {
     "Grok Build가 응답하지 않았어요. 설치를 확인한 뒤 다시 시도해 주세요.",
   "Grok Build isn't installed on this Mac.": "이 Mac에 Grok Build가 설치되어 있지 않아요.",
   "Grok Build isn't signed in.": "Grok Build에 로그인되어 있지 않아요.",
+  "Grok Build ready": "Grok Build 준비됨",
   "Grok Build sign-in": "Grok Build 로그인",
   "Grok Build {version}, {count, plural, one {# model} other {# models}}":
     "Grok Build {version}, 모델 {count, plural, other {#개}}",
@@ -1611,6 +1617,8 @@ export default {
   Nex: "Nex",
   "Not signed in to Cursor.": "Cursor에 로그인되어 있지 않아요.",
   "Runs on your Grok account": "Grok 계정으로 실행돼요",
+  "Setting up Cursor…": "Cursor 설치 중…",
+  "Setting up Grok Build…": "Grok Build 설치 중…",
   "Sign in again…": "다시 로그인…",
   "Sign in to Cursor from Settings › Model Providers.": "설정 › 모델 제공자에서 Cursor에 로그인해 주세요.",
   "Sign in to Grok from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok에 로그인해 주세요.",
