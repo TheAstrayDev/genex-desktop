@@ -1,21 +1,19 @@
 /**
  * What a build sells in its game's Genex store (loop/store-items.ts): the launch names each thing the
- * user prices in Nex, the harness lists each one with `genex__cli shop add` before the build starts,
- * so its card is in the chat at once, and every agent that reads the goal reads them as sold, never
- * as cut. A fishing game "with a fishing rod for nex" once launched with "Nex payments" in its cut
- * list, and its two-hour build never listed the rod.
+ * user prices in Nex, and every agent that reads the goal reads them as sold, never as cut. A fishing
+ * game "with a fishing rod for nex" once launched with "Nex payments" in its cut list, and its
+ * two-hour build never listed the rod. The store takes no item without its picture, so the build
+ * lists each once it has drawn one: the launch lists nothing, and never stands as the only moment.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import {
   DEFAULT_ITEM_PRICE,
-  GenexStoreCall,
-  listStoreItems,
-  notListedWords,
   STORE_ITEMS_MAX,
   storeItemsOf,
   StoreItemType,
+  storeLaunchWords,
   storeScopeItems,
 } from "../../src/harness-seed/loop/store-items.ts";
 import { createScope, restoreScope } from "../../src/harness-seed/loop/scope.ts";
@@ -98,103 +96,39 @@ describe("a launch names what the user sells for Nex", () => {
   });
 });
 
-/** A host that answers `plugins.invoke` with `answer` for each call, recording every call in order. */
-function storeHost(answer: (args: Record<string, unknown>) => unknown) {
-  const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
-  const host = {
-    call: async (method: string, params: Record<string, unknown>) => {
-      calls.push({ method, params });
-      if (method !== HostMethod.PluginsInvoke) return null;
-      const result = answer(params.args as Record<string, unknown>);
-      if (result instanceof Error) throw result;
-      return result;
-    },
-  };
-  return { host, calls };
-}
+const ROD_LINE = "Fishing Rod for 300 Nex, durable: A carbon rod that casts twice as far.";
 
-const LOCAL = (args: Record<string, unknown>) => ({
-  command: "shop add",
-  ok: true,
-  output: { kind: "genex.item_draft", state: "local", localId: `local_${String(args.args).length}abcdefghijk` },
-});
-
-describe("listing the items before the build", () => {
-  it("lists each item in the game's chat as genex__cli shop add, one after another, and keeps its id", async () => {
-    const { host, calls } = storeHost(LOCAL);
-    const listed = await listStoreItems(host, { project: "fishing-rod", threadId: "t-1" }, [
-      ROD,
-      { name: "Golden Bait", price: 100, type: "durable" },
+describe("the store items a run keeps", () => {
+  it("keep in one line each what shop add needs to list the item", () => {
+    assert.deepEqual(storeScopeItems([ROD, { name: "Golden Bait", price: 100, type: StoreItemType.Consumable }]), [
+      ROD_LINE,
+      "Golden Bait for 100 Nex, consumable",
     ]);
-    assert.deepEqual(
-      calls.map((call) => call.params),
-      [
-        {
-          project: "fishing-rod",
-          threadId: "t-1",
-          name: GenexStoreCall.Tool,
-          args: {
-            command: "shop add",
-            args: "Fishing Rod",
-            options: { price: 300, type: "durable", description: ROD.description },
-          },
-        },
-        {
-          project: "fishing-rod",
-          threadId: "t-1",
-          name: GenexStoreCall.Tool,
-          args: { command: "shop add", args: "Golden Bait", options: { price: 100, type: "durable" } },
-        },
-      ],
-    );
-    assert.deepEqual(
-      listed.map((item) => item.id),
-      ["local_11abcdefghijk", "local_11abcdefghijk"],
-    );
-    assert.deepEqual(storeScopeItems(listed), [
-      "Fishing Rod for 300 Nex (listed: local_11abcdefghijk)",
-      "Golden Bait for 100 Nex (listed: local_11abcdefghijk)",
-    ]);
-    assert.equal(notListedWords(listed), "");
+    const long = storeScopeItems([{ ...ROD, description: "a".repeat(1000) }])[0] ?? "";
+    assert.ok(long.length < 300, "every agent reads a short line");
   });
 
-  it("keeps why an item was not listed, lists the rest, and never throws", async () => {
-    const { host } = storeHost((args) =>
-      args.args === "Fishing Rod"
-        ? new Error("Genex is locked: ask the user to unlock Genex in Studio's Plugins page, then try again.")
-        : { command: "shop add", ok: true, output: { kind: "genex.item_draft", id: "sku_bait" } },
-    );
-    const listed = await listStoreItems(host, { project: "fishing-rod", threadId: "t-1" }, [
-      ROD,
-      { name: "Golden Bait", price: 100, type: "durable" },
-    ]);
-    assert.equal(listed[0]?.id, undefined);
-    assert.match(listed[0]?.problem ?? "", /Genex is locked/);
-    assert.equal(listed[1]?.id, "sku_bait");
-    assert.match(storeScopeItems(listed)[0] ?? "", /^Fishing Rod for 300 Nex \(not listed yet: Genex is locked/);
-    assert.match(notListedWords(listed), /Fishing Rod \(Genex is locked.*genex__cli shop add/);
-
-    const failed = await listStoreItems(
-      storeHost(() => ({ command: "shop add", ok: false, output: "price: must be a whole number" })).host,
-      { project: "fishing-rod", threadId: "t-1" },
-      [ROD],
-    );
-    assert.equal(failed[0]?.problem, "price: must be a whole number");
+  it("tell the user at the launch where each goes and that it can change at any time", () => {
+    const words = storeLaunchWords([ROD, { name: "Golden Bait", price: 100, type: StoreItemType.Durable }]);
+    assert.match(words, /Fishing Rod, Golden Bait.*Shop tab.*picture/);
+    assert.match(words, /at any time/);
+    assert.equal(storeLaunchWords([]), "");
   });
 });
 
 describe("the store items as every agent reads the goal", () => {
-  it("are sold in this build whatever the cut list says, each with its id", () => {
+  it("are sold in this build whatever the cut list says, each listed with its picture", () => {
     const scope = createScope({
       asked: [ASK],
       inScope: ["cast, hook, reel and catch"],
       cut: ["Nex payments"],
-      store: ["Fishing Rod for 300 Nex (listed: local_abcdefghijkl)"],
+      store: [ROD_LINE],
     });
     const lines = scopeLines({ scope });
-    assert.match(lines, /GENEX STORE.*Fishing Rod for 300 Nex \(listed: local_abcdefghijkl\)/);
+    assert.match(lines, new RegExp(`GENEX STORE.*${ROD_LINE}`));
     assert.match(lines, /buy\(\).*getEntitlements\(\)|getEntitlements\(\).*buy\(\)/);
-    assert.match(lines, /picture.*shop set/, "each item gets its picture");
+    assert.match(lines, /picture.*shop add.*image/, "each item is listed with the picture drawn first");
+    assert.match(lines, /shop list/, "an item listed already is not listed twice");
     assert.deepEqual(restoreScope(JSON.parse(JSON.stringify(scope)))?.store, scope.store, "a journal keeps them");
   });
 
@@ -206,8 +140,9 @@ describe("the store items as every agent reads the goal", () => {
 });
 
 describe("a Loop launch with store items", () => {
-  it("lists them in the chat before it promises the build, and its run's scope carries them", async () => {
+  it("lists nothing itself, tells the user where each goes, and its run's scope carries them", async () => {
     const order: string[] = [];
+    const said: string[] = [];
     // The run handleRunStart reserves, as the chat launched it.
     const reserved: Array<{ scope?: { store?: string[] } }> = [];
     class Reservations extends Map<string, { run: { scope?: { store?: string[] } } }> {
@@ -223,11 +158,11 @@ describe("a Loop launch with store items", () => {
       call: async (method: string, params: Record<string, unknown>) => {
         if (method === HostMethod.GameList) return [{ name: "fishing-rod" }];
         if (method === HostMethod.GameValidate) return { contract: "loaded", problems: [] };
-        if (method === HostMethod.PluginsInvoke) {
-          order.push(`listed ${String((params.args as Record<string, unknown>).args)}`);
-          return LOCAL(params.args as Record<string, unknown>);
+        if (method === HostMethod.PluginsInvoke) order.push("plugin");
+        if (method === HostMethod.EventsAppend) {
+          order.push("chat");
+          said.push(JSON.stringify(params.batch));
         }
-        if (method === HostMethod.EventsAppend) order.push("chat");
         return null;
       },
     };
@@ -248,8 +183,9 @@ describe("a Loop launch with store items", () => {
       { threadId: "t-1", project: "fishing-rod", text: ASK } as never,
       spec,
     );
-    assert.deepEqual(order.slice(0, 2), ["listed Fishing Rod", "chat"], "listed before the chat's promise");
+    assert.equal(order.includes("plugin"), false, "no item is listed before its picture exists");
+    assert.match(said[0] ?? "", /Fishing Rod will be on the Shop tab/);
     await setImmediate();
-    assert.deepEqual(reserved[0]?.scope?.store, ["Fishing Rod for 300 Nex (listed: local_11abcdefghijk)"]);
+    assert.deepEqual(reserved[0]?.scope?.store, [ROD_LINE]);
   });
 });

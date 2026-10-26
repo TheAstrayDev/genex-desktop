@@ -61,7 +61,7 @@ import { type ActiveRun, type RunReopen, StatusLane, type Studio } from "./studi
 import { clampRunHours, MAX_RUN_HOURS } from "./config.ts";
 import { CLIP_GAME_TITLE } from "./text.ts";
 import { createScope, userWordsInLog } from "./scope.ts";
-import { type ListedStoreItem, listStoreItems, notListedWords, storeItemsOf, storeScopeItems } from "./store-items.ts";
+import { type StoreItem, storeItemsOf, storeLaunchWords, storeScopeItems } from "./store-items.ts";
 import { closeCarriedPool } from "./workers/carry.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, HarnessEvent, Host, HostCall } from "../types/harness.d.ts";
 import type { ModelPreferences, RunSpec } from "../types/host-api.d.ts";
@@ -937,15 +937,15 @@ export async function launchFromIntake(
   // before anything is promised, when the run's engine is none the host seats there.
   const needsSession = await needsSessionRefusal(host, listed, spec);
   if (needsSession) throw new Error(needsSession);
-  // What the user sells for Nex goes in the game's Genex store now, before anything is built: each
-  // card is in the chat at once, and the run's scope names every item, so no plan can cut it.
-  const store = await listStoreItems(host, { project, threadId: action.threadId }, storeItemsOf(spec.storeItems));
+  // What the user sells for Nex rides the run's scope, so no plan can cut it; the build lists each
+  // item once it has drawn its picture, since the store takes none without one.
+  const store = storeItemsOf(spec.storeItems);
   const run = intakeRun(spec, action, project, readiness, await userWordsSoFar(host, action), store);
   // Such a Loop adds no connection and ends on a reviewer's yes: its own promise.
   const launched = openLoop
     ? openLaunchPromise(run.budgets, Date.now())
     : launchPromise(run.budgets, run.readiness, Date.now());
-  const promise = [launched, notListedWords(store)].filter(Boolean).join("\n\n");
+  const promise = [launched, storeLaunchWords(store)].filter(Boolean).join("\n\n");
   // The board did its job — the run spec carries the frames now; the next interview on this
   // thread starts with a clean slate.
   studio.moodBoards.delete(action.threadId);
@@ -1086,10 +1086,10 @@ function readInto(events: readonly HarnessEvent[], messageId: string): Set<strin
 
 /**
  * What the run is for (loop/scope.ts): the user's words as the log has them, the in-scope and cut
- * lists the launch named, and what it sells in the Genex store as listed. None when there are no
+ * lists the launch named, and what it sells in the Genex store. None when there are no
  * words to keep.
  */
-function intakeScope(spec: AnyRecord, asked: readonly string[], store: readonly ListedStoreItem[]): AnyRecord {
+function intakeScope(spec: AnyRecord, asked: readonly string[], store: readonly StoreItem[]): AnyRecord {
   const scope = createScope({
     asked,
     inScope: Array.isArray(spec.inScope) ? spec.inScope : [],
@@ -1106,7 +1106,7 @@ function intakeRun(
   project: string,
   readiness: { contract?: string; problems?: string[] } | null,
   asked: readonly string[] = [],
-  store: readonly ListedStoreItem[] = [],
+  store: readonly StoreItem[] = [],
 ): RunSpec & AnyRecord {
   return {
     runId: `run_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,

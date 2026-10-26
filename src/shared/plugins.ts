@@ -1094,6 +1094,11 @@ export const PluginService = {
    */
   GameEngineCanAssist: "game.engine.canAssist",
   /**
+   * `game-engine`: whether the bound game's chat still runs the turn this plugin's Do it for me
+   * started: false once that turn has ended (answered, failed or taken back) or its time is up.
+   */
+  GameEngineAssisting: "game.engine.assisting",
+  /**
    * `game-engine`: a long job of the plugin's (an engine's build or package) started in Genex's
    * process sandbox, writing only folders inside the bound game; answers its id at once, and the
    * host owns the job from then on.

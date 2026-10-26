@@ -49,8 +49,8 @@ export interface RunScope {
   /** The user steers that changed scope, each usable once. */
   revisions: string[];
   /**
-   * What the build sells in the game's Genex store for Nex, each with its id once listed
-   * (store-items.ts `storeScopeItems`); never cut. Absent on a scope that sells nothing.
+   * What the build sells in the game's Genex store for Nex (store-items.ts `storeScopeItems`);
+   * never cut. Absent on a scope that sells nothing.
    */
   store?: string[];
 }

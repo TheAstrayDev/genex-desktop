@@ -836,10 +836,10 @@ user's scope.
 What a run builds. Its scope (`loop/scope.ts`, `run.scope`) is the user's own words from the
 chat's log since the last run, stamped at launch with what is in scope and what is cut; a Resume or
 a reopen reads it back, and a run without one behaves as before. What the user sells for Nex is the
-launch's `store_items` (`loop/store-items.ts`): before the build starts and before the chat's
-promise, the harness lists each with `genex__cli shop add` in the chat (each card shows there at
-once), and the scope's GENEX STORE line names each item with its id, or why it is not listed yet,
-as sold whatever the cut list says. Every agent that reads the goal
+launch's `store_items` (`loop/store-items.ts`): the chat's promise says each goes on the Shop tab
+with its picture, and the scope's GENEX STORE line names each item as sold whatever the cut list
+says; the build draws its picture and lists it with `genex__cli shop add`, which refuses an item
+without one. Store items are never tied to a launch: any agent adds or changes one at any time. Every agent that reads the goal
 reads `scopeLines(run)` beside it (`loop/scope-prompts.ts`: judges add `SCOPE_RULE`, the lead's
 rules `DIRECTOR_SCOPE_RULE`), and every proposal — a taste judge's or player's `bigMove`, the
 planner's move, a liveness fix (`adds`) — carries a typed `scope`, `deepens` or `adds`: a vista,

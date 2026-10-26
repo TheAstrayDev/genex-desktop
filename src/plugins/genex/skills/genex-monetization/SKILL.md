@@ -6,8 +6,8 @@ unchanged. Where it disagrees with this preface, this preface wins.
 - Genex's currency is Nex; the card below calls it coin. Anything with a fixed price in Nex (a
   class or level unlock, a skin, an item), or anything the person wants to sell for real money
   without naming a currency, is a Genex store item: follow the `genex-items` skill
-  (`genex__skill {"name":"genex-items"}`) and list it with `shop add` by default, so its card shows
-  in the chat. That is the default in Studio, whatever the card below says about catalogs. A price
+  (`genex__skill {"name":"genex-items"}`) and list it with `shop add` and its picture by default,
+  at any time, so its card shows in the chat. That is the default in Studio, whatever the card below says about catalogs. A price
   in coins, gold or gems is the game's own currency, unless the person says it is for real money:
   then ask once whether they mean Nex.
 - The card's dynamic payment requests (`requestPayment`, `getPayment`, `getPayments`) are only for

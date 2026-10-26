@@ -63,8 +63,8 @@ export default {
     "Un juego de pastorear cometas donde guías rocas de hielo hasta su órbita",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "Ya hay un comando en marcha para este juego. Espera a que termine o detenlo.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "Un comando en este Mac o una URL con inicio de sesión en el navegador. Los agentes de todos tus juegos pueden usar sus herramientas.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "Un comando en este ordenador o una URL con inicio de sesión en el navegador. Los agentes de todos tus juegos pueden usar sus herramientas.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "Un conector ya usa el id “{id}”; quita o cambia el nombre de ese conector antes de instalar este plugin",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -615,8 +615,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "Creado en una sesión. Su trabajo no se añadió a tu build.",
   Bundled: "Incluido",
-  "Buy credits": "Comprar créditos",
-  "Buy credits on genex.games": "Comprar créditos en genex.games",
   "By <maker>{name}</maker>": "Por <maker>{name}</maker>",
   "By {author}": "De {author}",
   "Bypass permissions": "Omitir permisos",
@@ -1817,6 +1815,7 @@ export default {
   Help: "Ayuda",
   Hide: "Ocultar",
   "Hide Others": "Ocultar otros",
+  "Hide friends": "Ocultar amigos",
   "Hide sidebar": "Ocultar barra lateral",
   "Hide terminal": "Ocultar terminal",
   "Hide terminal · keeps running": "Ocultar terminal · sigue en marcha",
@@ -3502,6 +3501,7 @@ export default {
   "Show earlier runs": "Mostrar builds anteriores",
   "Show earlier updates": "Ver actualizaciones anteriores",
   "Show fewer": "Ver menos",
+  "Show friends": "Mostrar amigos",
   "Show friends what I’m playing": "Mostrar a mis amigos a qué juego",
   "Show game": "Mostrar juego",
   "Show in Explorer": "Mostrar en el Explorador",
@@ -4278,7 +4278,7 @@ export default {
   "This plan is no longer waiting for approval.": "Este plan ya no espera aprobación.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "Este plugin no tiene versiones publicadas, así que Studio toma el código más reciente. Se queda así hasta que lo actualices.",
-  "This plugin runs trusted code on your Mac.": "Este plugin ejecuta código de confianza en tu Mac.",
+  "This plugin runs trusted code on your computer.": "Este plugin ejecuta código de confianza en tu ordenador.",
   "This plugin's package is missing; remove the plugin and install it again":
     "Falta el paquete de este plugin; quita el plugin e instálalo de nuevo",
   "This plugin’s plugin.json can’t be used.": "El plugin.json de este plugin no se puede usar.",
@@ -5463,7 +5463,6 @@ export default {
   "{added} of {total} parts added": "{added} de {total} partes añadidas",
   "{added} of {total} parts added · {working} working": "{added} de {total} partes añadidas · {working} en curso",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "{amount} créditos, abrir Créditos",
   "{amount} more needed": "Te faltan {amount}",
   "{app} settings": "Ajustes de {app}",
   "{brand} doesn’t share limits for this plan": "{brand} no comparte los límites de este plan",
@@ -6071,8 +6070,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "Genex no puede hacer clic en Roblox Studio en este equipo. Publícalo tú en Studio:",
   "Handing it to the agent…": "Pasándoselo al agente…",
-  "If the chat asks to use computer control, answer it there.":
-    "Si el chat pide usar el control del equipo, responde ahí.",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "Si el chat o macOS pide permiso, permítelo: la publicación sigue sola.",
   "In Roblox Studio": "En Roblox Studio",
   "Name on Roblox": "Nombre en Roblox",
   "On Roblox": "En Roblox",
@@ -6173,6 +6172,8 @@ export default {
   "It’s already this game’s own item.": "Ya es un objeto propio de este juego.",
   "Listing draft: {name}": "Borrador de venta: {name}",
   "Draft · goes on sale when you publish": "Borrador · sale a la venta cuando publiques",
+  Draft: "Borrador",
+  "Drafts go on sale when you publish.": "Los borradores salen a la venta cuando publiques.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "Este objeto cambió después de esta tarjeta. Míralo en Objetos › Ventas antes de ponerlo a la venta.",
   "It changed since you approved it, so it stayed a draft.":
@@ -6218,4 +6219,11 @@ export default {
   "Ask for changes": "Pedir cambios",
   "Ask for changes below": "Pide cambios abajo",
   Shop: "Tienda",
+  "Character preview": "Vista previa del personaje",
+  "Finished character": "Personaje terminado",
+  "Get Genex credits on genex.games": "Conseguir créditos de Genex en genex.games",
+  "Make the {kind} with Genex now.": "Haz ahora con Genex: {kind}.",
+  "Make the {kind} with Genex now: {prompt}": "Haz ahora con Genex: {kind} — {prompt}",
+  "Not enough credits": "No hay créditos suficientes",
+  "{count, plural, other {# need credits}}": "{count, plural, one {# necesita créditos} other {# necesitan créditos}}",
 } satisfies LocaleCatalog;

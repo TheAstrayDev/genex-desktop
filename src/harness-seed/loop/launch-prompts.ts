@@ -54,11 +54,12 @@ const SMALL_TALK =
 const QUICK_IS_A_BUILD = "also when they want it fast: a quick build is still a build, and its judges still check it";
 
 /**
- * What a launch sells for Nex: a store item listed before the build, never a cut (loop/store-items.ts).
- * Nex is Genex's own currency; any other currency is the game's.
+ * What a launch sells for Nex: a store item the build lists with its picture, never a cut
+ * (loop/store-items.ts). Nex is Genex's own currency; any other currency is the game's. Store items
+ * are never tied to a launch: genex__cli lists or changes one at any time.
  */
 const STORE_ITEMS_RULE =
-  "Whatever the user sells for Nex (Genex's currency: a class, a character, a skin, an item) goes in the launch's store_items with its name and price (100 Nex when they named none), never in cut: Genex lists each in the game's store before the build starts and the build sells it. Ask nothing more about them (sharing with other games, resale, type, picture): each item's card in the chat leaves those to the person. Coins, gold, gems or a shop in the game are the game's own currency and store: never store_items, and no question about them.";
+  "Whatever the user sells for Nex (Genex's currency: a class, a character, a skin, an item) goes in the launch's store_items with its name and price (100 Nex when they named none), never in cut: the build draws each item's picture and lists it in the game's store. Ask nothing more about them (sharing with other games, resale, type, picture): each item's card leaves those to the person. Store items never need a launch: add, change or remove one at any time, with or without a build running, with genex__cli shop add, shop set and shop remove, and every item needs its picture (the image option). Coins, gold, gems or a shop in the game are the game's own currency and store: never store_items, and no question about them.";
 /** The same for an Unreal game, whose Loop has no judges: its lead checks its own captures. */
 const QUICK_IS_AN_UNREAL_BUILD = "also when they want it fast: a quick build is still a build";
 /**

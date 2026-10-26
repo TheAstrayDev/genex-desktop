@@ -209,6 +209,9 @@ const sharedItem = (delivers: boolean): CommandRow => ({
   ...(delivers ? { delivers } : {}),
 });
 
+/** The option naming a store item's picture: `shop add` needs it, since no item is listed without one. */
+const PICTURE_OPTION = "image";
+
 /**
  * Every command Studio runs. `budget` only reads: its `--assets` allowance lives in the run folder,
  * which Studio removes after each call, and Studio's own allowance and consent govern asset spending.
@@ -251,7 +254,7 @@ const GENEX_CLI_COMMANDS: Readonly<Record<GenexCliCommand, CommandRow>> = {
         model: gamePath(GamePathTarget.File),
         package: gamePath(GamePathTarget.Folder),
       },
-      ["price"],
+      ["price", PICTURE_OPTION],
       LocalItemsUse.Change,
     ),
     paid: false,
@@ -447,7 +450,10 @@ function optionsArgv(
   }
   for (const name of row.required ?? [])
     if (options[name] === undefined)
-      throw refuse(GenexCliRefusalCode.InvalidValue, GENEX_CLI_PROMPT.NeedsOption(command, name));
+      throw refuse(
+        GenexCliRefusalCode.InvalidValue,
+        name === PICTURE_OPTION ? GENEX_CLI_PROMPT.NeedsPicture : GENEX_CLI_PROMPT.NeedsOption(command, name),
+      );
   return { argv, gamePaths };
 }
 

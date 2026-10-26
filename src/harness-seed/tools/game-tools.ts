@@ -71,9 +71,9 @@ const IN_SCOPE_WORDS = "what this build delivers, each item in the user's words"
 const CUT_WORDS =
   "what a game like this often has that this build will not (a reference is a look bar, not a feature list)";
 
-/** What a launch sells in the game's Genex store: never cut, listed before the build starts (loop/store-items.ts). */
+/** What a launch sells in the game's Genex store: never cut, listed by the build with its picture (loop/store-items.ts). */
 const STORE_ITEMS_WORDS =
-  'each thing the user sells for Nex, Genex\'s currency (a class, a character, a skin, an item), as {"name","price","type","description"}: price in whole Nex as they named it (Genex takes the nearest step on the store grid), 100 when they named none; type "durable" for what is kept once bought (a class, a character, a skin), "consumable" only for what is used up. Genex lists each in the game\'s store before the build starts, so never put these in cut. Leave it out when nothing is sold for Nex: coins, gold or gems are a currency the game keeps itself';
+  'each thing the user sells for Nex, Genex\'s currency (a class, a character, a skin, an item), as {"name","price","type","description"}: price in whole Nex as they named it (Genex takes the nearest step on the store grid), 100 when they named none; type "durable" for what is kept once bought (a class, a character, a skin), "consumable" only for what is used up. The build lists each in the game\'s store with its picture, so never put these in cut; an item can also be added or changed at any time with genex__cli, no launch needed. Leave it out when nothing is sold for Nex: coins, gold or gems are a currency the game keeps itself';
 
 /** A store item list parameter: objects, or their JSON array as text from an engine that sends every field as a string. */
 const storeList = () => ({

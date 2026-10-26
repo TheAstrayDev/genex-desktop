@@ -317,7 +317,7 @@ function capabilityFor(method: string): PluginCapability | undefined {
 /**
  * The services that link a game to an engine project, snapshot the game before the plugin changes
  * it, make a game for a project, name the games whose run is going, and hand a setup task to the
- * game's chat (Do it for me) or say whether that can run here.
+ * game's chat (Do it for me), say whether that can run here, or whether the chat still runs it.
  */
 const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineLink,
@@ -328,6 +328,7 @@ const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineRuns,
   PluginService.GameEngineAssist,
   PluginService.GameEngineCanAssist,
+  PluginService.GameEngineAssisting,
 ]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([

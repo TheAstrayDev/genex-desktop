@@ -48,8 +48,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "얼음 바위를 궤도로 몰아넣는 혜성 몰이 게임",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "이 게임에서 이미 명령이 실행 중이에요. 끝날 때까지 기다리거나 중지하세요.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "이 Mac의 명령이나 브라우저 로그인이 있는 URL. 모든 게임의 에이전트가 그 도구를 쓸 수 있어요.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "이 컴퓨터의 명령이나 브라우저 로그인이 있는 URL. 모든 게임의 에이전트가 그 도구를 쓸 수 있어요.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "이미 다른 커넥터가 ID “{id}” 사용 중이에요. 이 플러그인을 설치하기 전에 그 커넥터를 제거하거나 이름을 바꾸세요",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -550,8 +550,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "한 세션에서 만들었어요. 작업이 빌드에 합쳐지지 않았어요.",
   Bundled: "기본 포함",
-  "Buy credits": "크레딧 구매",
-  "Buy credits on genex.games": "genex.games에서 크레딧 구매",
   "By <maker>{name}</maker>": "만든 사람: <maker>{name}</maker>",
   "By {author}": "제작: {author}",
   "Bypass permissions": "권한 우회",
@@ -1716,6 +1714,7 @@ export default {
   Help: "도움말",
   Hide: "숨기기",
   "Hide Others": "기타 가리기",
+  "Hide friends": "친구 숨기기",
   "Hide sidebar": "사이드바 숨기기",
   "Hide terminal": "터미널 숨기기",
   "Hide terminal · keeps running": "터미널 숨기기 · 계속 실행돼요",
@@ -3363,6 +3362,7 @@ export default {
   "Show earlier runs": "이전 빌드 보기",
   "Show earlier updates": "이전 업데이트 보기",
   "Show fewer": "접기",
+  "Show friends": "친구 보기",
   "Show friends what I’m playing": "내가 플레이 중인 게임을 친구에게 보여 주기",
   "Show game": "게임 보기",
   "Show in Explorer": "탐색기에서 보기",
@@ -4110,7 +4110,7 @@ export default {
   "This plan is no longer waiting for approval.": "이 계획은 더 이상 승인을 기다리지 않아요.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "이 플러그인에는 릴리스가 없어서 Studio가 최신 코드를 가져와요. 업데이트하기 전까지는 설치한 상태 그대로예요.",
-  "This plugin runs trusted code on your Mac.": "이 플러그인은 Mac에서 신뢰할 수 있는 코드를 실행해요.",
+  "This plugin runs trusted code on your computer.": "이 플러그인은 이 컴퓨터에서 신뢰할 수 있는 코드를 실행해요.",
   "This plugin's package is missing; remove the plugin and install it again":
     "이 플러그인의 패키지가 없어요. 플러그인을 제거하고 다시 설치하세요",
   "This plugin’s plugin.json can’t be used.": "이 플러그인의 plugin.json은 사용할 수 없어요.",
@@ -5271,7 +5271,6 @@ export default {
   "{added} of {total} parts added": "파트 {total}개 중 {added}개 추가됨",
   "{added} of {total} parts added · {working} working": "파트 {total}개 중 {added}개 추가됨 · {working}개 작업 중",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "{amount} 크레딧, 크레딧 열기",
   "{amount} more needed": "{amount} 더 필요해요",
   "{app} settings": "{app} 설정",
   "{brand} doesn’t share limits for this plan": "{brand}은(는) 이 요금제의 한도를 알려주지 않아요",
@@ -5846,8 +5845,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "이 컴퓨터에서는 Genex가 Roblox Studio를 클릭할 수 없어요. Studio에서 직접 게시하세요:",
   "Handing it to the agent…": "에이전트에게 넘기는 중…",
-  "If the chat asks to use computer control, answer it there.":
-    "채팅에서 컴퓨터 제어를 써도 되는지 물으면 거기서 답하세요.",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "채팅이나 macOS에서 권한을 물으면 허용하세요. 게시는 알아서 계속됩니다.",
   "In Roblox Studio": "Roblox Studio에서",
   "Name on Roblox": "Roblox에서의 이름",
   "On Roblox": "Roblox에",
@@ -5946,6 +5945,8 @@ export default {
   "It’s already this game’s own item.": "이미 이 게임의 아이템이에요.",
   "Listing draft: {name}": "판매 초안: {name}",
   "Draft · goes on sale when you publish": "초안 · 게시하면 판매 시작",
+  Draft: "초안",
+  "Drafts go on sale when you publish.": "초안은 게시하면 판매가 시작돼요.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "이 아이템은 이 카드 이후에 바뀌었어요. 판매하기 전에 아이템 › 판매에서 확인해 주세요.",
   "It changed since you approved it, so it stayed a draft.": "승인한 뒤에 바뀌어서 초안으로 남았어요.",
@@ -5987,4 +5988,11 @@ export default {
   "Ask for changes": "변경 요청",
   "Ask for changes below": "아래에서 변경을 요청하세요",
   Shop: "상점",
+  "Character preview": "캐릭터 미리보기",
+  "Finished character": "완성된 캐릭터",
+  "Get Genex credits on genex.games": "genex.games에서 Genex 크레딧 받기",
+  "Make the {kind} with Genex now.": "Genex로 지금 만들어 줘: {kind}",
+  "Make the {kind} with Genex now: {prompt}": "Genex로 지금 만들어 줘: {kind} — {prompt}",
+  "Not enough credits": "크레딧이 부족해요",
+  "{count, plural, other {# need credits}}": "{count, plural, other {#개 크레딧 필요}}",
 } satisfies LocaleCatalog;

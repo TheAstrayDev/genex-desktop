@@ -48,8 +48,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "引导冰岩进入轨道的彗星放牧游戏",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "此游戏已有命令在运行。请等待它完成或将其停止。",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "这台 Mac 上的命令，或通过浏览器登录的 URL。所有游戏中的智能体都能使用它的工具。",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "这台电脑上的命令，或通过浏览器登录的 URL。所有游戏中的智能体都能使用它的工具。",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "已有连接器使用 ID“{id}”；请先移除或重命名该连接器，再安装此插件",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -527,8 +527,6 @@ export default {
   "Built in one session and merged into your build.": "在一次会话中完成，并已合入你的构建。",
   "Built in one session. Its work wasn't merged into your build.": "在一次会话中完成。它的工作没有合入你的构建。",
   Bundled: "内置",
-  "Buy credits": "购买积分",
-  "Buy credits on genex.games": "在 genex.games 购买积分",
   "By <maker>{name}</maker>": "作者：<maker>{name}</maker>",
   "By {author}": "作者：{author}",
   "Bypass permissions": "绕过权限",
@@ -1649,6 +1647,7 @@ export default {
   Help: "帮助",
   Hide: "隐藏",
   "Hide Others": "隐藏其他",
+  "Hide friends": "隐藏好友",
   "Hide sidebar": "隐藏侧边栏",
   "Hide terminal": "隐藏终端",
   "Hide terminal · keeps running": "隐藏终端 · 仍在运行",
@@ -3255,6 +3254,7 @@ export default {
   "Show earlier runs": "显示更早的构建",
   "Show earlier updates": "显示更早的更新",
   "Show fewer": "收起",
+  "Show friends": "显示好友",
   "Show friends what I’m playing": "向好友显示我在玩什么",
   "Show game": "显示游戏",
   "Show in Explorer": "在资源管理器中显示",
@@ -3958,7 +3958,7 @@ export default {
   "This plan is no longer waiting for approval.": "该计划已不再等待批准。",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "此插件没有发布版本，所以 Studio 会获取最新代码。在你更新之前，它会保持安装时的状态。",
-  "This plugin runs trusted code on your Mac.": "此插件会在你的 Mac 上运行受信任的代码。",
+  "This plugin runs trusted code on your computer.": "此插件会在你的电脑上运行受信任的代码。",
   "This plugin's package is missing; remove the plugin and install it again":
     "这个插件的包不见了；请移除插件后重新安装",
   "This plugin’s plugin.json can’t be used.": "此插件的 plugin.json 无法使用。",
@@ -5090,7 +5090,6 @@ export default {
   "{added} of {total} parts added": "已添加 {added}/{total} 个部分",
   "{added} of {total} parts added · {working} working": "已添加 {added}/{total} 个部分 · {working} 个进行中",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "{amount} 积分，打开“积分”",
   "{amount} more needed": "还需 {amount}",
   "{app} settings": "{app} 设置",
   "{brand} doesn’t share limits for this plan": "{brand} 不提供此方案的额度",
@@ -5651,7 +5650,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "Genex 无法在这台电脑上点击 Roblox Studio。请在 Studio 中自己发布：",
   "Handing it to the agent…": "正在交给智能体…",
-  "If the chat asks to use computer control, answer it there.": "如果聊天中询问是否使用电脑控制，请在那里回答。",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "如果聊天或 macOS 请求权限，请允许：发布会自动继续。",
   "In Roblox Studio": "在 Roblox Studio 中",
   "Name on Roblox": "在 Roblox 上的名称",
   "On Roblox": "在 Roblox 上",
@@ -5744,6 +5744,8 @@ export default {
   "It’s already this game’s own item.": "它已经是这个游戏自己的物品。",
   "Listing draft: {name}": "上架草稿：{name}",
   "Draft · goes on sale when you publish": "草稿 · 发布后开始销售",
+  Draft: "草稿",
+  "Drafts go on sale when you publish.": "草稿会在发布后开始销售。",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "此物品在这张卡片之后被修改了。上架前请先在 物品 › 出售 中查看。",
   "It changed since you approved it, so it stayed a draft.": "在你批准之后它被修改了，所以仍是草稿。",
@@ -5784,4 +5786,11 @@ export default {
   "Ask for changes": "请求修改",
   "Ask for changes below": "在下方请求修改",
   Shop: "商店",
+  "Character preview": "角色预览",
+  "Finished character": "完成的角色",
+  "Get Genex credits on genex.games": "在 genex.games 获取 Genex 积分",
+  "Make the {kind} with Genex now.": "现在用 Genex 制作：{kind}。",
+  "Make the {kind} with Genex now: {prompt}": "现在用 Genex 制作：{kind} — {prompt}",
+  "Not enough credits": "积分不足",
+  "{count, plural, other {# need credits}}": "{count, plural, other {# 个需要积分}}",
 } satisfies LocaleCatalog;

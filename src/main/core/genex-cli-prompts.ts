@@ -29,6 +29,8 @@ export const GENEX_CLI_PROMPT = {
   NoPositional: (command: string) => `\`genex ${command}\` takes no positional argument; leave args out.`,
   NeedsPositional: (command: string) => `\`genex ${command}\` needs its positional argument in args.`,
   NeedsOption: (command: string, name: string) => `\`genex ${command}\` needs the ${name} option.`,
+  NeedsPicture:
+    "A store item is listed with its picture, never without: render the item alone on a transparent background with the game's own code (or make it with genex__asset image), save the PNG under .genex/scratch/, then call shop add again with the image option.",
   Locked: "Genex is locked: ask the user to unlock Genex in Studio's Plugins page, then try again.",
   NoDraft:
     'This game has no hosted Genex project yet. Publish a draft first with genex__publish {"operation":"draft"}, then run the command again.',

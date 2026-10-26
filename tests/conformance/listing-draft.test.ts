@@ -301,7 +301,11 @@ async function profile() {
   await mkdir(project, { recursive: true });
   await mkdir(path.join(root, "resources"), { recursive: true });
   await writeFile(path.join(project, "project.json"), JSON.stringify({ id: HOSTED, slug: "space-race-x1" }));
-  return { root, genexStorage };
+  // The game the call is bound to, with the item's picture a shop add names.
+  const game = path.join(root, "games", "space-race");
+  await mkdir(path.join(game, ".genex", "scratch"), { recursive: true });
+  await writeFile(path.join(game, ".genex", "scratch", "frost-axe.png"), "PNG-frost");
+  return { root, genexStorage, game };
 }
 
 /** A sandbox that runs nothing and prints `stdout` with exit `code`. */
@@ -334,12 +338,17 @@ async function cliService(
     resources: path.join(p.root, "resources"),
     genexStorage: p.genexStorage,
     protectedWrites: () => [],
+    boundGame: async () => p.game,
     onListingDraft: onDraft,
   });
 }
 
 const BINDING: PluginBinding = { project: "space-race", directory: "/games/space-race", threadId: "t1" };
-const SHOP_ADD = { command: "shop add", args: "Frost Axe", options: { price: 1200 } };
+const SHOP_ADD = {
+  command: "shop add",
+  args: "Frost Axe",
+  options: { price: 1200, image: ".genex/scratch/frost-axe.png" },
+};
 
 describe("a Studio-run CLI command and the Listing draft card", () => {
   it("hands the host the draft of a `shop add` run, with the call's binding, and answers the agent as before", async () => {

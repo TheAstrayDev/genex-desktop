@@ -2101,21 +2101,23 @@ button.chat-header-title:hover {
   width: 28px;
   height: 28px;
 }
-/* The game list scrolls, the friends under it scroll on their own, and what waits to be installed
- * stands at the foot. Each thumb is 3px, 2px from the border, shown while the sidebar is hovered or
- * scrolling. */
+/* The game list takes the room and scrolls, what waits to be installed stands at its foot, and the
+ * friends stand on the account plate, scrolling on their own. The list is their container: open,
+ * they take at most half of it. Each thumb is 3px, 2px from the border, shown while the sidebar is
+ * hovered or scrolling. */
 .sidebar-list {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  container-type: size;
 }
-/* The games (Create's or Play's Recent) take what they need and scroll past it; the friends stand
- * right under them. */
+/* The games (Create's or Play's Recent) take the room the friends leave and scroll past it; a short
+ * list leaves its room empty under it, never under the friends. */
 .sidebar-lists {
   position: relative;
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
 }
@@ -2180,7 +2182,9 @@ button.chat-header-title:hover {
 }
 /* The Genex account at the sidebar's foot (`play/ProfilePlate.tsx`), under the list in Play and in
  * Create: the name opens the account's menu, the credits beside it open Credits. */
-/* The account plate: its name block, then (2px on, so the name has room) the credits (`people.css`). */
+/* The account plate: its name block, then (2px on, so the name has room) the credits (`people.css`).
+ * Its face and name start where the friends' and the games' do, 16px and 54px in; the name, always
+ * between the face and the chevrons, spaces itself, a little closer to the chevrons so it keeps its room. */
 .profile-plate {
   flex: none;
   display: flex;
@@ -2193,10 +2197,9 @@ button.chat-header-title:hover {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 8px;
   min-width: 0;
   height: 44px;
-  padding-inline: 6px;
+  padding-inline: 8px 6px;
   border-radius: var(--radius-control);
   color: var(--ink);
   text-align: start;
@@ -2217,6 +2220,9 @@ button.chat-header-title:hover {
   font-size: 14px;
   line-height: 20px;
   white-space: nowrap;
+}
+.profile-plate-main > .profile-plate-name {
+  margin-inline: 10px 6px;
 }
 .profile-plate-name-text {
   min-width: 0;
@@ -2593,6 +2599,32 @@ button.chat-header-title:hover {
 .profile-menu-value {
   color: var(--ink-3);
   font: 12px / 16px var(--font-family-mono);
+}
+/* Get credits under the menu's credits row once none are left: a full-width button in the row's place. */
+.profile-menu-cta {
+  justify-content: center;
+  height: 32px;
+  margin: 2px 4px 6px;
+}
+/*
+ * Get credits, wherever credits run short: genex.games' own buy button (its `pro-cta`), a dark
+ * gradient lit from below by the Pro blue. The site's owner-tuned literals, the same in both themes.
+ */
+.credits-cta {
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background:
+    radial-gradient(62% 78% at 50% 122%, rgb(93 122 208 / 0.37) 0%, transparent 100%) padding-box,
+    linear-gradient(148deg, #16181d 0%, #242438 100%) padding-box,
+    linear-gradient(0deg, rgb(93 122 208 / 0.45) 0%, rgb(219 219 219 / 0.05) 60%) border-box;
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter var(--duration-quick);
+}
+.credits-cta:is(:hover, :focus-visible, [data-highlighted]) {
+  color: #fff;
+  filter: brightness(1.12);
 }
 /* A person's photo, round; everyone without one gets their generated avatar (`.cy-avatar`). */
 .person-avatar {
@@ -6480,7 +6512,39 @@ a:focus-visible {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The kind and, for a Genex job on its way, its price at the line's end. */
+.making-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.making-price {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+}
+/* Over a card's action (a credits wait's Get credits or Make it), the label sits above it, and the
+   drawing shrinks to keep clear of the label. */
+.making-label[data-lifted] {
+  bottom: 48px;
+}
+.making-card[data-making="needs-credits"] .making-art-slot {
+  top: 6px;
+  transform: scale(0.68);
+  transform-origin: top center;
+}
+.making-cta {
+  height: 32px;
+  font-size: 13px;
+}
 .making-title {
+  min-width: 0;
   font-size: 13px;
   font-weight: 500;
   line-height: 18px;

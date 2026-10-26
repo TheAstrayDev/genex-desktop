@@ -228,10 +228,14 @@ describe("the argv Studio runs", () => {
     );
     assert.deepEqual(
       genexCliRequest(
-        { command: "shop add", args: "Iron Key", options: { price: 100, type: "durable", resellable: true } },
+        {
+          command: "shop add",
+          args: "Iron Key",
+          options: { price: 100, type: "durable", resellable: true, image: "key.png" },
+        },
         FREE,
       ).argv,
-      ["shop", "add", "Iron Key", "--price", "100", "--type", "durable", "--resellable"],
+      ["shop", "add", "Iron Key", "--price", "100", "--type", "durable", "--resellable", "--image", "key.png"],
     );
   });
   it("leaves out a flag that is false", () => {
@@ -281,9 +285,26 @@ describe("what the consent card shows for a paid call", () => {
     assert.throws(() => genexCliConsentArgs({ command: "shop list" }, PAID), GenexCliRefusal);
   });
   it("asks nobody about a new item's draft, which spends nothing and sells nothing until the person puts it on sale", () => {
-    const draft = { command: "shop add", args: "Ivory Coffin", options: { price: 300 } };
+    const draft = { command: "shop add", args: "Ivory Coffin", options: { price: 300, image: "coffin.png" } };
     assert.throws(() => genexCliConsentArgs(draft, PAID), GenexCliRefusal);
     assert.equal(genexCliRequest(draft, FREE).paid, false);
+  });
+});
+
+describe("a store item's picture", () => {
+  it("is needed before the item is listed: shop add without one is refused, saying how to make it", () => {
+    const refused = refusal({ command: "shop add", args: "Rogue", options: { price: 100 } }, FREE);
+    assert.equal(refused.code, GenexCliRefusalCode.InvalidValue);
+    assert.match(refused.message, /picture/);
+    assert.match(refused.message, /image/);
+    const listed = genexCliRequest(
+      { command: "shop add", args: "Rogue", options: { price: 100, image: ".genex/scratch/rogue.png" } },
+      FREE,
+    );
+    assert.deepEqual(
+      listed.gamePaths?.map((file) => file.option),
+      ["image"],
+    );
   });
 });
 
@@ -323,6 +344,7 @@ describe("a store item's fields (marketplace plan 8.1)", () => {
           description: "Ice-blue head. Freezes an enemy for a second on hit.",
           tag: ["axe", "ice"],
           shared: true,
+          image: ".genex/scratch/frost-axe.png",
         },
       },
       FREE,
@@ -342,8 +364,14 @@ describe("a store item's fields (marketplace plan 8.1)", () => {
       "--tag",
       "ice",
       "--shared",
+      "--image",
+      ".genex/scratch/frost-axe.png",
     ]);
-    assert.equal(request.gamePaths, undefined, "nothing to copy from the game");
+    assert.deepEqual(
+      request.gamePaths?.map((file) => file.option),
+      ["image"],
+      "only the picture is copied from the game",
+    );
   });
 
   it("changes them with `shop set`: sharing off, one tag, a cleared description, Free, the type", () => {

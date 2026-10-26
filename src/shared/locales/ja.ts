@@ -48,8 +48,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "氷の岩を軌道へ導く彗星の群れ追いゲーム",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "このゲームではすでにコマンドが実行中です。終わるのを待つか、停止してください。",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "このMac上のコマンドか、ブラウザでサインインするURL。すべてのゲームのエージェントがそのツールを使えます。",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "このコンピュータ上のコマンドか、ブラウザでサインインするURL。すべてのゲームのエージェントがそのツールを使えます。",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "ID「{id}」はすでにコネクタが使っています。このプラグインをインストールする前に、そのコネクタを削除するか名前を変えてください",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -554,8 +554,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "1回のセッションでつくられました。作業はビルドに追加されませんでした。",
   Bundled: "同梱",
-  "Buy credits": "クレジットを購入",
-  "Buy credits on genex.games": "genex.gamesでクレジットを購入",
   "By <maker>{name}</maker>": "作者：<maker>{name}</maker>",
   "By {author}": "作者：{author}",
   "Bypass permissions": "権限をバイパス",
@@ -1755,6 +1753,7 @@ export default {
   Help: "ヘルプ",
   Hide: "隠す",
   "Hide Others": "ほかを隠す",
+  "Hide friends": "フレンドを隠す",
   "Hide sidebar": "サイドバーを隠す",
   "Hide terminal": "ターミナルを隠す",
   "Hide terminal · keeps running": "ターミナルを隠す · 実行は続きます",
@@ -3439,6 +3438,7 @@ export default {
   "Show earlier runs": "以前のビルドを表示",
   "Show earlier updates": "以前の更新を表示",
   "Show fewer": "表示を減らす",
+  "Show friends": "フレンドを表示",
   "Show friends what I’m playing": "プレイ中のゲームをフレンドに見せる",
   "Show game": "ゲームを表示",
   "Show in Explorer": "エクスプローラーで表示",
@@ -4216,7 +4216,8 @@ export default {
   "This plan is no longer waiting for approval.": "このプランはもう承認を待っていません。",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "このプラグインにはリリースがないため、Studioは最新のコードを使います。アップデートするまでインストール時のままです。",
-  "This plugin runs trusted code on your Mac.": "このプラグインは、このMacで信頼済みのコードを実行します。",
+  "This plugin runs trusted code on your computer.":
+    "このプラグインは、このコンピュータで信頼済みのコードを実行します。",
   "This plugin's package is missing; remove the plugin and install it again":
     "このプラグインのパッケージが見つかりません。プラグインを削除して、もう一度インストールしてください",
   "This plugin’s plugin.json can’t be used.": "このプラグインのplugin.jsonは使えません。",
@@ -5393,7 +5394,6 @@ export default {
   "{added} of {total} parts added": "{total}個中{added}個のパートを追加",
   "{added} of {total} parts added · {working} working": "{total}個中{added}個のパートを追加 · {working}個作業中",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "{amount}クレジット、クレジットを開く",
   "{amount} more needed": "あと{amount}必要",
   "{app} settings": "{app}の設定",
   "{brand} doesn’t share limits for this plan": "{brand} はこのプランの上限を公開していません",
@@ -5976,8 +5976,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "このコンピューターではGenexがRoblox Studioをクリックできません。Studioで自分で公開してください：",
   "Handing it to the agent…": "エージェントに渡しています…",
-  "If the chat asks to use computer control, answer it there.":
-    "チャットでコンピューター操作の使用を聞かれたら、そこで答えてください。",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "チャットや macOS で許可を求められたら、許可してください。公開はそのまま自動で進みます。",
   "In Roblox Studio": "Roblox Studioで",
   "Name on Roblox": "Robloxでの名前",
   "On Roblox": "Robloxに",
@@ -6077,6 +6077,8 @@ export default {
   "It’s already this game’s own item.": "すでにこのゲームのアイテムです。",
   "Listing draft: {name}": "出品の下書き: {name}",
   "Draft · goes on sale when you publish": "下書き · 公開すると販売開始",
+  Draft: "下書き",
+  "Drafts go on sale when you publish.": "下書きは公開すると販売開始されます。",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "このアイテムはこのカードの後に変更されました。販売する前に アイテム › 販売 で確認してください。",
   "It changed since you approved it, so it stayed a draft.": "承認した後に変更されたため、下書きのままです。",
@@ -6120,4 +6122,11 @@ export default {
   "Ask for changes": "変更を依頼",
   "Ask for changes below": "下で変更を依頼してください",
   Shop: "ショップ",
+  "Character preview": "キャラクターのプレビュー",
+  "Finished character": "完成したキャラクター",
+  "Get Genex credits on genex.games": "genex.gamesでGenexクレジットを入手",
+  "Make the {kind} with Genex now.": "Genexで今すぐつくって：{kind}",
+  "Make the {kind} with Genex now: {prompt}": "Genexで今すぐつくって：{kind} — {prompt}",
+  "Not enough credits": "クレジットが足りません",
+  "{count, plural, other {# need credits}}": "{count, plural, other {#件クレジット不足}}",
 } satisfies LocaleCatalog;

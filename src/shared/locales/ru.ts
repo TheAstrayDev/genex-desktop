@@ -54,8 +54,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "Пастух комет: направляй ледяные глыбы на орбиту",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "Для этой игры уже выполняется команда. Дождись её завершения или останови её.",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "Команда на этом Mac или URL со входом через браузер. Агенты в любой игре смогут пользоваться его инструментами.",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "Команда на этом компьютере или URL со входом через браузер. Агенты в любой игре смогут пользоваться его инструментами.",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "ID «{id}» уже занят коннектором — удали или переименуй этот коннектор, прежде чем устанавливать плагин",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -580,8 +580,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "Собрано за одну сессию. Работа не попала в твою сборку.",
   Bundled: "Встроенный",
-  "Buy credits": "Купить кредиты",
-  "Buy credits on genex.games": "Купить кредиты на genex.games",
   "By <maker>{name}</maker>": "Автор: <maker>{name}</maker>",
   "By {author}": "Автор: {author}",
   "Bypass permissions": "Обойти разрешения",
@@ -1770,6 +1768,7 @@ export default {
   Help: "Справка",
   Hide: "Скрыть",
   "Hide Others": "Скрыть остальные",
+  "Hide friends": "Скрыть друзей",
   "Hide sidebar": "Скрыть боковую панель",
   "Hide terminal": "Скрыть терминал",
   "Hide terminal · keeps running": "Скрыть терминал · продолжит работать",
@@ -3434,6 +3433,7 @@ export default {
   "Show earlier runs": "Показать более ранние сборки",
   "Show earlier updates": "Показать более ранние",
   "Show fewer": "Показать меньше",
+  "Show friends": "Показать друзей",
   "Show friends what I’m playing": "Показывать друзьям, во что я играю",
   "Show game": "Показать игру",
   "Show in Explorer": "Показать в Проводнике",
@@ -4193,7 +4193,7 @@ export default {
   "This plan is no longer waiting for approval.": "Этот план больше не ждёт одобрения.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "У этого плагина нет релизов, поэтому Studio берёт самый свежий код. Он останется таким, пока ты его не обновишь.",
-  "This plugin runs trusted code on your Mac.": "Этот плагин запускает доверенный код на твоём Mac.",
+  "This plugin runs trusted code on your computer.": "Этот плагин запускает доверенный код на твоём компьютере.",
   "This plugin's package is missing; remove the plugin and install it again":
     "Пакет этого плагина пропал; удали плагин и установи его снова",
   "This plugin’s plugin.json can’t be used.": "plugin.json этого плагина не подходит.",
@@ -5370,7 +5370,6 @@ export default {
   "{added} of {total} parts added": "Добавлено частей: {added} из {total}",
   "{added} of {total} parts added · {working} working": "Добавлено частей: {added} из {total} · в работе: {working}",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "Кредиты: {amount}, открыть «Кредиты»",
   "{amount} more needed": "Не хватает: {amount}",
   "{app} settings": "Настройки {app}",
   "{brand} doesn’t share limits for this plan": "{brand} не показывает лимиты для этого плана",
@@ -6023,8 +6022,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "Genex не может нажимать в Roblox Studio на этом компьютере. Опубликуй сам в Studio:",
   "Handing it to the agent…": "Передаём агенту…",
-  "If the chat asks to use computer control, answer it there.":
-    "Если чат спросит про управление компьютером, ответь там.",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "Если чат или macOS попросит разрешение, разреши: публикация продолжится сама.",
   "In Roblox Studio": "В Roblox Studio",
   "Name on Roblox": "Название на Roblox",
   "On Roblox": "На Roblox",
@@ -6125,6 +6124,8 @@ export default {
   "It’s already this game’s own item.": "Это уже собственный предмет этой игры.",
   "Listing draft: {name}": "Черновик товара: {name}",
   "Draft · goes on sale when you publish": "Черновик · поступит в продажу, когда опубликуешь",
+  Draft: "Черновик",
+  "Drafts go on sale when you publish.": "Черновики поступят в продажу, когда опубликуешь.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "Этот предмет изменился после этой карточки. Посмотри его в разделе Предметы › Продажи, прежде чем выставлять на продажу.",
   "It changed since you approved it, so it stayed a draft.":
@@ -6171,4 +6172,12 @@ export default {
   "Ask for changes": "Попросить изменения",
   "Ask for changes below": "Попроси изменения ниже",
   Shop: "Магазин",
+  "Character preview": "Превью персонажа",
+  "Finished character": "Готовый персонаж",
+  "Get Genex credits on genex.games": "Получить кредиты Genex на genex.games",
+  "Make the {kind} with Genex now.": "Сделай с Genex сейчас: {kind}.",
+  "Make the {kind} with Genex now: {prompt}": "Сделай с Genex сейчас: {kind} — {prompt}",
+  "Not enough credits": "Не хватает кредитов",
+  "{count, plural, other {# need credits}}":
+    "{count, plural, one {Ждут кредитов: #} few {Ждут кредитов: #} many {Ждут кредитов: #} other {Ждут кредитов: #}}",
 } satisfies LocaleCatalog;

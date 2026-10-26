@@ -19,20 +19,31 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
 - The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
-  browser (× cancels), signed in (avatar, name, and beside it the credits opening Credits in
-  Create, or in Play the Nex the account may spend (`studio:store.coins`, read as Play opens, as
-  the purchase sheet closes and on focus) opening Get Nex; the credits stay while the balance is
-  unknown or coin is off; a Pro's name has a PRO tag and their row lights up with their nameplate
-  under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in
-  again). Its menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nex (Get Nex),
-  Nameplate (Pro), Account settings, Sign out.
-- The sidebar's friends, signed in, in Play and Create: right under the games, the word Friends
-  (the Friends page, with the requests waiting) and each friend in the API's order, their game on
-  one green line while they play (no online or offline); a Pro friend's row lights up with their first nameplate under the pointer. A row opens the profile; hovering a friend
-  in a game offers Join. About 4½ rows show, then they scroll; the page is read every 20 seconds,
-  as genex.games polls. Offline nobody is playing.
+  browser (× cancels), signed in (avatar, name, and in Play beside it the Nex the account may spend
+  (`studio:store.coins`, read as Play opens, as the purchase sheet closes and on focus) opening Get
+  Nex; nothing beside it in Create; a Pro's name has a PRO tag and their row lights up with their
+  nameplate under the pointer), offline (the last account with the offline mark), ended (dimmed,
+  Sign in again). Its menu: Profile, Friends, Genex credits with the whole balance (the Genex plugin
+  page's Credits tab; at zero Get credits under it, genex.games' dark buy button, opening its
+  plans), Nex (Get Nex), Account settings, Sign out.
+- Credits show where they are spent, never as a balance by the account: building runs on the
+  person's own Claude or ChatGPT plan, and credits pay only for Genex tools. A Genex card on its way
+  shows its price (Genex's quote or charge, else the price list's for its operation; none for an
+  unlimited account); Approve on a review shows what its next step costs, and Get credits in its
+  place when the balance cannot pay. A request Genex refused for too few credits (the plugin reads
+  the balance against the price list and records `blocked: credits`) keeps its card, Not enough
+  credits with Get credits, then Make it once the balance read on return pays for it, which asks
+  the game's chat to make it.
+- The sidebar's friends, signed in, in Play and Create: at the sidebar's foot, right on the account
+  plate, with the games taking the room above. The word Friends with the requests waiting after it,
+  then ↗ (the Friends page), and a chevron that folds them to that one line or opens them again,
+  remembered on this Mac for Play and Create alike. Open, each friend in the API's order, their game
+  on one green line while they play (no online or offline); a Pro friend's row lights up with their first nameplate under the pointer. A row opens the profile; hovering a friend
+  in a game offers Join. About 4½ rows show (at most half the list in a short window), then they
+  scroll; faces and names start where the games' and the plate's do. The page is read every 20
+  seconds, as genex.games polls. Offline nobody is playing.
 - Settings › Genex account: avatar (generated or photo, Regenerate), a Pro's nameplate (New one), name, nickname (`@handle` and
-  Edit, once genex.games knows nicknames), credits with Buy credits, Sign out by the title. Signed
+  Edit, once genex.games knows nicknames), credits with Get credits, Sign out by the title. Signed
   out it is the sign-in stage, with the account-card drawing.
 - Publish needs only the account: signed out it asks to sign in. Its "Share its N assets on Play"
   switch (off; shown while some Genex asset is not on Play) shares them when the game goes live. Multiplayer needs the Genex plugin
@@ -365,14 +376,16 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   A tab chosen, the sidebar's Items row pressed again and the window coming back read the tab on
   show again (a burst once, `REREAD_GAP_MS`); Put on sale, Take off sale and sharing read Selling
   again at once, Add to and Remove from the item's detail.
-- The **Listing draft card**: when `genex__cli` runs `shop add` (no card asks first) or `genex__cli-paid` runs `shop set` and the pinned
+- The **Listing draft card**: when `genex__cli` runs `shop add` (no card asks first; it refuses an item
+  without its picture, `image`, and runs at any time, with or without a build) or `genex__cli-paid` runs `shop set` and the pinned
   CLI answers its `--json` draft (`kind: "genex.item_draft"`, version 1) for the game's own hosted
   project, main records `item_drafted` in the chat (`main/core/item-draft.ts`) and announces
   `item.drafted`. The harness may write neither, and a draft an agent writes in words is text. The
   card goes up after the turn's reply, one per item (a newer draft replaces it), with the price,
-  **Other games can use it** (main's `itemSetShared`) and where its sale stands: "Draft · goes on sale
-  when you publish", On sale (read from Selling too, so a sale Studio made shows), or Off sale; changes
-  are the agent's ("Ask for changes below"). Nothing on the card puts an item on sale, and Studio's
+  **Other games can use it** (main's `itemSetShared`, on an item genex.games holds) and where its sale
+  stands: "Draft · goes on sale when you publish", On sale (read from Selling too, so a sale Studio
+  made shows), or Off sale; the description shows two lines at most; changes are the agent's ("Ask for
+  changes below"). Nothing on the card puts an item on sale, and Studio's
   CLI runs never publish (`shop publish` is not in its command table): Studio itself does, after a
   publish (below). `picture_missing` / `picture_invalid` ask the agent to upload the picture. The
   agent's `shop add|set` takes the description, tags, sharing, Free and the game's picture, model
@@ -382,8 +395,8 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   keeps it in the game's `.genex/items/` (`<localId>.json` and a `<localId>/` folder). Studio copies
   those drafts into each `shop` run's folder and carries a `shop add|set|remove`'s change back
   (`main/core/local-item-files.ts`: drafts only, never through a link, capped). Its card (`state:
-  "local"`, keyed by local id) says "Draft · goes on sale when you publish". **Other games can use it**
-  on a local draft is main's own `shop set <localId> --shared|--no-shared`. Once the game's publish
+  "local"`, keyed by local id) says "Draft · goes on sale when you publish" and offers no **Other games
+  can use it**, since no other game can reach an item before its game is on Genex. Once the game's publish
   record says its publish made it public (`status: "published"`, written last: a publish that failed
   part-way or is still running has none), `main/core/local-items.ts` settles the game while one of its
   chats shows a local card or Studio's record (`<userData>/item-approvals.json`) holds a draft not yet
@@ -398,7 +411,9 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   what goes up, so a `last-sync.json` from a terminal `genex publish` uploads nothing.
 - The **Shop** tab (`panels/shop/`): beside Live and Builds once the game sells something, every item
   of the game as its chat's cards show it (its local drafts, then its items Selling lists for its
-  hosted project), each with **Ask for changes**, which leaves `changeItemPrompt` in the game's chat.
+  hosted project), drawn as tiles (`ListingLook.Tile`): the picture on top with the sale's word (Draft,
+  On sale, Off sale) and a pencil whose tooltip says **Ask for changes**, which leaves
+  `changeItemPrompt` in the game's chat; then the name beside the price, the description and sharing.
 
 Fixtures: with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`, `dev/fixture-store.ts` answers the store (Stick &
 Steel's store; the account's Snowball items); `--fixture items-store` makes the fixture game the
@@ -420,7 +435,8 @@ in the chat `[data-listing-draft="<id>"][data-listing-sale="offer|pressing|on-sa
 `[data-listing-share="<id>"]`, `[data-listing-put-on-sale="<id>"]`, `[data-listing-on-sale]`; a local draft's
 `[data-listing-draft="<localId>"][data-listing-local="offer|approved|changed|removed"]`,
 `[data-listing-local-status]`, `[data-listing-sell-when-published="<localId>"]` (`aria-pressed`),
-`[data-listing-undo-sell="<localId>"]`, `[data-listing-local-changed]`, `[data-listing-stayed-draft]`.
+`[data-listing-undo-sell="<localId>"]`, `[data-listing-local-changed]`, `[data-listing-stayed-draft]`;
+the Shop tab's `[data-shop-stage]`, each tile's pencil `[data-listing-ask]`.
 
 ## Where to work
 
