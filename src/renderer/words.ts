@@ -4021,6 +4021,18 @@ export const MAKING_WORDS = {
   /** A candidate's tab, and its picture. */
   candidate: (n: number) => t("Candidate {index}", { index: n }),
   candidates: t("Candidates"),
+  /** A job the account had too few Genex credits for: nothing was made or charged. */
+  needsCredits: t("Not enough credits"),
+  /** Its action: genex.games' plans in the browser. */
+  getCredits: t("Get credits"),
+  getCreditsLabel: t("Get Genex credits on genex.games"),
+  /** Once the balance pays for it: the chat's agent is asked to make it now. */
+  makeIt: t("Make it"),
+  /** What Make it sends in the game's chat, as if typed: "Make the 3D model with Genex now: Dragon boss". */
+  makeAgain: (kind: string, prompt: string | null) =>
+    prompt
+      ? t("Make the {kind} with Genex now: {prompt}", { kind, prompt })
+      : t("Make the {kind} with Genex now.", { kind }),
   /** The chat's cards of the assets a piece of work is still making. */
   inChat: t("Assets being made"),
   spoken: {
@@ -4615,6 +4627,8 @@ export const GENEX_WORDS = {
     kinds: {
       [CreditKind.Model]: { name: t("3D model"), tool: "Tripo" },
       [CreditKind.Character]: { name: t("Rigged character"), tool: "Meshy" },
+      [CreditKind.CharacterPreview]: { name: t("Character preview"), tool: "Meshy" },
+      [CreditKind.CharacterFinalize]: { name: t("Finished character"), tool: "Meshy" },
       [CreditKind.ModelAnimation]: { name: t("Animation clip"), tool: "Tripo · Uthana" },
       [CreditKind.Image]: { name: t("Image or sprite"), tool: "GPT Image" },
       [CreditKind.Texture]: { name: t("Texture set"), tool: "Nano Banana" },
@@ -4899,10 +4913,12 @@ export const PLAY_WORDS = {
     proTag: "PRO",
     menuLabel: t("Genex account"),
     profile: t("Profile"),
-    credits: t("Credits"),
+    /** The menu's row for the account's credits, which pay for Genex tools only. */
+    credits: t("Genex credits"),
     creditsUnlimited: t("Unlimited"),
-    /** The credits beside the plate's name: "1,700 credits, open Credits". */
-    creditsLabel: (amount: string) => t("{amount} credits, open Credits", { amount }),
+    /** Under the credits row once none are left: genex.games' plans in the browser. */
+    getCredits: t("Get credits"),
+    getCreditsLabel: t("Get Genex credits on genex.games"),
     coins: t("Nex"),
     /** The coin beside the plate's name in Play: "1,240 coin, get coin". */
     coinsLabel: (amount: string) => t("{amount} Nex, get Nex", { amount }),
@@ -5985,8 +6001,8 @@ export const ACCOUNT_WORDS = {
   credits: t("Credits"),
   creditsCount: (count: string) => t("{count} credits", { count }),
   creditsUnlimited: t("Unlimited credits"),
-  buyCredits: t("Buy credits"),
-  buyCreditsLabel: t("Buy credits on genex.games"),
+  buyCredits: t("Get credits"),
+  buyCreditsLabel: t("Get Genex credits on genex.games"),
   /** Under the balance: what credits pay for, the plugin's name a link to its page. */
   creditsNote: t("For <plugin>Genex plugin</plugin> tools: 3D, animation, textures, music. Optional."),
   creditsPluginLabel: t("Open the Genex plugin page"),

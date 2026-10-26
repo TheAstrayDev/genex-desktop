@@ -65,5 +65,5 @@ your balance: `npx genex doctor`.
 ## Troubleshooting
 
 - **The surface shows a visible repeating grid** — the CLI measures the seam automatically and warns when it is bad. Re-generate with `--terrain`, or scale the repeat down so the tile is smaller on screen. A repeating grid across a floor is the single most visible "asset flip" tell there is, so treat that warning as work.
-- **Out of credits** — the error prints balance, price and refill date. Relay it; don't retry.
+- **Out of credits** — Studio's card for the asset offers Get credits: one short sentence at most, a stand-in, no retry.
 - **Anything else** — `npx genex doctor`.

@@ -169,6 +169,7 @@ import {
   readLedger,
   RECONCILE_BATCH,
   settledFailureStatus,
+  shortOfCredits,
   siblingWithFiles,
   type LedgerRow,
   type ReviewAnswer,
@@ -2020,6 +2021,21 @@ export class GenexTools {
     const ca = this.#ca ? { ca: this.#ca } : {};
     return runGenexCli({ cli, preload: this.#preload, api: this.api, token, cwd, args, signal, ...ca, ...options });
   }
+  /**
+   * Whether Genex refused a job before starting it because the account had too few credits for it,
+   * read from the balance and the price list: its card then offers credits. Never throws; an unread
+   * balance never holds a job on credits.
+   */
+  async #shortOfCredits(job: GenexJob, signal: AbortSignal): Promise<boolean> {
+    const refused = job.status === GenexJobStatus.Failed && !job.generationId && !READ_OPERATIONS.has(job.operation);
+    if (!refused || job.blocked || signal.aborted) return false;
+    try {
+      const [account, prices] = await Promise.all([this.#fetch(GenexRoute.Credits), this.#fetch(GenexRoute.Prices)]);
+      return shortOfCredits(account, prices, job.operation);
+    } catch {
+      return false;
+    }
+  }
   /** Read Genex's durable admission evidence; never change its credit ledger. */
   async #reconcileJob(cwd: string, job: GenexJob, read: RemoteRead = RemoteRead.None, signal?: AbortSignal) {
     const reservation = await readLedger(cwd, job);
@@ -2305,6 +2321,7 @@ export class GenexTools {
       if (e instanceof GenexTermsPending) job.blocked = GenexBlocked.Terms;
       await this.#reconcileJob(cwd, job);
       job.status = settledFailureStatus(job, READ_OPERATIONS.has(request.operation), () => signal.aborted);
+      if (await this.#shortOfCredits(job, signal)) job.blocked = GenexBlocked.Credits;
       await save();
       return job;
     }

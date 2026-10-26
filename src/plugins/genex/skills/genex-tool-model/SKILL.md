@@ -112,7 +112,7 @@ in the prompt too (`"…front toward +Z"`) — it helps, it does not guarantee.
 
 ## Troubleshooting
 
-- **Out of credits** — the error prints the balance, the price and the refill date. Relay it; don't retry.
+- **Out of credits** — Studio's card for the asset offers Get credits: one short sentence at most, a stand-in, no retry.
 - **The rig was refused** — that mesh has no usable skeleton for any body plan. It is refunded. Ship it static, or animate it in code.
 - **Repeated failures in this folder** — the CLI says so after the second one. That pattern is the lane, not your prompt: build the piece in code or move on, and tell the user in one plain line.
 - **Anything else** — `npx genex doctor`.

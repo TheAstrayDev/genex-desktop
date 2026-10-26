@@ -548,8 +548,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "한 세션에서 만들었어요. 작업이 빌드에 합쳐지지 않았어요.",
   Bundled: "기본 포함",
-  "Buy credits": "크레딧 구매",
-  "Buy credits on genex.games": "genex.games에서 크레딧 구매",
   "By <maker>{name}</maker>": "만든 사람: <maker>{name}</maker>",
   "By {author}": "제작: {author}",
   "Bypass permissions": "권한 우회",
@@ -5265,7 +5263,6 @@ export default {
   "{added} of {total} parts added": "파트 {total}개 중 {added}개 추가됨",
   "{added} of {total} parts added · {working} working": "파트 {total}개 중 {added}개 추가됨 · {working}개 작업 중",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "{amount} 크레딧, 크레딧 열기",
   "{amount} more needed": "{amount} 더 필요해요",
   "{app} settings": "{app} 설정",
   "{brand} doesn’t share limits for this plan": "{brand}은(는) 이 요금제의 한도를 알려주지 않아요",
@@ -5983,4 +5980,11 @@ export default {
   "Ask for changes": "변경 요청",
   "Ask for changes below": "아래에서 변경을 요청하세요",
   Shop: "상점",
+  "Character preview": "캐릭터 미리보기",
+  "Finished character": "완성된 캐릭터",
+  "Get Genex credits on genex.games": "genex.games에서 Genex 크레딧 받기",
+  "Make the {kind} with Genex now.": "Genex로 지금 만들어 줘: {kind}",
+  "Make the {kind} with Genex now: {prompt}": "Genex로 지금 만들어 줘: {kind} — {prompt}",
+  "Not enough credits": "크레딧이 부족해요",
+  "{count, plural, other {# need credits}}": "{count, plural, other {#개 크레딧 필요}}",
 } satisfies LocaleCatalog;

@@ -19,13 +19,21 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
 - The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
-  browser (× cancels), signed in (avatar, name, and beside it the credits opening Credits in
-  Create, or in Play the Nex the account may spend (`studio:store.coins`, read as Play opens, as
-  the purchase sheet closes and on focus) opening Get Nex; the credits stay while the balance is
-  unknown or coin is off; a Pro's name has a PRO tag and their row lights up with their nameplate
-  under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in
-  again). Its menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nex (Get Nex),
-  Nameplate (Pro), Account settings, Sign out.
+  browser (× cancels), signed in (avatar, name, and in Play beside it the Nex the account may spend
+  (`studio:store.coins`, read as Play opens, as the purchase sheet closes and on focus) opening Get
+  Nex; nothing beside it in Create; a Pro's name has a PRO tag and their row lights up with their
+  nameplate under the pointer), offline (the last account with the offline mark), ended (dimmed,
+  Sign in again). Its menu: Profile, Friends, Genex credits with the whole balance (the Genex plugin
+  page's Credits tab; at zero Get credits under it, genex.games' dark buy button, opening its
+  plans), Nex (Get Nex), Account settings, Sign out.
+- Credits show where they are spent, never as a balance by the account: building runs on the
+  person's own Claude or ChatGPT plan, and credits pay only for Genex tools. A Genex card on its way
+  shows its price (Genex's quote or charge, else the price list's for its operation; none for an
+  unlimited account); Approve on a review shows what its next step costs, and Get credits in its
+  place when the balance cannot pay. A request Genex refused for too few credits (the plugin reads
+  the balance against the price list and records `blocked: credits`) keeps its card, Not enough
+  credits with Get credits, then Make it once the balance read on return pays for it, which asks
+  the game's chat to make it.
 - The sidebar's friends, signed in, in Play and Create: at the sidebar's foot, right on the account
   plate, with the games taking the room above. The word Friends with the requests waiting after it,
   then ↗ (the Friends page), and a chevron that folds them to that one line or opens them again,
@@ -35,7 +43,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   scroll; faces and names start where the games' and the plate's do. The page is read every 20
   seconds, as genex.games polls. Offline nobody is playing.
 - Settings › Genex account: avatar (generated or photo, Regenerate), a Pro's nameplate (New one), name, nickname (`@handle` and
-  Edit, once genex.games knows nicknames), credits with Buy credits, Sign out by the title. Signed
+  Edit, once genex.games knows nicknames), credits with Get credits, Sign out by the title. Signed
   out it is the sign-in stage, with the account-card drawing.
 - Publish needs only the account: signed out it asks to sign in. Its "Share its N assets on Play"
   switch (off; shown while some Genex asset is not on Play) shares them when the game goes live. Multiplayer needs the Genex plugin

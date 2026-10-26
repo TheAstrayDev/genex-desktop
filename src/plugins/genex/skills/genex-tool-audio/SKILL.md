@@ -84,5 +84,5 @@ Longer `--duration`s cost more. Live prices and your balance: `npx genex doctor`
 ## Troubleshooting
 
 - **Audio does not play on the first click** — nearly always the audio context, not the file: browsers require it to be created inside a real user gesture, and a sound fired before it exists is lost rather than queued. Create it on the first click or key press, then re-trigger whatever track was already selected.
-- **Out of credits** — the error prints balance, price and refill date. Relay it; don't retry.
+- **Out of credits** — Studio's card for the asset offers Get credits: one short sentence at most, a stand-in, no retry.
 - **Anything else** — `npx genex doctor` reports whether the audio lanes are live on this account.

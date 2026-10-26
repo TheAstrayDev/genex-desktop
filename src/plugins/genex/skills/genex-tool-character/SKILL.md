@@ -194,5 +194,5 @@ pick one up. **Re-running a character command bills a NEW character.**
 - **"Rigged by Uthana instead" on a `character` / `creature` result** — Meshy's rig failed pose QA in both rest poses (armored and heavily clothed bodies do), so the platform auto-rigged the mesh. Nothing to redo: give it moves with `npx genex character animate <id> --locomotion` and plain-word verbs; the Meshy catalog does not apply.
 - **`character animate` says the character is still generating** — wait for it first (`npx genex wait <id>`); the animate door only opens on a finished rig.
 - **Rigs rest facing +Z.** Set yaw explicitly when you place one, and never mirror a skinned mesh with a negative scale — it inverts the whole thing silently.
-- **Out of credits** — the error prints balance, price and refill date. Relay it; don't retry.
+- **Out of credits** — Studio's card for the asset offers Get credits: one short sentence at most, a stand-in, no retry.
 - **Anything else** — `npx genex doctor`.

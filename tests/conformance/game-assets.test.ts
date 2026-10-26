@@ -279,6 +279,36 @@ it("Genex job records are read without being written, and an approval never leav
   assert.deepEqual(await readGenexJobs(homes, "never-a-project"), []);
 });
 
+it("a Genex job record says what it costs and what it went no further for", async () => {
+  const homes = await tmpDir("studio-homes-");
+  const jobs = path.join(homes, "genex", "projects", "farm", "jobs");
+  const write = async (id: string, fields: Record<string, unknown>) => {
+    await mkdir(path.join(jobs, id), { recursive: true });
+    await writeFile(
+      path.join(jobs, id, "job.json"),
+      JSON.stringify({ id, project: "farm", files: [], operation: "model", status: "failed", ...fields }),
+    );
+  };
+  const ID = (n: number) => `${n}${n}${n}${n}${n}${n}${n}${n}-1111-1111-1111-111111111111`;
+  await write(ID(1), { creditsCharged: 35, creditsRefunded: 9 });
+  await write(ID(2), { creditsQuoted: 41 });
+  await write(ID(3), { creditsCharged: 35, creditsRefunded: 35, creditsQuoted: 35 });
+  await write(ID(4), { blocked: "credits", creditsQuoted: -5 });
+  await write(ID(5), { creditsQuoted: 1.5, creditsCharged: "35" });
+  const records = await readGenexJobs(homes, "farm");
+  assert.deepEqual(
+    records.map((r) => [r.credits, r.blocked]),
+    [
+      [26, undefined],
+      [41, undefined],
+      [0, undefined],
+      [undefined, "credits"],
+      [undefined, undefined],
+    ],
+    "the charge less refunds, else the quote; nothing that is not a whole count",
+  );
+});
+
 it("the contained reader refuses everything that is not an image inside the game's asset folders", async () => {
   const root = await game();
   const ok = await readContainedImage(root, `assets/genex/${JOB_A}/a.png`);
