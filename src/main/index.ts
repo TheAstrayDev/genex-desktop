@@ -3,6 +3,7 @@ import { isCodexLoginActive } from "../shared/codex-login.ts";
 import { updateCodingCli } from "../substrate/cli-update.ts";
 import { HarnessLogBatch } from "./harness-log-batch.ts";
 import { createDesktopControl } from "./desktop-control-host.ts";
+import { assistGrants } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import { showAfterPaint } from "./window-ready.ts";
 import { PerformanceRecorder, watchEventLoop } from "./performance.ts";
@@ -867,6 +868,16 @@ function appLookOptions(userData: string): Pick<StudioCoreOptions, "appLook" | "
   const { scratch, engineHomes } = layoutFor(userData);
   const access = appLookAccess(engineHomes);
   return { appLook: macAppLook({ run: appLookRun, scratchDir: scratch, access: access.status }), screenAccess: access };
+}
+
+/** The studio's window back in front of other apps, as an assist's turn ends. */
+function bringStudioForward(): void {
+  const win = window;
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  app.focus({ steal: true });
+  win.focus();
 }
 
 /** The core's stand option, when this launch has one. */
@@ -2654,6 +2665,9 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     const win = await createWindow(studio);
     studio.options.markBoot?.("window");
     window = win;
+    // A turn that clicked in another app (a publish in Studio) ends with Genex in front again, so
+    // the person sees it is done and can come back.
+    assistGrants(studio).onEnded(() => bringStudioForward());
     // The start or setup window this launch opened first gives way to the studio's.
     if (before && before !== win && !before.isDestroyed()) before.destroy();
     // First launch opens on an empty library, with no game chat to select.
