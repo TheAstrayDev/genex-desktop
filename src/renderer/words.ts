@@ -36,7 +36,7 @@ import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
 import { computerSettingQuestion, type GithubLookupProblem } from "../shared/plugins.ts";
-import { computerControlOffered, desktopStopShortcut } from "../shared/computer-control.ts";
+import { computerControlOffered } from "../shared/computer-control.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayRemixRefusal, PlayShelf, RemixStep } from "../shared/play.ts";
 import {
@@ -1812,19 +1812,20 @@ export const AUTO_RESUME_SETTING_WORDS = {
 /** Settings → Permissions: the switch that lets agents ask to control the person's computer. */
 export const COMPUTER_CONTROL_SETTING_WORDS = {
   section: t("Computer control"),
-  label: t("Let agents control your computer"),
+  label: t("Let agents use your computer"),
 } as const;
 
-/** What the switch says on `platform`: how to stop it there and what it never touches, or where it runs. */
+/** What the switch says on `platform`, in one line: agents ask first, or where it runs. */
 export function computerControlDetail(platform: string): string {
-  const can = t("With this on, an agent can click and type in the apps you allow.");
-  if (!computerControlOffered(platform)) return `${can} ${t("macOS and Windows only.")}`;
-  const stops = t("Each chat session asks you first, and {keys} stops it.", {
-    keys: desktopStopShortcut(platform).keys,
-  });
+  if (!computerControlOffered(platform)) return t("macOS and Windows only.");
+  return t("They ask before each app.");
+}
+
+/** What computer control never touches on `platform`, under a computer-control card's Details. */
+export function computerNeverWords(platform: string): string {
   if (platform === StudioPlatform.Windows)
-    return `${can} ${stops} ${t("It never uses password managers, Windows Settings, password prompts or Genex.")}`;
-  return `${can} ${stops} ${t("Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex.")}`;
+    return t("It never uses password managers, Windows Settings, password prompts or Genex.");
+  return t("It never uses password managers, System Settings, password prompts or Genex.");
 }
 
 export function resumedWords(parts: number): string {
