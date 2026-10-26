@@ -224,7 +224,9 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   bubble (`delivery-order.ts`). This needs a CLI that advertises `msg_lifecycle_v1` in its init
   capabilities (2.1.281 does); the input stays open until a result has answered everything read, so
   a late message is never cut off, and one taken but never started closes it after
-  `STEER_STALL_MS`, reported as not delivered. A tool that only waits ends early when a message is
+  `STEER_STALL_MS`, reported as not delivered. The brief carries a uuid too: a resumed session may
+  first answer what it had queued (a background task's notice), and that result does not close the
+  input before the brief's own turn, whose Genex tool calls answer over it. A tool that only waits ends early when a message is
   handed over (`loop/person-wrote.ts`: a worker wait, a lead's wait for a busy reviewer, a plugin
   lock wait on the host), so the session reaches its next step in seconds and may wait again.
 - **Cut at the next step and resume.** Any other session — Codex (`codex exec` closes stdin at

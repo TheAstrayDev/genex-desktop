@@ -747,6 +747,8 @@
 /* Publish to the web, drawn by Studio over the stage: the game, one main button, its progress. */
 .genex-publish-body {
   display: grid;
+  /* One column no wider than the card: a long link shortens with an ellipsis instead of widening it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   min-width: 0;
 }

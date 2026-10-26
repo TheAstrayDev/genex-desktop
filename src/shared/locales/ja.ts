@@ -48,8 +48,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "氷の岩を軌道へ導く彗星の群れ追いゲーム",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "このゲームではすでにコマンドが実行中です。終わるのを待つか、停止してください。",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "このMac上のコマンドか、ブラウザでサインインするURL。すべてのゲームのエージェントがそのツールを使えます。",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "このコンピュータ上のコマンドか、ブラウザでサインインするURL。すべてのゲームのエージェントがそのツールを使えます。",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "ID「{id}」はすでにコネクタが使っています。このプラグインをインストールする前に、そのコネクタを削除するか名前を変えてください",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -4191,7 +4191,8 @@ export default {
   "This plan is no longer waiting for approval.": "このプランはもう承認を待っていません。",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "このプラグインにはリリースがないため、Studioは最新のコードを使います。アップデートするまでインストール時のままです。",
-  "This plugin runs trusted code on your Mac.": "このプラグインは、このMacで信頼済みのコードを実行します。",
+  "This plugin runs trusted code on your computer.":
+    "このプラグインは、このコンピュータで信頼済みのコードを実行します。",
   "This plugin's package is missing; remove the plugin and install it again":
     "このプラグインのパッケージが見つかりません。プラグインを削除して、もう一度インストールしてください",
   "This plugin’s plugin.json can’t be used.": "このプラグインのplugin.jsonは使えません。",
@@ -5946,8 +5947,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "このコンピューターではGenexがRoblox Studioをクリックできません。Studioで自分で公開してください：",
   "Handing it to the agent…": "エージェントに渡しています…",
-  "If the chat asks to use computer control, answer it there.":
-    "チャットでコンピューター操作の使用を聞かれたら、そこで答えてください。",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "チャットや macOS で許可を求められたら、許可してください。公開はそのまま自動で進みます。",
   "In Roblox Studio": "Roblox Studioで",
   "Name on Roblox": "Robloxでの名前",
   "On Roblox": "Robloxに",

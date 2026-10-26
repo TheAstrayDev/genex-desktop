@@ -18,7 +18,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, sta
 import os from "node:os";
 import path from "node:path";
 import { sandboxBesidePlugins } from "./core/boot-side-by-side.ts";
-import { assistAvailable, coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
+import { assistAvailable, assistUnderWay, coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { MentionSources } from "./core/mention-tags.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
@@ -1144,11 +1144,7 @@ export class StudioCore {
     };
     // `game.engine.runs`: the games whose run is going, so an engine plugin never quits an editor a Loop uses.
     this.pluginServices.runningGames = () => this.#runningGames();
-    // `game.engine.assist`: Do it for me, a setup task handed to the game's chat (`desktop-assist.ts`).
-    this.pluginServices.engineAssist = (pluginId, binding, task, call) =>
-      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...call });
-    // `game.engine.canAssist`: whether that can run here, so a plugin shows its click path instead.
-    this.pluginServices.engineCanAssist = (pluginId) => assistAvailable(coreAssistHost(this), pluginId);
+    this.#wireAssists(this.pluginServices);
     this.plugins = new PluginRegistry(
       path.join(this.layout.engineHomes, "plugins"),
       path.join(this.options.paths.resources, "plugins"),
@@ -1209,6 +1205,17 @@ export class StudioCore {
       return result;
     };
     await this.#initPlugins();
+  }
+
+  /** Do it for me's host services (`desktop-assist.ts`). */
+  #wireAssists(services: PluginServices): void {
+    // `game.engine.assist`: Do it for me, a setup task handed to the game's chat.
+    services.engineAssist = (pluginId, binding, task, call) =>
+      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...call });
+    // `game.engine.canAssist`: whether that can run here, so a plugin shows its click path instead.
+    services.engineCanAssist = (pluginId) => assistAvailable(coreAssistHost(this), pluginId);
+    // `game.engine.assisting`: whether the chat still runs it, so a plugin's card ends with its turn.
+    services.engineAssisting = (pluginId, binding) => assistUnderWay(coreAssistHost(this), pluginId, binding);
   }
 
   /** The registry's start, each part of it marked so a slow plugin setup's log says which part held it. */
