@@ -297,9 +297,12 @@ gets no such notice: the list names what is on (`delegation-prompts.ts`).
   and its panel follows [Engine panels](../design/genex/README.md#engine-panels). Out of its facts the button is still
   asked for its status and shows while that status says `shown: true` (its chat chose the engine
   before the project exists); `visibleToolbarEntries` in `shared/plugin-toolbar.ts` decides.
-- Buttons render as `button[data-plugin-toolbar="<plugin>:<item>"]` immediately after the
-  Live/Builds group, for enabled installed plugins only; a disabled, removed or not-enabled plugin
-  contributes nothing.
+- Buttons render as `button[data-plugin-toolbar="<plugin>:<item>"]` at the stage strip's end, for
+  enabled installed plugins only; a disabled, removed or not-enabled plugin contributes nothing. A
+  button with `facts` (an engine's) stands in the chat header instead, left of Show in Finder
+  (`toolbarPlace` in `shared/plugin-toolbar.ts`), drawn there by the strip's toolbar through a portal
+  (`renderer/panels/engine-slot.ts`), so its status, panel and approvals stay the strip's; with no
+  game chat header it stays on the strip. Its `label` is the engine's short name (Roblox, Unity).
 
 **Status.** `status` names a declared action **without** confirmation. Studio calls it with no
 arguments (and the current project binding) when the toolbar mounts, on every `plugins.changed`,
@@ -1196,8 +1199,8 @@ plugin into Studio's Plugins folder. `studio-locate.ts` finds Studio on a Mac at
 from Info.plist through `plutil`) with `Contents/MacOS/StudioMCP`, and on Windows as the newest
 `%LOCALAPPDATA%\Roblox\Versions\version-*\RobloxStudioBeta.exe` beside `mcp.bat`; it refuses
 links out of those folders and a home or LOCALAPPDATA of the other system. Whether Studio runs is
-`pgrep -x RobloxStudio`, or `tasklist` by its full path. The toolbar item `studio` ("Roblox Studio"
-after the host's `roblox` mark, scoped to `roblox-project` games like every engine's button) opens the panel; its `toolbar-status` is a
+`pgrep -x RobloxStudio`, or `tasklist` by its full path. The toolbar item `studio` ("Roblox"
+after the host's `roblox` mark in the chat header, aria-label "Roblox Studio", scoped to `roblox-project` games like every engine's button) opens the panel; its `toolbar-status` is a
 dot: Not installed and Not open `info`, Set up and Starting `warn`, Ready `ok`. Set up holds until
 Genex's setup record (`setup/record.json` in plugin storage) exists; Ready means Studio's own MCP
 server lists an open Studio, asked through the one StudioMCP the backend keeps once Studio runs. Neither the button nor the
