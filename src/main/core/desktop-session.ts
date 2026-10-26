@@ -65,6 +65,60 @@ export interface DesktopSessionPlace {
   signal?: AbortSignal;
 }
 
+/** A chat's yes to computer control: the session's, and each app's, with the stop count it was given at. */
+interface ChatYes {
+  stopsAll: number;
+  session: boolean;
+  apps: Set<string>;
+}
+
+/** Every chat's yes, per core: it lasts the chat's turns until the person stops it. */
+const CHAT_YES = new WeakMap<object, Map<string, ChatYes>>();
+
+function chatYesOf(core: object): Map<string, ChatYes> {
+  const known = CHAT_YES.get(core);
+  if (known) return known;
+  const made = new Map<string, ChatYes>();
+  CHAT_YES.set(core, made);
+  return made;
+}
+
+/** How a chat's yes knows an app: its bundle id (or Windows exe), else its name. */
+const appKey = (app: DesktopApp): string => app.bundleId ?? app.name;
+
+/**
+ * Chat `threadId`'s yes to computer control, read and kept across its turns: it holds while no stop
+ * of every session came since it was given (`stopsAll`).
+ */
+function chatYes(core: object, threadId: string, stopsAll: () => number) {
+  const yes = chatYesOf(core);
+  const kept = (): ChatYes | null => {
+    const held = yes.get(threadId);
+    return held && held.stopsAll === stopsAll() ? held : null;
+  };
+  return {
+    covers: (question: DesktopQuestion, app?: DesktopApp): boolean => {
+      const held = kept();
+      if (!held) return false;
+      return question === DesktopQuestion.App && app ? held.apps.has(appKey(app)) : held.session;
+    },
+    keep: (question: DesktopQuestion, app?: DesktopApp): void => {
+      const held = kept() ?? { stopsAll: stopsAll(), session: false, apps: new Set<string>() };
+      if (question === DesktopQuestion.App && app) held.apps.add(appKey(app));
+      else held.session = true;
+      yes.set(threadId, held);
+    },
+  };
+}
+
+/**
+ * The person stopped chat `threadId` (Stop): its yes to computer control ends, and its next turn
+ * asks again. The stop shortcut and turning control off end every chat's (`stopsAll`).
+ */
+export function forgetChatComputerYes(core: object, threadId: string): void {
+  chatYesOf(core).delete(threadId);
+}
+
 /** Whether the person turned computer control on (Settings → Permissions; off by default). */
 export function computerControlOn(core: Pick<StudioCore, "settings">): boolean {
   return core.settings.computerControl;
@@ -93,7 +147,9 @@ export async function desktopSessionTools(
     role: ScreenRole.Operator,
   };
   const grants = assistGrants(core);
+  const yes = chatYes(core, place.threadId, () => desktop.stopsAll());
   const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<boolean> => {
+    if (yes.covers(question, app)) return true;
     // The person's press (or the card they approved) for this turn's assist already said yes to the
     // session and the grant's apps; any other app (their browser, for the game's page) is asked.
     const grant = grants.forTurn(place.threadId, place.turn);
@@ -111,6 +167,7 @@ export async function desktopSessionTools(
       undefined,
       { note },
     );
+    if (answer.approved) yes.keep(question, app);
     return answer.approved;
   };
   // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,

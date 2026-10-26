@@ -61,6 +61,8 @@ export type DesktopSessionDeps = Pick<
 /** The registry: what is installed, what is running, and how to stop it all. */
 export function desktopControl(options: DesktopControlOptions) {
   const running = new Set<DesktopTools>();
+  // Counts every stop of them all, so a yes given before one is known to have ended.
+  let stoppedAll = 0;
   let found: Promise<string | null> | null = null;
   const binary = () => {
     found ??= options.findDriver().catch(() => null);
@@ -129,6 +131,8 @@ export function desktopControl(options: DesktopControlOptions) {
       };
       return held;
     },
+    /** How many times every session was stopped at once (the stop shortcut, control turned off). */
+    stopsAll: (): number => stoppedAll,
     /** How many desktop sessions are holding the computer now. */
     active: (): number => running.size,
     /** Whether the driver can see and move here, waiting while the person gives its grants. */
@@ -139,6 +143,7 @@ export function desktopControl(options: DesktopControlOptions) {
     },
     /** Stop every desktop session at once: the person's stop, or the app quitting. */
     stopAll: async (): Promise<void> => {
+      stoppedAll += 1;
       const all = [...running];
       running.clear();
       keepDaemon();

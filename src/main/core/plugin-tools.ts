@@ -379,6 +379,14 @@ export class PluginToolService {
       ...(options.note ? { note: options.note } : {}),
     };
     const field = cardField(card.tool, args);
+    // Bypass asks nothing: an agent's card in a Bypass chat is logged approved by the mode, and one
+    // asked in another mode is answered by the person's switch. The person's own press still asks.
+    const modeAnswers = this.#modeAnswers(pluginId, threadId, options, exportReview);
+    if (await this.#bypassed(modeAnswers, threadId)) {
+      const result = { approved: true, by: "mode" as const };
+      await this.#recordAnswer({ ...base, ...field }, result, 0, threadId);
+      return result;
+    }
     const asked: PluginConsentEvent = {
       ...base,
       ...field,
@@ -395,7 +403,7 @@ export class PluginToolService {
       ...(signal ? { signal } : {}),
       // A build's lead is not the chat's turn: another turn ending leaves its question waiting.
       ...(attribution?.lead ? { outlivesTurn: true } : {}),
-      ...(options.modeAnswers ? { modeAnswers: options.modeAnswers } : {}),
+      ...(modeAnswers ? { modeAnswers } : {}),
     });
     try {
       await this.#core.append([customEventData(CustomEvent.PluginConsent, { ...asked })], threadId);
@@ -414,6 +422,28 @@ export class PluginToolService {
     const { edited, shown } = cardEdit(field, result, sent);
     await this.#recordAnswer({ ...base, ...shown }, result, performance.now() - waitStarted, threadId);
     return edited ? { ...result, input: edited } : result;
+  }
+
+  /**
+   * The chat modes that answer a card with no question: a connector's own, else, as Bypass asks
+   * nothing, Bypass for every card but one that stays the person's own (their press, an export's
+   * review, a plugin from a folder).
+   */
+  #modeAnswers(
+    pluginId: string,
+    threadId: string,
+    options: { modeAnswers?: PluginConsentRequest["modeAnswers"]; afresh?: boolean },
+    exportReview: PluginConsentEvent["exportReview"],
+  ): PluginConsentRequest["modeAnswers"] | null {
+    if (options.modeAnswers) return options.modeAnswers;
+    if (options.afresh || exportReview || this.#fromFolder(pluginId)) return null;
+    return { threadId, modes: [PermissionMode.Bypass] };
+  }
+
+  /** Whether chat `threadId` is in Bypass now and Bypass answers this card. */
+  async #bypassed(modeAnswers: PluginConsentRequest["modeAnswers"] | null, threadId: string): Promise<boolean> {
+    if (!modeAnswers?.modes.includes(PermissionMode.Bypass)) return false;
+    return (await this.#x.chatMode(threadId)) === PermissionMode.Bypass;
   }
 
   /** A card's answer, logged beside its question and announced to the chat. */
@@ -989,6 +1019,15 @@ export class PluginToolService {
     if (audience && modes.includes(await this.#x.chatMode(audience))) return true;
     if (await runConsent?.()) return true;
     return modes;
+  }
+
+  /**
+   * Whether `id` is a plugin loaded from a folder on this Mac, or one of its connectors: its code runs
+   * with the person's access, so its cards stay theirs to answer, Bypass included.
+   */
+  #fromFolder(id: string): boolean {
+    const local = this.#core.plugins.list().some((p) => p.manifest.id === id && p.source === PluginSourceKind.Local);
+    return local || this.#localOwner(id);
   }
 
   /** Whether connector `id` is a server of a plugin loaded from a folder on this Mac. */
