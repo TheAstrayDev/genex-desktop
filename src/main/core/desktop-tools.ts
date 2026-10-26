@@ -19,7 +19,7 @@ import { DESKTOP_TOOL_NAME, computerToolDefinition } from "../../substrate/compu
 import type { DesktopApp, DesktopDriver, DesktopShot } from "../../substrate/desktop-driver.ts";
 import type { DelegateRequest } from "../../substrate/engines/types.ts";
 import { computerSession, type TargetSource } from "./computer-session.ts";
-import { type DesktopTarget, desktopTarget } from "./desktop-target.ts";
+import { type DesktopTarget, type DesktopTargetOptions, desktopTarget } from "./desktop-target.ts";
 
 /** The most moves one desktop session makes unless the grant says otherwise. */
 const DESKTOP_MAX_ACTIONS = 200;
@@ -72,6 +72,19 @@ export interface DesktopToolsDeps {
    * it (the app reopened behind Genex). A failure to raise it stops nothing.
    */
   keepInFront?: () => string | null;
+  /** Open a page in the person's own browser (`open_page`), the host deciding which: why not, or null. */
+  openPage?: (address: URL) => Promise<string | null>;
+}
+
+/** What a session's target takes from its deps, beside its driver and its app check. */
+function targetOptions(deps: DesktopToolsDeps): Omit<DesktopTargetOptions, "driver" | "allowApp"> {
+  return {
+    ownApp: deps.ownApp,
+    vm: deps.vm === true,
+    ...(deps.engineApps ? { engineApps: deps.engineApps } : {}),
+    ...(deps.downscale ? { downscale: deps.downscale } : {}),
+    ...(deps.openPage ? { openPage: deps.openPage } : {}),
+  };
 }
 
 /** The desktop tool for one session, and how to stop it. */
@@ -160,14 +173,7 @@ function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { 
       if (typeof connected === "string") return unusable(connected);
       driver = connected;
       await raiseKept(deps, connected, true).catch(() => {});
-      target = desktopTarget({
-        driver,
-        allowApp,
-        ownApp: deps.ownApp,
-        vm: deps.vm === true,
-        ...(deps.engineApps ? { engineApps: deps.engineApps } : {}),
-        ...(deps.downscale ? { downscale: deps.downscale } : {}),
-      });
+      target = desktopTarget({ driver, allowApp, ...targetOptions(deps) });
       return { target, problem: null, note: null, fresh: true };
     },
     frame: (shown, jpeg, caption, act) => deps.frame?.(shown, jpeg, caption, act) ?? Promise.resolve(),

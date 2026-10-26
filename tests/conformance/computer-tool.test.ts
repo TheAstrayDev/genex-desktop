@@ -303,18 +303,29 @@ describe("computer tool — built from what the target can do", () => {
     reload: false,
   };
 
+  /** The verbs only a desktop offers: an app brought forward, a page opened in the person's browser. */
+  const DESKTOP_ONLY: ReadonlySet<string> = new Set(["bring_to_front", "open_page"]);
+
   it("offers a browser game every verb but named game actions, which only a Play Protocol game declares", () => {
     assert.deepEqual(
       computerActionsFor(BROWSER_CAPABILITIES),
-      // Flipped on purpose (web pages, then bringing an app forward): the web verbs and
-      // bring_to_front are the desktop's, never a game window's.
-      COMPUTER_ACTIONS.filter(
-        (action) => action !== "act" && !action.startsWith("web_") && action !== "bring_to_front",
-      ),
+      // Flipped on purpose (web pages, then bringing an app forward, then opening a page): the web
+      // verbs, bring_to_front and open_page are the desktop's, never a game window's.
+      COMPUTER_ACTIONS.filter((action) => action !== "act" && !action.startsWith("web_") && !DESKTOP_ONLY.has(action)),
     );
     const browser = computerToolDefinition({ role: "builder", capabilities: BROWSER_CAPABILITIES });
     assert.deepEqual(browser, computerToolDefinition({ role: "builder" }));
     assert.ok("surface" in browser.parameters.properties);
+  });
+
+  it("offers the desktop open_page, says what it takes, and asks for the address", () => {
+    assert.ok(computerActionsFor(DESKTOP_CAPABILITIES).includes("open_page"));
+    const description = computerToolDefinition({ role: "operator", capabilities: DESKTOP_CAPABILITIES }).description;
+    assert.match(description, /open_page text=<https:\/\/ address>/);
+    assert.deepEqual(parseComputerArgs({ action: "open_page" }), {
+      ok: false,
+      error: "open_page needs text=<an https:// address> of the page the task names",
+    });
   });
 
   it("offers the desktop bring_to_front, says what it takes, and asks for the app it names", () => {

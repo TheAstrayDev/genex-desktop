@@ -420,6 +420,18 @@ async function bringToFront(ctx: ActionContext): Promise<LiveToolResult> {
   return observed(ctx, `OK — ${ctx.caption}. ${await helpers.afterMove(ctx)}${ctx.noteLine}`, true);
 }
 
+/** A page opened in the person's own browser: the answer says where things stand after. */
+async function openPage(ctx: ActionContext): Promise<LiveToolResult> {
+  const { request, target, helpers } = ctx;
+  if (!target.openPage) return COMPUTER_ARG_PROBLEM.unsupported(request.action, "");
+  const why = await target.openPage(String(request.text ?? "").trim());
+  if (why) {
+    ctx.record.failed = why;
+    return COMPUTER_ARG_PROBLEM.pageCouldNot(why);
+  }
+  return observed(ctx, `OK — ${ctx.caption}. ${await helpers.afterMove(ctx)}${ctx.noteLine}`, true);
+}
+
 const HOST_ACTIONS: Record<ComputerHostAction, HostActionHandler> = {
   screenshot: look,
   camera: look,
@@ -443,6 +455,7 @@ const HOST_ACTIONS: Record<ComputerHostAction, HostActionHandler> = {
   web_click: web,
   web_type: web,
   bring_to_front: bringToFront,
+  open_page: openPage,
 };
 
 function isHostAction(action: string): action is ComputerHostAction {
@@ -502,6 +515,7 @@ function movesOf(request: ComputerRequest): number {
     request.action === ComputerVerb.Wait ||
     request.action === ComputerVerb.Act ||
     request.action === ComputerVerb.BringToFront ||
+    request.action === ComputerVerb.OpenPage ||
     WEB_MOVES.has(request.action);
   return isHostAction(request.action) && !moving ? 0 : 1;
 }

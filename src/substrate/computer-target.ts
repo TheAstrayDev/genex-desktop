@@ -112,6 +112,11 @@ export interface ComputerTarget {
    */
   front?(app: string): Promise<string | null>;
   /**
+   * Open an https page in the person's own default browser, where the target declares `apps`: null
+   * once it is handed to the browser, else why not (not https, or not a page the task may open).
+   */
+  openPage?(address: string): Promise<string | null>;
+  /**
    * Address this player (1 to `caps.players`) with every later look, input and state read, where
    * the target plays several at once.
    */

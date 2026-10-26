@@ -257,7 +257,8 @@ export function assistGrants(core: { readonly layout?: Pick<StudioCore["layout"]
 /** What the engine-app guard reads of a plugin: whether it is live, and its engine declaration. */
 type EnginePlugin = Pick<PluginInfo, "enabled" | "removed"> & { manifest: Pick<PluginInfo["manifest"], "engine"> };
 
-const livePlugins = (plugins: readonly EnginePlugin[]) => plugins.filter((plugin) => plugin.enabled && !plugin.removed);
+const livePlugins = <T extends Pick<PluginInfo, "enabled" | "removed">>(plugins: readonly T[]): T[] =>
+  plugins.filter((plugin) => plugin.enabled && !plugin.removed);
 
 /**
  * The apps an engine declares for `platform`, as the desktop names them: Mac bundle ids, or Windows
@@ -283,6 +284,34 @@ export function declaredPlayerApps(
 ): ReadonlySet<string> {
   return new Set(livePlugins(plugins).flatMap((plugin) => engineAppIds(plugin.manifest.engine?.playerApps, platform)));
 }
+
+/** What the page policy reads of a plugin: whether it is live, its id and the pages its engine declares. */
+type PagePlugin = Pick<PluginInfo, "enabled" | "removed"> & {
+  manifest: { id: string; engine?: { pages?: readonly string[] } };
+};
+
+/**
+ * Why `open_page` may not open `address` in the person's browser now, or null: only the turn holding
+ * an assist's grant opens a page, and only on a host its own engine declares (`engine.pages`), exactly.
+ */
+export function assistPageRefusal(
+  address: URL,
+  grant: Pick<AssistGrant, "pluginId"> | null,
+  plugins: readonly PagePlugin[],
+): string | null {
+  if (!grant) return PAGE_MESSAGE.noGrant;
+  const owner = livePlugins(plugins).find((plugin) => plugin.manifest.id === grant.pluginId);
+  const pages = owner?.manifest.engine?.pages ?? [];
+  if (pages.length === 0) return PAGE_MESSAGE.noPages;
+  return pages.includes(address.hostname) ? null : PAGE_MESSAGE.notDeclared(pages);
+}
+
+/** What the agent reads when a page is refused. */
+const PAGE_MESSAGE = {
+  noGrant: "open_page opens a page only in the turn that answers an engine's task (such as Publish to Roblox)",
+  noPages: "this task's engine declares no pages to open",
+  notDeclared: (pages: readonly string[]) => `this task opens only pages on ${pages.join(", ")}`,
+} as const;
 
 /** What an assist needs of the host. */
 export interface AssistHost {

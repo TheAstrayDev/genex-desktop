@@ -46,12 +46,14 @@ export interface DesktopControlOptions {
   later?: (ms: number, fire: () => void) => () => void;
   /** Wait for this computer's own grants (a Mac's Accessibility and Screen Recording); absent where none are asked. */
   awaitGrants?: (binary: string, signal?: AbortSignal) => Promise<boolean>;
+  /** Open an https page in the person's own default browser; absent where pages never open (a VM's desktop). */
+  openPage?: (address: string) => Promise<void>;
 }
 
 /** One session's desktop: where its frames go, how its person is asked, and what its screen shows. */
 export type DesktopSessionDeps = Pick<
   DesktopToolsDeps,
-  "frameDir" | "frame" | "downscale" | "maxActions" | "enabled" | "engineApps" | "keepInFront"
+  "frameDir" | "frame" | "downscale" | "maxActions" | "enabled" | "engineApps" | "keepInFront" | "openPage"
 > & {
   ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<boolean>;
 };
@@ -143,6 +145,12 @@ export function desktopControl(options: DesktopControlOptions) {
       options.onActive?.(0);
       await Promise.all(all.map((tools) => tools.release().catch(() => {})));
       await options.shutdown?.().catch(() => {});
+    },
+    /** Open a page in the person's own browser, where this computer can; false where it never does. */
+    openPage: async (address: string): Promise<boolean> => {
+      if (!options.openPage) return false;
+      await options.openPage(address);
+      return true;
     },
     /** Look for the driver again (after the person installs it). */
     rescan: (): void => {

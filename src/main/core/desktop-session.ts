@@ -14,7 +14,7 @@ import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
-import { assistGrants, declaredEngineApps, declaredPlayerApps } from "./desktop-assist.ts";
+import { assistGrants, assistPageRefusal, declaredEngineApps, declaredPlayerApps } from "./desktop-assist.ts";
 import { engineAppRefusal } from "./desktop-target.ts";
 import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 
@@ -28,6 +28,8 @@ const MESSAGE = {
     ),
   app: (app: string) => t("Let this chat's agent use {app}? It can click, type and read what {app} shows.", { app }),
   unnamedApp: () => t("Let this chat's agent use this app? It can click, type and read what this app shows."),
+  /** The agent's words, never the person's: English. */
+  noBrowser: "this computer opens no pages in the person's browser",
 } as const;
 
 /** Who asks for computer control on the consent card: the studio itself, never a plugin. */
@@ -112,9 +114,16 @@ export async function desktopSessionTools(
     const [app] = grant?.asked ? grant.apps : [];
     return app ?? null;
   };
+  // A page of the task this turn answers, on a host its engine declares: the grant's own, never any other.
+  const openPage = async (address: URL): Promise<string | null> => {
+    const refusal = assistPageRefusal(address, grants.forTurn(place.threadId, place.turn), core.plugins.list());
+    if (refusal) return refusal;
+    return (await desktop.openPage(address.href)) ? null : MESSAGE.noBrowser;
+  };
   const tools = desktop.toolsFor({
     enabled: () => computerControlOn(core),
     keepInFront,
+    openPage,
     engineApps,
     frameDir: path.join(core.layout.scratch, "desktop", safePathSegment(place.threadId)),
     ask,

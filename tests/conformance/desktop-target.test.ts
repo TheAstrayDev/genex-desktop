@@ -558,3 +558,53 @@ describe("bringing an app to the front", () => {
     assert.deepEqual(calls, [`raise ${ROBLOX_STUDIO}`], "the grant lets the raise through");
   });
 });
+
+describe("opening a page in the person's browser", () => {
+  /** A target whose host opens what it is handed, and refuses what the test says. */
+  function opening(refuse: (address: string) => string | null = () => null) {
+    const fake = fakeDriver();
+    const opened: string[] = [];
+    const target = desktopTarget({
+      driver: fake.driver,
+      allowApp: async () => true,
+      openPage: async (address) => {
+        const why = refuse(address.href);
+        if (!why) opened.push(address.href);
+        return why;
+      },
+      frontSettleMs: 0,
+    });
+    return { target, opened, calls: fake.calls };
+  }
+
+  it("hands the host an https address to open, and clicks nothing itself", async () => {
+    const { target, opened, calls } = opening();
+    assert.equal(await target.openPage?.("https://create.example.com/dashboard/creations"), null);
+    assert.deepEqual(opened, ["https://create.example.com/dashboard/creations"]);
+    assert.deepEqual(calls, [], "no input reached the driver");
+  });
+
+  it("says why when the host refuses it", async () => {
+    const { target, opened } = opening(() => "that page is not this task's");
+    assert.equal(await target.openPage?.("https://elsewhere.example/"), "that page is not this task's");
+    assert.deepEqual(opened, []);
+  });
+
+  const refusedAddresses: Array<[string, string]> = [
+    ["plain http", "http://create.example.com/"],
+    ["a file", "file:///etc/passwd"],
+    ["a script", "javascript:alert(1)"],
+    ["a custom scheme that opens an app", "roblox-studio:1+launchmode:edit"],
+    ["credentials in the address", "https://user:pass@create.example.com/"],
+    ["a port", "https://create.example.com:8443/"],
+    ["an address that does not parse", "https://"],
+    ["no address", "   "],
+  ];
+  for (const [name, address] of refusedAddresses) {
+    it(`refuses ${name}, and nothing is opened`, async () => {
+      const { target, opened } = opening();
+      assert.match(String(await target.openPage?.(address)), /https:\/\//);
+      assert.deepEqual(opened, []);
+    });
+  }
+});

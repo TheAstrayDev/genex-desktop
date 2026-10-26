@@ -21,6 +21,7 @@ import {
   AssistGrants,
   type AssistHost,
   assistAvailable,
+  assistPageRefusal,
   assistGrants,
   declaredEngineApps,
   declaredPlayerApps,
@@ -457,6 +458,54 @@ async function toyWithAssist(): Promise<string> {
   await writeFile(file, JSON.stringify(manifest, null, 2));
   return dir;
 }
+
+describe("the pages an assist may open in the person's browser", () => {
+  const kiln = {
+    enabled: true,
+    removed: false,
+    manifest: {
+      id: "kiln",
+      engine: {
+        id: "kiln",
+        label: "Kiln",
+        projectFiles: [".kiln"],
+        fact: "kiln",
+        projectInFolder: false,
+        pages: ["create.kiln.dev"],
+      },
+    },
+  };
+  const other = {
+    ...kiln,
+    manifest: { id: "other", engine: { ...kiln.manifest.engine, id: "other", pages: ["create.other.dev"] } },
+  };
+  const plugins = [kiln, other];
+  const grant = { pluginId: "kiln" };
+
+  it("opens a page of a host the assist's own engine declares, in the turn that holds its grant", () => {
+    assert.equal(assistPageRefusal(new URL("https://create.kiln.dev/dashboard/1/icon"), grant, plugins), null);
+  });
+
+  const refused: Array<[string, string, { pluginId: string } | null, RegExp]> = [
+    ["a turn holding no grant", "https://create.kiln.dev/", null, /only in the turn that answers/],
+    ["another engine's page", "https://create.other.dev/", grant, /create\.kiln\.dev/],
+    ["a host that only ends like it", "https://evilcreate.kiln.dev/", grant, /create\.kiln\.dev/],
+    ["a host that only starts like it", "https://create.kiln.dev.evil.example/", grant, /create\.kiln\.dev/],
+    ["a page of the web at large", "https://example.com/", grant, /create\.kiln\.dev/],
+  ];
+  for (const [name, address, held, why] of refused) {
+    it(`refuses ${name}`, () => {
+      assert.match(String(assistPageRefusal(new URL(address), held, plugins)), why);
+    });
+  }
+
+  it("refuses every page for a disabled engine, or one that declares none", () => {
+    const off = { ...kiln, enabled: false };
+    assert.match(String(assistPageRefusal(new URL("https://create.kiln.dev/"), grant, [off])), /declares no pages/);
+    const bare = { ...kiln, manifest: { id: "kiln", engine: { ...kiln.manifest.engine, pages: undefined } } };
+    assert.match(String(assistPageRefusal(new URL("https://create.kiln.dev/"), grant, [bare])), /declares no pages/);
+  });
+});
 
 describe("the apps engines declare", () => {
   type Apps = { mac?: string[]; windows?: string[] };

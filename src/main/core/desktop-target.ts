@@ -132,6 +132,9 @@ const MESSAGE = {
   notInFront: (app: string) =>
     `${app} did not come to the front: it may not be running (nothing is opened for you), or another window stayed in front`,
   notRunning: (app: string) => `${app} is not running: bring_to_front opens nothing, it only raises a running app`,
+  notPage: (raw: string) =>
+    `"${raw}" is not a page open_page opens: give a whole https:// address, with no user name, password or port`,
+  noPages: "this computer opens no pages for the agent",
 } as const;
 
 /** An app's name as `bring_to_front` takes it: an executable or a bundle id, never a path. */
@@ -145,6 +148,29 @@ function namedApp(raw: string): DesktopApp | null {
   if (!APP_NAME.test(name)) return null;
   const id = name.toLowerCase().endsWith(".exe") ? name.toLowerCase() : name;
   return { name: id, bundleId: id, pid: null };
+}
+
+/** An address `open_page` opens: a whole https page, with no credentials and no port; null otherwise. */
+function pageAddress(raw: string): URL | null {
+  let address: URL;
+  try {
+    address = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  const plain = address.protocol === "https:" && address.hostname !== "" && address.port === "";
+  return plain && !address.username && !address.password ? address : null;
+}
+
+/** `open_page`: an https address handed to the host, which decides; null once the browser has it. */
+async function openPageWith(options: Pick<DesktopTargetOptions, "openPage" | "frontSettleMs">, raw: string) {
+  const address = pageAddress(raw);
+  if (!address) return MESSAGE.notPage(raw.trim());
+  if (!options.openPage) return MESSAGE.noPages;
+  const why = await options.openPage(address);
+  if (why) return why;
+  await sleep(options.frontSettleMs ?? FRONT_SETTLE_MS);
+  return null;
 }
 
 /** What the engine-app guard reads: the editors engines declare, and the chat's live assist grant. */
@@ -195,6 +221,11 @@ export interface DesktopTargetOptions {
   engineApps?: (app: DesktopApp) => string | null;
   /** How long a raised app has to take the foreground before `bring_to_front` checks it; {@link FRONT_SETTLE_MS} by default. */
   frontSettleMs?: number;
+  /**
+   * Open an https page in the person's own default browser (`open_page`): the host decides which pages
+   * this turn may open, and answers why not, or null once the browser has it. Absent: no page opens.
+   */
+  openPage?: (address: URL) => Promise<string | null>;
   /** A smaller picture for the model, where the host can make one; the driver's own otherwise. */
   downscale?: (
     shot: DesktopShot,
@@ -521,6 +552,7 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
     },
     refusals: () => state.refused.splice(0),
     front,
+    openPage: (raw: string) => openPageWith(options, raw),
     ...(driver.web ? { web: guardedWeb(driver.web, { allowApp: options.allowApp, neverDriven }) } : {}),
   };
 }

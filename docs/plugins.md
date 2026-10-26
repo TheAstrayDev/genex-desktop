@@ -170,7 +170,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `toolbar[]` | 2 | Up to 4 buttons in the stage strip; see below |
 | `mcpServers[]` | 2 | Up to 4 MCP servers the plugin ships, run by the host as connectors the plugin owns, each (API 3) with `facts`; see below |
 | `detect[]` | 3 | Up to 8 `{fact, files, notUnder?}` rules that recognise the plugin's kinds of project by their files; see [Project facts](#project-facts) |
-| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?, playerApps?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
+| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?, playerApps?, pages?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
 | `workspace` | 3 | `{facts?, ignore?, copySkip?}`: what history and writers' copies leave out of a folder holding the plugin's facts; see [Workspace rules](#workspace-rules) |
 | `assets` | 3 | `{facts?, folders, formats?}`: where the assets of a folder holding the plugin's facts live (1–8 folders inside the fact's folder or `.`, up to 32 lowercase extensions without the dot) |
 | `workerTypes[]` | 3 | Up to 16 `{id, description, tools, isolation}`: the kinds of worker a lead may start while the plugin is on; see [Worker types](#worker-types) |
@@ -2570,7 +2570,10 @@ The manifest is refused unless:
   tool refuses them outside its `game.engine.assist` turns, and those turns may drive only them;
 - `playerApps`, when present, has `apps`' shape and names the apps the engine's published games are
   played in by everyone (Roblox's player app): while the plugin is on, the `desktop` tool refuses
-  them always, an assist turn included, so no agent plays in a live server.
+  them always, an assist turn included, so no agent plays in a live server;
+- `pages`, when present, lists 1–4 distinct lowercase web hosts (never an address, a port or a path)
+  the engine's assist turn may open in the person's own browser with the desktop tool's `open_page`
+  (https only, exact host); Roblox declares `create.roblox.com` for the cover step of Publish.
 
 Unknown keys are dropped and the rest kept in a fixed order. `engineCatalog` lists the declared
 engines by id, the first declaration of an id winning. `parseEngineRemote` reads a published game's

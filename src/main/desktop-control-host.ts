@@ -115,6 +115,8 @@ export function createDesktopControl(options: { automated: boolean; resources: s
         }
       : {}),
     onActive,
+    // A page of the task the agent answers (Creator Hub), in the browser where the person is signed in.
+    ...(vmCommand ? {} : { openPage: (address: string) => shell.openExternal(address) }),
     shutdown: async () => {
       await embedded?.stop();
     },

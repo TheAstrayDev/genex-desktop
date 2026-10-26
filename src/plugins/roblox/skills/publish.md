@@ -16,12 +16,21 @@ the turn with `publish-result` (below), so the card shows how it ended.
   and never open the Roblox player.
 - **Keep Studio's own choices.** Leave the creator, genre, devices and every other setting as
   Studio fills them in; leave the description empty.
-- **Stop for the person** and click nothing more when Roblox or Studio shows anything that is
-  theirs: an age check, an ID check, a two-step or verification code, terms to accept, a payment,
-  a sign-in, a question about saving, or any dialog you don't recognise. Say exactly what it asks
-  and where (and in `publish-result`); they answer it, then ask again.
-- **Studio's own state is yours to handle, never the person's chore.** Genex ends a play test and
-  brings Studio back to its editor before handing you the publish. Read Studio's mode only from the
+- **Stop for the person only for what is theirs**, and click nothing more then: an age check, an ID
+  check, a two-step or verification code, terms to accept, a payment, a sign-in, or a question about
+  saving their work. Say exactly what it asks and where (and in `publish-result`); they answer it,
+  then ask again.
+- **Everything else is yours to get past.** A dialog you don't recognise: read it (screenshot, zoom)
+  and take the choice that keeps the place and its settings as they are (Cancel, Close, OK on a
+  notice); a click that answered an error: take a fresh screenshot and try once more; a window that
+  is behind another: `bring_to_front` it. Try at least two different ways before you report that a
+  step failed, and say what you tried.
+- **Studio's own state is yours to handle, never the person's chore.** If the Roblox Studio
+  connection says Studio isn't open for this game, call `open-studio` and wait (up to two minutes,
+  reading `get_studio_state` every few seconds) until the place is open. If Studio shows "not
+  responding" or says it is busy, wait: it is saving or loading; never click a choice that closes or
+  restarts it. Genex ends a play test and brings Studio back to its editor before handing you the
+  publish. Read Studio's mode only from the
   Roblox Studio connection's `get_studio_state` ("Current Studio Mode: Edit" is editing): a
   NetworkClient in Explorer (a place edited from Roblox has one while editing) and the Test tab's red
   Stop button don't mean a test runs. If a test really runs, end it yourself with Studio's Stop
@@ -44,8 +53,8 @@ the turn with `publish-result` (below), so the card shows how it ended.
 5. Click **Create** (or **Publish**). Wait until the dialog closes and Studio reloads the place from
    Roblox (its window title names the place again; that can be Roblox's place name, not the game's).
    If the dialog shows **Save failed** with a **Retry** button, Roblox's server dropped the request:
-   click **Retry** once (Studio sends the same publish again; it creates no second game). A second
-   **Save failed** is a stop (below).
+   wait ten seconds and click **Retry** (Studio sends the same publish again; it creates no second
+   game). Do that up to three times; only a fourth **Save failed** is a stop (below).
 6. Call `publish-result` with `published: true`, then say in one line that it is published under
    that name. Genex links this game to the published place by itself; don't press anything in
    Genex's panel for it.
@@ -92,8 +101,10 @@ to Roblox.
    `bring_to_front` (`msedge.exe` on Windows unless the person's browser is another, its bundle id on
    a Mac), or click a visible part of its window, and take a screenshot. The taskbar and Dock are
    never driven, and Alt+Tab only lands back in Studio. Type the address only once the browser is in
-   front, never into Studio (its viewport takes letters as camera keys). If no browser is open, or a
-   sign-in page shows there, that is a stop (rules above).
+   front, never into Studio (its viewport takes letters as camera keys). If no browser is running
+   (`bring_to_front` says it is not running), open the page with the desktop tool's `open_page` (it
+   opens the address in the person's default browser and brings it forward), then take a
+   screenshot. A sign-in page there is the person's (rules above); the game stays published either way.
 4. On **Icon**, upload the icon and save. On **Thumbnails** (in the page's sidebar), add the
    thumbnail, tick it **Active** and save. In each file dialog, go straight to the path the answer
    gave (⌘⇧G on a Mac, the file name field on Windows), paste it and press Return, then open it.
@@ -103,6 +114,7 @@ to Roblox.
 
 ## If it fails or stops
 
-Call `publish-result` with `published: false` and a `detail` naming what Studio or Roblox showed (in
-its own words) and what the person answers there; say the same in the chat, and stop. Never retry with another menu, a shortcut you
-haven't seen work, or another Studio window.
+First try to get past it yourself (rules above). Only when it is the person's, or two different
+tries failed, call `publish-result` with `published: false` and a `detail` naming what Studio or
+Roblox showed (in its own words), what you tried, and what the person answers there; say the same in
+the chat, and stop. Never publish from another Studio window or into another place than this game's.

@@ -344,7 +344,13 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   answer. Since the taskbar and Dock are the shell, `bring_to_front text=<app>` (an executable on
   Windows, a bundle id on a Mac) raises a running app the agent cannot click, such as the person's
   browser behind a full-screen editor: it is held to a click's rules and card first, opens nothing,
-  and answers whether the app is now in front. `app_look`, which only looks and so needs no setting ([tool permissions](tool-permissions.md#looking-at-apps)),
+  and answers whether the app is now in front. On a Mac the name is first resolved to the running app
+  (`list_apps`, bundle id in any case or app name), so every check sees the app's own id. When no
+  browser runs, `open_page text=<https address>` opens a page in the person's default browser
+  (`shell.openExternal`), only in the turn holding an assist's grant and only on a host the grant's
+  engine declares (`engine.pages`, exactly); credentials, ports and other schemes are refused.
+  Assist grants live in `assist-grants.json` in the profile's own data, so a Publish pressed before
+  Genex quits (macOS asks to reopen it for Screen Recording) still holds for the retried turn. `app_look`, which only looks and so needs no setting ([tool permissions](tool-permissions.md#looking-at-apps)),
   never looks at these apps or Genex's own windows either.
 - **Never building or play-testing.** The apps an enabled engine plugin declares for this system
   (`engine.apps.mac` or `engine.apps.windows`, its editor) are refused in plain words ("use the engine's own tools", and a

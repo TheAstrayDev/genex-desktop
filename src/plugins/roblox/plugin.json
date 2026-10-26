@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "roblox",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "icon": "icon.svg",
   "name": "Roblox Studio",
   "publisher": "Genex",
@@ -27,7 +27,8 @@
     "projectInFolder": false,
     "play": { "players": 8, "clock": "none", "pointer": true, "state": true },
     "apps": { "mac": ["com.Roblox.RobloxStudio"], "windows": ["RobloxStudioBeta.exe"] },
-    "playerApps": { "mac": ["com.roblox.RobloxPlayer"], "windows": ["RobloxPlayerBeta.exe"] }
+    "playerApps": { "mac": ["com.roblox.RobloxPlayer"], "windows": ["RobloxPlayerBeta.exe"] },
+    "pages": ["create.roblox.com"]
   },
   "tools": [
     {

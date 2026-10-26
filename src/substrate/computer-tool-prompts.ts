@@ -86,7 +86,8 @@ const WEB_LINES =
 
 /** The app sentence, for a desktop where the app the agent needs can sit behind a full-screen one. */
 const APPS_LINE =
-  "bring_to_front text=<app>: bring a running app's window in front of the others when it is covered and no part of it can be clicked (the taskbar and Dock are never driven) — its executable on Windows (msedge.exe, chrome.exe, firefox.exe), its bundle id on a Mac (com.apple.Safari, com.google.Chrome); it opens nothing, and the app is asked for like any other. ";
+  "bring_to_front text=<app>: bring a running app's window in front of the others when it is covered and no part of it can be clicked (the taskbar and Dock are never driven) — its executable on Windows (msedge.exe, chrome.exe, firefox.exe), its bundle id on a Mac (com.apple.Safari, com.google.Chrome); it opens nothing, and the app is asked for like any other. " +
+  "open_page text=<https:// address>: open a page of the task you answer in the person's own default browser, where they are signed in (Roblox's Creator Hub for a publish), when no browser is running; then take a screenshot and bring_to_front the browser if it is not in front. ";
 
 /** The batch sentence: several moves in one call. */
 const BATCH_LINE =
@@ -227,6 +228,8 @@ export const COMPUTER_ARG_PROBLEM = {
   webOpenNeedsUrl: "web_open needs text=<an https:// address>",
   frontNeedsApp: "bring_to_front needs text=<app>: its executable on Windows (msedge.exe) or bundle id on a Mac",
   frontCouldNot: (why: string) => `bring_to_front did not happen: ${why}`,
+  pageNeedsAddress: "open_page needs text=<an https:// address> of the page the task names",
+  pageCouldNot: (why: string) => `open_page did not happen: ${why}`,
   webCouldNot: (action: string, why: string) => `${action} did not happen: ${why}`,
   webPageCut: "(the page goes on: web_read text=<what you look for> reads the part you need)",
   webNeedsRef: (action: string) => `${action} needs ref=<an element ref web_read listed, e.g. p3:12>`,

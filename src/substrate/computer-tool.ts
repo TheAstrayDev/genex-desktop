@@ -91,6 +91,7 @@ export const COMPUTER_HOST_ACTIONS = [
   "web_click",
   "web_type",
   "bring_to_front",
+  "open_page",
 ] as const;
 
 /** The actions the session itself treats specially, by name: a wait, a batch and a reload. */
@@ -101,6 +102,7 @@ export const ComputerVerb = {
   Act: "act",
   Look: "look",
   BringToFront: "bring_to_front",
+  OpenPage: "open_page",
 } as const;
 
 /** The web page verbs: a page read and driven by its structure, in a separate, clean browser. */
@@ -431,6 +433,7 @@ const ACTION_NEEDS: Partial<Record<ComputerAction, (request: ComputerRequest) =>
   web_click: (r) => (r.ref ? null : COMPUTER_ARG_PROBLEM.webNeedsRef(r.action)),
   web_type: (r) => (r.ref && r.text !== undefined ? null : COMPUTER_ARG_PROBLEM.webTypeNeedsRefAndText),
   bring_to_front: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.frontNeedsApp),
+  open_page: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.pageNeedsAddress),
 };
 
 /** The amounts an action falls back to when it names none. */
@@ -598,6 +601,7 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
   web_click: (caps) => caps.dom,
   web_type: (caps) => caps.dom,
   bring_to_front: (caps) => caps.apps === true,
+  open_page: (caps) => caps.apps === true,
 };
 
 /** Can this target carry out this action? */
@@ -725,7 +729,18 @@ const ACTION_DEED: Record<ComputerAction, ScreenDeed> = {
   web_click: ScreenDeed.Click,
   web_type: ScreenDeed.Type,
   bring_to_front: ScreenDeed.Load,
+  open_page: ScreenDeed.Load,
 };
+
+/** The host an `open_page` address names, for its caption; the text itself when it names none. */
+function pageHost(text: string | undefined): string {
+  const raw = String(text ?? "").trim();
+  try {
+    return new URL(raw).host || raw.slice(0, MAX_CAPTION_TEXT_CHARS);
+  } catch {
+    return raw.slice(0, MAX_CAPTION_TEXT_CHARS);
+  }
+}
 
 /** A computer action as the agent's screen shows it: its deed, and the keys of a press. */
 export function computerAct(request: ComputerRequest): ScreenAct {
@@ -788,6 +803,8 @@ function describeStudioAction(request: ComputerRequest): string {
       return `bring ${String(request.text ?? "")
         .trim()
         .slice(0, MAX_CAPTION_TEXT_CHARS)} to the front`;
+    case "open_page":
+      return `open ${pageHost(request.text)} in the browser`;
     default:
       return describeWebAction(request);
   }

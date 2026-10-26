@@ -474,3 +474,36 @@ describe("computer session — bringing an app to the front", () => {
     );
   });
 });
+
+describe("computer session — opening a page in the person's browser", () => {
+  it("hands open_page to a target that can, says why when it could not, and refuses it elsewhere", async () => {
+    const { target, calls } = fakeTarget();
+    const desk: ComputerTarget = {
+      ...target,
+      caps: { ...BROWSER_CAPABILITIES, apps: true },
+      openPage: async (address) => {
+        calls.push(`page:${address}`);
+        return address.startsWith("https://create.example.com/") ? null : "that page is not this task's";
+      },
+    };
+    const { s } = await session({ target: desk });
+    assert.match(
+      text(await s.run("computer", { action: "open_page", text: "https://create.example.com/icon" })),
+      /^OK — open create\.example\.com in the browser/,
+    );
+    assert.match(
+      text(await s.run("computer", { action: "open_page", text: "https://elsewhere.example/" })),
+      /open_page did not happen: that page is not this task's/,
+    );
+    assert.match(
+      text(await s.run("computer", { action: "open_page" })),
+      /open_page needs text=<an https:\/\/ address>/,
+    );
+    assert.deepEqual(calls, ["page:https://create.example.com/icon", "page:https://elsewhere.example/"]);
+    const plain = await session();
+    assert.match(
+      text(await plain.s.run("computer", { action: "open_page", text: "https://create.example.com/icon" })),
+      /not available/,
+    );
+  });
+});
