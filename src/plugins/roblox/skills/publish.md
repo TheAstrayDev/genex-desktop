@@ -135,13 +135,15 @@ they must answer stays open in front of them.
    take a screenshot. Never close a tab the person had before. If you started the browser yourself
    with `open_page` and now none of the person's tabs are left, quit it (⌘Q, or Alt+F4 on Windows);
    a browser that was already running stays running.
-2. **Roblox Studio.** Bring this game's place window to the front (its title names the place).
-   If it is Studio's only window, quit Studio normally (⌘Q on a Mac, Alt+F4 on Windows); if Studio
-   has a window of another place open too, close only this one (**File**, then **Close Place**).
+2. **Roblox Studio.** Close this game's Studio window, whoever opened it (you, Genex or the build):
+   the person asked for that. Bring it to the front by its title (`window`, rules above), then on a
+   Mac press ⌘Q (a Mac runs one Studio per place, so that quits this place only); on Windows press
+   Alt+F4 with its window in front. Leave every other place's Studio window open.
    The place is on Roblox now, so if Studio asks to save it or to commit drafts, take the choice
    that keeps the work (**Save**, **Commit**), never **Don't Save**. Wait until the window is gone
    and take a screenshot. Never force-quit Studio; if it is still saving, wait.
-3. Say in one line that you closed them.
+3. Look that it is gone (`bring_to_front` with its `window` now finds no such window), and say in
+   one line that you closed them.
 
 ## If it fails or stops
 

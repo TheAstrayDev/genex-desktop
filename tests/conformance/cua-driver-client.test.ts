@@ -214,7 +214,7 @@ describe("cua-driver as the desktop driver", () => {
       fake.calls.map(({ tool, args }) => [tool, args]),
       [
         ["list_windows", { app: "com.Roblox.RobloxStudio" }],
-        ["bring_to_front", { pid: 65113, window_id: 9 }],
+        ["bring_to_front", { pid: 65113 }],
       ],
     );
     const none = fakeConnection({ list_windows: json({ windows: [] }) });
@@ -224,6 +224,24 @@ describe("cua-driver as the desktop driver", () => {
       ["list_windows"],
       "an app with no window is left alone",
     );
+  });
+
+  it("raises by the frontmost window only when the driver can't raise its process, which owns several", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const fake = fakeConnection({
+      list_windows: json({ windows: [{ pid: 92718, window_id: 4, z_index: 2, title: "a.rbxlx" }] }),
+    });
+    const connection = {
+      ...fake.connection,
+      call: async (tool: string, args: Record<string, unknown>) => {
+        if (tool !== "bring_to_front") return fake.connection.call(tool, args);
+        calls.push(args);
+        if (args.window_id === undefined) throw new Error("pid 92718 owns more than one eligible top-level window");
+        return json({ ok: true });
+      },
+    };
+    await cuaDriver(connection).bringToFront?.("com.Roblox.RobloxStudio");
+    assert.deepEqual(calls, [{ pid: 92718 }, { pid: 92718, window_id: 4 }]);
   });
 
   it("lists an app's windows front first with their titles, and raises the process of the one asked for", async () => {

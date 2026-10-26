@@ -25,6 +25,7 @@ import {
   TargetRefusal,
   VM_CAPABILITIES,
 } from "../../shared/computer-target.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { StillMimeType } from "../../shared/preview-contract.ts";
 import type { ComputerTarget, TargetShot } from "../../substrate/computer-target.ts";
 import { guardedWeb } from "./desktop-web.ts";
@@ -540,9 +541,11 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
     if (refusal) return refusal;
     const pick = await titledWindow(driver, app.bundleId, appName(app), window);
     if (pick.why) return pick.why;
-    await driver.bringToFront(app.bundleId, pick.window);
+    // The driver may doubt a raise that worked (macOS moves focus late): what is in front decides.
+    const failed = await driver.bringToFront(app.bundleId, pick.window).then(() => null, errorMessage);
     await sleep(options.frontSettleMs ?? FRONT_SETTLE_MS);
-    return inFront(await driver.focus(), app.bundleId, pick.window?.pid) ? null : MESSAGE.notInFront(appName(app));
+    if (inFront(await driver.focus(), app.bundleId, pick.window?.pid)) return null;
+    return failed ?? MESSAGE.notInFront(appName(app));
   };
   /** Whether an action may go ahead: every point and keyboard it aims at is cleared, before any input. */
   const cleared = async (action: PreviewInputAction): Promise<boolean> => {

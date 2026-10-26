@@ -547,7 +547,7 @@ describe("bringing an app to the front", () => {
       const BLOCK = { pid: 64, windowId: 640, title: "/Users/x/games/spinning-colored-block.rbxlx - Roblox Studio" };
 
       /** Two Studios, one per place as a Mac runs them, Jump on Platforms in front; a raise of a pid fronts it. */
-      function twoStudios(raises = true) {
+      function twoStudios(raises = true, doubts = false) {
         const fake = raisingDriver(RUNNING);
         let front: DesktopApp = { ...MAC_STUDIO, pid: JUMP.pid };
         fake.driver.focus = async () => ({ app: front, secure: false });
@@ -556,9 +556,10 @@ describe("bringing an app to the front", () => {
         fake.driver.bringToFront = async (id, window) => {
           fake.calls.push(`raise ${id} ${window?.pid} ${window?.windowId}`);
           if (raises && window) front = { ...MAC_STUDIO, pid: window.pid };
+          if (doubts) throw new Error("exact window was not verified as the frontmost process's focused window");
         };
         const target = desktopTarget({ driver: fake.driver, allowApp: async () => true, frontSettleMs: 0 });
-        return { target, calls: fake.calls };
+        return { target, calls: fake.calls, fake };
       }
 
       it("raises the window whose title names the place, though another of the app's is in front", async () => {
@@ -573,6 +574,12 @@ describe("bringing an app to the front", () => {
         assert.match(why, /Jump on Platforms - Roblox Studio/);
         assert.match(why, /spinning-colored-block\.rbxlx - Roblox Studio/);
         assert.deepEqual(calls, []);
+      });
+
+      it("goes by what is in front when the driver doubts a raise that worked", async () => {
+        const { target, fake } = twoStudios(true, true);
+        assert.equal(await target.front?.("com.Roblox.RobloxStudio", "spinning-colored-block"), null);
+        assert.ok(fake.calls.length > 0);
       });
 
       it("says so when the app came forward on another of its windows", async () => {

@@ -144,7 +144,7 @@ describe("publish-status and publish-result through the backend", () => {
       const said = String(await backend.tool?.(RobloxTool.PublishResult, { published: true }, host.context));
       assert.match(said, /card shows it/);
       assert.match(said, /cover-pictures/, "a publish that went out goes on to the game's cover in the same turn");
-      assert.match(said, /close what you opened/, "and the turn ends tidy, cover or none");
+      assert.match(said, /close this game.s Studio window whoever opened it/, "and the turn ends tidy, cover or none");
       assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Published);
       const again = String(await backend.tool?.(RobloxTool.PublishResult, { published: false }, host.context));
       assert.match(again, /No publish is under way/);
@@ -221,7 +221,7 @@ describe("publish-status and publish-result through the backend", () => {
         const after = await status();
         if (logged) {
           assert.match(said, /cover-pictures/, "it goes on to the cover");
-          assert.match(said, /close what you opened/, "then tidies up");
+          assert.match(said, /close this game.s Studio window whoever opened it/, "then tidies up");
           assert.equal(after.attempt?.phase, RobloxPublishPhase.Published);
           assert.equal(after.attempt?.detail, undefined, "the doubt is not shown on a published card");
         } else {

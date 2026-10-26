@@ -385,10 +385,31 @@ async function listedWindows(call: CuaCall, pid?: number): Promise<CuaWindow[]> 
  * frontmost window (on any Space, or in Stage Manager's strip). An app with no window is left alone.
  */
 async function bringAppToFront(call: CuaCall, app: string, window?: DesktopWindow): Promise<void> {
-  const [front] = window ? [window] : await appWindows(call, app);
+  if (window) {
+    await raiseWindow(call, window);
+    return;
+  }
+  const [front] = await appWindows(call, app);
   if (!front) return;
-  // A process with more than one window (Studio keeps a small untitled one) is raised only by window.
-  await call("bring_to_front", { pid: front.pid, ...(front.windowId !== null ? { window_id: front.windowId } : {}) });
+  // The process is raised as a whole when the driver can: naming a window holds the raise to a
+  // stricter check that a browser coming forward can fail. One owning several windows (Studio keeps
+  // a small untitled one) is refused that way, and then raised by its frontmost window.
+  const whole = await call("bring_to_front", { pid: front.pid }).then(
+    () => true,
+    (error: unknown) => {
+      if (front.windowId === null) throw error;
+      return false;
+    },
+  );
+  if (!whole) await raiseWindow(call, front);
+}
+
+/** One window of a process brought to the front, by its id when the driver gave one. */
+async function raiseWindow(call: CuaCall, window: DesktopWindow): Promise<void> {
+  await call("bring_to_front", {
+    pid: window.pid,
+    ...(window.windowId !== null ? { window_id: window.windowId } : {}),
+  });
 }
 
 /** An app's windows by its bundle id or name, front first. */

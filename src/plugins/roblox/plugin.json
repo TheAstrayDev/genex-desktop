@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "roblox",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "icon": "icon.svg",
   "name": "Roblox Studio",
   "publisher": "Genex",
