@@ -135,6 +135,12 @@ describe("cover-pictures", () => {
     const said = await coverPictures({ bound: () => true, shot: async () => shot, folder: game, make });
     assert.match(said, /icon\.png/);
     assert.match(said, /thumbnail\.png/);
+    const folder = path.join(game, COVER_FOLDER);
+    assert.ok(said.includes(folder), "the answer names the folder the file dialog goes to first");
+    assert.ok(
+      !said.includes(path.join(folder, "icon.png")),
+      "a file dialog opens the folder, then picks the picture by name: no whole file path to paste",
+    );
     assert.match(
       said,
       /create\.roblox\.com/,

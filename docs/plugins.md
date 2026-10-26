@@ -1560,7 +1560,10 @@ first publish, or an update while the game still shows Roblox's default icon): `
 (1920 × 1080) in the game's `.genex/roblox-cover/` (a centred crop, scaled by `sips` or PowerShell;
 a link there is refused or replaced, never followed), and the agent uploads both on the game's
 Creator Hub page (Icon, then Thumbnails ticked Active) in the person's browser, as the `publish` skill
-says: Studio's Game Settings no longer take them.
+says: Studio's Game Settings no longer take them. The answer names the folder and each picture's
+file name apart, so a file dialog opens the folder first and the picture is picked by name. Once all
+is done the turn closes what it opened: its Creator Hub tabs (and a browser it started with
+`open_page`), then the game's Studio window, saving rather than discarding.
 
 **After a publish** (`relink.ts`) Genex links the game to the published place by itself: Studio
 reopens a newly published place under its name ("<name> (placeId: N)"), which the game's link no
@@ -1571,7 +1574,7 @@ it; a hand-over the chat refused leaves none. Where Genex can't click, the panel
 once per Studio holding the game when it shows Studio's clicks, never again as the panel keeps
 looking. With no Studio holding the game nothing is noted, and only a note that names one follows
 a reopening by name. The panel's status,
-every Genex moment and each publish call then ask the Studios that could be the game's whether
+every Genex moment, each publish call and `publish-result` (before the turn closes Studio) then ask the Studios that could be the game's whether
 Roblox has their place now: the noted Studio, the one bound now, and, once no open Studio still
 holds the game's own unpublished place, one whose place carries the noted name. With no note, the
 Studio the game's helper was last connected from is asked within `LOST_STUDIO_MS` (10 minutes) of

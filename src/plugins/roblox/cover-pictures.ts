@@ -196,7 +196,8 @@ export async function coverPictures(deps: CoverDeps): Promise<string> {
   if (!shot) return COVER_PROMPTS.NoShot;
   try {
     const made = await deps.make(Buffer.from(shot.data, "base64"), deps.folder);
-    return COVER_PROMPTS.Made(made[CoverPicture.Icon], made[CoverPicture.Thumbnail]);
+    const icon = made[CoverPicture.Icon];
+    return COVER_PROMPTS.Made(path.dirname(icon), path.basename(icon), path.basename(made[CoverPicture.Thumbnail]));
   } catch (error) {
     return COVER_PROMPTS.NotMade(errorMessage(error));
   }

@@ -29,8 +29,9 @@ the turn with `publish-result` (below), so the card shows how it ended.
   connection says Studio isn't open for this game, call `open-studio` and wait (up to two minutes,
   reading `get_studio_state` every few seconds) until the place is open. If Studio shows "not
   responding" or says it is busy, wait: it is saving or loading; never click a choice that closes or
-  restarts it. Genex ends a play test and brings Studio back to its editor before handing you the
-  publish. Read Studio's mode only from the
+  restarts it while you publish (closing it once all is done is the last step, below). Genex ends a
+  play test and brings Studio back to its editor before handing you the publish. Read Studio's mode
+  only from the
   Roblox Studio connection's `get_studio_state` ("Current Studio Mode: Edit" is editing): a
   NetworkClient in Explorer (a place edited from Roblox has one while editing) and the Test tab's red
   Stop button don't mean a test runs. If a test really runs, end it yourself with Studio's Stop
@@ -58,7 +59,7 @@ the turn with `publish-result` (below), so the card shows how it ended.
 6. Call `publish-result` with `published: true`, then say in one line that it is published under
    that name. Genex links this game to the published place by itself; don't press anything in
    Genex's panel for it.
-7. Give the game its cover (below).
+7. Give the game its cover (below), then close what you opened (at the end).
 
 ## An update
 
@@ -76,7 +77,8 @@ connection's `execute_luau`:
    time moves only when Studio saves, so Genex also reads Studio's own log of the publish, and its
    answer says whether the update went through. Go by that answer, and never click Publish twice.
 5. If the game still has Roblox's default icon (its Creator Hub **Icon** page shows none of its
-   own), give the game its cover (below); leave a cover it already has.
+   own), give the game its cover (below); leave a cover it already has. Then close what you opened
+   (at the end).
 
 ## The game's cover
 
@@ -106,11 +108,32 @@ to Roblox.
    opens the address in the person's default browser and brings it forward), then take a
    screenshot. A sign-in page there is the person's (rules above); the game stays published either way.
 4. On **Icon**, upload the icon and save. On **Thumbnails** (in the page's sidebar), add the
-   thumbnail, tick it **Active** and save. In each file dialog, go straight to the path the answer
-   gave (⌘⇧G on a Mac, the file name field on Windows), paste it and press Return, then open it.
+   thumbnail, tick it **Active** and save. In each file dialog, go to the folder the answer gave
+   first (⌘⇧G on a Mac, the file name field on Windows: paste the folder, never a file's path, and
+   press Return), then click the picture by its name (`icon.png`, `thumbnail.png`) and open it.
 5. Say in one line that the cover is set (Roblox reviews new pictures before it shows them, so the
    game page keeps its placeholder a while). If Creator Hub refuses a picture or asks anything else,
    stop (rules above) and say what it showed; the game stays published either way.
+6. Close what you opened (below).
+
+## When it is done: close what you opened
+
+Once the publish went through and the cover is set or left (or the update needed none), leave the
+screen as tidy as you found it, then end the turn. Skip this when you stop for the person: what
+they must answer stays open in front of them.
+
+1. **The browser.** Close every tab you opened for Creator Hub: with the browser in front and that
+   tab showing (its address is on create.roblox.com), press ⌘W on a Mac or Ctrl+W on Windows, then
+   take a screenshot. Never close a tab the person had before. If you started the browser yourself
+   with `open_page` and now none of the person's tabs are left, quit it (⌘Q, or Alt+F4 on Windows);
+   a browser that was already running stays running.
+2. **Roblox Studio.** Bring this game's place window to the front (its title names the place).
+   If it is Studio's only window, quit Studio normally (⌘Q on a Mac, Alt+F4 on Windows); if Studio
+   has a window of another place open too, close only this one (**File**, then **Close Place**).
+   The place is on Roblox now, so if Studio asks to save it or to commit drafts, take the choice
+   that keeps the work (**Save**, **Commit**), never **Don't Save**. Wait until the window is gone
+   and take a screenshot. Never force-quit Studio; if it is still saving, wait.
+3. Say in one line that you closed them.
 
 ## If it fails or stops
 

@@ -1127,8 +1127,15 @@ async function assistUnderWay(context: PluginContext): Promise<boolean> {
  * stopped with what Roblox asked the person. A publish the agent could not confirm is published when
  * Studio's own log records one that went through since the press. Only a publish under way is ended.
  */
-async function publishResult(deps: RobloxDeps, context: PluginContext, args: Record<string, unknown>) {
+async function publishResult(
+  deps: RobloxDeps,
+  services: MomentServices,
+  context: PluginContext,
+  args: Record<string, unknown>,
+) {
   if (!context.project) return PUBLISH_PROMPTS.NoAttempt;
+  // Linked now, while Studio still shows the published place: the turn closes Studio once all is done.
+  await relinkQuietly(deps, services, context, true);
   const storage = await context.host(PluginService.StorageRoot);
   const said = args.published === true;
   const pressed = await readAttempt(storage, context.project);
@@ -1354,7 +1361,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     ...modelHandlers(deps, services),
     [RobloxTool.PublishUpdate]: publishHandler(deps, services, PublishAsker.Agent),
     [RobloxTool.FirstPublish]: firstPublishHandler(deps, services, PublishAsker.Agent),
-    [RobloxTool.PublishResult]: (args, context) => publishResult(deps, context, args),
+    [RobloxTool.PublishResult]: (args, context) => publishResult(deps, services, context, args),
     [RobloxTool.CoverPictures]: coverTool(deps, services),
     ...pressHandlers(deps, slot, luau),
     [RobloxTool.HeroShots]: async (_args, context) => {
