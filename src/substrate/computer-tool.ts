@@ -174,6 +174,8 @@ export interface ComputerRequest {
   ref?: string;
   /** web_type: press Enter after the text. */
   submit?: boolean;
+  /** bring_to_front: part of the title of the app's window to raise, among several it has open. */
+  window?: string;
   /** Which player this and every later action addresses, on a target that plays several. */
   player?: number;
 }
@@ -197,6 +199,8 @@ const MAX_QUOTED_SURFACE_CHARS = 40;
 const MAX_CAPTION_TEXT_CHARS = 40;
 /** The longest web element ref the tool reads. */
 const MAX_REF_CHARS = 64;
+/** The longest window title part bring_to_front reads. */
+const MAX_WINDOW_CHARS = 200;
 /** A web element ref inside whatever a model wrote for it (`[p3:12] link "Home"` → `p3:12`). */
 const WEB_REF = /[a-z]+\d+:\d+/i;
 
@@ -344,6 +348,8 @@ function readPointerFields(request: ComputerRequest, raw: Record<string, unknown
 function readOtherFields(request: ComputerRequest, raw: Record<string, unknown>): void {
   if (raw.text !== undefined && raw.text !== null) request.text = String(raw.text);
   readWebFields(request, raw);
+  const window = raw.window === undefined || raw.window === null ? "" : String(raw.window).trim();
+  if (window) request.window = window.slice(0, MAX_WINDOW_CHARS);
   const repeat = num(raw.repeat);
   if (repeat !== null) request.repeat = clampRepeat(repeat);
   const duration = num(raw.duration);
@@ -689,6 +695,7 @@ export function computerToolDefinition(
         ...((capabilities.players ?? 1) > 1
           ? { player: { type: "number", description: text.player(capabilities.players ?? 1) } }
           : {}),
+        ...(capabilities.apps ? { window: { type: "string", description: text.window } } : {}),
         observe: { type: "string", description: text.observe },
         actions: { type: "string", description: text.actions },
       },
@@ -802,7 +809,10 @@ function describeStudioAction(request: ComputerRequest): string {
     case "bring_to_front":
       return `bring ${String(request.text ?? "")
         .trim()
-        .slice(0, MAX_CAPTION_TEXT_CHARS)} to the front`;
+        .slice(
+          0,
+          MAX_CAPTION_TEXT_CHARS,
+        )}${request.window ? ` (${request.window.slice(0, MAX_CAPTION_TEXT_CHARS)})` : ""} to the front`;
     case "open_page":
       return `open ${pageHost(request.text)} in the browser`;
     default:

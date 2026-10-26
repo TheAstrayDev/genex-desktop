@@ -412,7 +412,7 @@ async function act(ctx: ActionContext): Promise<LiveToolResult> {
 async function bringToFront(ctx: ActionContext): Promise<LiveToolResult> {
   const { request, target, helpers } = ctx;
   if (!target.front) return COMPUTER_ARG_PROBLEM.unsupported(request.action, "");
-  const why = await target.front(String(request.text ?? "").trim());
+  const why = await target.front(String(request.text ?? "").trim(), request.window);
   if (why) {
     ctx.record.failed = why;
     return COMPUTER_ARG_PROBLEM.frontCouldNot(why);

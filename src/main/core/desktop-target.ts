@@ -32,6 +32,7 @@ import type {
   DesktopApp,
   DesktopButton,
   DesktopDriver,
+  DesktopFocus,
   DesktopKeys,
   DesktopShot,
 } from "../../substrate/desktop-driver.ts";
@@ -132,10 +133,39 @@ const MESSAGE = {
   notInFront: (app: string) =>
     `${app} did not come to the front: it may not be running (nothing is opened for you), or another window stayed in front`,
   notRunning: (app: string) => `${app} is not running: bring_to_front opens nothing, it only raises a running app`,
+  noTitled: (app: string, window: string, titles: readonly string[]) =>
+    `no window of ${app} has "${window}" in its title; its windows are: ${titles.map((t) => `"${t}"`).join(", ") || "none with a title"}. Give part of one of those titles as window`,
+  noWindowPick: (app: string) =>
+    `this computer can't pick one of ${app}'s windows by title: bring_to_front raises its frontmost one, so leave window out`,
   notPage: (raw: string) =>
     `"${raw}" is not a page open_page opens: give a whole https:// address, with no user name, password or port`,
   noPages: "this computer opens no pages for the agent",
 } as const;
+
+/**
+ * The process of an app's window whose title holds `window`, or why there is none to raise; no pick
+ * when no window is named.
+ */
+async function titledWindow(
+  driver: DesktopDriver,
+  id: string,
+  name: string,
+  raw: string | undefined,
+): Promise<{ pid?: number; why?: string }> {
+  const window = raw?.trim();
+  if (!window) return {};
+  if (!driver.appWindows) return { why: MESSAGE.noWindowPick(name) };
+  const windows = await driver.appWindows(id);
+  const wanted = window.toLowerCase();
+  const titled = windows.find((w) => w.title.toLowerCase().includes(wanted));
+  if (titled) return { pid: titled.pid };
+  return { why: MESSAGE.noTitled(name, window, windows.map((w) => w.title).filter(Boolean)) };
+}
+
+/** Whether the app (and its process `pid`, when one was picked) has the keyboard now. */
+function inFront(focus: DesktopFocus, id: string, pid: number | undefined): boolean {
+  return focus.app?.bundleId === id && (pid === undefined || focus.app.pid === pid);
+}
 
 /** An app's name as `bring_to_front` takes it: an executable or a bundle id, never a path. */
 const APP_NAME = /^[\w .-]{1,128}$/;
@@ -495,8 +525,11 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
     const refusal = await appRefusal(app);
     return refusal ? refuse(op, refusal) : true;
   };
-  /** A named app brought in front, held to a click's rules first; null once it is in front. */
-  const front = async (raw: string): Promise<string | null> => {
+  /**
+   * A named app brought in front, held to a click's rules first; with `window`, the app's window
+   * whose title holds it (a Mac runs one Roblox Studio per place); null once it is in front.
+   */
+  const front = async (raw: string, window?: string): Promise<string | null> => {
     const named = namedApp(raw);
     if (!named?.bundleId || !driver.bringToFront) return MESSAGE.noAppName(raw.trim());
     // Checked as the running app it names, under its own id: another case of a refused one is refused.
@@ -504,10 +537,11 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
     if (!app?.bundleId) return MESSAGE.notRunning(named.name);
     const refusal = await appRefusal(app);
     if (refusal) return refusal;
-    await driver.bringToFront(app.bundleId);
+    const pick = await titledWindow(driver, app.bundleId, appName(app), window);
+    if (pick.why) return pick.why;
+    await driver.bringToFront(app.bundleId, pick.pid);
     await sleep(options.frontSettleMs ?? FRONT_SETTLE_MS);
-    const { app: now } = await driver.focus();
-    return now?.bundleId === app.bundleId ? null : MESSAGE.notInFront(appName(app));
+    return inFront(await driver.focus(), app.bundleId, pick.pid) ? null : MESSAGE.notInFront(appName(app));
   };
   /** Whether an action may go ahead: every point and keyboard it aims at is cleared, before any input. */
   const cleared = async (action: PreviewInputAction): Promise<boolean> => {

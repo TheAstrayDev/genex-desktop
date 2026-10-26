@@ -87,13 +87,27 @@ export interface DesktopWeb {
 }
 
 /** The driver: one connection, held for a session and closed when it ends. */
+/** One window of a running app: the process that owns it and its title. */
+export interface DesktopWindow {
+  pid: number;
+  title: string;
+}
+
 export interface DesktopDriver {
   screenshot(): Promise<DesktopShot>;
   focus(): Promise<DesktopFocus>;
   /** The app under a screen point, so a click is checked against the app it lands in. */
   appAt?(x: number, y: number): Promise<DesktopApp | null>;
-  /** Bring a running app (a Mac bundle id) to the front, where the driver can. */
-  bringToFront?(app: string): Promise<void>;
+  /**
+   * Bring a running app (a Mac bundle id) to the front, where the driver can: the process `pid`
+   * names when given (one of {@link appWindows}'), else the one owning its frontmost window.
+   */
+  bringToFront?(app: string, pid?: number): Promise<void>;
+  /**
+   * A running app's windows, front first, each with its process and the title it shows: a Mac runs
+   * some apps (Roblox Studio) as one process per open document under one bundle id.
+   */
+  appWindows?(app: string): Promise<DesktopWindow[]>;
   /**
    * The running app a name stands for, under its own bundle id: macOS reads bundle ids in any case
    * (com.roblox.robloxstudio is Roblox Studio), so a name is checked as the app it is. Null when no

@@ -226,6 +226,26 @@ describe("cua-driver as the desktop driver", () => {
     );
   });
 
+  it("lists an app's windows front first with their titles, and raises the process of the one asked for", async () => {
+    // A Mac runs one Roblox Studio process per open place, under one bundle id.
+    const fake = fakeConnection({
+      list_windows: json({
+        windows: [
+          { pid: 92718, window_id: 4, z_index: 2, app_name: "Roblox Studio", title: "spinning-colored-block.rbxlx" },
+          { pid: 94330, window_id: 9, z_index: 5, app_name: "Roblox Studio", title: "Jump on Platforms" },
+          { window_id: 11, z_index: 1, app_name: "Roblox Studio" },
+        ],
+      }),
+    });
+    const driver = cuaDriver(fake.connection);
+    assert.deepEqual(await driver.appWindows?.("com.Roblox.RobloxStudio"), [
+      { pid: 94330, title: "Jump on Platforms" },
+      { pid: 92718, title: "spinning-colored-block.rbxlx" },
+    ]);
+    await driver.bringToFront?.("com.Roblox.RobloxStudio", 92718);
+    assert.deepEqual(fake.actions(), [{ tool: "bring_to_front", args: { pid: 92718 } }]);
+  });
+
   it("names a running Mac app under its own bundle id, asked in any case or by its name", async () => {
     const driver = cuaDriver(fakeConnection().connection);
     assert.deepEqual(await driver.runningApp?.("com.APPLE.notes"), {

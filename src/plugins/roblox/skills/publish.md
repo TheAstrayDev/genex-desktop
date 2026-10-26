@@ -43,6 +43,13 @@ the turn with `publish-result` (below), so the card shows how it ended.
   accessibility and its dialogs have no accessibility actions: bring the window of this game's
   place to the front (its title names the place), then click with the pointer and type into the
   focused field. Look at the screen after each step.
+- **Several Studio windows open: pick this game's by its title.** A Mac runs one Studio per open
+  place, so a plain `bring_to_front` raises whichever is in front already. Give the place's name or
+  its file name as `window`: `bring_to_front` with `text` `com.Roblox.RobloxStudio` and `window`
+  `spinning-colored-block`, say (a Mac only: on Windows leave `window` out). A `window` no title holds is
+  answered with the titles Studio's windows show: pick this game's from them and raise it again.
+  Check the title in the screenshot before you click anything. Bringing a window forward is never
+  the person's step: never ask them to switch windows, and never stop for it.
 
 ## A first publish (a new game)
 

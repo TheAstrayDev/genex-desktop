@@ -31,6 +31,7 @@ import {
   type DesktopDriver,
   type DesktopFocus,
   type DesktopShot,
+  type DesktopWindow,
   windowsAppId,
 } from "./desktop-driver.ts";
 import { type MacApps, macApps } from "./mac-apps.ts";
@@ -309,6 +310,7 @@ interface CuaWindow {
   pid: number | null;
   windowId: number | null;
   appName: string;
+  title: string;
   z: number;
   bounds: { x: number; y: number; width: number; height: number } | null;
 }
@@ -321,7 +323,8 @@ function windowOf(row: Record<string, unknown>, index: number): CuaWindow {
       : null;
   // cua numbers windows so the largest z_index is the frontmost; without one, the list is front first.
   const appName = typeof row.app_name === "string" ? row.app_name : "";
-  return { pid: num(row.pid), windowId: num(row.window_id), appName, z: num(row.z_index) ?? -index, bounds };
+  const title = typeof row.title === "string" ? row.title : "";
+  return { pid: num(row.pid), windowId: num(row.window_id), appName, title, z: num(row.z_index) ?? -index, bounds };
 }
 
 /** Whether a listed window is the driver's own cursor overlay, by its app's name (macOS) or executable (Windows). */
@@ -381,10 +384,25 @@ async function listedWindows(call: CuaCall, pid?: number): Promise<CuaWindow[]> 
  * Bring a running app to the front by its bundle id: the driver activates the process that owns its
  * frontmost window (on any Space, or in Stage Manager's strip). An app with no window is left alone.
  */
-async function bringAppToFront(call: CuaCall, app: string): Promise<void> {
-  const rows = listOf(await call("list_windows", { app }), "windows");
-  const [front] = rows.map(windowOf).sort((a, b) => b.z - a.z);
+async function bringAppToFront(call: CuaCall, app: string, pid?: number): Promise<void> {
+  if (pid) {
+    await call("bring_to_front", { pid });
+    return;
+  }
+  const [front] = await appWindowRows(call, app);
   if (front?.pid) await call("bring_to_front", { pid: front.pid });
+}
+
+/** An app's windows by its bundle id or name, front first. */
+async function appWindowRows(call: CuaCall, app: string): Promise<CuaWindow[]> {
+  const rows = listOf(await call("list_windows", { app }), "windows");
+  return rows.map(windowOf).sort((a, b) => b.z - a.z);
+}
+
+/** An app's windows that a process owns, front first, with their titles. */
+async function appWindows(call: CuaCall, app: string): Promise<DesktopWindow[]> {
+  const owned = (await appWindowRows(call, app)).filter((window) => window.pid !== null);
+  return owned.map((window) => ({ pid: window.pid ?? 0, title: window.title }));
 }
 
 /** A running Mac app by its bundle id in any case, or its name: the app under its own id, or null. */
@@ -574,11 +592,16 @@ export function cuaDriver(
     },
     focus: () => reads.focus(),
     appAt: (x, y) => reads.appAt((x * screen.width) / picture.width, (y * screen.height) / picture.height),
-    ...(options.windows ? {} : { runningApp: (name: string) => runningMacApp(call, name) }),
-    bringToFront: async (app: string) => {
+    ...(options.windows
+      ? {}
+      : {
+          runningApp: (name: string) => runningMacApp(call, name),
+          appWindows: (app: string) => appWindows(call, app),
+        }),
+    bringToFront: async (app: string, pid?: number) => {
       // Windows raises by executable through its own probe: the driver's bring_to_front is the Mac's.
       if (options.windows) await options.windows.raise(app);
-      else await bringAppToFront(call, app);
+      else await bringAppToFront(call, app, pid);
     },
     // move_cursor takes no delivery mode, and a desktop target is its own scope.
     move: (x, y) => call("move_cursor", { target: DESKTOP, x, y }).then(() => undefined),

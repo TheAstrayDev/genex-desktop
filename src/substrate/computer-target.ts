@@ -108,9 +108,10 @@ export interface ComputerTarget {
   web?: TargetWeb;
   /**
    * Bring a running app's window in front of the others, where the target declares `apps`: null once
-   * it is in front, else why it is not (refused, declined, or it did not come forward).
+   * it is in front, else why it is not (refused, declined, or it did not come forward). With
+   * `window`, the app's window whose title holds it, among several the app has open.
    */
-  front?(app: string): Promise<string | null>;
+  front?(app: string, window?: string): Promise<string | null>;
   /**
    * Open an https page in the person's own default browser, where the target declares `apps`: null
    * once it is handed to the browser, else why not (not https, or not a page the task may open).

@@ -345,7 +345,10 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   Windows, a bundle id on a Mac) raises a running app the agent cannot click, such as the person's
   browser behind a full-screen editor: it is held to a click's rules and card first, opens nothing,
   and answers whether the app is now in front. On a Mac the name is first resolved to the running app
-  (`list_apps`, bundle id in any case or app name), so every check sees the app's own id. When no
+  (`list_apps`, bundle id in any case or app name), so every check sees the app's own id. A Mac runs
+  some apps as one process per document (Roblox Studio per place), so `window=<part of a title>`
+  raises the process owning the window whose title holds it (`list_windows`), and a title no window
+  has is answered with the titles there are; Windows takes no `window`. When no
   browser runs, `open_page text=<https address>` opens a page in the person's default browser
   (`shell.openExternal`), only in the turn holding an assist's grant and only on a host the grant's
   engine declares (`engine.pages`, exactly); credentials, ports and other schemes are refused.

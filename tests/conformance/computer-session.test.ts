@@ -451,9 +451,9 @@ describe("computer session — bringing an app to the front", () => {
     const desk: ComputerTarget = {
       ...target,
       caps: { ...BROWSER_CAPABILITIES, apps: true },
-      front: async (app) => {
-        calls.push(`front:${app}`);
-        return app === "msedge.exe" ? null : `${app} did not come to the front`;
+      front: async (app, window) => {
+        calls.push(window ? `front:${app}:${window}` : `front:${app}`);
+        return app === "chrome.exe" ? `${app} did not come to the front` : null;
       },
     };
     const { s } = await session({ target: desk });
@@ -466,7 +466,22 @@ describe("computer session — bringing an app to the front", () => {
       /bring_to_front did not happen: chrome\.exe did not come to the front/,
     );
     assert.match(text(await s.run("computer", { action: "bring_to_front" })), /bring_to_front needs text=<app>/);
-    assert.deepEqual(calls, ["front:msedge.exe", "front:chrome.exe"]);
+    assert.match(
+      text(
+        await s.run("computer", {
+          action: "bring_to_front",
+          text: "com.Roblox.RobloxStudio",
+          window: " spinning-colored-block ",
+        }),
+      ),
+      /^OK — bring com\.Roblox\.RobloxStudio \(spinning-colored-block\) to the front/,
+      "one of the app's windows, by part of its title",
+    );
+    assert.deepEqual(calls, [
+      "front:msedge.exe",
+      "front:chrome.exe",
+      "front:com.Roblox.RobloxStudio:spinning-colored-block",
+    ]);
     const plain = await session();
     assert.match(
       text(await plain.s.run("computer", { action: "bring_to_front", text: "msedge.exe" })),

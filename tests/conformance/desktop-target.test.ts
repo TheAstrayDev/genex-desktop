@@ -542,6 +542,48 @@ describe("bringing an app to the front", () => {
       });
     }
 
+    describe("picking one of an app's windows by its title", () => {
+      const JUMP = { pid: 62, title: "Jump on Platforms - Roblox Studio" };
+      const BLOCK = { pid: 64, title: "spinning-colored-block.rbxlx - Roblox Studio" };
+
+      /** Two Studios, one per place as a Mac runs them, Jump on Platforms in front; a raise of a pid fronts it. */
+      function twoStudios(raises = true) {
+        const fake = raisingDriver(RUNNING);
+        let front: DesktopApp = { ...MAC_STUDIO, pid: JUMP.pid };
+        fake.driver.focus = async () => ({ app: front, secure: false });
+        fake.driver.runningApp = async () => MAC_STUDIO;
+        fake.driver.appWindows = async () => [JUMP, BLOCK];
+        fake.driver.bringToFront = async (id, pid) => {
+          fake.calls.push(`raise ${id} ${pid}`);
+          if (raises && pid) front = { ...MAC_STUDIO, pid };
+        };
+        const target = desktopTarget({ driver: fake.driver, allowApp: async () => true, frontSettleMs: 0 });
+        return { target, calls: fake.calls };
+      }
+
+      it("raises the window whose title names the place, though another of the app's is in front", async () => {
+        const { target, calls } = twoStudios();
+        assert.equal(await target.front?.("com.Roblox.RobloxStudio", "Spinning-Colored-Block"), null);
+        assert.deepEqual(calls, [`raise com.Roblox.RobloxStudio ${BLOCK.pid}`]);
+      });
+
+      it("names the app's windows when none has that title, and raises nothing", async () => {
+        const { target, calls } = twoStudios();
+        const why = String(await target.front?.("com.Roblox.RobloxStudio", "Sky Race"));
+        assert.match(why, /Jump on Platforms - Roblox Studio/);
+        assert.match(why, /spinning-colored-block\.rbxlx - Roblox Studio/);
+        assert.deepEqual(calls, []);
+      });
+
+      it("says so when the app came forward on another of its windows", async () => {
+        const { target } = twoStudios(false);
+        assert.match(
+          String(await target.front?.("com.Roblox.RobloxStudio", "spinning-colored-block")),
+          /did not come to the front/,
+        );
+      });
+    });
+
     it("never says Windows on a Mac when an app stays behind", async () => {
       const fake = raisingDriver([]);
       fake.driver.runningApp = async () => SAFARI;
