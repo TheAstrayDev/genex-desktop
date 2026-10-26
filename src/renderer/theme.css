@@ -2600,6 +2600,32 @@ button.chat-header-title:hover {
   color: var(--ink-3);
   font: 12px / 16px var(--font-family-mono);
 }
+/* Get credits under the menu's credits row once none are left: a full-width button in the row's place. */
+.profile-menu-cta {
+  justify-content: center;
+  height: 32px;
+  margin: 2px 4px 6px;
+}
+/*
+ * Get credits, wherever credits run short: genex.games' own buy button (its `pro-cta`), a dark
+ * gradient lit from below by the Pro blue. The site's owner-tuned literals, the same in both themes.
+ */
+.credits-cta {
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background:
+    radial-gradient(62% 78% at 50% 122%, rgb(93 122 208 / 0.37) 0%, transparent 100%) padding-box,
+    linear-gradient(148deg, #16181d 0%, #242438 100%) padding-box,
+    linear-gradient(0deg, rgb(93 122 208 / 0.45) 0%, rgb(219 219 219 / 0.05) 60%) border-box;
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter var(--duration-quick);
+}
+.credits-cta:is(:hover, :focus-visible, [data-highlighted]) {
+  color: #fff;
+  filter: brightness(1.12);
+}
 /* A person's photo, round; everyone without one gets their generated avatar (`.cy-avatar`). */
 .person-avatar {
   display: inline-block;
@@ -6486,7 +6512,39 @@ a:focus-visible {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The kind and, for a Genex job on its way, its price at the line's end. */
+.making-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.making-price {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+}
+/* Over a card's action (a credits wait's Get credits or Make it), the label sits above it, and the
+   drawing shrinks to keep clear of the label. */
+.making-label[data-lifted] {
+  bottom: 48px;
+}
+.making-card[data-making="needs-credits"] .making-art-slot {
+  top: 6px;
+  transform: scale(0.68);
+  transform-origin: top center;
+}
+.making-cta {
+  height: 32px;
+  font-size: 13px;
+}
 .making-title {
+  min-width: 0;
   font-size: 13px;
   font-weight: 500;
   line-height: 18px;

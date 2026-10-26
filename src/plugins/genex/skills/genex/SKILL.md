@@ -59,6 +59,14 @@ Where it disagrees with this preface, this preface wins.
   `genex__cli {"command":"llm cancel","args":"<id>"}`, and `--all` is `"options":{"all":true}`.
 - Any other `npx genex` command is not available in Studio. Say so rather than work around it.
 
+## When credits run short
+
+Building the game never uses Genex credits: it runs on the user's own plan. A generation Genex
+refuses for too few credits keeps its card in Studio, which says so and offers Get credits, then
+Make it. So never relay the balance, price or refill date, and never retry: add at most one short
+sentence ("The dragon needs credits; a simple box stands in for now.") and carry on with a stand-in.
+This holds for every lane card's "Out of credits" line too.
+
 <!-- upstream https://genex.games/SKILL.md v1.36.15 sha256 9f3b2d106412a440969bd286aa017e2b853accb148eedd1314b66e725a06ac0d -->
 ---
 name: genex

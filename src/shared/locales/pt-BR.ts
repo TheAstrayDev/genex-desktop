@@ -610,8 +610,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "Criado em uma sessão. O trabalho não foi adicionado ao seu build.",
   Bundled: "Incluído",
-  "Buy credits": "Comprar créditos",
-  "Buy credits on genex.games": "Comprar créditos no genex.games",
   "By <maker>{name}</maker>": "Por <maker>{name}</maker>",
   "By {author}": "Por {author}",
   "Bypass permissions": "Ignorar permissões",
@@ -5443,7 +5441,6 @@ export default {
   "{added} of {total} parts added · {working} working":
     "{added} de {total} partes adicionadas · {working} em andamento",
   "{amount} Nex": "{amount} Nex",
-  "{amount} credits, open Credits": "{amount} créditos, abrir Créditos",
   "{amount} more needed": "Faltam {amount}",
   "{app} settings": "Configurações do {app}",
   "{brand} doesn’t share limits for this plan": "O {brand} não mostra os limites deste plano",
@@ -6200,4 +6197,12 @@ export default {
   "Ask for changes": "Pedir alterações",
   "Ask for changes below": "Peça alterações abaixo",
   Shop: "Loja",
+  "Character preview": "Prévia do personagem",
+  "Finished character": "Personagem pronto",
+  "Get Genex credits on genex.games": "Obter créditos do Genex no genex.games",
+  "Make the {kind} with Genex now.": "Faça agora com o Genex: {kind}.",
+  "Make the {kind} with Genex now: {prompt}": "Faça agora com o Genex: {kind} — {prompt}",
+  "Not enough credits": "Créditos insuficientes",
+  "{count, plural, other {# need credits}}":
+    "{count, plural, one {# precisa de créditos} other {# precisam de créditos}}",
 } satisfies LocaleCatalog;
