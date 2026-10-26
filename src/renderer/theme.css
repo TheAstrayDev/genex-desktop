@@ -197,6 +197,14 @@
   --focus-edge: color-mix(in oklab, #3c44c4 18%, #29292b);
   --sidebar-selected: color-mix(in oklab, #212224 62%, #0b0b0d);
   --sidebar-hover: color-mix(in oklab, #212224 45%, #0b0b0d);
+  /* How much accent a selected segment (`.selected-tint`, Play's tabs) mixes into its fill and its edge. */
+  --select-share: 16%;
+  --select-edge-share: 55%;
+}
+/* On a light canvas the same blue reads at a lighter mix. */
+:root[data-theme="light"] {
+  --select-share: 10%;
+  --select-edge-share: 35%;
 }
 
 /* Source vocabulary and Studio aliases share the same semantic values. */
@@ -1218,6 +1226,9 @@
 }
 .stage-strip-game {
   grid-area: game;
+  /* Sound and Full screen keep a column of their own for the fold, but sit 4px after Reload as the
+     game's controls do among themselves: half the strip's gap. */
+  margin-inline-start: -4px;
 }
 .stage-strip-end {
   grid-area: end;
@@ -1236,6 +1247,9 @@
 }
 .stage-strip[data-fold="game"] {
   grid-template-areas: "start start start start ." ". . . . ." "game . end end end";
+}
+.stage-strip[data-fold="game"] > .stage-strip-game {
+  margin-inline-start: 0;
 }
 /* On the second row (`data-row`) the plugin buttons may wrap, and end 8px from the strip's edge. */
 .stage-strip-end[data-row="second"] {
@@ -1647,6 +1661,39 @@ button.chat-header-title:hover {
 .header-control[aria-expanded="true"] {
   background: var(--control-hover, var(--hover));
   color: var(--ink);
+}
+/* A narrow chat header folds the game's engine button (ChatHeader's `[data-chat-engine]`) to its
+   icon: its name goes, and its status dot or update mark moves to the icon's corner. */
+[data-chat-header] {
+  container-type: inline-size;
+}
+@container (width < 360px) {
+  [data-chat-engine] [data-slot="button"] {
+    width: 32px;
+    padding-inline: 0;
+  }
+  [data-chat-engine] :is([data-toolbar-label], [data-plugin-badge]:not([data-dot], [data-plugin-update])) {
+    display: none;
+  }
+  [data-chat-engine] [data-fold-dot] {
+    display: block;
+  }
+  [data-chat-engine] :is([data-plugin-badge][data-dot], [data-fold-dot]) {
+    position: absolute;
+    top: 5px;
+    inset-inline-end: 5px;
+  }
+  [data-chat-engine] [data-plugin-update] {
+    position: absolute;
+    top: 2px;
+    inset-inline-end: 2px;
+    border-radius: 50%;
+    background: var(--control-fill, var(--hover));
+  }
+  [data-chat-engine] [data-plugin-update] svg {
+    width: 11px;
+    height: 11px;
+  }
 }
 .studio-shell[data-compact="true"] {
   grid-template-columns: minmax(0, 1fr);
@@ -5154,6 +5201,14 @@ button.chat-header-title:hover {
 .theme-primary {
   background: var(--accent-fill);
   color: var(--accent-foreground);
+}
+/* Every switch's selected segment: the accent as a tint with its edge, the label in ink. Only the one
+   main action of a surface is filled (`.theme-primary`). A palette's own View switch colour tints it. */
+.selected-tint {
+  background: color-mix(in srgb, var(--switch-fill, var(--accent)) var(--select-share), transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--switch-fill, var(--accent)) var(--select-edge-share), transparent);
+  color: var(--ink);
 }
 .theme-primary:is(:hover, :focus-visible):enabled {
   background: var(--accent-hover);
