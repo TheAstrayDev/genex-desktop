@@ -30,6 +30,24 @@ import type { GenexAccountView } from "./genex-account.ts";
 import type { PlayBarHold } from "./play-bar.ts";
 import type { PurchaseAnswer } from "./play-purchase.ts";
 import type { PlayComment, PlayCommentsPage } from "./play-comments.ts";
+import type {
+  BrowseDetail,
+  BrowsePage,
+  CreatorItem,
+  ItemAdded,
+  ItemAllowance,
+  ItemGames,
+  ItemReportReason,
+  MyItem,
+  Selling,
+  ShelfItem,
+  StoreBuyResult,
+  StoreClaimed,
+  StoreRefused,
+  StoreSheet,
+  StoreTab,
+} from "./store-items.ts";
+import type { LocalItemsView, LocalShareResult } from "./item-draft.ts";
 import type { PlayCredits } from "./play-credits.ts";
 import type {
   AddOutcome,
@@ -458,6 +476,12 @@ export interface StudioApi {
   claudeLoginCancel(): Promise<unknown>;
   /** OpenCode's own sign-in (`opencode auth login`), in the terminal dock. */
   openCodeSignIn(): Promise<{ started: boolean; missingCli?: boolean }>;
+  /** Grok Build's own sign-in (`grok login`, a Grok account in the browser), in its Settings row. */
+  grokSignIn(): Promise<{ started: boolean; missingCli?: boolean }>;
+  /** Cursor's own sign-in (`cursor-agent login`), in a terminal in its Settings row. */
+  cursorSignIn(): Promise<{ started: boolean; missingCli?: boolean }>;
+  /** Sign Cursor's CLI out of the account Genex runs on; answers Cursor's status. */
+  cursorSignOut(): Promise<import("./engine-descriptor.ts").EngineStatus>;
   /**
    * Check a pasted OpenRouter API key with OpenRouter and keep it in the OS secret store when it is
    * accepted. The answer is OpenRouter's status; the key never comes back.
@@ -538,8 +562,6 @@ export interface StudioApi {
   playInstalls(): Promise<NativeInstalls>;
   /** Play: remove a game from this computer; its saves stay. */
   playUninstall(slug: string): Promise<void>;
-  /** Play: stop sharing who the player is with an installed game, on Genex and here. */
-  playForgetIdentity(slug: string): Promise<void>;
   /** Play: play an installed game in its own window (a running one comes forward); how it goes arrives as `UiEvent.PlaySessions`. */
   playLaunch(slug: string): Promise<void>;
   /** Play: bring a running game forward, quit it, or forget how it failed to start. */
@@ -608,6 +630,60 @@ export interface StudioApi {
   playManage(gameId: string, change: PlayGameChange): Promise<PlayChangeResult>;
   /** Play: make a picture (already cropped to 16:9) a published game's cover on genex.games. */
   playCover(gameId: string, image: Uint8Array, contentType: PlayCoverType): Promise<PlayCoverResult>;
+  /** Store: a game's Store tab (its items on sale, then the shared ones it added); empty when it sells nothing or the store is off. */
+  storeItems(slug: string): Promise<StoreTab>;
+  /** Store: My items on a game's page, each marked Works here or Not in this game; signed out, `unauthorized`. */
+  storeMyItems(slug: string): Promise<MyItem[] | StoreRefused>;
+  /** Store: "Works in N games", with the first games' covers. */
+  storeItemGames(itemId: string): Promise<ItemGames>;
+  /**
+   * Store: buy an item on a game's page. Main starts the purchase and shows Play's sheet for it
+   * (`onStoreSheet`); answers when the sheet closes, or with genex.games' refusal before any sheet.
+   */
+  storeBuy(itemId: string, slug: string): Promise<StoreBuyResult>;
+  /** Store: the studio window's answer to the purchase sheet numbered `sheet`; main acts only on the one on screen. */
+  storeAnswer(sheet: number, answer: PurchaseAnswer): Promise<void>;
+  /** Store: the purchase sheet main draws in the studio window, or null once it closes. */
+  onStoreSheet(listener: (sheet: StoreSheet | null) => void): () => void;
+  /** Store: claim a Free item on a game's page; a second claim replays the first. */
+  storeClaim(itemId: string, slug: string): Promise<StoreClaimed | StoreRefused>;
+  /** Store: a profile's shelf, at most five items; none for a person genex.games does not know. */
+  storeShelf(userId: string): Promise<ShelfItem[]>;
+  /** The coin the Genex account may spend, for the account plate in Play; null signed out or with coin off. */
+  storeCoins(): Promise<number | null>;
+  /** Get Nex: genex.games' coin page in the browser. */
+  storeGetCoin(): Promise<void>;
+  /** Store: report an item (Copy, Doesn't work, Inappropriate, Scam), as the account when there is one. */
+  storeReport(itemId: string, reason: ItemReportReason, message: string | null): Promise<true | StoreRefused>;
+  /** Create › Items › Browse: other creators' shared items, a page at a time. */
+  itemsBrowse(query: string, cursor: string | null, tags?: string[]): Promise<BrowsePage | StoreRefused>;
+  /** Create › Items › Browse: one item's detail panel. */
+  itemsBrowseDetail(itemId: string): Promise<BrowseDetail | StoreRefused>;
+  /** Create › Items: Add to \<game>, a game of the account's named by its Genex project id. */
+  itemsAddToGame(itemId: string, projectId: string): Promise<ItemAdded | StoreRefused>;
+  /** Create › Items: take a shared item out of one of the account's games. */
+  itemsRemoveFromGame(itemId: string, projectId: string): Promise<ItemAllowance | StoreRefused>;
+  /** Create › Items › Selling: the ready / on-hold strip and the account's items. */
+  itemsSelling(): Promise<Selling | StoreRefused>;
+  /** Create › Items: Put on sale, from the listing draft card or Selling. Only Studio's own button publishes (D40). */
+  itemPutOnSale(itemId: string): Promise<CreatorItem | StoreRefused>;
+  /** Create › Items › Selling: Take off sale; owners keep it. */
+  itemTakeOffSale(itemId: string): Promise<CreatorItem | StoreRefused>;
+  /** Create › Items: "Other games can use it", on or off. */
+  itemSetShared(itemId: string, shared: boolean): Promise<CreatorItem | StoreRefused>;
+  /** A game's local item drafts as Studio holds them: approvals, drafts and what became of each after its publish. */
+  itemsLocal(project: string): Promise<LocalItemsView>;
+  /** "Sell when published" on a local draft as its card shows it (`contentHash`); kept in Studio's app data. */
+  itemsLocalApprove(project: string, localId: string, contentHash: string): Promise<LocalItemsView>;
+  /** Undo "Sell when published" on a local draft. */
+  itemsLocalWithdraw(project: string, localId: string): Promise<LocalItemsView>;
+  /** "Other games can use it" on a local draft, whose card shows `contentHash`: main runs the CLI's `shop set`. */
+  itemsLocalShare(project: string, localId: string, contentHash: string, shared: boolean): Promise<LocalShareResult>;
+  /**
+   * Settle a game's local drafts once it is on Genex: upload them, then put on sale only what the
+   * person approved unchanged. Paced in main; `force` right after a publish finished.
+   */
+  itemsLocalSettle(project: string, force: boolean): Promise<LocalItemsView>;
   /** The app's Genex account: signed out, signing in, signed in, or a sign-in genex.games ended. Never asks the network. */
   genexAccount(): Promise<GenexAccountView>;
   /** Sign in to Genex in the browser (again, after a sign-in ended); the account as it is after. */
@@ -700,6 +776,11 @@ export interface StudioApi {
     width: number;
     height: number;
     watching: boolean;
+    /**
+     * The game open on the stage (absent under home, Play or Studio): a show the person asks for in
+     * its chat may load it even while Live holds another game out of sight.
+     */
+    project?: string | null;
     viewport?: { width: number; height: number };
   }): Promise<boolean>;
   /** The Live game's sound switch; main decides when Live is actually heard. */

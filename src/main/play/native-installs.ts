@@ -27,7 +27,13 @@ import {
 import { atomicWriteJson, readJsonIfExists } from "../../substrate/fsx.ts";
 import { diskBytes, removeOwnedFolder } from "../../substrate/storage-folders.ts";
 import { downloadArchive, InstallError, verifyArchive } from "./native-download.ts";
-import { type ToolRun, type UnpackedApp, unpackLinuxBuild, unpackMacBuild } from "./native-unpack.ts";
+import {
+  type ToolRun,
+  type UnpackedApp,
+  unpackLinuxBuild,
+  unpackMacBuild,
+  unpackWindowsBuild,
+} from "./native-unpack.ts";
 import type { StallClock } from "./remix.ts";
 
 /** Free space kept beyond the download and the unpacked game. */
@@ -115,14 +121,12 @@ async function systemFreeBytes(dir: string): Promise<number> {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const STRING_FIELDS = ["title", "version", "entry", "executable", "bundleId", "bundleName", "installedAt"] as const;
-/** A Genex project id as the API hands them out: letters and digits, never a path. */
-const PROJECT_ID = /^[A-Za-z0-9]{1,64}$/;
 
 /** One index record as the installer wrote it, or null when anything in it is off. */
 function readRecord(slug: string, value: unknown): InstallRecord | null {
   if (!isPlaySlug(slug) || !isRecord(value) || value.slug !== slug) return null;
   if (!STRING_FIELDS.every((field) => typeof value[field] === "string" && value[field] !== "")) return null;
-  const { platform, arch, bytes, coverUrl, lastPlayedAt, identityProject } = value;
+  const { platform, arch, bytes, coverUrl, lastPlayedAt } = value;
   if (!isNativePlatform(platform) || !isNativeArch(arch)) return null;
   if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return null;
   return {
@@ -142,7 +146,6 @@ function readRecord(slug: string, value: unknown): InstallRecord | null {
     // A record from before these were kept: an engine nobody named, and full screen.
     engine: typeof value.engine === "string" ? value.engine : null,
     windowed: value.windowed === true,
-    ...(typeof identityProject === "string" && PROJECT_ID.test(identityProject) ? { identityProject } : {}),
   };
 }
 
@@ -159,9 +162,8 @@ function readIndex(value: unknown): InstallIndex {
 
 /** The installed game as Play shows it: the record without the launcher's own fields. */
 function shownGame(record: InstallRecord): InstalledGame {
-  const { slug, title, coverUrl, version, platform, arch, bytes, installedAt, lastPlayedAt, identityProject } = record;
-  const shown = { slug, title, coverUrl, version, platform, arch, bytes, installedAt, lastPlayedAt };
-  return identityProject ? { ...shown, identityProject } : shown;
+  const { slug, title, coverUrl, version, platform, arch, bytes, installedAt, lastPlayedAt } = record;
+  return { slug, title, coverUrl, version, platform, arch, bytes, installedAt, lastPlayedAt };
 }
 
 /**
@@ -305,8 +307,6 @@ export class NativeInstaller {
         bytes,
         installedAt: at,
         lastPlayedAt: games[slug]?.lastPlayedAt ?? null,
-        // An update keeps what the player agreed this game may know.
-        ...(games[slug]?.identityProject ? { identityProject: games[slug].identityProject } : {}),
         entry: build.entry,
         engine: game.native?.engine ?? null,
         ...app,
@@ -322,13 +322,17 @@ export class NativeInstaller {
     await this.#push();
     const unpacked = path.join(staging, "game");
     const game = { slug: job.slug, host: this.#deps.host };
-    const app =
-      job.build.platform === NativePlatform.Linux
-        ? await unpackLinuxBuild(archive, unpacked, job.build, game)
-        : await unpackMacBuild(this.#deps.run, archive, unpacked, job.build, game);
+    const app = await this.#unpack(job, archive, unpacked, game);
     job.stop.signal.throwIfAborted();
     await this.#settle(job, unpacked, app);
     await rm(archive, { force: true });
+  }
+
+  /** Unpack a verified archive the way its platform's builds are packed. */
+  #unpack(job: Job, archive: string, unpacked: string, game: { slug: string; host: NativeHost }): Promise<UnpackedApp> {
+    if (job.build.platform === NativePlatform.Linux) return unpackLinuxBuild(archive, unpacked, job.build, game);
+    if (job.build.platform === NativePlatform.Windows) return unpackWindowsBuild(archive, unpacked, job.build, game);
+    return unpackMacBuild(this.#deps.run, archive, unpacked, job.build, game);
   }
 
   /** Download, check and unpack one game; its progress and outcome say how it went. */
@@ -422,21 +426,6 @@ export class NativeInstaller {
   /** The launcher's record of an installed game, or null. */
   async record(slug: string): Promise<InstallRecord | null> {
     return (await this.#indexNow()).games[slug] ?? null;
-  }
-
-  /**
-   * Remember (`projectId`) or forget (null) that the player agreed this installed game may know who
-   * they are; a game that is not installed is left alone.
-   */
-  async knowsYou(slug: string, projectId: string | null): Promise<void> {
-    if (projectId !== null && !PROJECT_ID.test(projectId)) return;
-    await this.#changeIndex((games) => {
-      const game = games[slug];
-      if (!game) return;
-      if (projectId) game.identityProject = projectId;
-      else delete game.identityProject;
-    });
-    await this.#push();
   }
 
   /** Note that `slug` was just played. */

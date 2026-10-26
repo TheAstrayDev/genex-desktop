@@ -277,6 +277,7 @@ export function StageStrip({
   loaded,
   project,
   hasBuilds,
+  hasShop,
   buildsLive,
   beside,
   stageView,
@@ -297,6 +298,8 @@ export function StageStrip({
   loaded: GameProject | null;
   project: string | null;
   hasBuilds: boolean;
+  /** The game sells something: Shop joins the tabs. */
+  hasShop: boolean;
   buildsLive: boolean;
   beside: BesideTarget | null;
   stageView: StageView;
@@ -339,7 +342,7 @@ export function StageStrip({
     return () => onToolbarOpen(false);
   }, [pluginsOpen, viewsOpen, onToolbarOpen]);
   const secondRow = step === StripFoldStep.Plugins || step === StripFoldStep.Game;
-  const tabs = stageTabs({ views: live.views, plugins, hasBuilds, buildsLive, beside });
+  const tabs = stageTabs({ views: live.views, plugins, hasBuilds, buildsLive, hasShop, beside });
   const active = activeStageTab(stageView, live.views, live.shown);
   return (
     <div

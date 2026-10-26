@@ -82,6 +82,7 @@ export function createStudioBridge(
     ...runCalls(bridge),
     ...studioCalls(bridge),
     ...playCalls(bridge),
+    ...storeCalls(bridge),
     ...pluginCalls(bridge),
     ...accountCalls(bridge),
     ...terminalCalls(bridge),
@@ -229,7 +230,6 @@ function playCalls(bridge: BridgeCalls) {
     playInstallCancel: (slug) => invoke("studio:play.install-cancel", { slug }),
     playInstalls: () => invoke("studio:play.installs"),
     playUninstall: (slug) => invoke("studio:play.uninstall", { slug }),
-    playForgetIdentity: (slug) => invoke("studio:play.forget-identity", { slug }),
     playLaunch: (slug) => invoke("studio:play.launch", { slug }),
     playSession: (slug, action) => invoke("studio:play.session", { slug, action }),
     playSessions: () => invoke("studio:play.sessions"),
@@ -261,6 +261,39 @@ function playCalls(bridge: BridgeCalls) {
     playShare: (url, at) => invoke("studio:play.share", { url, at }),
     playManage: (gameId, change) => invoke("studio:play.manage", { gameId, change }),
     playCover: (gameId, image, contentType) => invoke("studio:play.cover", { gameId, image, contentType }),
+  } satisfies Partial<StudioApi>;
+}
+
+/** The store: a game's Store and My items, the purchase sheet, the shelf, complaints and Create › Items. */
+function storeCalls(bridge: BridgeCalls) {
+  const { invoke, subscribe } = bridge;
+  return {
+    storeItems: (slug) => invoke("studio:store.items", { slug }),
+    storeMyItems: (slug) => invoke("studio:store.my-items", { slug }),
+    storeItemGames: (itemId) => invoke("studio:store.item-games", { itemId }),
+    storeBuy: (itemId, slug) => invoke("studio:store.buy", { itemId, slug }),
+    storeAnswer: (sheet, answer) => invoke("studio:store.answer", { sheet, answer }),
+    onStoreSheet: (listener) => subscribe("studio:store.sheet", listener),
+    storeClaim: (itemId, slug) => invoke("studio:store.claim", { itemId, slug }),
+    storeShelf: (userId) => invoke("studio:store.shelf", { userId }),
+    storeCoins: () => invoke("studio:store.coins"),
+    storeGetCoin: () => invoke("studio:store.get-coin"),
+    storeReport: (itemId, reason, message) => invoke("studio:store.report", { itemId, reason, message }),
+    itemsBrowse: (query, cursor, tags = []) => invoke("studio:items.browse", { query, cursor, tags }),
+    itemsBrowseDetail: (itemId) => invoke("studio:items.detail", { itemId }),
+    itemsAddToGame: (itemId, projectId) => invoke("studio:items.add", { itemId, projectId }),
+    itemsRemoveFromGame: (itemId, projectId) => invoke("studio:items.remove", { itemId, projectId }),
+    itemsSelling: () => invoke("studio:items.selling"),
+    itemPutOnSale: (itemId) => invoke("studio:items.put-on-sale", { itemId }),
+    itemTakeOffSale: (itemId) => invoke("studio:items.take-off-sale", { itemId }),
+    itemSetShared: (itemId, shared) => invoke("studio:items.shared", { itemId, shared }),
+    itemsLocal: (project) => invoke("studio:items.local", { project }),
+    itemsLocalApprove: (project, localId, contentHash) =>
+      invoke("studio:items.local-approve", { project, localId, contentHash }),
+    itemsLocalWithdraw: (project, localId) => invoke("studio:items.local-withdraw", { project, localId }),
+    itemsLocalShare: (project, localId, contentHash, shared) =>
+      invoke("studio:items.local-share", { project, localId, contentHash, shared }),
+    itemsLocalSettle: (project, force) => invoke("studio:items.local-settle", { project, force }),
   } satisfies Partial<StudioApi>;
 }
 
@@ -392,6 +425,9 @@ function accountCalls(bridge: BridgeCalls) {
     claudeLoginOpenBrowser: () => invoke("studio:claude-login.browser"),
     claudeLoginCancel: () => invoke("studio:claude-login.cancel"),
     openCodeSignIn: () => invoke("studio:opencode.signin"),
+    grokSignIn: () => invoke("studio:grok.signin"),
+    cursorSignIn: () => invoke("studio:cursor.signin"),
+    cursorSignOut: () => invoke("studio:cursor.signout"),
     openRouterKeySave: (key) => invoke("studio:openrouter.key.save", { key }),
     openRouterKeyClear: () => invoke("studio:openrouter.key.clear"),
     openRouterSignIn: () => invoke("studio:openrouter.signin"),

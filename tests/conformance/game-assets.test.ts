@@ -7,7 +7,7 @@ import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 import { copyProject, Project, TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/project-fixtures.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { joinProjectAssets, readContainedImage, readGenexJobs, walkGameAssets } from "../../src/main/game-assets.ts";
-import { assetKind, isAudioFile } from "../../src/shared/game-assets.ts";
+import { assetKind, isAudioFile, ProjectAssetScope } from "../../src/shared/game-assets.ts";
 import { DEFAULT_ASSET_FOLDERS, isAssetPath } from "../../src/shared/project-workspace.ts";
 import { isImageFile } from "../../src/substrate/game-workspace.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
@@ -545,6 +545,36 @@ async function previewsInsideAssetFolders(): Promise<void> {
     assert.equal(await godotImage(file), null, file);
 }
 
+/** A store item's picture, as its local draft names it: only inside that draft's own folder, never through a link. */
+async function readsItemPictures(): Promise<void> {
+  const ROD = "local_750042e04a1c";
+  const web = await adopted(Project.WebFolder, {
+    [`.genex/items/${ROD}/image.png`]: PNG,
+    ".genex/scratch/rod.png": PNG,
+    "assets/rod.png": PNG,
+    "outside/secret.png": PNG,
+  });
+  await mkdir(path.join(web.dir, ".genex/items/local_0123456789ab"), { recursive: true });
+  await symlink(
+    path.join(web.dir, "outside/secret.png"),
+    path.join(web.dir, ".genex/items/local_0123456789ab/image.png"),
+  );
+  const picture = (file: string) =>
+    lite.core.readProjectAsset({ project: web.name, scope: ProjectAssetScope.ItemPicture, file });
+  assert.equal((await picture(`.genex/items/${ROD}/image.png`))?.mimeType, "image/png");
+  for (const file of [
+    ".genex/scratch/rod.png",
+    "assets/rod.png",
+    `.genex/items/${ROD}/../../scratch/rod.png`,
+    ".genex/items/../../outside/secret.png",
+    ".genex/items/local_0123456789ab/image.png",
+    `/.genex/items/${ROD}/image.png`,
+    `.genex/items/${ROD}/sub/image.png`,
+    `.genex/items/not-a-local-id/image.png`,
+  ])
+    assert.equal(await picture(file), null, file);
+}
+
 async function readsShareOneFactsWalk(): Promise<void> {
   const unity = await adopted(Project.WebFolder, {
     "ProjectSettings/ProjectVersion.txt": "m_EditorVersion: 6000.0.0f1\n",
@@ -589,6 +619,7 @@ describe("a project's assets, by its facts and plugins", () => {
   it("lists what a project's facts and plugins name, by name when Genex cannot show it", listsByFactsAndPlugins);
   it("previews a file inside a project's asset folders and refuses one outside", previewsInsideAssetFolders);
   it("thumbnails and previews reuse the folders the listing found", readsShareOneFactsWalk);
+  it("reads a store item's picture from its local draft's own folder only", readsItemPictures);
 });
 
 describe("a game's asset folders as its facts change", () => {

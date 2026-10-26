@@ -78,7 +78,7 @@ runner serial) beside the end-to-end suites, while the packages build; only the 
 waits for both, and a failed shard re-runs alone. When Check's macOS `fast` job already passed on
 the same commit (its push to `main`, or a dispatch), the release reuses it and skips its own fast
 shards (`scripts/release-fast-evidence.mjs`); otherwise it runs them. The serial rig shards balance by the file
-times the newest earlier release left (`scripts/release-durations.mjs`), by source bytes without one. An urgent fix may skip the regression with the repository
+times the newest earlier release left (`scripts/release-durations.mjs`), by source bytes without one; the short harness shards queue after them (they wait on `linux-static`) so long rig shards never start last. An urgent fix may skip the regression with the repository
 variable `RELEASE_REGRESSION=skip` (the builds then start after validation); dispatch a build-only
 run on `main` after publication to run it, and unset the variable. Build-only dispatches use the `candidate` environment
 and receive no signing secrets. Draft upload requires verified macOS signing plus the macOS and
@@ -132,7 +132,8 @@ installed app until the self test's sandboxed chat turn has reported (`scripts/c
 when the release's runner has the stage, the run adds `--claude-worker`: one Loop worker on the real
 Claude Code CLI (the vendor's installer puts it in a home of the stage's own), its model a scripted Anthropic
 stand-in (`tests/helpers/fake-anthropic.ts`, a dummy token, nothing billed), must run its turn
-unrefused and write its folder from Genex's sandbox (`smoke/claude-worker-check.ts`). Machines:
+unrefused and write its folder from Genex's sandbox (`smoke/claude-worker-check.ts`). The vendor's installer gets 4 minutes there, inside the self test's 8, so a stalled install
+reports how long it ran and what it last printed; every install says how long it took. Machines:
 macOS 26 and 15, Ubuntu 26.04 and 24.04 and Windows Server 2025 on GitHub-hosted runners, Fedora
 (install and repository only, in a container), and with `CANARY_AZURE=on` Windows 11 and 10 on
 Azure VMs made for the run and deleted after it. Every Windows machine starts Genex as its
@@ -150,6 +151,24 @@ A dispatch with `package_run` checks a build before it is released: give it a Pa
 (dispatched with `only: win32`) and the Azure machines install that run's `Genex-Setup.exe` instead
 of a download, with that run's commit driving the agent command. No other machine runs and no issue
 is touched. Dispatch it from a ref the `canary` environment allows.
+
+Adding `upgrade_from` (a release tag) checks the update from that release instead. Each Azure owner
+installs the release, with one game in its library (`canary-kept-game`, a `.claude` folder and a
+dependency tree), and starts it once, which sets the sandbox up for that release's srt-win; then the
+build goes over it as Squirrel's update. The steps are `earlier-release`, `install`, `upgrade-card`
+(the card that asks to update the sandbox, `upgrade-card.png`), `upgrade-approval` (pressing Update
+raises exactly one approval prompt), `upgrade-start` (the studio up with no harness rewind) and
+`agent-command`, run on that same profile. Azure's own account is the built-in Administrator,
+which runs elevated and is never asked even under Admin Approval Mode, so an upgrade run's owner is
+`canary-owner`, an ordinary administrator Prepare makes (UAC on, `EnableLUA 1`), with prompts off
+for the earlier release's own setup. The earlier installer carries no Mark of the Web: with UAC on,
+SmartScreen holds a release it does not recognize at "Windows protected your PC".
+`scripts/canary/windows/uac-approver.ps1`, started as SYSTEM on the owner's desktop through WMI
+(Run Command's job cannot hold a process of another session), turns the prompt on right before
+Update is pressed and shows it on the normal desktop (`PromptOnSecureDesktop 0`), where it
+photographs (`uac-<n>.png`) and approves each one; `approver-start.log` says whether it started. The standard user then installs the build
+on the updated machine, as before. The build needs a higher version than the release, or Squirrel
+has nothing to update: dispatch Package with `only: win32` and `version` (for example `0.1.99`).
 
 Azure setup, once: the subscription owner runs `scripts/canary/azure-setup.sh` in Cloud Shell. It
 creates an app registration whose only credential is GitHub's OIDC token for the `canary`

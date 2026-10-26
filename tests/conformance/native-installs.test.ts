@@ -13,7 +13,7 @@ import { describe, it } from "node:test";
 import { promisify } from "node:util";
 import genexManifest from "../../src/plugins/genex/plugin.json" with { type: "json" };
 import { type InstallOutcome, nativeInstalls, SAVES } from "../../src/main/play/native-installs.ts";
-import { GAME_BUNDLE_PREFIX, runTool, WINDOWED_KEY } from "../../src/main/play/native-unpack.ts";
+import { GAME_BUNDLE_PREFIX, runTool, type ToolRun, WINDOWED_KEY } from "../../src/main/play/native-unpack.ts";
 import type { PlayGameDetail } from "../../src/shared/play.ts";
 import {
   InstallFailure,
@@ -32,6 +32,21 @@ const SKIP = process.platform === "darwin" ? false : "unpacks and signs with mac
 const HOST = "builds.example.test";
 const THIS_MAC: NativeHost = { platform: NativePlatform.Mac, arch: NativeArch.Arm64, osVersion: "15.0" };
 const GB = 1024 ** 3;
+/** A developer folder that is not there: every tool that asks Xcode for itself (`lipo`, `git`) then fails. */
+const NO_DEVELOPER_TOOLS = "/nonexistent-developer-tools";
+
+/**
+ * {@link runTool} on a Mac without Apple's developer tools: the tools in /usr/bin that only stand in
+ * for Xcode's (`lipo`, `git`) fail as they do there, and macOS's own (`ditto`, `codesign`) run.
+ */
+const withoutDeveloperTools: ToolRun = (file, args, options) =>
+  new Promise((resolve) => {
+    const env = { ...process.env, DEVELOPER_DIR: NO_DEVELOPER_TOOLS };
+    execFile(file, args, { timeout: options.timeoutMs, env }, (error, stdout, stderr) => {
+      const exited = error && typeof error.code === "number" ? error.code : null;
+      resolve({ code: error ? exited : 0, stdout: String(stdout), stderr: String(stderr) });
+    });
+  });
 
 /** A minimal app: `/usr/bin/true` as its program (both processors), signed ad hoc unless `unsigned`. */
 async function makeApp(
@@ -105,6 +120,8 @@ async function installer(
     inUse?: (slug: string) => boolean;
     hold?: Promise<void>;
     onPush?: (state: NativeInstalls) => void;
+    run?: ToolRun;
+    host?: NativeHost;
   } = {},
 ) {
   const root = path.join(await realpath(await tmpDir("native-installs-")), "installed-games");
@@ -131,11 +148,11 @@ async function installer(
   }) as typeof fetch;
   const installs = nativeInstalls({
     root,
-    host: THIS_MAC,
+    host: options.host ?? THIS_MAC,
     hosts: new Set([HOST]),
     game: async (slug) => page(slug, games[slug] ?? []),
     fetch: fetchImpl,
-    run: runTool,
+    run: options.run ?? runTool,
     freeBytes: async () => options.free ?? 100 * GB,
     now: Date.now,
     publish: (state) => {
@@ -279,6 +296,30 @@ describe("Play's native installer", { skip: SKIP }, () => {
     assert.equal((await stat(program)).mode & 0o111, 0o111);
   });
 
+  it("installs on a Mac without Apple's developer tools, an Intel-only game through Rosetta", async () => {
+    const work = await tmpDir("native-app-");
+    const universal = await zipApp(await makeApp(work, "Dust Runners"), path.join(work, "universal.zip"));
+    const intel = await zipApp(
+      await makeApp(path.join(work, "i"), "Dust Runners", { intelOnly: true }),
+      path.join(work, "intel.zip"),
+    );
+    const cases: Array<[string, Buffer, NativeHost]> = [
+      ["a universal app", universal, THIS_MAC],
+      ["an Intel-only app, with Rosetta", intel, { ...THIS_MAC, rosetta: true }],
+    ];
+    for (const [why, archive, host] of cases) {
+      const build = buildOf("dust-runners", archive);
+      const { installs, outcomes } = await installer({ "dust-runners": [build] }, new Map([[build.url, archive]]), {
+        run: withoutDeveloperTools,
+        host,
+      });
+      await installs.install("dust-runners");
+      await installs.idle();
+      assert.equal(outcomes[0]?.failure, null, why);
+      assert.equal((await installs.state()).installed[0]?.slug, "dust-runners", why);
+    }
+  });
+
   it("fails each bad archive with its reason and leaves no game folder", async () => {
     const work = await tmpDir("native-app-");
     const good = await zipApp(await makeApp(work, "Dust Runners"), path.join(work, "good.zip"));
@@ -298,7 +339,7 @@ describe("Play's native installer", { skip: SKIP }, () => {
     const cases: Array<[string, Buffer, Partial<NativeBuild>, InstallFailure]> = [
       ["a checksum that does not match", good, { sha256: "0".repeat(64) }, InstallFailure.Checksum],
       ["no signature", unsigned, {}, InstallFailure.Unsigned],
-      ["only for Intel, with no Rosetta", intel, {}, InstallFailure.UnsupportedOs],
+      ["only for Intel, with no Rosetta", intel, {}, InstallFailure.NeedsRosetta],
       ["another app than the catalog names", good, { entry: "Other.app" }, InstallFailure.EntryMissing],
       ["a climb out of the archive", writeZip([{ name: "../evil", data: "x" }]), {}, InstallFailure.UnsafeArchive],
       ["a chain of links out of the game", writeZip(chain), {}, InstallFailure.UnsafeArchive],
@@ -422,35 +463,6 @@ describe("Play's native installer", { skip: SKIP }, () => {
     assert.deepEqual((await installs.state()).installed, []);
     assert.deepEqual(await readdir(path.join(root, "dust-runners")), [SAVES]);
     assert.equal(await readFile(path.join(root, "dust-runners", SAVES, "slot1.sav"), "utf8"), "level 3");
-  });
-
-  it("remembers which installed game knows who the player is, keeps it across an update, and forgets it", async () => {
-    const work = await tmpDir("native-app-");
-    const archive = await zipApp(await makeApp(work, "Dust Runners"), path.join(work, "game.zip"));
-    const v1 = buildOf("dust-runners", archive);
-    const v2 = buildOf("dust-runners", archive, { version: "1.1", url: `https://${HOST}/dust-runners/1.1/mac.zip` });
-    const games: Record<string, NativeBuild[]> = { "dust-runners": [v1] };
-    const { installs } = await installer(
-      games,
-      new Map([
-        [v1.url, archive],
-        [v2.url, archive],
-      ]),
-    );
-    await installs.install("dust-runners");
-    await installs.idle();
-    const shown = async () => (await installs.state()).installed[0]?.identityProject;
-    assert.equal(await shown(), undefined, "a game knows nobody until the player says so");
-    await installs.knowsYou("dust-runners", "cm1");
-    assert.equal(await shown(), "cm1");
-    games["dust-runners"] = [v2];
-    await installs.install("dust-runners");
-    await installs.idle();
-    assert.equal(await shown(), "cm1", "an update keeps it");
-    await installs.knowsYou("dust-runners", null);
-    assert.equal(await shown(), undefined);
-    await installs.knowsYou("not-installed", "cm2");
-    assert.equal((await installs.state()).installed.length, 1, "a game that is not installed is not added");
   });
 
   it("clears what a quit left mid-install at the next start", async () => {

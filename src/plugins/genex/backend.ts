@@ -3,8 +3,11 @@ import { fileURLToPath } from "node:url";
 import { GenexTools, type RemixChoice } from "./adapter.ts";
 import { COVER_CLIP } from "./clip.ts";
 import { nativeUploads } from "./native-publish.ts";
+import { MESSAGE as PUBLISH_MESSAGE } from "./publish.ts";
+import { isEmptyStarter } from "./starter.ts";
 import { type CoverCamera, CoverOperation, COVER_STILL, MESSAGE as COVER_MESSAGE } from "./cover.ts";
 import { SessionCredentials } from "../../substrate/session-credentials.ts";
+import { PLUGIN_API_ENV, PLUGIN_CA_ENV, PLUGIN_GAMES_ENV } from "../../substrate/plugins/process.ts";
 import {
   GenexAction,
   GenexHostedStatus,
@@ -138,6 +141,11 @@ function coverTool(genex: GenexTools, project: string, args: Args, camera: Cover
   throw new Error(COVER_MESSAGE.BadOperation);
 }
 
+/** Publish's refusal of a game that is still Studio's empty starter: nothing is exported or sent. */
+async function refuseEmptyStarter(ctx: Invocation): Promise<void> {
+  if (ctx.directory && (await isEmptyStarter(ctx.directory))) throw new Error(PUBLISH_MESSAGE.EmptyStarterRefusal());
+}
+
 const isPublishKind = (value: unknown) => value === GenexPublishKind.Draft || value === GenexPublishKind.Gallery;
 
 /** The agent's publish tool: announce, run the export, the cover shot and the upload start, then report the phase. */
@@ -150,6 +158,7 @@ async function publishTool(
   camera: CoverCamera | undefined,
 ) {
   if (!isPublishKind(args.operation)) throw new Error(MESSAGE.BadPublishOperation);
+  if (ctx.directory && (await isEmptyStarter(ctx.directory))) throw new Error(PUBLISH_MESSAGE.EmptyStarter);
   await ctx.host(PluginService.EventsEmit, {
     kind: "publish",
     operation: args.operation,
@@ -305,11 +314,15 @@ const ACTIONS: Record<string, Action> = {
   },
   [GenexAction.Approve]: withProject((genex, project, args) => genex.approve(project, args.id, args.candidate)),
   [GenexAction.PublishStatus]: withProject((genex, project, args) => publishStatusFor(genex, project, args)),
-  [GenexAction.PublishDraft]: withProject((genex, project, _args, service, camera) =>
-    genex.publishDraft(project, () => service(PluginService.ExportStage, {}), camera),
-  ),
+  [GenexAction.PublishDraft]: async (genex, _args, ctx, service, invokedAt) => {
+    if (!ctx.project) throw new Error(MESSAGE.OpenProject());
+    await refuseEmptyStarter(ctx);
+    const camera = coverCamera(ctx, service, invokedAt);
+    return genex.publishDraft(ctx.project, () => service(PluginService.ExportStage, {}), camera);
+  },
   [GenexAction.PublishGallery]: async (genex, args, ctx, service, invokedAt) => {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
+    await refuseEmptyStarter(ctx);
     // The dialog names the game's apps by their place in its folder; only real builds inside it go.
     const apps = ctx.directory ? await nativeUploads(ctx.directory, args.native) : [];
     const exportStage = () => service(PluginService.ExportStage, {});
@@ -336,18 +349,85 @@ const ACTIONS: Record<string, Action> = {
   },
 };
 
-export async function activate() {
-  return createGenexPlugin();
+/** The longest API origin the host may name. */
+const HOST_API_MAX = 200;
+/** The longest CA file path the host may name. */
+const HOST_CA_MAX = 1024;
+/** Whitespace or a control character anywhere: never part of a CA file path the host names. */
+const UNSAFE_PATH_CHARACTERS = /[\s\u0000-\u001f\u007f]/;
+
+/**
+ * The API the host has this backend talk to (a development profile's stand, `PLUGIN_API_ENV`): a
+ * bare http or https origin, else undefined, which keeps genex.games. The host only names one in a
+ * development launch on a stand (`main/play/origins.ts` `devStand`), with that stand's account.
+ */
+export function hostApiOf(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  return bareOrigin(env[PLUGIN_API_ENV]);
 }
-/** Source-level fixture seam. Never reachable from panel or agent arguments. */
-export async function createGenexPlugin(api?: string) {
+
+/** A bare http or https origin as written (no user, path, query or fragment), else undefined. */
+function bareOrigin(raw: string | undefined): string | undefined {
+  if (!raw || raw.length > HOST_API_MAX || raw.trim() !== raw) return undefined;
+  try {
+    const url = new URL(raw);
+    const web = url.protocol === "https:" || url.protocol === "http:";
+    const bare = !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash;
+    return web && bare && raw.replace(/\/$/, "") === url.origin ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The stand's own CA file the host names beside its API (`PLUGIN_CA_ENV`): one absolute path, which
+ * this backend's CLI runs trust for Node and git; undefined without the stand's API, or for any other
+ * value, which trusts nothing more.
+ */
+export function hostCaOf(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const raw = env[PLUGIN_CA_ENV];
+  if (!hostApiOf(env) || !raw || raw.length > HOST_CA_MAX || UNSAFE_PATH_CHARACTERS.test(raw)) return undefined;
+  return path.isAbsolute(raw) ? raw : undefined;
+}
+
+/**
+ * The stand's game host the host names beside its API (`PLUGIN_GAMES_ENV`): a bare origin, where a
+ * publish to the stand tests its draft; undefined without the stand's API, or for any other value.
+ */
+export function hostGamesOf(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  return hostApiOf(env) ? bareOrigin(env[PLUGIN_GAMES_ENV]) : undefined;
+}
+
+export async function activate() {
+  const api = hostApiOf(process.env);
+  const ca = hostCaOf(process.env);
+  const games = hostGamesOf(process.env);
+  return createGenexPlugin(api, { hostAccount: api !== undefined, ...(ca ? { ca } : {}), ...(games ? { games } : {}) });
+}
+/**
+ * Source-level fixture seam. Never reachable from panel or agent arguments. `hostAccount`: the host
+ * runs this backend on another account (a development stand): its session lease is taken again at
+ * every call, so a sign-in or sign-out there reaches the next publish, and nothing is saved. `ca`:
+ * that stand's own CA file, which the CLI runs trust; `games`: its game host, where a publish tests
+ * its draft.
+ */
+export async function createGenexPlugin(
+  api?: string,
+  options: { hostAccount?: boolean; ca?: string; games?: string } = {},
+) {
   let genex: GenexTools | undefined;
   let initialization: Promise<GenexTools> | undefined;
   let current: any;
+  let credentials: SessionCredentials | undefined;
   const service: Service = (method, args = {}) => current.host(method, args);
+  /** The host's lease for this call: the account it names now, or none. */
+  const takeLease = async (held: SessionCredentials) => {
+    const lease = await service(PluginService.CredentialsSession);
+    if (typeof lease === "string" && lease) held.restore(lease);
+    else held.lock();
+  };
   const create = async () => {
     const root = await service(PluginService.StorageRoot);
-    const credentials = new SessionCredentials({
+    credentials = new SessionCredentials({
       get: () => service(PluginService.CredentialsRead) as Promise<string | null>,
       set: (token) => service(PluginService.CredentialsWrite, { token }) as Promise<void>,
       clear: () => service(PluginService.CredentialsClear) as Promise<void>,
@@ -356,6 +436,8 @@ export async function createGenexPlugin(api?: string) {
     if (typeof lease === "string" && lease) credentials.restore(lease);
     genex = new GenexTools(String(root), api, {
       credentials,
+      ...(options.ca ? { ca: options.ca } : {}),
+      ...(options.games ? { standGames: options.games } : {}),
       deliver: async (output, _root, jobId) =>
         service(PluginService.AssetsDeliver, { output, jobId }) as Promise<string[]>,
       preload: path.join(path.dirname(fileURLToPath(import.meta.url)), "preload.mjs"),
@@ -373,7 +455,9 @@ export async function createGenexPlugin(api?: string) {
       genex = undefined;
       throw error;
     });
-    return initialization;
+    const tools = await initialization;
+    if (options.hostAccount && credentials) await takeLease(credentials);
+    return tools;
   }
   // Context is carried through AsyncLocalStorage so parallel jobs never borrow another worker's authority.
   const { AsyncLocalStorage } = await import("node:async_hooks");

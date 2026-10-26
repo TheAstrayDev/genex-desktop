@@ -211,6 +211,34 @@ test("Stop during CLI diagnostics kills the probe and never proceeds to executio
   }
   assert.equal(alive, false, "the local diagnostic process was released");
 });
+/**
+ * A CLI whose first start takes `slowMs` before it answers (Windows scanning a new binary), then
+ * answers at once; with `always`, every start is that slow.
+ */
+async function slowFirstStartCli(relative: string, slowMs: number, always = false): Promise<string> {
+  const binary = path.join(root, exe(relative));
+  const started = path.join(root, `${relative}.started`);
+  const body =
+    `const fs = require("fs"); const first = ${always} || !fs.existsSync(${JSON.stringify(started)}); fs.writeFileSync(${JSON.stringify(started)}, "");\n` +
+    `setTimeout(() => console.log(process.argv[2] === "--version" ? "fixture 1.0" : ${JSON.stringify(FLAGS)}), first ? ${slowMs} : 0);\n`;
+  await launcher(binary, `#!${process.execPath}\n${body}`, body);
+  return binary;
+}
+test("a CLI slow on its first start is asked again with a longer allowance before it is called incompatible", async () => {
+  const once = await slowFirstStartCli("first-start-once/codex", 1500);
+  const asked = await discoverCodingCli("codex", { ...options, override: once, probeTimeoutsMs: [300] });
+  assert.equal(asked.status.state, "incompatible", "one short allowance is not enough for this CLI");
+  const binary = await slowFirstStartCli("first-start/codex", 1500);
+  const found = await discoverCodingCli("codex", { ...options, override: binary, probeTimeoutsMs: [300, 10_000] });
+  assert.equal(found.status.state, "ready", found.status.detail);
+  assert.equal(found.status.version, "fixture 1.0");
+});
+test("a CLI that never answers within any allowance is incompatible and says how long it was given", async () => {
+  const binary = await slowFirstStartCli("never-answers/codex", 60_000, true);
+  const found = await discoverCodingCli("codex", { ...options, override: binary, probeTimeoutsMs: [200, 400] });
+  assert.equal(found.status.state, "incompatible");
+  assert.match(found.status.detail, /timed out after 0\.4 seconds/);
+});
 test("Stop while resolving Claude prevents both SDK entry points from launching", async () => {
   for (const operation of ["complete", "delegate"] as const) {
     let calls = 0;
@@ -566,6 +594,33 @@ test("damaged kept answers are ignored: the CLI is asked, and discovery still wo
   configureCodingClis(path.join(root, "settings.json"), [], options);
 });
 
+test("a saved-paths file Genex cannot read hides no CLI: a BOM is read, anything else is ignored", async () => {
+  const automatic = await cli("damaged-saved/auto/codex", "auto 3.0.0");
+  const saved = await cli("damaged-saved/saved/codex", "saved 3.1.0");
+  const damaged = [
+    { text: `\uFEFF${JSON.stringify({ codex: saved })}`, path: saved, why: "UTF-8 BOM, as Windows PowerShell writes" },
+    { text: "{", path: automatic, why: "cut short" },
+    { text: "", path: automatic, why: "empty" },
+    { text: "[]", path: automatic, why: "not an object" },
+    { text: JSON.stringify({ codex: 7 }), path: automatic, why: "a path that is no text" },
+  ];
+  try {
+    for (const [index, { text, path: expected, why }] of damaged.entries()) {
+      const settings = path.join(root, `damaged-saved-${index}/settings.json`);
+      await mkdir(path.dirname(settings), { recursive: true });
+      await writeFile(settings, text);
+      configureCodingClis(settings, [], { ...options, loginPath: path.dirname(automatic) });
+      for (const provider of ["codex", "claude-code", "opencode"] as const) {
+        const found = await resolveCodingCli(provider, undefined, undefined, true);
+        if (provider === "codex") assert.equal(found.status.path, expected, why);
+        else assert.equal(found.status.state, "missing", `${why}: ${provider} is looked for, not refused`);
+      }
+    }
+  } finally {
+    configureCodingClis(path.join(root, "settings.json"), [], options);
+  }
+});
+
 test("a saved path that stopped working yields to a working automatic installation", async () => {
   const settings = path.join(root, "fallback-host/settings.json");
   const automatic = await cli("fallback/auto/codex", "auto 2.0.0");
@@ -595,7 +650,7 @@ test("standard folders cover installers that never reach the login PATH", async 
   for (const version of ["v18.20.1", "v22.3.0", "v9.0.0"])
     await mkdir(path.join(home, ".nvm/versions/node", version, "bin"), { recursive: true });
   const dirs = await standardCliDirs(home, "darwin");
-  for (const dir of [".local/bin", ".claude/local", ".npm-global/bin", ".bun/bin", ".volta/bin"])
+  for (const dir of [".local/bin", ".claude/local", ".npm-global/bin", ".bun/bin", ".volta/bin", ".grok/bin"])
     assert.ok(dirs.includes(path.join(home, dir)), dir);
   const nvm = dirs.filter((dir) => dir.includes(".nvm"));
   assert.deepEqual(
@@ -659,6 +714,9 @@ test("Windows standard folders: the native installers first, then npm's prefix a
   assert.deepEqual(await standardCliDirs("C:\\Users\\Ada", "win32", env), [
     "C:\\Users\\Ada\\.local\\bin",
     "C:\\Users\\Ada\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin",
+    "C:\\Users\\Ada\\.grok\\bin",
+    // Flipped (Cursor): its PowerShell installer's own folder.
+    "C:\\Users\\Ada\\AppData\\Local\\cursor-agent",
     "C:\\Users\\Ada\\AppData\\Roaming\\npm",
     "C:\\Program Files\\nodejs",
     "C:\\Users\\Ada\\AppData\\Local\\pnpm",
@@ -679,12 +737,14 @@ test("on Windows only a PATHEXT name is a CLI: npm's sh launcher and PowerShell 
 test("the binary resolver names each coding CLI's executable and refuses any other engine", () => {
   assert.equal(codingCliBinary("codex"), "codex");
   assert.equal(codingCliBinary("claude-code"), "claude");
+  assert.equal(codingCliBinary("grok"), "grok");
   for (const other of ["ollama", "bonsai", "constructor", "", "claude"]) assert.throws(() => codingCliBinary(other));
 });
 test("display versions drop product names", () => {
   assert.equal(cliVersion("2.1.280 (Claude Code)"), "2.1.280");
   assert.equal(cliVersion("codex-cli 0.155.1"), "0.155.1");
   assert.equal(cliVersion("codex-cli 0.2.0-alpha.3"), "0.2.0-alpha.3");
+  assert.equal(cliVersion("grok 1.0.70 (f50904eaee6c)"), "1.0.70");
   assert.equal(cliVersion("fixture-1"), "fixture-1");
   assert.equal(cliVersion(undefined), undefined);
 });
@@ -737,6 +797,38 @@ test("an installation that cannot run yields to a working one further along the 
   const manual = await discoverCodingCli("opencode", { ...search, override: outdated });
   assert.equal(manual.status.state, "incompatible");
   assert.equal(manual.status.path, outdated);
+});
+/** `grok --help`'s options, as Grok Build 1.0.70 lists them. */
+const GROK_FLAGS =
+  "--add-dir --allow --always-approve --continue --cwd --deny --disable-web-search --disallowed-tools --model " +
+  "--max-turns --no-plan --output-format --permission-mode --prompt-file --prompt-json --reasoning-effort --resume " +
+  "--rules --sandbox --session-id --tools";
+test("Grok Build is ready when its help lists every option Genex passes; one that lacks one is refused by name", async () => {
+  const grokCli = async (relative: string, help: string, version = "grok 1.0.70 (f50904eaee6c)") => {
+    const file = path.join(root, exe(relative));
+    await launcher(
+      file,
+      `#!/bin/sh\ncase "$1" in\n --version) echo '${version}';;\n *) echo '${help}';;\nesac\n`,
+      `console.log(process.argv[2] === "--version" ? ${JSON.stringify(version)} : ${JSON.stringify(help)});\n`,
+    );
+    await chmod(file, 0o755);
+    return file;
+  };
+  const ready = await discoverCodingCli("grok", { ...options, override: await grokCli("grok-ok/grok", GROK_FLAGS) });
+  assert.equal(ready.status.state, "ready");
+  assert.equal(ready.status.version, "grok 1.0.70 (f50904eaee6c)");
+  const older = GROK_FLAGS.replace("--prompt-file ", "");
+  const refused = await discoverCodingCli("grok", { ...options, override: await grokCli("grok-old/grok", older) });
+  assert.equal(refused.status.state, "incompatible");
+  assert.match(refused.status.detail, /--prompt-file/);
+  const outdated = await discoverCodingCli("grok", {
+    ...options,
+    override: await grokCli("grok-outdated/grok", GROK_FLAGS, "grok 1.0.3 (1a29d5bc12d4) [stable]"),
+  });
+  assert.equal(outdated.status.state, "incompatible", "xAI refuses a CLI older than 1.0.13");
+  assert.match(outdated.status.detail, /too old[\s\S]*1\.0\.13/);
+  const minimum = await grokCli("grok-minimum/grok", GROK_FLAGS, "grok 1.0.13 (abc) [stable]");
+  assert.equal((await discoverCodingCli("grok", { ...options, override: minimum })).status.state, "ready");
 });
 test.after(async () => {
   await rm(root, { recursive: true, force: true });

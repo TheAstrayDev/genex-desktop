@@ -35,7 +35,7 @@ import {
   utilityProcess,
 } from "electron";
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -47,6 +47,7 @@ import { wireGameFullScreen } from "./full-screen-view.ts";
 import { HarnessState } from "../shared/protocol.ts";
 import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
+import { CursorEngine } from "../substrate/engines/cursor.ts";
 import { configureCodingClis, resolveCodingCli } from "../substrate/engines/external-cli.ts";
 import { installCodingCli } from "../substrate/cli-installer.ts";
 import { CodingCliState } from "../shared/coding-cli.ts";
@@ -98,7 +99,7 @@ import {
 } from "./auto-update.ts";
 import { RELEASE_CHECK_INTERVAL_MS, latestRelease } from "./release-check.ts";
 import { UpdateAction } from "../shared/app-update.ts";
-import { gatedHostTool } from "./core/genex-cli.ts";
+import { gatedHostTool, type GenexStand, launchStand } from "./core/genex-cli.ts";
 import { normalGamesElsewhere, normalGamesFolder } from "./core/never-touch-list.ts";
 import { diagnosticsText, gatherDiagnostics } from "./diagnostics.ts";
 import { type FeedbackSources, sendFeedback } from "./feedback.ts";
@@ -121,6 +122,7 @@ import { registerPluginsIpc } from "./ipc/plugins.ts";
 import { type PreviewBoundsRecord, registerPreviewIpc } from "./ipc/preview.ts";
 import { registerProjectsIpc } from "./ipc/projects.ts";
 import { type PlayIpcDeps, registerPlayIpc } from "./ipc/play.ts";
+import { registerStoreIpc, type StoreIpcDeps } from "./ipc/store.ts";
 import { registerGenexAccountIpc } from "./ipc/genex-account.ts";
 import {
   createGenexAccount,
@@ -132,6 +134,8 @@ import { devStandAccountPort } from "./dev/dev-stand-account.ts";
 import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
 import { openGenexPage } from "./genex-browser.ts";
 import { fixtureGamePage, fixtureGetCoin, fixtureNativeGames, fixturePlayRequest } from "./dev/fixture-play.ts";
+import { createFixtureStore } from "./dev/fixture-store.ts";
+import { fixtureLocalRuns } from "./dev/fixture-items.ts";
 import { FIXTURE_CONFIRM_ORIGIN } from "./dev/fixture-coin.ts";
 import { launchFixtureAccount } from "./dev/fixture-people.ts";
 import {
@@ -157,11 +161,19 @@ import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
 import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
-import { buildHostsFor, networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import {
+  buildHostsFor,
+  type GalleryRequest,
+  mintedTicket,
+  networkRequest,
+  type PlayGallery,
+  playGallery,
+  type PlayWorld,
+  TicketDelivery,
+} from "./play/gallery.ts";
 import { relayHostsOf, startGenexGateway } from "./play/genex-gateway.ts";
 import { GAME_LINK_SCHEME, gameLinkIn, gameLinks } from "./play/game-links.ts";
 import { thisComputer } from "./play/native-host.ts";
-import { IDENTITY_QUESTION, nativeTicket } from "./play/native-identity.ts";
 import { type InstallOutcome, type NativeInstaller, nativeInstalls } from "./play/native-installs.ts";
 import { checkNativeUpdates } from "./play/native-updates.ts";
 import { runTool } from "./play/native-unpack.ts";
@@ -171,6 +183,7 @@ import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
 import { linuxGameWindows } from "./play/native-windows-linux.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
 import { spawnLinuxGame } from "../substrate/plugins/linux-game.ts";
+import { windowsGames } from "../substrate/plugins/windows-game.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
 import { killProcessTree } from "../substrate/process-tree.ts";
 import { prepareNativeGamesFixture } from "./dev/fixture-native-games.ts";
@@ -187,8 +200,12 @@ import { playViewsOf, wirePlayViewer } from "./play/viewer-view.ts";
 import { purchaseConfirmOrigin } from "./play/purchase-window.ts";
 import { type PlayComments, playComments } from "./play/comments.ts";
 import { type PlayCoin, playCoin } from "./play/coin.ts";
-import { playOrigins } from "./play/origins.ts";
+import { playStore } from "./play/store.ts";
+import { followStudioWindow, type StoreSheetControl, storeSheet } from "./play/store-sheet.ts";
+import { devStand, websitePageOpener } from "./play/origins.ts";
+import { devGamesTrust } from "./play/dev-games-trust.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
+import { playCoinPageUrl } from "../shared/play-purchase.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
 import { registerSettingsIpc } from "./ipc/settings.ts";
 import { readLicenseTexts } from "./licenses.ts";
@@ -249,7 +266,14 @@ import { samePath } from "../substrate/paths.ts";
 import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../shared/boot.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { type Painter, paintWhileUsed } from "../substrate/paint-while-used.ts";
-import { ensureHostGit, longPath, takeBackSandboxEntries } from "../substrate/windows-sandbox.ts";
+import {
+  type DetachedSpawn,
+  ensureHostGit,
+  forgetKeptGrants,
+  longPath,
+  takeBackSandboxEntries,
+} from "../substrate/windows-sandbox.ts";
+import { ensureMacGit } from "../substrate/git-policy.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -376,12 +400,14 @@ app.on("open-url", (event, url) => {
 // anything else runs: no profile, no window (main/windows-install.ts).
 const squirrelStep = squirrelStartup(process.platform, process.argv, process.execPath);
 if (squirrelStep) {
-  // The sandbox's grants and denies outlive each launch; an uninstall takes them back.
-  if (squirrelStep.takeBackSandbox)
-    takeBackSandboxEntries(
-      (file, args, env) => spawn(file, args, { env, detached: true, stdio: "ignore", windowsHide: true }),
-      os.homedir(),
-    );
+  // The sandbox's grants and denies outlive each launch; an uninstall takes them back: Genex's own,
+  // and the write grants srt-win keeps.
+  if (squirrelStep.takeBackSandbox) {
+    const detached: DetachedSpawn = (file, args, env) =>
+      spawn(file, args, { env, detached: true, stdio: "ignore", windowsHide: true });
+    takeBackSandboxEntries(detached, os.homedir());
+    forgetKeptGrants(detached);
+  }
   await runSquirrelStep(squirrelStep, (file, args) =>
     spawn(file, args, { detached: true, stdio: "ignore", windowsHide: true }),
   );
@@ -502,11 +528,17 @@ for (const [name, value] of testLanguageSwitches(
 ))
   app.commandLine.appendSwitch(name, value);
 /**
- * Where Play talks to genex.games in this launch: genex.games itself, or a local or test copy that a
- * development profile names (`play/origins.ts`); never in a packaged app, and never in a fixture
- * launch, which answers Play from its own data.
+ * Where Play talks to genex.games in this launch: genex.games itself, or a local or test copy (a
+ * stand) that a development profile names (`play/origins.ts`), with its game host, the Genex host
+ * tools' API and its own CA; never in a packaged app, and never in a fixture launch, which answers
+ * Play from its own data.
  */
-const playOrigin = playOrigins(process.env, dev !== null && !app.isPackaged && !fixtureNativePolicy);
+const stand = devStand(process.env, {
+  developerProfile: dev !== null,
+  packaged: app.isPackaged,
+  fixture: fixtureNativePolicy,
+});
+const playOrigin = stand.origins;
 // Human review is an explicit opt-in; automated fixture windows stay parked and unfocusable.
 const interactiveFixture = process.env.STUDIO_FIXTURE_INTERACTIVE === "1";
 const parkedFixtureWindow = isSmoke || (fixtureProviders && !interactiveFixture);
@@ -541,6 +573,8 @@ let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCre
   null;
 let gameLibrary: LibrarySharing | null = null;
 let playManage: PlayManage | null = null;
+/** The store on the Genex account and its purchase sheet in the studio window, made on first use (`storeFor`). */
+let playStoreDeps: PlayStoreParts | null = null;
 /** Play's native installs and the games being played, made on first use (`playInstallsFor`, `playSessionsFor`). */
 let nativeInstaller: NativeInstaller | null = null;
 let nativeLauncher: NativeSessions | null = null;
@@ -640,7 +674,7 @@ app.on("accessibility-support-changed", (_event, enabled) => {
 let liveThreadStatus: ThreadStatusMap = {};
 /** An eval-lane launch's view of the core's UI events (it digests the game its chat seeds); null otherwise. */
 let evalLaneUiTap: ((event: UiEvent) => void) | null = null;
-const { codexLogin, claudeLogin, openCodeLogin } = createLoginControllers({
+const { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin } = createLoginControllers({
   terminals,
   openExternal: (url) => shell.openExternal(url),
   subscription,
@@ -648,6 +682,14 @@ const { codexLogin, claudeLogin, openCodeLogin } = createLoginControllers({
   onOpenCodeSignedIn: async () => {
     if (core?.engines.has(EngineId.OpenCode)) await core.engines.get(EngineId.OpenCode).refreshModels?.(true);
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenCode } });
+  },
+  onGrokSignedIn: async () => {
+    if (core?.engines.has(EngineId.Grok)) await core.engines.get(EngineId.Grok).refreshModels?.(true);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.Grok } });
+  },
+  onCursorSignedIn: async () => {
+    if (core?.engines.has(EngineId.Cursor)) await core.engines.get(EngineId.Cursor).refreshModels?.(true);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.Cursor } });
   },
   showCodexState: (state) => {
     preview?.setOccluded(state.visible);
@@ -838,6 +880,10 @@ function bringStudioForward(): void {
   win.focus();
 }
 
+/** The core's stand option, when this launch has one. */
+const optionalStand = (genexStand: GenexStand | undefined): Pick<StudioCoreOptions, "genexStand"> =>
+  genexStand ? { genexStand } : {};
+
 /** Computer control (cua-driver), made with the first core: one registry, stopped on quit. */
 let desktop: DesktopControl | undefined;
 
@@ -855,6 +901,24 @@ async function createCore(userData: string): Promise<StudioCore> {
     neverTouch: otherProfiles(userData),
     // The normal profile keeps its games outside its data: another launch's workers never reach them.
     neverTouchGames: normalGamesElsewhere(launch.gamesRoot, app.getPath("home")),
+    // A development profile on a stand: the Genex host tools' CLI and the Genex plugin (its publish)
+    // go to the stand as the account it signed in to.
+    ...optionalStand(launchStand(stand, () => genexAccountFor(studio).token())),
+    // A game's local item drafts after its publish: Put on sale as the app's account; a fixture
+    // launch uploads them to its own store in place of the CLI.
+    localItems: {
+      putOnSale: (skuId) => storeFor(studio).store.putOnSale(skuId),
+      selling: () => storeFor(studio).store.selling(),
+      ...(fixtureNativePolicy
+        ? {
+            runs: fixtureLocalRuns({
+              request: (route, init) => storeFor(studio).request(route, init),
+              token: () => genexAccountFor(studio).token(),
+              core: () => studio,
+            }),
+          }
+        : {}),
+    },
     ...launch,
     ...(ollamaHost ? { ollamaHost } : {}),
     // Electron's binary doubles as node for the harness child process.
@@ -1153,19 +1217,28 @@ function watchNativeUpdates(studio: StudioCore): void {
  * Native games being played in their own windows, each in the game sandbox, or null where Genex
  * launches no native game.
  */
+/** Where Genex keeps its compiled game host on Windows, in its own data. */
+const GAME_HOST_FOLDER = "game-host";
+
+/** How this system starts a native game, sees its window, brings it forward and asks it to quit. */
+function gameLauncher(): Pick<NativeSessionsDeps, "spawn" | "hasWindow" | "show" | "kill"> {
+  // Windows runs a game in an AppContainer through Genex's game host, which says when its window is up.
+  if (process.platform === StudioPlatform.Windows) return windowsGames(path.join(userDataRoot, GAME_HOST_FOLDER));
+  const kill = (pid: number, signal: NodeJS.Signals) => process.kill(pid, signal);
+  // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
+  if (process.platform === StudioPlatform.Linux) return { spawn: spawnLinuxGame, ...linuxGameWindows(), kill };
+  return { spawn: spawnNativeGame, hasWindow: hasGameWindow, show: showGameWindow, kill };
+}
+
 function playSessionsFor(studio: StudioCore): NativeSessions | null {
   const installs = playInstallsFor(studio);
   if (!installs) return null;
-  // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
-  const linux = process.platform === StudioPlatform.Linux;
-  const windows = linux ? linuxGameWindows() : { hasWindow: hasGameWindow, show: showGameWindow };
+  // A Windows game reaches nothing, Genex included: its AppContainer has no loopback (windows-game.ts).
+  const offline = Boolean(fixtureNativePolicy) || process.platform === StudioPlatform.Windows;
   nativeLauncher ??= nativeSessions({
     root: studio.layout.installedGames,
     record: (slug) => installs.record(slug),
-    spawn: linux ? spawnLinuxGame : spawnNativeGame,
-    hasWindow: windows.hasWindow,
-    show: windows.show,
-    kill: (pid, signal) => process.kill(pid, signal),
+    ...gameLauncher(),
     killTree: (pid) => killProcessTree(pid),
     probe: psProbe(),
     clock: SYSTEM_CLOCK,
@@ -1174,9 +1247,8 @@ function playSessionsFor(studio: StudioCore): NativeSessions | null {
     ended: (slug) => installs.sweep(slug),
     log: (line) => studioLog.write("main", line),
     // A fixture launch has no Genex to reach: its games stay offline, and their plays uncounted.
-    ...(fixtureNativePolicy
-      ? {}
-      : { genex: (slug: string) => openGameGenex(studio, slug), presence: playsFor(studio) }),
+    ...(offline ? {} : { genex: (slug: string) => openGameGenex(studio, slug) }),
+    ...(fixtureNativePolicy ? {} : { presence: playsFor(studio) }),
   });
   return nativeLauncher;
 }
@@ -1203,38 +1275,9 @@ async function openGameGenex(studio: StudioCore, slug: string): Promise<GameGene
     api: playOrigin.api,
     relay: relayHostsOf(new URL(playOrigin.api).hostname),
   });
-  const catalog = playCatalogFor(studio);
-  const installs = playInstallsFor(studio);
-  const ticket = await nativeTicket(
-    {
-      ticket: (game, delivery) => catalog.ticket(game, delivery),
-      ask: async ({ slug: game }) => askNativeIdentity((await installs?.record(game))?.title ?? game),
-      share: (projectId) => catalog.shareIdentity(projectId),
-      shared: async (game, projectId) => installs?.knowsYou(game, projectId),
-    },
-    slug,
-  );
+  const ticket = mintedTicket(await playCatalogFor(studio).ticket(slug, TicketDelivery.Desktop));
   const env = { GENEX_API_URL: gateway.apiUrl, ...(ticket ? { GENEX_EMBED_TICKET: ticket } : {}) };
   return { ports: gateway.ports, env, close: gateway.close };
-}
-
-/**
- * Ask the player, once per game, whether a native game may know who they are, as a sheet on
- * Studio's window: the game would see their Genex name and avatar (App Review 4.7.3).
- */
-async function askNativeIdentity(game: string): Promise<boolean> {
-  const words = IDENTITY_QUESTION;
-  const options = {
-    type: "question" as const,
-    message: words.title(game),
-    detail: words.detail(),
-    buttons: [words.accept(), words.decline()],
-    defaultId: 0,
-    cancelId: 1,
-  };
-  const parent = window && !window.isDestroyed() ? window : null;
-  const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
-  return response === 0;
 }
 
 /**
@@ -1448,6 +1491,73 @@ function playCoinFor(studio: StudioCore): PlayCoin {
   });
 }
 
+/** The store's parts: its client, the purchase sheet, and the requests both make. */
+type PlayStoreParts = Omit<StoreIpcDeps, "local" | "coin"> & { sheet: StoreSheetControl; request: GalleryRequest };
+
+/** The account's coin for the plate in Play, and Get Nex, read as the purchase sheet's is (`playCoinFor`). */
+function plateCoinFor(studio: StudioCore): StoreIpcDeps["coin"] {
+  const coin = playCoinFor(studio);
+  return {
+    spendable: () => coin.spendableOrNone(),
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    getCoin: () => {
+      if (fixtureNativePolicy) fixtureGetCoin();
+      else if (window) openGenexWebsitePage(studio, window, playCoinPageUrl(playOrigin.web));
+    },
+  };
+}
+
+/**
+ * The store on the Genex account (marketplace plan 10.1): its client, and the purchase sheet a game's
+ * page shows in the studio window, confirmed as the viewer's is. A fixture launch answers both from
+ * its own store over its other fixture answers (`dev/fixture-store.ts`), so no socket opens.
+ */
+function storeFor(studio: StudioCore): PlayStoreParts {
+  if (playStoreDeps) return playStoreDeps;
+  const account = genexAccountFor(studio);
+  const deps = {
+    request: fixtureNativePolicy
+      ? createFixtureStore({ now: Date.now, fallback: fixturePlayRequest })
+      : networkRequest(globalThis.fetch, playOrigin.api),
+    token: account.token,
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+    refused: account.refused,
+  };
+  const store = playStore(deps);
+  const sheet = storeSheet({
+    purchase: store.purchase,
+    world: (slug) => playCatalogFor(studio).world(slug),
+    coin: playCoin(deps),
+    account: { signIn: () => signInToGenex(studio) },
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    openPage: (url) => {
+      if (fixtureNativePolicy) fixtureGetCoin();
+      else if (window) openGenexWebsitePage(studio, window, url);
+    },
+    web: playOrigin.web,
+    clock: SYSTEM_CLOCK,
+    push: (shown) => {
+      const page = livePage();
+      if (page) pushToRenderer(page, "studio:store.sheet", shown);
+    },
+  });
+  playStoreDeps = { store, sheet, request: deps.request };
+  return playStoreDeps;
+}
+
+/**
+ * A genex.games page the app links to (Get Nex): a page of Play's website opens as a sign-in page
+ * does, which takes a development website's plain http; anything else as every other link does.
+ */
+function openGenexWebsitePage(studio: StudioCore, win: BrowserWindow, url: string): void {
+  websitePageOpener(
+    playOrigin.web,
+    (page) => void openGenexPage(fixtureNativePolicy, page, playOrigin.web).catch(() => openOutside(studio, win, page)),
+    (other) => void openOutside(studio, win, other),
+  )(url);
+}
+
 /** The purchase sheet's Sign in: the app's own Genex sign-in in the browser; how it went shows on the sheet's next read. */
 function signInToGenex(studio: StudioCore): void {
   void genexAccountFor(studio)
@@ -1457,6 +1567,8 @@ function signInToGenex(studio: StudioCore): void {
 
 /** Play's full-screen viewer in `win`: a published game, the studio's bar over its top edge. */
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
+  // The store's purchase sheet is drawn in this window: Pay waits again on focus, and it goes with the page.
+  followStudioWindow(win, storeFor(studio).sheet);
   playView = wirePlayViewer({
     win,
     // The viewer's Remix shows only for a game whose source holds a game, as a card's does.
@@ -1466,6 +1578,8 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);
     },
     web: playOrigin.web,
+    origins: playOrigin,
+    ...devGamesCertificates(),
     offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
     micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
@@ -1474,16 +1588,36 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     barArguments: pageLanguageArguments,
     comments: playCommentsFor(studio),
     ...(playInstallsFor(studio) ? { nativeApp: nativeAppFor(studio) } : {}),
+    // The bar's Store door: only a game whose Store tab has items (the store off reads as none).
+    storeShown: async (slug) => (await storeFor(studio).store.items(slug)).items.length > 0,
     coin: playCoinFor(studio),
     account: { signIn: () => signInToGenex(studio) },
-    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     openPage: (url) => {
       if (fixtureNativePolicy) fixtureGetCoin();
-      else void openOutside(studio, win, url);
+      else openGenexWebsitePage(studio, win, url);
     },
     // A fixture launch's stand-in game confirms on a website that resolves nowhere (`fixture-coin.ts`).
     confirmOrigin: fixtureNativePolicy ? FIXTURE_CONFIRM_ORIGIN : purchaseConfirmOrigin(playOrigin),
   });
+}
+
+/**
+ * A development stand's own CA for the viewer, trusted for the stand's game hosts only
+ * (`play/dev-games-trust.ts`); nothing in any other launch, or when the CA file cannot be read.
+ */
+function devGamesCertificates(): Pick<Parameters<typeof wirePlayViewer>[0], "certificates"> {
+  if (!stand.gamesCaFile) return {};
+  let pem: string;
+  try {
+    pem = readFileSync(stand.gamesCaFile, "utf8");
+  } catch (error) {
+    studioLog.write("main", `stand CA not read: ${errorMessage(error)}`);
+    return {};
+  }
+  const trust = devGamesTrust(playOrigin.games, pem, Date.now);
+  if (!trust) studioLog.write("main", "stand CA is not a certificate: nothing is trusted");
+  return trust ? { certificates: trust } : {};
 }
 
 /**
@@ -1995,6 +2129,12 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     claudeLogin,
     codexLogin,
     openCodeLogin,
+    grokLogin,
+    cursorLogin,
+    cursor: () => {
+      const engine = core?.engines.has(EngineId.Cursor) ? core.engines.get(EngineId.Cursor) : null;
+      return engine instanceof CursorEngine ? engine : null;
+    },
     subscription,
     pushUiEvent,
     busy: () => keepAwake.held || (core?.budget.userInFlight ?? 0) > 0,
@@ -2004,6 +2144,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   registerDataFolderIpc(handle, dataFolderIpc(studio));
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, playIpcDeps(studio));
+  registerStoreIpc(handle, { ...storeFor(studio), coin: plateCoinFor(studio), local: studio.localItems });
   const { library } = playAccountFor(studio);
   registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio), pictureFile: pictureFileFor() });
   registerNotificationsIpc(handle, {
@@ -2094,9 +2235,11 @@ async function settleDataFolder(): Promise<boolean> {
   return false;
 }
 
-/** The host's own Git for repairing build copies after a move (Windows); elsewhere the PATH's. */
+/** The host's own Git for repairing build copies after a move (Windows, a Mac without developer tools); elsewhere the PATH's. */
 function hostGitForMoves(): { hostGit?: () => Promise<boolean> } {
-  return process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {};
+  if (process.platform === StudioPlatform.Windows) return { hostGit: () => ensureHostGit() };
+  if (process.platform === StudioPlatform.Mac) return { hostGit: () => ensureMacGit(resources) };
+  return {};
 }
 
 /** Move the data with the start window showing how far, then start Genex again; quitting waits for it. */
@@ -2532,7 +2675,7 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     const booted = await startHarness(studio);
     if (!booted) return null;
     if (fixture) await activateChatFixture(studio, fixture);
-    if (fixture?.project) await openFixtureGame(win, fixture.project);
+    if (fixture?.project) await openFixtureGame(studio, win, fixture.project);
     announceReady(userData);
     showFixtureAgentsFailure(userData);
     const view = requirePreview();
@@ -2610,13 +2753,14 @@ async function seedFixtureModel(win: BrowserWindow, threadId: string): Promise<v
 }
 
 /**
- * A fixture session begins in its game: every launch opens home, so the fixture opens the game
- * from the sidebar as a person would, and waits until the window shows it (or the sandbox setup,
- * which has no games). A game that never opens fails the launch, as a broken fixture should.
+ * A fixture session begins in its game, running: every launch opens home, so the fixture opens the
+ * game from the sidebar as a person would, and waits until the window shows it (or the sandbox
+ * setup, which has no games); opening a game starts nothing, so it then loads the game into Live as
+ * Play would. A game that never opens fails the launch, as a broken fixture should.
  */
-async function openFixtureGame(win: BrowserWindow, project: string): Promise<void> {
+async function openFixtureGame(studio: StudioCore, win: BrowserWindow, project: string): Promise<void> {
   const row = `nav [data-project=${JSON.stringify(project)}]`;
-  await win.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+  const opened = await win.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     const until = Date.now() + ${FIXTURE_OPEN_TIMEOUT_MS};
     let clicked = false;
     const tick = () => {
@@ -2634,6 +2778,7 @@ async function openFixtureGame(win: BrowserWindow, project: string): Promise<voi
     };
     tick();
   })`);
+  if (opened === true) void studio.loadPreview({ project }).catch(() => {});
 }
 
 /**

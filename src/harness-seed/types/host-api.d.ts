@@ -986,7 +986,7 @@ export interface ModelCatalogStatus {
 }
 // ↑ src/shared/model-catalog.ts
 
-export type CodingProvider = "codex" | "claude-code" | "opencode";
+export type CodingProvider = "codex" | "claude-code" | "opencode" | "grok" | "cursor";
 // ↑ src/shared/coding-cli.ts
 
 export interface CodingCliStatus {
@@ -1015,7 +1015,8 @@ export interface EngineAccount {
 /**
  * How a provider signs in: Claude through a piped or embedded terminal plus status polling, Codex
  * through its native login reported from the in-app console, OpenCode through its own `auth login`
- * in the embedded terminal (which keeps every provider it signs in to), `none` for an engine with
+ * in the embedded terminal (which keeps every provider it signs in to), Grok Build and Cursor through
+ * their own sign-in command there (the person's account, in the browser), `none` for an engine with
  * no sign-in of its own (a local model, a local server, or OpenRouter, whose key is pasted in Settings).
  */
 export type LoginKind = "terminal" | "console" | "cli" | "none";
@@ -1065,6 +1066,8 @@ export interface ProviderInfo {
   readonly billing: Billing;
   /** Subscriptions only. */
   readonly signIn: SignInCopy | null;
+  /** Shipped before a live test proved it: Settings and the picker say Beta. */
+  readonly beta?: true;
 }
 // ↑ src/shared/providers.ts
 

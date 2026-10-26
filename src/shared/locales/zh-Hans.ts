@@ -451,6 +451,7 @@ export default {
   "Ben-Day": "本戴点",
   "Best fit": "最适合",
   Better: "改进",
+  Beta: "测试版",
   "Between builds": "构建间隙",
   "Billed by each provider you use": "由你使用的各提供方分别计费",
   "Billed by each provider you use.": "由你使用的各提供方分别计费。",
@@ -615,6 +616,9 @@ export default {
   "Checking plan usage…": "正在检查套餐用量…",
   "Checking play": "正在检查试玩",
   "Checking preservation": "正在检查是否保持原样",
+  "Checking that Epic signed the installer…": "正在确认安装程序由 Epic 签名…",
+  "Checking that Microsoft signed Unreal's runtime installer…":
+    "正在确认 Unreal 自带的运行库安装程序由 Microsoft 签名…",
   "Checking that Roblox signed the installer.": "正在确认安装程序有 Roblox 的签名。",
   "Checking the game files…": "正在检查游戏文件…",
   "Checking the key…": "正在检查密钥…",
@@ -744,8 +748,34 @@ export default {
   "Codex sign-in output": "Codex 登录输出",
   "Codex skill discovery closed. Refresh to retry.": "Codex 技能发现已关闭。刷新以重试。",
   "Codex skill discovery timed out. Refresh to retry.": "Codex 技能发现超时。刷新以重试。",
-  "Coin lives in your Genex account. Sign in once, then pay here.":
-    "金币存放在你的 Genex 账号中。登录一次，即可在这里支付。",
+  "Cursor didn't answer. Check the installation, then try again.": "Cursor 没有响应。请检查安装后重试。",
+  "Cursor is unavailable": "Cursor 不可用",
+  "Cursor isn't installed on this computer.": "这台电脑上没有安装 Cursor。",
+  "Cursor sign-in": "Cursor 登录",
+  "Cursor {version}, {count, plural, other {# model(s)}}": "Cursor {version}，{count, plural, other {# 个模型}}",
+  "Cursor's CLI forgets this computer's sign-in": "Cursor CLI 会忘记这台电脑上的登录",
+  "Cursor's model list could not be read.": "无法读取 Cursor 的模型列表。",
+  "Cursor's sign-in status could not be read.": "无法读取 Cursor 的登录状态。",
+  "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
+    "请在浏览器中完成 Cursor 登录。登录信息由 Cursor 保存。",
+  "Finish signing in to Grok in your browser.": "请在浏览器中完成 Grok 登录。",
+  "Grok Build didn't answer. Check the installation, then try again.": "Grok Build 没有响应。请检查安装后再试一次。",
+  "Grok Build isn't installed on this Mac.": "这台 Mac 上没有安装 Grok Build。",
+  "Grok Build isn't signed in.": "Grok Build 尚未登录。",
+  "Grok Build sign-in": "Grok Build 登录",
+  "Grok Build {version}, {count, plural, one {# model} other {# models}}":
+    "Grok Build {version}，{count, plural, other {# 个模型}}",
+  "Grok Build's model list could not be read.": "无法读取 Grok Build 的模型列表。",
+  "Install Cursor": "安装 Cursor",
+  "Install Cursor from Settings › Model Providers.": "请在“设置 › 模型提供方”中安装 Cursor。",
+  "Install Cursor's CLI to build with your Cursor plan.": "安装 Cursor CLI，用你的 Cursor 套餐来制作。",
+  "Install Grok Build": "安装 Grok Build",
+  "Install Grok Build from Settings › Model Providers.": "请在“设置 › 模型提供方”中安装 Grok Build。",
+  "Install it to build games with your Grok account.": "安装后即可用你的 Grok 账号制作游戏。",
+  "Installing Cursor. This can take a minute.": "正在安装 Cursor，可能需要一分钟。",
+  "Installing Grok Build. This can take a minute.": "正在安装 Grok Build，可能需要一分钟。",
+  "Nex lives in your Genex account. Sign in once, then pay here.":
+    "Nex 存放在你的 Genex 账号中。登录一次，即可在这里支付。",
   Color: "颜色",
   Colors: "配色",
   Columns: "列数",
@@ -827,7 +857,6 @@ export default {
   "Context · {percent}% used": "上下文 · 已用 {percent}%",
   "Context: {used} tokens": "上下文：{used} token",
   Continue: "继续",
-  "Continue as me": "以我的身份继续",
   "Continue on this Mac": "在这台 Mac 上继续",
   "Continue to confirmation": "继续确认",
   Contractor: "外部智能体",
@@ -945,7 +974,6 @@ export default {
   "Couldn't start sign-in": "无法开始登录",
   "Couldn't start the sign-in on this Mac. Paste a key instead.": "无法在这台 Mac 上开始登录。请改为粘贴密钥。",
   "Couldn't stop play": "无法停止试玩",
-  "Couldn't stop sharing who you are. Try again in a moment.": "无法停止分享你的身份。请稍后再试。",
   "Couldn't take a motion strip": "无法拍摄动作序列图",
   "Couldn't take a picture of {asset}": "无法为 {asset} 拍照",
   "Couldn't take a play-view shot": "无法截取游玩画面",
@@ -976,6 +1004,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "无法安装：这个游戏无法在这台 Mac 上运行。",
   "Couldn’t install: this game is larger than it says.": "无法安装：这个游戏比标注的更大。",
   "Couldn’t install: this game isn’t signed.": "无法安装：这个游戏没有签名。",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "无法安装：这个游戏需要 Rosetta 才能在这台 Mac 上运行。",
   "Couldn’t install: this game’s files aren’t safe to open.": "无法安装：打开这个游戏的文件不安全。",
   "Couldn’t load other versions.": "无法加载其他版本。",
   "Couldn’t load the comments": "无法加载评论",
@@ -1098,6 +1128,8 @@ export default {
   "Dismiss remaining imports": "忽略其余导入",
   Dividers: "分隔线",
   "Do it for me": "帮我完成",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
+    "“帮我完成”会打开启动器，由这个对话通过电脑控制在里面安装 Unreal。约 45 GB。需要登录 Epic 时，只有你本人能登录。",
   "Does it feel alive? {score} of {max}": "感觉有生气吗？{score}/{max}",
   "Does what you ask, then stops.": "按你说的做，然后停下。",
   "Don't allow": "不允许",
@@ -1133,6 +1165,7 @@ export default {
   "Downloading Roblox's installer.": "正在下载 Roblox 安装程序。",
   "Downloading Unity Hub": "正在下载 Unity Hub",
   "Downloading models": "正在下载模型",
+  "Downloading the Epic Games Launcher from Epic…": "正在从 Epic 下载 Epic Games Launcher…",
   "Downloading {model}": "正在下载 {model}",
   "Downloading {model} · {percent}%": "正在下载 {model} · {percent}%",
   "Downloading {name}": "正在下载 {name}",
@@ -1177,8 +1210,18 @@ export default {
   "Enter the server's address, like 127.0.0.1:5000.": "请输入服务器地址，例如 127.0.0.1:5000。",
   "Environment variables": "环境变量",
   "Environment variables: name": "环境变量：名称",
+  "Epic's download led somewhere other than Epic, so Genex stopped.":
+    "Epic 的下载指向了 Epic 以外的地方，所以 Genex 停止了。",
+  "Epic's download link wasn't secure, so Genex didn't download it.": "Epic 的下载链接不安全，所以 Genex 没有下载。",
+  "Epic's download page is opening in your browser.": "正在浏览器中打开 Epic 的下载页面。",
+  "Epic's download was far bigger than its installer, so Genex stopped.":
+    "Epic 的下载比它的安装程序大得多，所以 Genex 停止了。",
+  "Epic's free app that installs Unreal. Do it for me downloads it from Epic and installs it: choose Yes when Windows asks.":
+    "Epic 的免费应用，用来安装 Unreal。“帮我完成”会从 Epic 下载并安装它：Windows 询问时请选“是”。",
   "Epic's free app that installs Unreal. Genex opens Epic's download page.":
     "Epic 的免费应用，用来安装 Unreal。Genex 会打开 Epic 的下载页面。",
+  "Epic's installer didn't download. Check your internet connection and try again.":
+    "Epic 的安装程序没有下载成功。请检查网络连接后再试一次。",
   Error: "错误",
   "Error copied.": "错误信息已复制。",
   "Every game chat and Loop run is recorded under Recent runs.":
@@ -1372,6 +1415,8 @@ export default {
     "Genex 无法在这台电脑上点击 Roblox Studio。请在 Studio 中自己发布：{clicks}。",
   "Genex can't click in Roblox Studio on this computer. Turn it on yourself: {clicks}.":
     "Genex 无法在这台电脑上点击 Roblox Studio。请自己开启：{clicks}。",
+  "Genex can't click in the launcher on this computer. Install Unreal {version} yourself: {clicks}.":
+    "Genex 无法在这台电脑上点击启动器。请自己安装 Unreal {version}：{clicks}。",
   "Genex can't find this computer's Roblox folders: its home folder isn't a full path of this system.":
     "Genex 找不到这台电脑的 Roblox 文件夹：它的主文件夹不是这个系统的完整路径。",
   "Genex can't read {file} as Roblox Studio's settings, so it changes no settings file. Turn Studio's MCP server on in Studio: {clicks}.":
@@ -1393,8 +1438,6 @@ export default {
   "Genex couldn't download the Luau checks. Check the connection and press Add Luau checks again.":
     "Genex 无法下载 Luau 检查。请检查网络连接，然后再次点击“添加 Luau 检查”。",
   "Genex couldn't get Roblox Studio.": "Genex 未能获取 Roblox Studio。",
-  "Genex couldn't stop sharing who you are with this game. Try again in a moment.":
-    "Genex 无法停止向这个游戏分享你的身份。请稍后再试。",
   "Genex couldn't tell whether {app} was free, so nothing was rewound. Rewind again in a moment.":
     "Genex 无法判断 {app} 是否空闲，因此没有回退任何内容。请稍后再回退。",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
@@ -1408,9 +1451,13 @@ export default {
   "Genex cover": "Genex 封面",
   "Genex credits": "Genex 积分",
   "Genex decides from crash reports": "Genex 根据崩溃报告决定",
+  "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "Genex 没有点击任何东西。请在启动器中自己安装 Unreal {version}：{clicks}。",
   "Genex didn't click anything. Turn it on yourself: {clicks}.": "Genex 没有点击任何内容。请自己开启：{clicks}。",
   "Genex didn't publish anything. To publish it yourself in Studio: {clicks}.":
     "Genex 没有发布任何内容。要在 Studio 中自己发布：{clicks}。",
+  "Genex didn’t approve the {app}.": "{app} 未通过 Genex 审核。",
+  "Genex didn’t approve the {app}: {reason}": "{app} 未通过 Genex 审核：{reason}",
   "Genex didn’t take that. Try again in a moment.": "Genex 没能完成这个操作。请稍后再试。",
   "Genex downloads Godot this way on Windows only; on a Mac, Do it for me installs it in Applications.":
     "只有在 Windows 上 Genex 才这样下载 Godot；在 Mac 上，“帮我完成”会把它安装到“应用程序”中。",
@@ -1432,6 +1479,7 @@ export default {
   "Genex hasn't set up this project, so there's nothing to undo.": "Genex 没有设置过这个项目，所以没有可撤销的内容。",
   "Genex hasn’t confirmed it yet. {game} finishes the purchase once it does. You won’t be charged twice.":
     "Genex 尚未确认。确认后，{game} 会完成这次购买。你不会被重复扣费。",
+  "Genex installs Epic's launcher itself on Windows only.": "Genex 只在 Windows 上自己安装 Epic 的启动器。",
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "Genex 只在 Mac 上安装 Unity Hub：请从 Unity 的页面获取。",
   "Genex is already getting Roblox Studio.": "Genex 已经在获取 Roblox Studio。",
@@ -1442,7 +1490,6 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex 正在安装 Godot。你无需做任何事。",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex 以 MIT 许可证开源。它还包含其他项目的软件，各自遵循自己的许可证。",
-  "Genex is reviewing the game before it shows in the gallery.": "Genex 正在审核这款游戏，通过后才会显示在画廊中。",
   "Genex isn't getting Roblox Studio right now.": "Genex 现在没有在获取 Roblox Studio。",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genex 会先备份每个文件，“撤销设置”可以撤回这些更改。你改过的 Genex 编辑器辅助程序文件会以 .mine 副本保留在旁边。",
@@ -1504,7 +1551,26 @@ export default {
   "Get Unreal Engine {version} to make games in Unreal.": "获取 Unreal Engine {version}，就能用 Unreal 制作游戏。",
   "Get Xcode": "获取 Xcode",
   "Get a key": "获取密钥",
-  "Get coin": "获取金币",
+  "Get Nex": "获取 Nex",
+  Nex: "Nex",
+  "Not signed in to Cursor.": "未登录 Cursor。",
+  "Runs on your Grok account": "使用你的 Grok 账号运行",
+  "Sign in again…": "重新登录…",
+  "Sign in to Cursor from Settings › Model Providers.": "请在“设置 › 模型提供方”中登录 Cursor。",
+  "Sign in to Grok from Settings › Model Providers.": "请在“设置 › 模型提供方”中登录 Grok。",
+  "Sign in with your Cursor account to build with your plan.": "登录你的 Cursor 账号，用你的套餐来制作。",
+  "Sign in with your Grok account. Grok Build keeps the sign-in.": "用你的 Grok 账号登录，登录信息由 Grok Build 保存。",
+  "Switch to another Cursor account": "切换到另一个 Cursor 账号",
+  "Switch to another Grok account": "切换到另一个 Grok 账号",
+  "Update Cursor": "更新 Cursor",
+  "Update Grok Build": "更新 Grok Build",
+  "Update Grok Build from Settings › Model Providers.": "请在“设置 › 模型提供方”中更新 Grok Build。",
+  "Uses your Cursor plan": "使用你的 Cursor 套餐",
+  "Your Cursor account has no model it can run.": "你的 Cursor 账号没有可运行的模型。",
+  "xAI blocked this Grok account: {reason}": "xAI 已封禁这个 Grok 账号：{reason}",
+  "xAI no longer accepts this Grok Build.": "xAI 不再接受这个版本的 Grok Build。",
+  "xAI no longer accepts this version. Update it to keep building.": "xAI 不再接受这个版本。更新后即可继续制作。",
+  "{amount} Nex, get Nex": "{amount} Nex，获取 Nex",
   "Get credits": "获取积分",
   "Get the Epic Games Launcher": "获取 Epic Games Launcher",
   "Getting Roblox Studio": "正在获取 Roblox Studio",
@@ -1575,6 +1641,7 @@ export default {
   Help: "帮助",
   Hide: "隐藏",
   "Hide Others": "隐藏其他",
+  "Hide friends": "隐藏好友",
   "Hide sidebar": "隐藏侧边栏",
   "Hide terminal": "隐藏终端",
   "Hide terminal · keeps running": "隐藏终端 · 仍在运行",
@@ -1632,6 +1699,7 @@ export default {
   "In Unity Hub, sign in and add a Unity license (Personal is free if Unity's terms allow it for you). Unity's own terms cover its apps and your account. Only you type your password.":
     "在 Unity Hub 中登录并添加 Unity 许可证（如果 Unity 的条款允许，Personal 版免费）。Unity 的应用和你的账号受 Unity 自己的条款约束。密码只由你本人输入。",
   "In every game": "所有游戏",
+  "In review": "审核中",
   "In round {round}'s brief": "已写入第 {round} 轮的任务说明",
   "In the background": "后台",
   "In the background: {title}": "后台：{title}",
@@ -1667,6 +1735,7 @@ export default {
   "Install Codex": "安装 Codex",
   "Install Codex, then check again.": "请安装 Codex，然后再检查一次。",
   "Install Genex plugin": "安装 Genex 插件",
+  "Install Microsoft's Visual C++ runtime": "安装 Microsoft Visual C++ 运行库",
   "Install Ollama": "安装 Ollama",
   "Install OpenCode": "安装 OpenCode",
   "Install OpenCode from Settings › Model Providers.": "请在“设置 › 模型提供方”中安装 OpenCode。",
@@ -1701,10 +1770,14 @@ export default {
   "Installed.": "已安装。",
   "Installing Blender {version}": "正在安装 Blender {version}",
   "Installing Godot {version}": "正在安装 Godot {version}",
+  "Installing Microsoft's Visual C++ runtime. Choose Yes when Windows asks.":
+    "正在安装 Microsoft Visual C++ 运行库。Windows 询问时请选“是”。",
   "Installing OpenCode. This can take a minute.": "正在安装 OpenCode，可能需要一分钟。",
   "Installing Unity Hub": "正在安装 Unity Hub",
   "Installing Unity {version}": "正在安装 Unity {version}",
   "Installing packages": "正在安装依赖包",
+  "Installing the Epic Games Launcher. Choose Yes when Windows asks.":
+    "正在安装 Epic Games Launcher。Windows 询问时请选“是”。",
   "Installing {name} took too long. Try again.": "{name} 安装耗时过长。请重试。",
   "Installing {name}. This can take a minute.": "正在安装 {name}，可能需要一分钟。",
   "Installing {title}": "正在安装 {title}",
@@ -1753,6 +1826,7 @@ export default {
   "It kept getting this wrong, so it stopped to save your credits.": "这里一直出错，为了节省你的积分已停止。",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "它会从“游玩”和 genex.games 下架，回到草稿。直接链接仍然有效，重新发布后游玩次数和点赞都会保留。",
+  "It leaves the game’s Store. Players who own it keep it.": "它会离开游戏的商店。已拥有的玩家会继续保留。",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "它可能需要依赖包自带的安装脚本，这些脚本没有运行。",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1766,6 +1840,7 @@ export default {
     "它会在 Genex 的这些时刻运行：{steps}；这些步骤不会事先询问你。",
   "It runs with your access: Genex doesn't sandbox its code.": "它以你的权限运行：Genex 不会把它的代码放进沙盒。",
   "It runs, but no reviewer compared it with the game you had.": "可以运行，但没有审查员把它和你之前的游戏比较过。",
+  "It shows in the game after its next release.": "它会在游戏下次发布后出现。",
   "It shows up here as soon as it runs.": "游戏一运行就会显示在这里。",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "它默认关闭：请在“插件”中启用；它的每个工具在运行前都会询问你。",
@@ -1775,8 +1850,6 @@ export default {
   "It turns on when installed: agents in all your games can use it from your next message.":
     "安装后即开启：从你的下一条消息起，所有游戏中的智能体都能使用它。",
   "It was paused before it could write up the build.": "在写出构建总结前就被暂停了。",
-  "It will see your display name and avatar, so your progress and scores can be saved to your account. Games are code written by other people, not by Genex. You can stop sharing any time in Settings › Storage.":
-    "它将看到你的显示名称和头像，这样你的进度和分数就能保存到你的账户。游戏是其他人编写的代码，不是 Genex 写的。你可以随时在“设置 › 存储”中停止分享。",
   "It's no longer there.": "它已经不在了。",
   "It's switched on in Studio's settings. Studio answers once a place is open: open one in Studio, or press New Roblox game.":
     "已在 Studio 的设置中开启。打开一个地点后 Studio 才会响应：在 Studio 中打开一个，或点击“新建 Roblox 游戏”。",
@@ -1793,8 +1866,8 @@ export default {
   "Its packages aren’t installed yet — “{install}” runs on one press.": "依赖包还没安装——点一下即可运行“{install}”。",
   "Its packages aren’t installed yet.": "依赖包尚未安装。",
   "Its project didn’t go, so no one can remix it yet.": "项目没有发送成功，所以暂时没人能改编它。",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "项目太大，无法改编：Genex 最多保存 2 GB、5,000 个文件。",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "项目太大，无法改编：Genex 最多保存 5 GB、5,000 个文件。",
   "Its session failed before it delivered anything.": "它的会话在交付任何内容之前就失败了。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "它的源码在你自己的仓库里：在游戏文件夹中运行 genex make-remixable 即可允许改编。",
@@ -1839,7 +1912,6 @@ export default {
     "已保留。{count, plural, other {# 项之前失败的检查现在通过了}}，之前通过的都没有出问题，并排对比的审查员也没有异议。",
   Kind: "类型",
   "Kinds of asset": "素材类型",
-  "Knows who you are": "知道你是谁",
   "Koi drifting through a neon night market, seen from above": "锦鲤游过霓虹夜市上空，俯视视角",
   "Laid the terrain": "已铺设地形",
   Language: "语言",
@@ -1879,7 +1951,6 @@ export default {
     "允许这个对话的智能体使用这个应用吗？它可以点击、输入，并读取这个应用显示的内容。",
   "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
     "允许这个对话的智能体使用 {app} 吗？它可以点击、输入，并读取 {app} 显示的内容。",
-  "Let {game} know who you are?": "让 {game} 知道你是谁？",
   "Letters a–z, digits and dashes.": "字母 a–z、数字和短横线。",
   "Letting go of every input": "正在松开所有输入",
   "Letting the game settle": "正在等待游戏稳定",
@@ -2055,6 +2126,7 @@ export default {
   "Merging a worker's work": "正在合并助手的工作",
   "Mic didn’t start": "麦克风未能启动",
   Microphone: "麦克风",
+  "Microsoft's Visual C++ runtime is installed.": "Microsoft Visual C++ 运行库已安装。",
   Mine: "我的",
   Minimize: "最小化",
   "Mobile support": "移动端支持",
@@ -2165,6 +2237,7 @@ export default {
   "No checks yet": "暂无检查",
   "No comments on {title} yet": "{title} 还没有评论",
   "No compatible newer release is available for this installed plugin": "这个已安装的插件没有可用的兼容新版本",
+  "No cover yet, so it goes out without a picture.": "还没有封面，所以会不带图片发布。",
   "No dash at the ends": "开头和结尾不能是短横线",
   "No friends yet — send your link and play together.": "还没有好友——发送你的链接，一起玩吧。",
   "No games for “{query}”.": "没有与“{query}”匹配的游戏。",
@@ -2216,6 +2289,7 @@ export default {
   "None yet": "暂无",
   "Not a public file: {path}": "不是公开文件：{path}",
   "Not added": "未添加",
+  "Not approved": "未通过",
   "Not asked — the step did not land.": "未请求——步骤没有完成。",
   "Not comparable": "无法比较",
   "Not confirmed": "未确认",
@@ -2234,6 +2308,9 @@ export default {
   "Not in your game yet": "尚未加入游戏",
   "Not installed": "未安装",
   "Not live yet": "尚未进入游戏",
+  "Package it on a Mac": "请在 Mac 上打包",
+  "Package it on a Windows PC": "请在 Windows 电脑上打包",
+  "Package it on a Linux PC": "请在 Linux 电脑上打包",
   "Not made yet": "尚未制作",
   "Not measured": "未测量",
   "Not measured yet": "尚未测量",
@@ -2267,6 +2344,7 @@ export default {
   "Nothing changes until you apply.": "应用之前不会有任何改变。",
   "Nothing is added to this folder.": "不会向此文件夹添加任何内容。",
   "Nothing is failing.": "没有失败的检查。",
+  "Nothing is installing.": "当前没有正在安装的内容。",
   "Nothing is online for this game yet": "此游戏还没有任何在线内容",
   "Nothing kept yet": "暂未保留任何内容",
   "Nothing made": "没有产出",
@@ -2275,6 +2353,8 @@ export default {
   "Nothing new to suggest.": "暂无新建议。",
   "Nothing spent yet": "尚无消费",
   "Nothing to free up": "没有可释放的空间",
+  "Nothing was clicked. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "没有点击任何东西。请在启动器中自己安装 Unreal {version}：{clicks}。",
   "Nothing was clicked. Turn it on yourself: {clicks}.": "没有点击任何内容。请自己开启：{clicks}。",
   "Nothing was ever sent from this launch.": "此次启动从未发送过任何内容。",
   "Nothing was published. To publish it yourself in Studio: {clicks}.":
@@ -2368,6 +2448,8 @@ export default {
   "Open a game before starting its terminal.": "请先打开一个游戏，再启动它的终端。",
   "Open a game first, so its chat can click it for you, or turn it on yourself: {clicks}.":
     "先打开一个游戏，让它的对话替你点击；或者自己开启：{clicks}。",
+  "Open a game first, so its chat can install Unreal for you, or install Unreal {version} yourself in the launcher: {clicks}.":
+    "请先打开一个游戏，让它的对话帮你安装 Unreal；或者在启动器中自己安装 Unreal {version}：{clicks}。",
   "Open a game first, then choose the place it builds in.": "请先打开一个游戏，再选择它要在其中制作的地点。",
   "Open a game first: Unity works on the open game's project.": "请先打开一个游戏：Unity 会处理当前打开的游戏的项目。",
   "Open a game folder": "打开游戏文件夹",
@@ -2476,7 +2558,7 @@ export default {
     "将在浏览器中打开 OpenRouter。在那里授权 Genex 后就会回到这里。",
   "Opens System Settings → Privacy & Security → {pane}": "打开系统设置 → 隐私与安全性 → {pane}",
   "Opens beside the chat": "在对话旁边打开",
-  "Opens genex.games. Pay comes back once the coin lands.": "将打开 genex.games。金币到账后即可支付。",
+  "Opens genex.games. Pay comes back once the Nex lands.": "将打开 genex.games。Nex 到账后即可支付。",
   "Opens in Explorer": "在资源管理器中打开",
   "Opens in Finder": "在 Finder 中打开",
   "Opens in its default app": "用默认应用打开",
@@ -2572,7 +2654,6 @@ export default {
   "Plans first, asks to proceed": "先做计划，再询问是否继续",
   Platforms: "平台",
   Play: "游玩",
-  "Play as guest": "以访客身份游玩",
   "Play build": "游玩此构建",
   "Play game": "开始游戏",
   "Play latest": "游玩最新版",
@@ -2805,6 +2886,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "请先移除排队中的消息：这个 Harness 无法撤回它们。",
   "Remove this row": "移除此行",
+  "Remove {item} from {game}?": "要把 {item} 从 {game} 移除吗？",
   "Remove {name}": "移除 {name}",
   Removed: "已移除",
   "Removed {actor}": "已移除 {actor}",
@@ -2982,6 +3064,8 @@ export default {
   "Run status unavailable": "构建状态不可用",
   "Run the setup scripts this game’s packages came with": "运行这个游戏的依赖包自带的安装脚本",
   "Run this game’s setup scripts?": "要运行这个游戏的安装脚本吗？",
+  "Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder to install Microsoft's Visual C++ runtime.":
+    "运行 Unreal 的 Engine › Extras › Redist › en-us 文件夹中的 vc_redist.x64.exe，安装 Microsoft Visual C++ 运行库。",
   "Run {command}": "运行 {command}",
   "Run {command} for {connector}?": "要为 {connector} 运行 {command} 吗？",
   Running: "运行中",
@@ -3090,6 +3174,7 @@ export default {
   Sending: "正在发送",
   "Sending…": "正在发送…",
   "Sends when the build finishes…": "构建完成后发送…",
+  "Sent for review. It appears in Play once Genex approves it.": "已提交审核。Genex 通过后会出现在“游玩”中。",
   Sent: "已发送",
   "Sent — every part gets it with its next round": "已发送——每个部分都会在下一轮收到",
   "Sent — it goes into this part's next round": "已发送——将进入这个部分的下一轮",
@@ -3163,6 +3248,7 @@ export default {
   "Show earlier runs": "显示更早的构建",
   "Show earlier updates": "显示更早的更新",
   "Show fewer": "收起",
+  "Show friends": "显示好友",
   "Show friends what I’m playing": "向好友显示我在玩什么",
   "Show game": "显示游戏",
   "Show in Explorer": "在资源管理器中显示",
@@ -3326,7 +3412,6 @@ export default {
   "Stop game": "停止游戏",
   "Stop replying about {about}": "取消回复 {about}",
   "Stop sharing": "停止分享",
-  "Stop sharing who you are with {game}": "停止向 {game} 分享你的身份",
   "Stop this background work": "停止此后台任务",
   "Stop this game's build before removing it.": "请先停止此游戏的构建，再移除它。",
   "Stop this terminal before closing its session.": "请先停止此终端，再关闭其会话。",
@@ -3340,6 +3425,7 @@ export default {
   "Stopped getting Roblox Studio. Anything Roblox's installer already put on this computer stays.":
     "已停止获取 Roblox Studio。Roblox 安装程序已经放到这台电脑上的内容会保留。",
   "Stopped play": "已停止试玩",
+  "Stopped.": "已停止。",
   "Stopped. Everything built so far is kept.": "已停止。目前做好的内容都已保留。",
   "Stopped. What it built is in your game now.": "已停止。做好的内容已进入你的游戏。",
   "Stopped. What it built is kept in your project.": "已停止。做好的内容保留在你的项目中。",
@@ -3503,6 +3589,7 @@ export default {
   "The CLI returned an invalid control response.": "CLI 返回的控制响应无效。",
   "The CLI returned an invalid model list.": "CLI 返回的模型列表无效。",
   "The Epic Games Launcher is installed": "Epic Games Launcher 已安装",
+  "The Epic Games Launcher is installed. Sign in to Epic in it.": "Epic Games Launcher 已安装。请在其中登录 Epic。",
   "The Genex helper is in Studio": "Genex 辅助插件已在 Studio 中",
   "The Genex helper is in Studio's Plugins folder and Studio's MCP server is on.":
     "Genex 辅助插件已在 Studio 的 Plugins 文件夹中，Studio 的 MCP 服务器也已开启。",
@@ -3578,6 +3665,10 @@ export default {
     "安装程序的签名者不是 Roblox，所以 Genex 没有运行它。没有安装任何内容。",
   "The installer isn't signed as Roblox's, so Genex didn't run it. Nothing was installed.":
     "安装程序没有 Roblox 的签名，所以 Genex 没有运行它。没有安装任何内容。",
+  "The installer isn't signed by its maker, so Genex didn't run it.":
+    "安装程序不是由其发布者签名的，所以 Genex 没有运行它。",
+  "The installer isn't signed, so Genex didn't run it.": "安装程序没有签名，所以 Genex 没有运行它。",
+  "The installer stopped before it finished. Try again.": "安装程序没有完成就停止了。请再试一次。",
   "The instructions this suggestion changes are gone. Discard it.": "这条建议要修改的指令已经不存在了。请丢弃它。",
   "The judge didn't play": "评审没有游玩",
   "The judge's moves were replayed on this build, and the goal held.": "评审的操作已在这个构建上重放，目标依然达成。",
@@ -3823,6 +3914,8 @@ export default {
     "这个游戏的对话会用电脑控制在 Roblox Studio 中点击 {clicks}。所有玩这个游戏的人都会收到更新，更新会发布在你的 Roblox 账号上。",
   "This game's chat clicks {clicks} in Roblox Studio with computer control. It keeps the privacy and settings Studio gives a new game and leaves the description empty. It is published on your Roblox account; if Roblox asks for your age, ID, a two-step code, terms or a payment, Genex stops and leaves that to you.":
     "这个游戏的对话会用电脑控制在 Roblox Studio 中点击 {clicks}。它会保留 Studio 给新游戏的隐私和设置，描述留空。游戏会发布在你的 Roblox 账号上；如果 Roblox 要求你的年龄、身份证件、两步验证码、同意条款或付款，Genex 会停下来交给你处理。",
+  "This game's chat is installing Unreal in the Epic Games Launcher. If Genex asks you something first, answer it in this game's chat, and sign in to Epic if the launcher asks.":
+    "这个游戏的对话正在 Epic Games Launcher 中安装 Unreal。如果 Genex 先问你问题，请在这个游戏的对话里回答；启动器要求时请登录 Epic。",
   "This game's chat is publishing the update in Roblox Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
     "这个游戏的对话正在 Roblox Studio 中发布更新。如果 Genex 先问你问题，请在这个游戏的对话里回答，然后看着 Studio。",
   "This game's chat is publishing {name} to Roblox in Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
@@ -3954,10 +4047,10 @@ export default {
   Try: "试试",
   "Try again": "重试",
   "Try again in a few minutes.": "请过几分钟再试。",
-  "Try again in the game once the coin lands.": "金币到账后，请在游戏中重试。",
-  "Try again in the game. No coin was charged.": "请在游戏中重试。没有扣除任何金币。",
-  "Try again in the game. No coin was reserved or charged.": "请在游戏中重试。没有预留或扣除任何金币。",
-  "Try again in the game. The coin went back to your balance.": "请在游戏中重试。金币已退回你的余额。",
+  "Try again in the game once the Nex lands.": "Nex 到账后，请在游戏中重试。",
+  "Try again in the game. No Nex was charged.": "请在游戏中重试。没有扣除任何 Nex。",
+  "Try again in the game. No Nex was reserved or charged.": "请在游戏中重试。没有预留或扣除任何 Nex。",
+  "Try again in the game. The Nex went back to your balance.": "请在游戏中重试。Nex 已退回你的余额。",
   "Try again, or choose another model.": "请重试，或选择其他模型。",
   "Try the build again": "重试构建",
   "Try your changes before you update.": "更新前先试试你的改动。",
@@ -3991,7 +4084,6 @@ export default {
     "有两个 Unreal 编辑器开着。请在你要退出的那个编辑器窗口中退出它。",
   "Two open Studios have a place named {name}, so Genex can't tell them apart. Save one under another name in Studio, then choose it again.":
     "两个打开的 Studio 中都有名为 {name} 的地点，所以 Genex 无法区分它们。请在 Studio 中把其中一个另存为其他名字，然后重新选择。",
-  "Two steps before the agent can build in Unreal.": "还差两步，智能体就能在 Unreal 中制作游戏了。",
   "Type a name.": "请输入名称。",
   "Type your email and password in the Unity Hub window and add a Unity license (Personal is free if Unity's terms allow it for you). Genex goes on by itself once you're in.":
     "在 Unity Hub 窗口中输入邮箱和密码，并添加 Unity 许可证（如果 Unity 的条款允许，Personal 版免费）。登录后 Genex 会自动继续。",
@@ -4075,9 +4167,16 @@ export default {
   "Unreal {engine} builds with Xcode {min} to {max}. Keep Xcode {version} and add Xcode {wanted} from Apple's downloads: put it in Applications beside Xcode {current}; this card then shows the one command to select it.":
     "Unreal {engine} 需要用 Xcode {min} 到 {max} 构建。保留 Xcode {version}，并从 Apple 的下载页面添加 Xcode {wanted}：把它放到“应用程序”中 Xcode {current} 的旁边，之后这张卡片会显示选择它的那条命令。",
   "Unreal {engine} is set up for {project}": "Unreal {engine} 已为 {project} 设置好",
+  "Unreal {version} and everything it needs are on this computer.": "Unreal {version} 及其所需的一切都已在这台电脑上。",
   "Unreal {version} is installed": "Unreal {version} 已安装",
   "Unreal {version}'s editor isn't where Epic's launcher says. Verify the install in the Epic Games Launcher.":
     "Unreal {version} 的编辑器不在 Epic 启动器所说的位置。请在 Epic Games Launcher 中验证安装。",
+  "Unreal's copy of Microsoft's runtime installer is missing. In the Epic Games Launcher, verify Unreal.":
+    "Unreal 自带的 Microsoft 运行库安装程序不见了。请在 Epic Games Launcher 中验证（Verify）Unreal。",
+  "Unreal's editor needs it to start, and it isn't on this computer. Do it for me runs Unreal's own copy: choose Yes when Windows asks.":
+    "Unreal 编辑器需要它才能启动，而这台电脑上没有。“帮我完成”会运行 Unreal 自带的副本：Windows 询问时请选“是”。",
+  "Unreal's editor needs it to start. Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder.":
+    "Unreal 编辑器需要它才能启动。请运行 Unreal 的 Engine › Extras › Redist › en-us 文件夹中的 vc_redist.x64.exe。",
   "Unrecognized Genex page link": "无法识别的 Genex 页面链接",
   "Unsafe runtime archive": "不安全的运行时压缩包",
   "Unsupported TOML value. Use quoted strings, booleans or arrays of strings.":
@@ -4270,8 +4369,11 @@ export default {
   "Why the lead stopped it": "主智能体停止它的原因",
   Window: "窗口",
   "Windows app": "Windows 应用",
+  "Windows didn't get permission to install. Press Do it for me again and choose Yes when Windows asks.":
+    "Windows 没有获得安装许可。请再按一次“帮我完成”，并在 Windows 询问时选“是”。",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windows 需要一次性设置受保护的工作区，并由管理员批准。",
+  "Windows will ask you to allow it once.": "Windows 会请你允许一次。",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "Windows 会请你允许一次。如果要求输入密码，这台电脑的管理员可以输入自己的密码。智能体在自己的受保护空间里工作，远离你的文件。",
   "Windows wouldn’t start Genex’s protected space.": "Windows 未能启动 Genex 的受保护空间。",
@@ -4369,7 +4471,7 @@ export default {
   "Your browser should show": "浏览器中应显示",
   "Your build": "你的构建",
   "Your coding provider": "你的模型提供方",
-  "Your coin arrived. Review the purchase, then pay.": "金币已到账。请确认购买内容，然后支付。",
+  "Your Nex arrived. Review the purchase, then pay.": "Nex 已到账。请确认购买内容，然后支付。",
   "Your files": "你的文件",
   "Your game appears here": "你的游戏会显示在这里",
   "Your game as it was when the run started.": "构建开始时，你的游戏是这个样子。",
@@ -4627,7 +4729,6 @@ export default {
   "how well the screen reads": "画面有多易读",
   "how well the screen reads {score}": "画面有多易读：{score}",
   "how well the screen reads {score} out of {max}": "画面有多易读：{score} 分，满分 {max} 分",
-  "identity\u0004Stop sharing": "停止分享",
   "in hand": "进行中",
   "in {game}": "在 {game} 中",
   "in {game} and {count} more": "在 {game} 及另外 {count} 款游戏中",
@@ -4982,7 +5083,7 @@ export default {
   "{added} of {total} added": "已添加 {added}/{total}",
   "{added} of {total} parts added": "已添加 {added}/{total} 个部分",
   "{added} of {total} parts added · {working} working": "已添加 {added}/{total} 个部分 · {working} 个进行中",
-  "{amount} coin": "{amount} 金币",
+  "{amount} Nex": "{amount} Nex",
   "{amount} credits, open Credits": "{amount} 积分，打开“积分”",
   "{amount} more needed": "还需 {amount}",
   "{app} settings": "{app} 设置",
@@ -5007,6 +5108,7 @@ export default {
   "{chart}: {readings}": "{chart}：{readings}",
   "{check}: {name} · {status}": "{check}：{name} · {status}",
   "{chosen} of {total}": "{chosen}/{total}",
+  "{coins} of your Nex is on hold until {date}.": "你的 Nex 中有 {coins} 冻结至 {date}。",
   "{command} (exit {code})": "{command}（退出码 {code}）",
   "{command} failed": "{command} 失败",
   "{commit} (cataloged, not audited)": "{commit}（已收录，未审计）",
@@ -5214,8 +5316,6 @@ export default {
   "{game} cover preview": "{game} 的封面预览",
   "{game} has your receipt.": "{game} 已收到你的收据。",
   "{game} in play": "{game} 游玩画面",
-  "{game} no longer knows who you are. It asks again next time you play.":
-    "{game} 不再知道你是谁。下次游玩时它会再问你。",
   "{game} now builds in {engine} · {project}": "{game} 现在在 {engine} 中制作 · {project}",
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · {time} 开始",
@@ -5308,6 +5408,7 @@ export default {
   "{name}, playing {game}": "{name}，正在玩 {game}",
   '{name}: Codex reads the bearer token from the environment variable {variable}. Studio stores it itself — paste the token into the Authorization field as "Bearer <token>".':
     "{name}：Codex 从环境变量 {variable} 读取 bearer 令牌。Studio 会自己保存它——请将令牌以“Bearer <token>”的形式粘贴到 Authorization 字段中。",
+  "{name}: Genex is reviewing it": "{name}：Genex 正在审核",
   "{name}: on Genex for desktop players": "{name}：已在 Genex 上供桌面玩家使用",
   "{name}: publishing it is coming soon": "{name}：即将支持发布",
   "{name}: sign in to Genex again": "{name}：重新登录 Genex",
@@ -5437,6 +5538,8 @@ export default {
   "{source} needs your permission": "{source} 需要你的许可",
   "{state} · from {plugin}": "{state} · 来自 {plugin}",
   "{status} · newer than Genex has tested": "{status} · 比 Genex 测试过的版本更新",
+  "{steps, plural, =2 {Two steps before the agent can build in Unreal.} =3 {Three steps before the agent can build in Unreal.} other {# steps before the agent can build in Unreal.}}":
+    "{steps, plural, =2 {还差两步，智能体就能在 Unreal 中制作游戏了。} =3 {还差三步，智能体就能在 Unreal 中制作游戏了。} other {还差 # 步，智能体就能在 Unreal 中制作游戏了。}}",
   "{task} in {engine}…": "{task}（{engine}）…",
   "{task} · working": "{task} · 进行中",
   "{task}: didn't finish.": "{task}：未完成。",
@@ -5515,6 +5618,7 @@ export default {
   "It isn’t on this computer any more. Install it again.": "它已不在这台电脑上。请重新安装。",
   "It couldn’t start on this computer.": "它无法在这台电脑上启动。",
   "Remove from this computer": "从这台电脑移除",
+  "Remove from {game}": "从 {game} 移除",
   "{title} is removed from this computer. Its saves stay.": "{title} 已从这台电脑移除。存档仍会保留。",
   "Ready to play on this computer.": "可以在这台电脑上游玩了。",
   "Can’t play on {platform}": "无法在 {platform} 上玩",
@@ -5561,4 +5665,120 @@ export default {
   "Your game is on Roblox": "你的游戏已上线 Roblox",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "你继续工作时，游戏的智能体会在 Roblox Studio 中发布它。",
+  "Anything else we should know? (optional)": "还有什么想告诉我们的吗？（可选）",
+  "Balance {amount}": "余额 {amount}",
+  "Balance {now} → {after}": "余额 {now} → {after}",
+  "Doesn't work": "无法使用",
+  "Drag to turn": "拖动旋转",
+  "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
+    "Genex 还没确认。确认后会显示在“我的物品”中。不会重复扣费。",
+  "Genex’s protected space needs an update": "Genex 的受保护空间需要更新",
+  Get: "领取",
+  "Get in {game}": "在 {game} 中获取",
+  Inappropriate: "不当内容",
+  "It may be back later. No Nex was charged.": "以后可能还会上架。没有扣除 Nex。",
+  "It's yours. Find it under Store › My items in every game it works in.":
+    "它是你的了。在它适用的每个游戏的“商店 › 我的物品”中都能找到。",
+  Item: "物品",
+  Items: "物品",
+  "Items you own show up here.": "你拥有的物品会显示在这里。",
+  "My items": "我的物品",
+  "No Nex was charged.": "没有扣除 Nex。",
+  "No Nex was reserved or charged.": "没有预留或扣除 Nex。",
+  "Not in this game": "不适用于此游戏",
+  Owned: "已拥有",
+  "Report item": "举报物品",
+  "Report item…": "举报物品…",
+  Scam: "诈骗",
+  "Sign in to see the items you own.": "登录后即可查看你拥有的物品。",
+  Store: "商店",
+  "Store and my items": "商店和我的物品",
+  "The Nex went back to your balance.": "Nex 已退回你的余额。",
+  "This item isn’t sold here anymore": "此物品已不在这里出售",
+  "Too many reports for now. Try again later.": "举报次数过多，请稍后再试。",
+  "Try again once the Nex lands.": "Nex 到账后再试一次。",
+  "Why are you reporting it?": "你为什么要举报？",
+  "Works here": "适用于此游戏",
+  "You have {have} · {more} more needed": "你有 {have} · 还差 {more}",
+  "Your items couldn’t load.": "无法加载你的物品。",
+  "item report\u0004Copy": "抄袭",
+  "{count, number} left": "剩余 {count, number}",
+  "{count, plural, one {Works in # game} other {Works in # games}}": "{count, plural, other {适用于 # 个游戏}}",
+  "+{amount}": "+{amount}",
+  Actions: "操作",
+  "Actions for {name}": "{name} 的操作",
+  "Add to {game}": "添加到 {game}",
+  "Ask for an item or a change…": "请求一个物品或修改…",
+  "Ask the agent to change it": "让智能体修改",
+  Browse: "浏览",
+  "Browse and selling": "浏览和出售",
+  "By {name}": "作者：{name}",
+  "Choose a game": "选择游戏",
+  "Nex you earn is spent in games, like any Nex.": "赚到的 Nex 和其他 Nex 一样，可以在游戏中使用。",
+  "Draft, put on sale": "草稿，上架出售",
+  Earned: "收入",
+  "Genex can’t sell it under that name. Ask the agent for another.": "Genex 无法用这个名称出售。请让智能体换一个名称。",
+  "Genex can’t sell it with that description. Ask the agent to change it.":
+    "Genex 无法用这段描述出售。请让智能体修改描述。",
+  "Genex couldn’t do that. Try again in a moment.": "Genex 没能完成。请稍后再试。",
+  "Genex couldn’t use its 3D model. Ask the agent to fix it.": "Genex 无法使用它的 3D 模型。请让智能体修复。",
+  "Genex couldn’t use its files. Ask the agent to fix them.": "Genex 无法使用它的文件。请让智能体修复。",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex 无法使用它的图片。请让智能体上传图片。",
+  "Genex took this item off sale.": "Genex 已将此物品下架。",
+  "It isn’t on sale anymore.": "它已不再出售。",
+  "It needs a picture first. Ask the agent to upload the picture.": "需要先有一张图片。请让智能体上传图片。",
+  "Items couldn’t load.": "物品加载失败。",
+  "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
+    "其他创作者制作的物品。可免费添加到你的游戏，在你的游戏中每卖出一件，你都能获得 15%。",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "其他创作者制作的物品。可免费添加到你的游戏，在你的游戏中每卖出一件，你都能获得 {share}。",
+  "Items you make show up here. Ask your game’s agent for one.": "你制作的物品会显示在这里。让你游戏的智能体做一个吧。",
+  "Its files are too large. Ask the agent to make them smaller.": "它的文件太大了。请让智能体把文件变小。",
+  "Its maker doesn’t let other games use it anymore.": "作者已不再允许其他游戏使用它。",
+  "It’s already this game’s own item.": "它已经是这个游戏自己的物品。",
+  "Listing draft: {name}": "上架草稿：{name}",
+  "Draft · goes on sale when you publish": "草稿 · 发布后开始销售",
+  Draft: "草稿",
+  "Drafts go on sale when you publish.": "草稿会在发布后开始销售。",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "此物品在这张卡片之后被修改了。上架前请先在 物品 › 出售 中查看。",
+  "It changed since you approved it, so it stayed a draft.": "在你批准之后它被修改了，所以仍是草稿。",
+  "Removed from this game": "已从此游戏移除",
+  "Genex couldn’t change this draft. Try again.": "Genex 无法更改这个草稿。请重试。",
+  "New item": "新物品",
+  "No items match.": "没有匹配的物品。",
+  "No one has shared an item yet.": "还没有人分享物品。",
+  "Off sale": "已下架",
+  "On sale": "出售中",
+  "Only an item players keep can be used in other games.": "只有玩家永久拥有的物品才能用于其他游戏。",
+  "Only the item’s maker can change it.": "只有物品作者可以修改它。",
+  "Other games can use it": "其他游戏可以使用",
+  "Players pay": "玩家支付",
+  "Publish a game to Genex first, then add items to it.": "请先将游戏发布到 Genex，再向其中添加物品。",
+  "Put on sale": "上架出售",
+  "Ready to use": "可使用",
+  "Report under review": "举报审核中",
+  "Search items": "搜索物品",
+  Selling: "出售",
+  "Sign in to Genex first.": "请先登录 Genex。",
+  "Sign in to Genex to see items.": "登录 Genex 后即可查看物品。",
+  Sold: "售出",
+  Status: "状态",
+  "Take off sale": "下架",
+  "That price isn’t one the store takes. Ask the agent to pick another.": "商店不接受这个价格。请让智能体换一个价格。",
+  "The item store is off right now.": "物品商店目前已关闭。",
+  "This game is still the empty starter: build something first, then publish.":
+    "这个游戏还是空的初始项目：先做点东西，再发布。",
+  "This game sells as many items as it can.": "这个游戏出售的物品已达上限。",
+  "You get per sale": "每笔销售你获得",
+  "You get per sale ({share})": "每笔销售你获得（{share}）",
+  "Your agent puts it in the game.": "智能体会把它加入游戏。",
+  "You’ve put a lot on sale today. Try again tomorrow.": "你今天已上架了很多物品。请明天再试。",
+  "{count, plural, one {in # game} other {in # games}}": "{count, plural, other {用于 # 个游戏}}",
+  "{days, plural, one {On hold for # day} other {On hold for # days}}": "{days, plural, other {冻结 # 天}}",
+  "{game} · {games}": "{game} · {games}",
+  "Ask for changes": "请求修改",
+  "Ask for changes below": "在下方请求修改",
+  Shop: "商店",
 } satisfies LocaleCatalog;
