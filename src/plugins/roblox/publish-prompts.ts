@@ -18,7 +18,7 @@ const YOURSELF = `Tell the person they can publish it themselves in Studio: ${PU
 const END_TURN = `this chat's message "Roblox Studio asks: Publish …" hands ${PUBLISH_CLICK_PATH} to the turn that answers it, with computer control. If that message is already in front of you in this turn, you are that turn: click it now with the desktop tool, as the publish skill says. Otherwise end this turn now and don't click anything yourself.`;
 
 /** The cover step after a publish that went out. */
-const COVER = `in this same turn, give the game its cover as the publish skill says (frame Studio's view, ${agentTool(RobloxTool.CoverPictures)}, then the game's Creator Hub page in the browser, which Genex asks the person for on a card when you first use it, even if an earlier turn could not): always after a first publish; after an update unless the game already has its own icon.`;
+const COVER = `in this same turn, give the game its cover as the publish skill says (frame Studio's view, ${agentTool(RobloxTool.CoverPictures)}, then the game's Creator Hub page in the browser, which Genex asks the person for on a card when you first use it, even if an earlier turn could not): always after a first publish; after an update unless the game's Creator Hub Icon page already shows its own icon. Then, cover or none, close what you opened as the publish skill's last step says: the Creator Hub tabs you opened, then this place's Studio (Save if it asks, never Don't Save).`;
 
 export const PUBLISH_PROMPTS = {
   Started: `The person's OK is recorded: ${END_TURN}`,

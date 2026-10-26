@@ -77,8 +77,9 @@ connection's `execute_luau`:
    time moves only when Studio saves, so Genex also reads Studio's own log of the publish, and its
    answer says whether the update went through. Go by that answer, and never click Publish twice.
 5. If the game still has Roblox's default icon (its Creator Hub **Icon** page shows none of its
-   own), give the game its cover (below); leave a cover it already has. Then close what you opened
-   (at the end).
+   own; look at that page unless this chat set the cover already), give the game its cover (below);
+   leave a cover it already has.
+6. Close what you opened (at the end), whether or not the game needed a cover.
 
 ## The game's cover
 
