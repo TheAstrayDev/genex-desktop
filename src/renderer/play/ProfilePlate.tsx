@@ -1,12 +1,12 @@
 /**
  * The Genex account at the foot of the sidebar, in Play and in Create, always in the same place.
- * Signed in: its avatar, its name, and in Play beside it the coin it may spend, which opens Get Nex
- * (the friends are listed under the games). Credits never sit here: building runs on the person's
+ * Signed in: its avatar, its name, and in Play beside it the coin it may spend, which opens the Nex
+ * sheet (`NexSheet.tsx`, with Get Nex; the friends are listed under the games). Credits never sit here: building runs on the person's
  * own plan, so the credits Genex tools spend show where they are spent. A Pro's name has a PRO tag,
  * and under the pointer their row lights up
  * with their nameplate: the moving art behind the name and sparkles on the face (`nameplate/`).
  * The name opens a menu: Profile, Friends, Genex credits (Get credits under them once none are
- * left), Coin, Account settings and Sign out. Offline it shows the account as last time, with the
+ * left), Nex (the Nex sheet), Account settings and Sign out. Offline it shows the account as last time, with the
  * Offline mark beside it. Signed
  * out it signs in in the browser; while that waits it says so, with a way to cancel; and once
  * genex.games ends a sign-in it shows the account dimmed, to sign in again. The account is the
@@ -35,6 +35,7 @@ import { useOnline } from "../ui/use-online.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { useGetCredits } from "./use-get-credits.ts";
 import { CoinMark } from "./CoinMark.tsx";
+import { NexSheet } from "./NexSheet.tsx";
 import { CreditsShard, ScrambleNumber } from "./CreditsShard.tsx";
 import { formatCount, PlateEnd, plateEnd, PlateState, plateState } from "./play-model.ts";
 import { avatarRecipe } from "../../shared/avatar-recipe.ts";
@@ -100,18 +101,12 @@ function Credits(): JSX.Element {
   );
 }
 
-/** Get Nex: genex.games' coin page in the browser; nothing to do when main cannot open it. */
-const getCoin = (): void =>
-  void studio()
-    .api.storeGetCoin()
-    .catch(() => undefined);
-
-/** The coin the account may spend, once read, whole like the credits above it; it opens Get Nex. */
-function Coins(): JSX.Element | null {
+/** The coin the account may spend, once read, whole like the credits above it; it opens the Nex sheet. */
+function Coins({ onNex }: { onNex: () => void }): JSX.Element | null {
   const coins = usePeople((s) => s.coins);
   if (coins === null) return null;
   return (
-    <DropdownMenuItem data-profile-menu="coins" onSelect={getCoin}>
+    <DropdownMenuItem data-profile-menu="coins" onSelect={onNex}>
       <CoinMark size={16} />
       <span className="flex-1">{WORDS.coins}</span>
       <span className="profile-menu-value">{CREDITS_NUMBER.format(coins)}</span>
@@ -124,11 +119,13 @@ function PlateMenu({
   me,
   waiting,
   onOpen,
+  onNex,
   onSignOut,
 }: {
   me: PlayMe;
   waiting: number;
   onOpen: (page: typeof PlayPage.Profile | typeof PlayPage.Friends) => void;
+  onNex: () => void;
   onSignOut: () => void;
 }): JSX.Element {
   const joined = joinedWhen(me.joinedAt);
@@ -154,7 +151,7 @@ function PlateMenu({
         {waiting > 0 && <span className="sidebar-badge">{waiting}</span>}
       </DropdownMenuItem>
       <Credits />
-      <Coins />
+      <Coins onNex={onNex} />
       <DropdownMenuSeparator />
       <DropdownMenuItem data-profile-menu="account" onSelect={openAccountSettings}>
         <Icon name="settings" />
@@ -168,8 +165,8 @@ function PlateMenu({
   );
 }
 
-/** The coin beside the name in Play, as last read; it opens Get Nex, as the menu's Coin does. */
-function PlateCoins({ coins }: { coins: number }): JSX.Element {
+/** The coin beside the name in Play, as last read; it opens the Nex sheet, as the menu's Nex does. */
+function PlateCoins({ coins, onNex }: { coins: number; onNex: () => void }): JSX.Element {
   const amount = formatCount(coins);
   return (
     <Tooltip>
@@ -179,7 +176,7 @@ function PlateCoins({ coins }: { coins: number }): JSX.Element {
           className="plate-end plate-credits"
           data-profile-coins
           aria-label={WORDS.coinsLabel(amount)}
-          onClick={getCoin}
+          onClick={onNex}
         >
           <CoinMark size={12} />
           <ScrambleNumber text={amount} />
@@ -191,11 +188,19 @@ function PlateCoins({ coins }: { coins: number }): JSX.Element {
 }
 
 /** Beside the name: the Offline mark, or the coin in Play (`plateEnd`); credits show only where they are spent. */
-function PlateEndSlot({ offline, play }: { offline: boolean; play: boolean }): JSX.Element | null {
+function PlateEndSlot({
+  offline,
+  play,
+  onNex,
+}: {
+  offline: boolean;
+  play: boolean;
+  onNex: () => void;
+}): JSX.Element | null {
   const coins = usePeople((s) => s.coins);
   const end = plateEnd({ offline, play, coins });
   if (end === PlateEnd.Offline) return <OfflineSlot />;
-  if (end === PlateEnd.Coins && coins !== null) return <PlateCoins coins={coins} />;
+  if (end === PlateEnd.Coins && coins !== null) return <PlateCoins coins={coins} onNex={onNex} />;
   return null;
 }
 
@@ -254,6 +259,7 @@ function AccountPlate({
 }): JSX.Element {
   const waiting = usePeople(waitingRequests);
   const [signingOut, setSigningOut] = useState(false);
+  const [nexOpen, setNexOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // The balance beside the name reads with the account, and again whenever the menu opens.
   // biome-ignore lint/correctness/useExhaustiveDependencies: another account reads its own balance
@@ -287,9 +293,15 @@ function AccountPlate({
             <Icon name="chevrons" size={14} className="profile-plate-chevrons" />
           </button>
         </DropdownMenuTrigger>
-        <PlateMenu me={me} waiting={waiting} onOpen={open} onSignOut={() => setSigningOut(true)} />
+        <PlateMenu
+          me={me}
+          waiting={waiting}
+          onOpen={open}
+          onNex={() => setNexOpen(true)}
+          onSignOut={() => setSigningOut(true)}
+        />
       </DropdownMenu>
-      <PlateEndSlot offline={offline} play={play} />
+      <PlateEndSlot offline={offline} play={play} onNex={() => setNexOpen(true)} />
     </>
   );
   return (
@@ -302,6 +314,7 @@ function AccountPlate({
         row
       )}
       {signingOut && <SignOutDialog onDismiss={() => setSigningOut(false)} />}
+      {nexOpen && <NexSheet onDismiss={() => setNexOpen(false)} />}
     </>
   );
 }

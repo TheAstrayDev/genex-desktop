@@ -1678,7 +1678,6 @@ export default {
   "xAI no longer accepts this Grok Build.": "xAI больше не принимает эту версию Grok Build.",
   "xAI no longer accepts this version. Update it to keep building.":
     "xAI больше не принимает эту версию. Обнови её, чтобы продолжить.",
-  "{amount} Nex, get Nex": "{amount} Nex, получить Nex",
   "Get credits": "Получить кредиты",
   "Get the Epic Games Launcher": "Скачать Epic Games Launcher",
   "Getting Roblox Studio": "Roblox Studio устанавливается",
@@ -1965,7 +1964,6 @@ export default {
     "Он работает с твоими правами: Genex не изолирует его код.",
   "It runs, but no reviewer compared it with the game you had.":
     "Эта версия работает, но проверяющие не сравнивали её с прежней игрой.",
-  "It shows in the game after its next release.": "Он появится в игре после её следующего релиза.",
   "It shows up here as soon as it runs.": "Она появится здесь, как только запустится.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "Сначала он выключен: включи его в «Плагинах»; каждый его инструмент спросит тебя перед запуском.",
@@ -5962,7 +5960,6 @@ export default {
   "It isn’t on this computer any more. Install it again.": "Игры больше нет на этом компьютере. Установи её снова.",
   "It couldn’t start on this computer.": "Не удалось запустить игру на этом компьютере.",
   "Remove from this computer": "Удалить с этого компьютера",
-  "Remove from {game}": "Убрать из «{game}»",
   "{title} is removed from this computer. Its saves stay.":
     "Игра «{title}» удалена с этого компьютера. Сохранения остались.",
   "Ready to play on this computer.": "Можно играть на этом компьютере.",
@@ -6054,14 +6051,12 @@ export default {
   "+{amount}": "+{amount}",
   Actions: "Действия",
   "Actions for {name}": "Действия: {name}",
-  "Add to {game}": "Добавить в {game}",
   "Ask for an item or a change…": "Попроси предмет или изменение…",
   "Ask the agent to change it": "Попросить агента изменить",
   Browse: "Обзор",
   "Browse and selling": "Обзор и продажи",
   "By {name}": "Автор: {name}",
   "Choose a game": "Выбрать игру",
-  "Nex you earn is spent in games, like any Nex.": "Заработанные Nex тратятся в играх, как и любые другие.",
   "Draft, put on sale": "Черновик, выставить на продажу",
   Earned: "Заработано",
   "Genex can’t sell it under that name. Ask the agent for another.":
@@ -6094,13 +6089,32 @@ export default {
   "Draft · goes on sale when you publish": "Черновик · поступит в продажу, когда опубликуешь",
   Draft: "Черновик",
   "Drafts go on sale when you publish.": "Черновики поступят в продажу, когда опубликуешь.",
+  For: "Для",
+  "Add to game": "Добавить в игру",
+  "Players see it after your next publish.": "Игроки увидят его после следующей публикации.",
+  "On sale in your game": "Продаётся в твоей игре",
+  "Players can buy it there now.": "Игроки уже могут купить его там.",
+  "Remove from game": "Убрать из игры",
+  "What is Nex?": "Что такое Nex?",
+  "{amount} Nex, about Nex": "{amount} Nex, о Nex",
+  "Nex is the money of games on Genex. Players buy it, then spend it on items inside any game.":
+    "Nex — это деньги игр на Genex. Игроки покупают его и тратят на предметы в любой игре.",
+  "Your Nex": "Твои Nex",
+  "Buy Nex in packs. One balance works in every game.": "Покупай Nex пакетами. Один баланс работает во всех играх.",
+  Spend: "Тратить",
+  "Buy items in a game’s store: characters, skins, upgrades. What you buy stays yours.":
+    "Покупай предметы в магазине игры: персонажей, скины, улучшения. Купленное остаётся твоим.",
+  Earn: "Зарабатывать",
+  "Players pay Nex for your items. After a short hold, you spend it like any Nex.":
+    "Игроки платят Nex за твои предметы. После короткой заморозки ты тратишь их как обычные Nex.",
+  "Credits are separate: they pay for making games. Nex pays for what games sell.":
+    "Кредиты — это другое: ими платят за создание игр. Nex платят за то, что игры продают.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "Этот предмет изменился после этой карточки. Посмотри его в разделе Предметы › Продажи, прежде чем выставлять на продажу.",
   "It changed since you approved it, so it stayed a draft.":
     "Он изменился после твоего одобрения, поэтому остался черновиком.",
   "Removed from this game": "Удалён из этой игры",
   "Genex couldn’t change this draft. Try again.": "Genex не смог изменить этот черновик. Попробуй ещё раз.",
-  "New item": "Новый предмет",
   "No items match.": "Ничего не найдено.",
   "No one has shared an item yet.": "Пока никто не поделился предметами.",
   "Off sale": "Снят с продажи",

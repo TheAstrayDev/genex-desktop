@@ -2201,3 +2201,90 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* ── The Nex sheet (`play/NexSheet.tsx`): what Nex is, and how it is got, spent and earned ── */
+.nex-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.nex-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--line);
+}
+.nex-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: var(--page);
+}
+.nex-figure-label {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+.nex-figure-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+  font-size: 22px;
+  line-height: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.nex-figure[data-nex-held] .nex-figure-amount {
+  color: var(--ink-2);
+}
+.nex-ways {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nex-way {
+  display: flex;
+  gap: 14px;
+}
+.nex-way-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--ink);
+}
+.nex-way-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.nex-way-title {
+  font-weight: 500;
+}
+.nex-way-body {
+  color: var(--ink-2);
+}
+.nex-credits {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--page);
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 19px;
+}
+.nex-foot {
+  display: flex;
+  justify-content: flex-end;
+}

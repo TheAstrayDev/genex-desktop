@@ -1730,7 +1730,6 @@ export default {
   "xAI no longer accepts this Grok Build.": "xAI n’accepte plus cette version de Grok Build.",
   "xAI no longer accepts this version. Update it to keep building.":
     "xAI n’accepte plus cette version. Mets-la à jour pour continuer.",
-  "{amount} Nex, get Nex": "{amount} Nex, obtenir des Nex",
   "Get credits": "Obtenir des crédits",
   "Get the Epic Games Launcher": "Télécharger Epic Games Launcher",
   "Getting Roblox Studio": "Installation de Roblox Studio",
@@ -2020,7 +2019,6 @@ export default {
     "Il s’exécute avec tes accès : Genex n’isole pas son code.",
   "It runs, but no reviewer compared it with the game you had.":
     "Ça tourne, mais aucun vérificateur ne l’a comparé au jeu que tu avais.",
-  "It shows in the game after its next release.": "Il apparaît dans le jeu après sa prochaine sortie.",
   "It shows up here as soon as it runs.": "Il s’affichera ici dès qu’il tournera.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "Il démarre désactivé : active-le dans Plugins ; chacun de ses outils te demandera avant de s’exécuter.",
@@ -6027,7 +6025,6 @@ export default {
   "It isn’t on this computer any more. Install it again.": "Il n’est plus sur cet ordinateur. Réinstalle-le.",
   "It couldn’t start on this computer.": "Il n’a pas pu démarrer sur cet ordinateur.",
   "Remove from this computer": "Retirer de cet ordinateur",
-  "Remove from {game}": "Retirer de {game}",
   "{title} is removed from this computer. Its saves stay.":
     "{title} est retiré de cet ordinateur. Ses sauvegardes restent.",
   "Ready to play on this computer.": "Prêt à jouer sur cet ordinateur.",
@@ -6119,15 +6116,12 @@ export default {
   "+{amount}": "+{amount}",
   Actions: "Actions",
   "Actions for {name}": "Actions pour {name}",
-  "Add to {game}": "Ajouter à {game}",
   "Ask for an item or a change…": "Demande un objet ou un changement…",
   "Ask the agent to change it": "Demander à l’agent de le modifier",
   Browse: "Parcourir",
   "Browse and selling": "Parcourir et ventes",
   "By {name}": "Par {name}",
   "Choose a game": "Choisir un jeu",
-  "Nex you earn is spent in games, like any Nex.":
-    "Les Nex que tu gagnes se dépensent dans les jeux, comme tous les Nex.",
   "Draft, put on sale": "Brouillon, mettre en vente",
   Earned: "Gagné",
   "Genex can’t sell it under that name. Ask the agent for another.":
@@ -6160,13 +6154,33 @@ export default {
   "Draft · goes on sale when you publish": "Brouillon · mis en vente quand tu publies",
   Draft: "Brouillon",
   "Drafts go on sale when you publish.": "Les brouillons sont mis en vente quand tu publies.",
+  For: "Pour",
+  "Add to game": "Ajouter au jeu",
+  "Players see it after your next publish.": "Les joueurs le verront après ta prochaine publication.",
+  "On sale in your game": "En vente dans ton jeu",
+  "Players can buy it there now.": "Les joueurs peuvent l’y acheter dès maintenant.",
+  "Remove from game": "Retirer du jeu",
+  "What is Nex?": "Qu’est-ce que le Nex ?",
+  "{amount} Nex, about Nex": "{amount} Nex, à propos du Nex",
+  "Nex is the money of games on Genex. Players buy it, then spend it on items inside any game.":
+    "Le Nex est l’argent des jeux sur Genex. Les joueurs l’achètent, puis le dépensent en objets dans n’importe quel jeu.",
+  "Your Nex": "Ton Nex",
+  "Buy Nex in packs. One balance works in every game.":
+    "Achète du Nex en packs. Un seul solde fonctionne dans tous les jeux.",
+  Spend: "Dépenser",
+  "Buy items in a game’s store: characters, skins, upgrades. What you buy stays yours.":
+    "Achète des objets dans la boutique d’un jeu : personnages, skins, améliorations. Ce que tu achètes reste à toi.",
+  Earn: "Gagner",
+  "Players pay Nex for your items. After a short hold, you spend it like any Nex.":
+    "Les joueurs paient tes objets en Nex. Après une courte période de blocage, tu le dépenses comme n’importe quel Nex.",
+  "Credits are separate: they pay for making games. Nex pays for what games sell.":
+    "Les crédits sont à part : ils paient la création de jeux. Le Nex paie ce que les jeux vendent.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "Cet objet a changé après cette carte. Regarde-le dans Objets › Ventes avant de le mettre en vente.",
   "It changed since you approved it, so it stayed a draft.":
     "Il a changé depuis que tu l’as approuvé, il reste donc un brouillon.",
   "Removed from this game": "Retiré de ce jeu",
   "Genex couldn’t change this draft. Try again.": "Genex n’a pas pu modifier ce brouillon. Réessaie.",
-  "New item": "Nouvel objet",
   "No items match.": "Aucun objet ne correspond.",
   "No one has shared an item yet.": "Personne n’a encore partagé d’objet.",
   "Off sale": "Hors vente",

@@ -1665,7 +1665,6 @@ export default {
   "xAI no longer accepts this Grok Build.": "xAIはこのGrok Buildを受け付けなくなりました。",
   "xAI no longer accepts this version. Update it to keep building.":
     "xAIはこのバージョンを受け付けなくなりました。アップデートして続けましょう。",
-  "{amount} Nex, get Nex": "{amount} Nex、Nexを入手",
   "Get credits": "クレジットを入手",
   "Get the Epic Games Launcher": "Epic Games Launcherを入手",
   "Getting Roblox Studio": "Roblox Studioを入手中",
@@ -1955,7 +1954,6 @@ export default {
     "あなたの権限で動作します。Genexはこのコードをサンドボックス化しません。",
   "It runs, but no reviewer compared it with the game you had.":
     "動作はしますが、レビュアーは前のゲームと比較していません。",
-  "It shows in the game after its next release.": "次のリリース後にゲームに表示されます。",
   "It shows up here as soon as it runs.": "動くようになったら、すぐここに表示されます。",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "最初はオフです。「プラグイン」でオンにしてください。各ツールは実行前に確認します。",
@@ -5915,7 +5913,6 @@ export default {
     "このコンピューターにはもうありません。もう一度インストールしてください。",
   "It couldn’t start on this computer.": "このコンピューターで起動できませんでした。",
   "Remove from this computer": "このコンピューターから削除",
-  "Remove from {game}": "{game}から外す",
   "{title} is removed from this computer. Its saves stay.":
     "{title}をこのコンピューターから削除しました。セーブデータは残ります。",
   "Ready to play on this computer.": "このコンピューターでプレイできます。",
@@ -6007,14 +6004,12 @@ export default {
   "+{amount}": "+{amount}",
   Actions: "操作",
   "Actions for {name}": "{name}の操作",
-  "Add to {game}": "{game}に追加",
   "Ask for an item or a change…": "アイテムや変更を頼む…",
   "Ask the agent to change it": "エージェントに変更を頼む",
   Browse: "さがす",
   "Browse and selling": "さがす・販売",
   "By {name}": "作者: {name}",
   "Choose a game": "ゲームを選ぶ",
-  "Nex you earn is spent in games, like any Nex.": "稼いだNexは、ほかのNexと同じようにゲームで使えます。",
   "Draft, put on sale": "下書き、販売する",
   Earned: "収益",
   "Genex can’t sell it under that name. Ask the agent for another.":
@@ -6047,12 +6042,31 @@ export default {
   "Draft · goes on sale when you publish": "下書き · 公開すると販売開始",
   Draft: "下書き",
   "Drafts go on sale when you publish.": "下書きは公開すると販売開始されます。",
+  For: "対象",
+  "Add to game": "ゲームに追加",
+  "Players see it after your next publish.": "次回の公開後にプレイヤーに表示されます。",
+  "On sale in your game": "ゲームで販売中",
+  "Players can buy it there now.": "プレイヤーは今そこで購入できます。",
+  "Remove from game": "ゲームから削除",
+  "What is Nex?": "Nexとは？",
+  "{amount} Nex, about Nex": "{amount} Nex、Nexについて",
+  "Nex is the money of games on Genex. Players buy it, then spend it on items inside any game.":
+    "NexはGenexのゲームで使うお金です。プレイヤーはNexを購入し、どのゲームでもアイテムに使えます。",
+  "Your Nex": "あなたのNex",
+  "Buy Nex in packs. One balance works in every game.": "Nexはパックで購入できます。残高はすべてのゲームで共通です。",
+  Spend: "使う",
+  "Buy items in a game’s store: characters, skins, upgrades. What you buy stays yours.":
+    "ゲームのストアでアイテムを購入できます：キャラクター、スキン、アップグレード。購入したものはずっとあなたのものです。",
+  Earn: "稼ぐ",
+  "Players pay Nex for your items. After a short hold, you spend it like any Nex.":
+    "プレイヤーはあなたのアイテムにNexを支払います。短い保留期間の後、ほかのNexと同じように使えます。",
+  "Credits are separate: they pay for making games. Nex pays for what games sell.":
+    "クレジットは別物です：ゲーム作りの支払いに使います。Nexはゲームが販売するものの支払いに使います。",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "このアイテムはこのカードの後に変更されました。販売する前に アイテム › 販売 で確認してください。",
   "It changed since you approved it, so it stayed a draft.": "承認した後に変更されたため、下書きのままです。",
   "Removed from this game": "このゲームから削除しました",
   "Genex couldn’t change this draft. Try again.": "Genexでこの下書きを変更できませんでした。もう一度試してください。",
-  "New item": "新しいアイテム",
   "No items match.": "一致するアイテムはありません。",
   "No one has shared an item yet.": "まだ誰もアイテムを共有していません。",
   "Off sale": "販売停止中",

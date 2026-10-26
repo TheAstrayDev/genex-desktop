@@ -1628,7 +1628,6 @@ export default {
   "xAI no longer accepts this Grok Build.": "xAI가 이 Grok Build를 더 이상 받지 않아요.",
   "xAI no longer accepts this version. Update it to keep building.":
     "xAI가 이 버전을 더 이상 받지 않아요. 업데이트하고 계속 만들어 보세요.",
-  "{amount} Nex, get Nex": "{amount} Nex, Nex 받기",
   "Get credits": "크레딧 받기",
   "Get the Epic Games Launcher": "Epic Games Launcher 받기",
   "Getting Roblox Studio": "Roblox Studio 받는 중",
@@ -1909,7 +1908,6 @@ export default {
     "사용자 권한으로 실행돼요. Genex는 이 코드를 샌드박스에 격리하지 않아요.",
   "It runs, but no reviewer compared it with the game you had.":
     "실행은 되지만, 리뷰어가 이전 게임과 비교하지 않았어요.",
-  "It shows in the game after its next release.": "게임의 다음 릴리스 후에 보여요.",
   "It shows up here as soon as it runs.": "실행되면 바로 여기에 나타나요.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "처음에는 꺼져 있어요. ‘플러그인’에서 켜 주세요. 각 도구는 실행 전에 확인을 요청해요.",
@@ -5786,7 +5784,6 @@ export default {
   "It isn’t on this computer any more. Install it again.": "이제 이 컴퓨터에 없어요. 다시 설치하세요.",
   "It couldn’t start on this computer.": "이 컴퓨터에서 시작하지 못했어요.",
   "Remove from this computer": "이 컴퓨터에서 제거",
-  "Remove from {game}": "{game}에서 빼기",
   "{title} is removed from this computer. Its saves stay.":
     "{title} 게임을 이 컴퓨터에서 제거했어요. 저장 데이터는 남아 있어요.",
   "Ready to play on this computer.": "이 컴퓨터에서 플레이할 수 있어요.",
@@ -5877,14 +5874,12 @@ export default {
   "+{amount}": "+{amount}",
   Actions: "작업",
   "Actions for {name}": "{name} 작업",
-  "Add to {game}": "{game}에 추가",
   "Ask for an item or a change…": "아이템이나 변경을 요청하세요…",
   "Ask the agent to change it": "에이전트에게 변경 요청",
   Browse: "둘러보기",
   "Browse and selling": "둘러보기와 판매",
   "By {name}": "{name} 제작",
   "Choose a game": "게임 선택",
-  "Nex you earn is spent in games, like any Nex.": "번 Nex는 다른 Nex처럼 게임에서 써요.",
   "Draft, put on sale": "초안, 판매 시작",
   Earned: "수익",
   "Genex can’t sell it under that name. Ask the agent for another.":
@@ -5916,12 +5911,31 @@ export default {
   "Draft · goes on sale when you publish": "초안 · 게시하면 판매 시작",
   Draft: "초안",
   "Drafts go on sale when you publish.": "초안은 게시하면 판매가 시작돼요.",
+  For: "대상",
+  "Add to game": "게임에 추가",
+  "Players see it after your next publish.": "다음 게시 후 플레이어에게 보여요.",
+  "On sale in your game": "게임에서 판매 중",
+  "Players can buy it there now.": "플레이어가 지금 바로 구매할 수 있어요.",
+  "Remove from game": "게임에서 제거",
+  "What is Nex?": "Nex가 뭔가요?",
+  "{amount} Nex, about Nex": "{amount} Nex, Nex 알아보기",
+  "Nex is the money of games on Genex. Players buy it, then spend it on items inside any game.":
+    "Nex는 Genex 게임의 화폐예요. 플레이어가 Nex를 구매해 어떤 게임에서든 아이템에 써요.",
+  "Your Nex": "내 Nex",
+  "Buy Nex in packs. One balance works in every game.": "Nex를 묶음으로 구매하세요. 하나의 잔액을 모든 게임에서 써요.",
+  Spend: "쓰기",
+  "Buy items in a game’s store: characters, skins, upgrades. What you buy stays yours.":
+    "게임 스토어에서 아이템을 구매하세요: 캐릭터, 스킨, 업그레이드. 구매한 건 계속 내 거예요.",
+  Earn: "벌기",
+  "Players pay Nex for your items. After a short hold, you spend it like any Nex.":
+    "플레이어가 내 아이템에 Nex를 지불해요. 짧은 보류 기간이 지나면 다른 Nex처럼 쓸 수 있어요.",
+  "Credits are separate: they pay for making games. Nex pays for what games sell.":
+    "크레딧은 별개예요: 게임을 만드는 데 쓰여요. Nex는 게임이 파는 것에 쓰여요.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "이 아이템은 이 카드 이후에 바뀌었어요. 판매하기 전에 아이템 › 판매에서 확인해 주세요.",
   "It changed since you approved it, so it stayed a draft.": "승인한 뒤에 바뀌어서 초안으로 남았어요.",
   "Removed from this game": "이 게임에서 삭제됨",
   "Genex couldn’t change this draft. Try again.": "Genex가 이 초안을 바꾸지 못했어요. 다시 시도해 주세요.",
-  "New item": "새 아이템",
   "No items match.": "일치하는 아이템이 없어요.",
   "No one has shared an item yet.": "아직 아무도 아이템을 공유하지 않았어요.",
   "Off sale": "판매 중단",
