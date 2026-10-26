@@ -4210,7 +4210,8 @@ export default {
   "This plan is no longer waiting for approval.": "このプランはもう承認を待っていません。",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "このプラグインにはリリースがないため、Studioは最新のコードを使います。アップデートするまでインストール時のままです。",
-  "This plugin runs trusted code on your computer.": "このプラグインは、このコンピュータで信頼済みのコードを実行します。",
+  "This plugin runs trusted code on your computer.":
+    "このプラグインは、このコンピュータで信頼済みのコードを実行します。",
   "This plugin's package is missing; remove the plugin and install it again":
     "このプラグインのパッケージが見つかりません。プラグインを削除して、もう一度インストールしてください",
   "This plugin’s plugin.json can’t be used.": "このプラグインのplugin.jsonは使えません。",

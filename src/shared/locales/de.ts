@@ -4308,7 +4308,8 @@ export default {
   "This plan is no longer waiting for approval.": "Dieser Plan wartet nicht mehr darauf, angenommen zu werden.",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "Dieses Plugin hat keine Releases, daher nimmt Studio den neuesten Code. Es bleibt so installiert, bis du es aktualisierst.",
-  "This plugin runs trusted code on your computer.": "Dieses Plugin führt vertrauenswürdigen Code auf deinem Computer aus.",
+  "This plugin runs trusted code on your computer.":
+    "Dieses Plugin führt vertrauenswürdigen Code auf deinem Computer aus.",
   "This plugin's package is missing; remove the plugin and install it again":
     "Das Paket dieses Plugins fehlt; entferne das Plugin und installiere es neu",
   "This plugin’s plugin.json can’t be used.": "Die plugin.json dieses Plugins ist nicht verwendbar.",

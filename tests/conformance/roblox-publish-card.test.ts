@@ -145,7 +145,7 @@ describe("publish-status and publish-result through the backend", () => {
       assert.match(said, /card shows it/);
       assert.match(said, /cover-pictures/, "a publish that went out goes on to the game's cover in the same turn");
       assert.match(said, /close this game.s Studio window whoever opened it/, "and the turn ends tidy, cover or none");
-      assert.match(said, /^Noted[^]*Don't reply yet/, "the cover and the tidy-up come before the turn's last line");
+      assert.match(said, /^Noted[\s\S]*Don't reply yet/, "the cover and the tidy-up come before the turn's last line");
       assert.equal((await status()).attempt?.phase, RobloxPublishPhase.Published);
       const again = String(await backend.tool?.(RobloxTool.PublishResult, { published: false }, host.context));
       assert.match(again, /No publish is under way/);
