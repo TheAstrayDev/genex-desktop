@@ -486,6 +486,72 @@ describe("bringing an app to the front", () => {
     });
   }
 
+  describe("on a Mac, where bundle ids are read in any case", () => {
+    const SAFARI: DesktopApp = { name: "Safari", bundleId: "com.apple.Safari", pid: 61 };
+    const MAC_STUDIO: DesktopApp = { name: "Roblox Studio", bundleId: "com.Roblox.RobloxStudio", pid: 62 };
+    const SETTINGS: DesktopApp = { name: "System Settings", bundleId: "com.apple.systempreferences", pid: 63 };
+    const RUNNING = [SAFARI, MAC_STUDIO, SETTINGS];
+
+    /** A Mac target: the driver names a running app by its own id, whatever case it was asked in. */
+    function macFronting(allowed: string[], granted: ReadonlySet<string> | null = null) {
+      const fake = raisingDriver(RUNNING);
+      fake.driver.runningApp = async (name) =>
+        RUNNING.find((app) => app.bundleId?.toLowerCase() === name.toLowerCase() || app.name === name) ?? null;
+      const asked: string[] = [];
+      const target = desktopTarget({
+        driver: fake.driver,
+        allowApp: async (app) => {
+          asked.push(app.bundleId ?? app.name);
+          return allowed.includes(app.bundleId ?? "");
+        },
+        ownApp: (app) => app.bundleId === STUDIO.bundleId,
+        engineApps: (app) => engineAppRefusal(app, { declared: new Set([MAC_STUDIO.bundleId ?? ""]), granted }),
+        frontSettleMs: 0,
+      });
+      return { target, calls: fake.calls, asked };
+    }
+
+    it("raises the running app under its own id, asked in another case", async () => {
+      const studio = new Set([MAC_STUDIO.bundleId ?? ""]);
+      const { target, calls } = macFronting([MAC_STUDIO.bundleId ?? ""], studio);
+      assert.equal(await target.front?.("com.roblox.RobloxStudio"), null);
+      assert.deepEqual(calls, ["raise com.Roblox.RobloxStudio"]);
+    });
+
+    it("asks the person about the app under its own id", async () => {
+      const { target, asked } = macFronting(["com.apple.Safari"]);
+      assert.equal(await target.front?.("com.apple.safari"), null);
+      assert.deepEqual(asked, ["com.apple.Safari"]);
+    });
+
+    const macRefused: Array<{ name: string; app: string; why: RegExp }> = [
+      { name: "system settings in another case", app: "com.apple.SystemPreferences", why: /never driven/ },
+      {
+        name: "an engine's editor in another case, outside its assist",
+        app: "com.roblox.robloxstudio",
+        why: /game engine's editor/,
+      },
+      { name: "an app that is not running", app: "com.google.Chrome", why: /is not running.*opens nothing/ },
+    ];
+    for (const row of macRefused) {
+      it(`refuses ${row.name}, and nothing is raised`, async () => {
+        const { target, calls, asked } = macFronting(["com.google.Chrome", "com.apple.systempreferences"]);
+        assert.match(String(await target.front?.(row.app)), row.why);
+        assert.deepEqual(calls, [], "the driver raised nothing");
+        assert.deepEqual(asked, [], "a refused app is never put to the person");
+      });
+    }
+
+    it("never says Windows on a Mac when an app stays behind", async () => {
+      const fake = raisingDriver([]);
+      fake.driver.runningApp = async () => SAFARI;
+      const target = desktopTarget({ driver: fake.driver, allowApp: async () => true, frontSettleMs: 0 });
+      const why = String(await target.front?.("com.apple.Safari"));
+      assert.match(why, /did not come to the front/);
+      assert.doesNotMatch(why, /Windows/);
+    });
+  });
+
   it("brings an engine's editor forward inside an assist that was granted it", async () => {
     const { target, calls } = await fronting([ROBLOX_STUDIO], new Set([ROBLOX_STUDIO]));
     assert.match(String(await target.front?.(ROBLOX_STUDIO)), /did not come to the front/);

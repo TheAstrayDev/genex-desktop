@@ -94,6 +94,12 @@ export interface DesktopDriver {
   appAt?(x: number, y: number): Promise<DesktopApp | null>;
   /** Bring a running app (a Mac bundle id) to the front, where the driver can. */
   bringToFront?(app: string): Promise<void>;
+  /**
+   * The running app a name stands for, under its own bundle id: macOS reads bundle ids in any case
+   * (com.roblox.robloxstudio is Roblox Studio), so a name is checked as the app it is. Null when no
+   * running app has that bundle id or name. Absent where names are already exact (Windows executables).
+   */
+  runningApp?(name: string): Promise<DesktopApp | null>;
   move(x: number, y: number): Promise<void>;
   click(x: number, y: number, options: { button: DesktopButton; count: number; modifiers: DesktopKeys }): Promise<void>;
   mouse(x: number, y: number, options: { button: DesktopButton; down: boolean }): Promise<void>;

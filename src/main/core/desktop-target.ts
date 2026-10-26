@@ -130,7 +130,8 @@ const MESSAGE = {
   noAppName: (name: string) =>
     `"${name}" names no app: give the app's executable on Windows (msedge.exe) or its bundle id on a Mac (com.apple.Safari)`,
   notInFront: (app: string) =>
-    `${app} did not come to the front: it may not be running (nothing is opened for you), or Windows kept another window in front`,
+    `${app} did not come to the front: it may not be running (nothing is opened for you), or another window stayed in front`,
+  notRunning: (app: string) => `${app} is not running: bring_to_front opens nothing, it only raises a running app`,
 } as const;
 
 /** An app's name as `bring_to_front` takes it: an executable or a bundle id, never a path. */
@@ -465,8 +466,11 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
   };
   /** A named app brought in front, held to a click's rules first; null once it is in front. */
   const front = async (raw: string): Promise<string | null> => {
-    const app = namedApp(raw);
-    if (!app?.bundleId || !driver.bringToFront) return MESSAGE.noAppName(raw.trim());
+    const named = namedApp(raw);
+    if (!named?.bundleId || !driver.bringToFront) return MESSAGE.noAppName(raw.trim());
+    // Checked as the running app it names, under its own id: another case of a refused one is refused.
+    const app = driver.runningApp ? await driver.runningApp(named.bundleId) : named;
+    if (!app?.bundleId) return MESSAGE.notRunning(named.name);
     const refusal = await appRefusal(app);
     if (refusal) return refusal;
     await driver.bringToFront(app.bundleId);

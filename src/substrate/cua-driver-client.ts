@@ -387,6 +387,14 @@ async function bringAppToFront(call: CuaCall, app: string): Promise<void> {
   if (front?.pid) await call("bring_to_front", { pid: front.pid });
 }
 
+/** A running Mac app by its bundle id in any case, or its name: the app under its own id, or null. */
+async function runningMacApp(call: CuaCall, name: string): Promise<DesktopApp | null> {
+  const wanted = name.toLowerCase();
+  const apps = listOf(await call("list_apps", {}), "apps").map(appOf);
+  const byId = apps.find((app) => app.bundleId?.toLowerCase() === wanted);
+  return byId ?? apps.find((app) => app.bundleId !== null && app.name.toLowerCase() === wanted) ?? null;
+}
+
 /** The accessibility tree of an app's front window, or null when it has none on screen. */
 async function frontTreeOf(
   call: CuaCall,
@@ -563,6 +571,7 @@ export function cuaDriver(
     },
     focus: () => reads.focus(),
     appAt: (x, y) => reads.appAt((x * screen.width) / picture.width, (y * screen.height) / picture.height),
+    ...(options.windows ? {} : { runningApp: (name: string) => runningMacApp(call, name) }),
     bringToFront: async (app: string) => {
       // Windows raises by executable through its own probe: the driver's bring_to_front is the Mac's.
       if (options.windows) await options.windows.raise(app);

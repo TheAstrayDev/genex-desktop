@@ -226,6 +226,17 @@ describe("cua-driver as the desktop driver", () => {
     );
   });
 
+  it("names a running Mac app under its own bundle id, asked in any case or by its name", async () => {
+    const driver = cuaDriver(fakeConnection().connection);
+    assert.deepEqual(await driver.runningApp?.("com.APPLE.notes"), {
+      name: "Notes",
+      bundleId: "com.apple.Notes",
+      pid: 7,
+    });
+    assert.equal((await driver.runningApp?.("Finder"))?.bundleId, "com.apple.finder", "by the name it shows");
+    assert.equal(await driver.runningApp?.("com.google.Chrome"), null, "an app that is not running is none");
+  });
+
   it("reads the hit test's pid, and nothing from an empty or failed answer", () => {
     assert.equal(parseHitPid("96960\n"), 96960);
     for (const text of ["", "\n", "-25211", "0", "pid", "12.5"]) assert.equal(parseHitPid(text), null, text);
