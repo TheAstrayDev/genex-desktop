@@ -3100,10 +3100,10 @@ describe("the modeller in the loop (AG-930)", () => {
     const threadId = await rig.core.createGameThread("snapshot-world");
     // The disable lands in the one await every builder's preparation makes: the connectors' tool lists.
     const mcp = rig.core.mcp;
-    const toolsFor = mcp.toolsFor.bind(mcp);
-    mcp.toolsFor = async (...args: Parameters<typeof toolsFor>) => {
+    const toolsReport = mcp.toolsReport.bind(mcp);
+    mcp.toolsReport = async (...args: Parameters<typeof toolsReport>) => {
       await rig.core.plugins.setEnabled("blender", false);
-      return toolsFor(...args);
+      return toolsReport(...args);
     };
     await apiOf(rig)["engine.delegate"]!({
       engine: "fake-delegate",
