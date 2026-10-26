@@ -5808,4 +5808,7 @@ export default {
     "添加辅助插件前 Studio 就已经打开了，所以你的脚本还到不了它那里。「重启 Studio」会加载辅助插件。",
   "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
     "Genex 辅助插件已经在 Studio 的 Plugins 文件夹里了，所以 Genex 没有动它。",
+  "Allow in this chat": "在此对话中允许",
+  "Allowed in this chat": "已在此对话中允许",
+  "Don't ask again for this action in this chat.": "在此对话中不再询问此操作。",
 } satisfies LocaleCatalog;

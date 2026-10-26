@@ -6195,4 +6195,7 @@ export default {
     "Studio был открыт до того, как плагин добавили, поэтому твои скрипты в него пока не попадают. «Перезапустить Studio» загрузит плагин.",
   "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
     "Плагин Genex уже был в папке Plugins в Studio, поэтому Genex оставил его как есть.",
+  "Allow in this chat": "Разрешить в этом чате",
+  "Allowed in this chat": "Разрешено в этом чате",
+  "Don't ask again for this action in this chat.": "Больше не спрашивать об этом действии в этом чате.",
 } satisfies LocaleCatalog;

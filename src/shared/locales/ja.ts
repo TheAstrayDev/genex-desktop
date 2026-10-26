@@ -6144,4 +6144,7 @@ export default {
     "ヘルパーを追加する前からStudioが開いていたので、スクリプトがまだ届いていないよ。「Studioを再起動」でヘルパーを読み込むよ。",
   "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
     "GenexヘルパーはすでにStudioのPluginsフォルダーにあったので、Genexはそのままにしたよ。",
+  "Allow in this chat": "このチャットで許可",
+  "Allowed in this chat": "このチャットで許可済み",
+  "Don't ask again for this action in this chat.": "このチャットでは今後この操作を確認しません。",
 } satisfies LocaleCatalog;

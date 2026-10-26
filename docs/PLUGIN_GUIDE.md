@@ -374,7 +374,10 @@ Two different things, both asked by the host and never by the plugin or the agen
   (`{consent:'declined', by, message}`), never as an error — say in your skill text that a declined
   request must not be repeated. API 3: `confirmationInput: {parameter, label}` names one of the
   tool's string parameters the person may edit on the card before Allow (a game's name, say); the
-  call runs with their edit.
+  call runs with their edit. A chat in Bypass approves an agent's card by itself; API 3:
+  `onAccount: true` marks a tool that acts on the person's account with another service (an upload
+  it moderates, a generation against its limits, a publish), whose card asks even in Bypass and
+  offers **Allow in this chat**, covering that tool for the rest of the chat.
 - **`tools[].timeoutMs`** (API 3) — whole milliseconds, 1,000 to 540,000: how long one call may
   run when that is longer than the host's 190-second ceiling, such as an engine's import or export.
 - **`actions[].confirmation`** — a user-invoked action behind a Studio-owned review and a native

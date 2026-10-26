@@ -6241,4 +6241,7 @@ export default {
     "Studio ya estaba abierto antes de añadir el complemento, así que tus scripts todavía no le llegan. «Reiniciar Studio» lo carga.",
   "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
     "El complemento de Genex ya estaba en la carpeta Plugins de Studio, así que Genex lo dejó como estaba.",
+  "Allow in this chat": "Permitir en este chat",
+  "Allowed in this chat": "Permitido en este chat",
+  "Don't ask again for this action in this chat.": "No volver a preguntar por esta acción en este chat.",
 } satisfies LocaleCatalog;

@@ -269,6 +269,12 @@ export interface PluginManifestTool extends PluginTool {
   /** API 3, with `confirmation`: the text parameter the person may edit on the card. */
   confirmationInput?: PluginConfirmationInput;
   /**
+   * API 3, with `confirmation`: the call acts on the person's account with another service (an
+   * upload it moderates, a generation that counts against its limits). Its card asks in every chat
+   * mode, Bypass included, and offers Allow in this chat, which covers the tool for that chat.
+   */
+  onAccount?: true;
+  /**
    * API 3: the longest one call may run in the backend when that is longer than the host's ceiling
    * (a game engine's import or export), at most {@link PLUGIN_TOOL_MAX_TIMEOUT_MS}.
    */
@@ -803,7 +809,11 @@ export interface PluginChange {
   skills?: PluginSkillChange;
 }
 /** How a consent question ended; `mode`: the person switched the chat to a mode that asks nothing first for it. */
-export type PluginConsentBy = "user" | "timeout" | "stop" | "turn" | "restart" | "mode";
+/**
+ * Who settled a consent card: the person, the timeout, a stop, the turn's end, a restart, the chat's
+ * mode (Bypass), or the person's earlier Allow in this chat (`chat`).
+ */
+export type PluginConsentBy = "user" | "timeout" | "stop" | "turn" | "restart" | "mode" | "chat";
 /** Host-generated paths in the staged public copy, shown before upload approval. */
 export interface ExportReview {
   included: string[];
@@ -830,6 +840,11 @@ export interface PluginConsentEvent {
   note?: string;
   /** A connector's card: the person may also allow this exact tool from now on. */
   alwaysOffered?: boolean;
+  /**
+   * An `onAccount` tool's card: the person may also allow this tool for the rest of the chat
+   * (answered with `always`).
+   */
+  chatOffered?: boolean;
   /** Approved with Always allow: the tool runs without asking from now on. */
   always?: boolean;
   /**

@@ -1387,6 +1387,10 @@ button.genex-publish-banner-name:hover {
   display: grid;
   gap: 12px;
 }
+/* Its line leads the list, so it starts where the list does. */
+.genex-publish-next > .genex-publish-hint {
+  text-align: left;
+}
 .genex-publish-next-steps {
   display: grid;
   gap: 4px;

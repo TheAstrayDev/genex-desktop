@@ -6011,4 +6011,7 @@ export default {
     "도우미를 추가하기 전에 Studio가 이미 열려 있어서 스크립트가 아직 전달되지 않아요. 「Studio 다시 시작」을 누르면 도우미를 불러와요.",
   "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
     "Genex 도우미가 이미 Studio의 Plugins 폴더에 있어서 Genex가 그대로 두었어요.",
+  "Allow in this chat": "이 채팅에서 허용",
+  "Allowed in this chat": "이 채팅에서 허용됨",
+  "Don't ask again for this action in this chat.": "이 채팅에서는 이 작업을 다시 묻지 않아요.",
 } satisfies LocaleCatalog;

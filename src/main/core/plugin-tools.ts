@@ -1,4 +1,4 @@
-import { consentAudience, priorConsentDecline } from "./consent-audience.ts";
+import { allowedInChat, consentAudience, priorConsentDecline } from "./consent-audience.ts";
 import { STUDIO_CONSENT_NAMES, type StudioConsentSource } from "../../shared/plugins.ts";
 /**
  * Plugin and connector tools as agents call them: the consent a confirmed tool waits for, the
@@ -340,7 +340,7 @@ export class PluginToolService {
    */
   async requestConsent(
     pluginId: string,
-    tool: PluginTool & Pick<PluginManifestTool, "confirmationInput">,
+    tool: PluginTool & Pick<PluginManifestTool, "confirmationInput" | "onAccount">,
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
@@ -362,8 +362,6 @@ export class PluginToolService {
     const attribution = this.#x.pluginCallAttribution.get(binding);
     const threadId = await consentAudience(this.#core, binding, attribution?.runId);
     const name = `${pluginId}__${tool.name}`;
-    const declined = options.afresh ? null : await this.#declinedBefore(attribution, threadId, name, args);
-    if (declined) return declined;
     const card = await this.#shownCard(pluginId, tool);
     const base = {
       consentId,
@@ -374,18 +372,16 @@ export class PluginToolService {
       project: binding.project,
       ...consentThreads(binding.threadId, threadId, attribution),
       prompt: card.tool.confirmation ?? "",
-      ...(exportReview ? { exportReview } : {}),
-      ...(options.offerAlways ? { alwaysOffered: true } : {}),
-      ...(options.note ? { note: options.note } : {}),
+      ...cardOffers(exportReview, options, tool),
     };
     const field = cardField(card.tool, args);
-    // Bypass asks nothing: an agent's card in a Bypass chat is logged approved by the mode, and one
-    // asked in another mode is answered by the person's switch. The person's own press still asks.
-    const modeAnswers = this.#modeAnswers(pluginId, threadId, options, exportReview);
-    if (await this.#bypassed(modeAnswers, threadId)) {
-      const result = { approved: true, by: "mode" as const };
-      await this.#recordAnswer({ ...base, ...field }, result, 0, threadId);
-      return result;
+    const ownAct = options.afresh === true || exportReview !== undefined;
+    const modeAnswers = this.#modeAnswers(pluginId, threadId, options, ownAct || tool.onAccount === true);
+    const afresh = options.afresh === true;
+    const settled = await this.#settledBefore({ attribution, threadId, name, args, afresh, modeAnswers, tool });
+    if (settled) {
+      if (settled.by !== "user") await this.#recordAnswer({ ...base, ...field }, settled, 0, threadId);
+      return settled;
     }
     const asked: PluginConsentEvent = {
       ...base,
@@ -426,18 +422,41 @@ export class PluginToolService {
 
   /**
    * The chat modes that answer a card with no question: a connector's own, else, as Bypass asks
-   * nothing, Bypass for every card but one that stays the person's own (their press, an export's
-   * review, a plugin from a folder).
+   * nothing, Bypass for every card but one that stays the person's own (`personal`: their press,
+   * an export's review, a tool acting on their account elsewhere) or a plugin's from a folder.
    */
   #modeAnswers(
     pluginId: string,
     threadId: string,
-    options: { modeAnswers?: PluginConsentRequest["modeAnswers"]; afresh?: boolean },
-    exportReview: PluginConsentEvent["exportReview"],
+    options: { modeAnswers?: PluginConsentRequest["modeAnswers"] },
+    personal: boolean,
   ): PluginConsentRequest["modeAnswers"] | null {
     if (options.modeAnswers) return options.modeAnswers;
-    if (options.afresh || exportReview || this.#fromFolder(pluginId)) return null;
+    if (personal || this.#fromFolder(pluginId)) return null;
     return { threadId, modes: [PermissionMode.Bypass] };
+  }
+
+  /**
+   * A card's answer given before it is shown, or null to ask: the person's earlier no to the same
+   * call (`user`, not logged again), their Allow in this chat for an `onAccount` tool (`chat`), or
+   * the chat's Bypass (`mode`). Bypass asks nothing: an agent's card in a Bypass chat goes on, and
+   * one asked in another mode is answered by the person's switch (`modeAnswers`).
+   */
+  async #settledBefore(asked: {
+    attribution: { runId?: string; lead?: boolean } | undefined;
+    threadId: string;
+    name: string;
+    args: Record<string, unknown>;
+    afresh: boolean;
+    modeAnswers: PluginConsentRequest["modeAnswers"] | null;
+    tool: Pick<PluginManifestTool, "onAccount">;
+  }): Promise<{ approved: boolean; by: PluginConsentBy } | null> {
+    const { attribution, threadId, name, args } = asked;
+    const declined = asked.afresh ? null : await this.#declinedBefore(attribution, threadId, name, args);
+    if (declined) return declined;
+    if (asked.tool.onAccount && (await allowedInChat(this.#core, threadId, name)))
+      return { approved: true, by: "chat" };
+    return (await this.#bypassed(asked.modeAnswers, threadId)) ? { approved: true, by: "mode" } : null;
   }
 
   /** Whether chat `threadId` is in Bypass now and Bypass answers this card. */
@@ -1376,6 +1395,20 @@ export function consentArgsDigest(args: Record<string, unknown>): Record<string,
   return digest;
 }
 
+/** What a card offers beyond its question: an export's review, a lasting yes, and its line under the question. */
+function cardOffers(
+  exportReview: PluginConsentEvent["exportReview"],
+  options: { offerAlways?: boolean; note?: string },
+  tool: Pick<PluginManifestTool, "onAccount">,
+): Pick<PluginConsentEvent, "exportReview" | "alwaysOffered" | "chatOffered" | "note"> {
+  return {
+    ...(exportReview ? { exportReview } : {}),
+    ...(options.offerAlways ? { alwaysOffered: true } : {}),
+    ...(tool.onAccount ? { chatOffered: true } : {}),
+    ...(options.note ? { note: options.note } : {}),
+  };
+}
+
 /** A card's field as its event carries it: none, or its label and the value it holds. */
 type CardField = Pick<PluginConsentEvent, "input">;
 
@@ -1476,6 +1509,7 @@ export const CONSENT_DECLINED_MESSAGES: Record<PluginConsentBy, string> = {
   restart: "The studio restarted before the user answered. Ask again before trying this action.",
   // A mode answers only with a yes; listed so every ending has its words.
   mode: "The chat's mode answered this request.",
+  chat: "The user's Allow in this chat answered this request.",
 };
 
 export const requireFromHere = createRequire(import.meta.url);
