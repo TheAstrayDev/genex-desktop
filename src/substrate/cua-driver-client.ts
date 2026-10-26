@@ -390,7 +390,10 @@ async function bringAppToFront(call: CuaCall, app: string): Promise<void> {
 /** A running Mac app by its bundle id in any case, or its name: the app under its own id, or null. */
 async function runningMacApp(call: CuaCall, name: string): Promise<DesktopApp | null> {
   const wanted = name.toLowerCase();
-  const apps = listOf(await call("list_apps", {}), "apps").map(appOf);
+  // cua lists installed apps too, with pid 0: only a running one can be raised.
+  const apps = listOf(await call("list_apps", {}), "apps")
+    .map(appOf)
+    .filter((app) => (app.pid ?? 0) > 0);
   const byId = apps.find((app) => app.bundleId?.toLowerCase() === wanted);
   return byId ?? apps.find((app) => app.bundleId !== null && app.name.toLowerCase() === wanted) ?? null;
 }

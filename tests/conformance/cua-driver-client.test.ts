@@ -235,6 +235,18 @@ describe("cua-driver as the desktop driver", () => {
     });
     assert.equal((await driver.runningApp?.("Finder"))?.bundleId, "com.apple.finder", "by the name it shows");
     assert.equal(await driver.runningApp?.("com.google.Chrome"), null, "an app that is not running is none");
+    // cua 0.35 lists installed apps too, with pid 0 when they are not running.
+    const installed = fakeConnection({
+      list_apps: json({
+        apps: [
+          { name: "Roblox Studio", bundle_id: "com.Roblox.RobloxStudio", pid: 0, running: false },
+          { name: "Safari", bundle_id: "com.apple.Safari", running: false },
+        ],
+      }),
+    });
+    const offline = cuaDriver(installed.connection);
+    assert.equal(await offline.runningApp?.("com.roblox.robloxstudio"), null, "installed is not running");
+    assert.equal(await offline.runningApp?.("Safari"), null, "nor is one with no pid at all");
   });
 
   it("reads the hit test's pid, and nothing from an empty or failed answer", () => {
