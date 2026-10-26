@@ -63,9 +63,9 @@ the turn with `publish-result` (below), so the card shows how it ended.
    If the dialog shows **Save failed** with a **Retry** button, Roblox's server dropped the request:
    wait ten seconds and click **Retry** (Studio sends the same publish again; it creates no second
    game). Do that up to three times; only a fourth **Save failed** is a stop (below).
-6. Call `publish-result` with `published: true`, then say in one line that it is published under
-   that name. Genex links this game to the published place by itself; don't press anything in
-   Genex's panel for it.
+6. Call `publish-result` with `published: true`, and say nothing yet: a reply without a tool call
+   ends the turn, and the cover and the tidy-up still come. Genex links this game to the published
+   place by itself; don't press anything in Genex's panel for it.
 7. Give the game its cover (below), then close what you opened (at the end).
 
 ## An update
@@ -79,8 +79,8 @@ connection's `execute_luau`:
 2. In Studio's menu bar, click **File**, then **Publish to Roblox**.
 3. If Studio asks to confirm, confirm the publish; anything else is a stop (rules above).
 4. Read the time again every few seconds for up to half a minute. Once it is later than the first
-   one, the update is on Roblox: call `publish-result` with `published: true`, then say so in one
-   line. If it hasn't changed, call `publish-result` with `published: false` and what you saw: that
+   one, the update is on Roblox: call `publish-result` with `published: true` (say nothing yet). If
+   it hasn't changed, call `publish-result` with `published: false` and what you saw: that
    time moves only when Studio saves, so Genex also reads Studio's own log of the publish, and its
    answer says whether the update went through. Go by that answer, and never click Publish twice.
 5. If the game still has Roblox's default icon (its Creator Hub **Icon** page shows none of its
@@ -119,8 +119,8 @@ to Roblox.
    thumbnail, tick it **Active** and save. In each file dialog, go to the folder the answer gave
    first (⌘⇧G on a Mac, the file name field on Windows: paste the folder, never a file's path, and
    press Return), then click the picture by its name (`icon.png`, `thumbnail.png`) and open it.
-5. Say in one line that the cover is set (Roblox reviews new pictures before it shows them, so the
-   game page keeps its placeholder a while). If Creator Hub refuses a picture or asks anything else,
+5. Keep for your last line that the cover is set (Roblox reviews new pictures before it shows them,
+   so the game page keeps its placeholder a while). If Creator Hub refuses a picture or asks anything else,
    stop (rules above) and say what it showed; the game stays published either way.
 6. Close what you opened (below).
 
@@ -142,8 +142,9 @@ they must answer stays open in front of them.
    The place is on Roblox now, so if Studio asks to save it or to commit drafts, take the choice
    that keeps the work (**Save**, **Commit**), never **Don't Save**. Wait until the window is gone
    and take a screenshot. Never force-quit Studio; if it is still saving, wait.
-3. Look that it is gone (`bring_to_front` with its `window` now finds no such window), and say in
-   one line that you closed them.
+3. Look that it is gone (`bring_to_front` with its `window` now finds no such window).
+4. Only now end the turn, with one message to the person: published (under which name), the cover
+   set or left, and what you closed. That message is the turn's last word.
 
 ## If it fails or stops
 
