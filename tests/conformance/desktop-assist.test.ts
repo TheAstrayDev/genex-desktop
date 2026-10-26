@@ -482,10 +482,16 @@ describe("the toy engine's Do it for me, through a real core", () => {
   it("the setting card names computer control and says it is for every chat", async () => {
     const events = await lite.core.store.listEvents(threadId);
     const setting = events
-      .map((event) => (event.data as { payload?: { pluginId?: string; pluginName?: string; prompt?: string } }).payload)
+      .map(
+        (event) =>
+          (event.data as { payload?: { pluginId?: string; pluginName?: string; prompt?: string; note?: string } })
+            .payload,
+      )
       .find((payload) => payload?.pluginId === StudioConsentSource.ComputerSetting);
     assert.equal(setting?.pluginName, "Computer control");
-    assert.match(String(setting?.prompt), /every chat/);
+    // Flipped: the one-line question leaves "every chat" to the line under it.
+    assert.equal(setting?.prompt, "Turn on computer control?");
+    assert.match(String(setting?.note), /any chat/);
   });
 
   it("a confirmed tool whose card the person approved starts the task; declined, nothing is posted", async () => {
