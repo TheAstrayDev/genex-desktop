@@ -360,19 +360,23 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   `state/items.ts`) is a room over the workspace, like Plugins. **Browse** lists other creators'
   shared items with a search, read once the typing pauses; the intro and You get per sale name the
   selling game's share genex.games sends (`sellerShareBps`, `panels/items/browse-model.ts`), else the
-  design's words; the panel shows Players pay, You get per sale and **Add to \<game> ▾**,
-  which offers the account's local games whose Genex publish record names a project: it adds the
+  design's words; the panel shows Players pay, You get per sale, **For \<game ▾>** (the account's
+  local games whose Genex publish record names a project) and **Add to game**: it adds the
   allowance, then opens that game's chat and sends the prompt that has the agent run
   `genex items add <id>` (`panels/items/items-prompts.ts`, `composeInChatWhenOpen`): the agent calls
   `genex__cli-paid` `items add`, and Studio moves the CLI's `genex-items/<id>/` into the game
   ([host tools](plugins.md#first-party-privileges)). An item already in the chosen game (Browse's
-  detail names the account's games it was added to) says **Added to \<game>**, with "It shows in the
-  game after its next release." until a build made after it goes live (Q5), and **Remove from
-  \<game>**, asked first, calls `itemsRemoveFromGame`. **Selling**
-  shows Ready to use and On hold for N days, then the account's items (Draft, put on sale; Report
+  detail names the account's games it was added to) says **Added to your game**, "Players see it after
+  your next publish." until a build made after it goes live (Q5), then **On sale in your game**, and
+  **Remove from game**, asked first, calls `itemsRemoveFromGame`. Both tabs share one frame (at most
+  1,160 px wide), so the page keeps its width when the tab changes. **Selling**
+  shows Ready to use and On hold for N days with **What is Nex?**, each opening the **Nex sheet**
+  (`play/NexSheet.tsx`, also opened by the coin beside the account's name in Play and the account
+  menu's Nex): what Nex is, the account's Nex and what Selling holds back, how it is got, spent and
+  earned, that credits are separate, and **Get Nex**. Then the account's items (Draft, put on sale; Report
   under review; Off sale, dimmed) with Put on sale, Take off sale, Other games can use it and Ask the
   agent to change it, which leaves words in the item's game's composer; a Free item's price says Free.
-  **New item** opens the chosen game's chat, its composer asking "Ask for an item or a change…".
+  Items are made in a game's chat, so the page has no New item.
   A tab chosen, the sidebar's Items row pressed again and the window coming back read the tab on
   show again (a burst once, `REREAD_GAP_MS`); Put on sale, Take off sale and sharing read Selling
   again at once, Add to and Remove from the item's detail.
@@ -429,7 +433,7 @@ the sheet's `[data-item-sheet-held]`, the shelf's `[data-shelf-item="<id>"]` / `
 `[data-items-card="<id>"]`, `[data-items-detail="<id>"]`, `[data-items-add-to="<game>"]`,
 `[data-items-added="<game>"]`, `[data-items-remove-from="<game>"]` → `[data-items-remove-confirm="<game>"]`,
 `[data-items-choose-game]` (`[data-items-game="<game>"]`), `[data-items-selling]`, `[data-items-held]`,
-`[data-items-new]`, `[data-items-row="<id>"]`, `[data-items-status="draft|under-review|off-sale"]`,
+`[data-items-about-nex]` (the Nex sheet `[data-nex-sheet]`, `[data-nex-get]`), `[data-items-row="<id>"]`, `[data-items-status="draft|under-review|off-sale"]`,
 `[data-items-put-on-sale="<id>"]`, `[data-items-actions="<id>"]` → `[data-items-action="<action>"]`;
 in the chat `[data-listing-draft="<id>"][data-listing-sale="offer|pressing|on-sale|taken-down"]`,
 `[data-listing-share="<id>"]`, `[data-listing-put-on-sale="<id>"]`, `[data-listing-on-sale]`; a local draft's

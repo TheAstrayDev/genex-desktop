@@ -4921,8 +4921,8 @@ export const PLAY_WORDS = {
     getCredits: t("Get credits"),
     getCreditsLabel: t("Get Genex credits on genex.games"),
     coins: t("Nex"),
-    /** The coin beside the plate's name in Play: "1,240 coin, get coin". */
-    coinsLabel: (amount: string) => t("{amount} Nex, get Nex", { amount }),
+    /** The coin beside the plate's name in Play, which opens the Nex sheet: "1,240 Nex, about Nex". */
+    coinsLabel: (amount: string) => t("{amount} Nex, about Nex", { amount }),
     accountSettings: t("Account settings"),
     signOut: t("Sign out"),
     /** The plate while signed out, signing in, offline, and once genex.games ended the sign-in. */
@@ -5428,6 +5428,21 @@ export const PLAY_STORE_WORDS = {
  * (`chat/ListingDraftCard.tsx`; screen 09). Money is coin here (P24); every number is genex.games'
  * own. Lines marked "no design copy" have no screen of their own.
  */
+/** The Nex sheet (`play/NexSheet.tsx`): what Nex is, and how it is got, spent and earned. */
+export const NEX_WORDS = {
+  title: t("Nex"),
+  lead: t("Nex is the money of games on Genex. Players buy it, then spend it on items inside any game."),
+  yours: t("Your Nex"),
+  get: t("Get"),
+  getBody: t("Buy Nex in packs. One balance works in every game."),
+  spend: t("Spend"),
+  spendBody: t("Buy items in a game’s store: characters, skins, upgrades. What you buy stays yours."),
+  earn: t("Earn"),
+  earnBody: t("Players pay Nex for your items. After a short hold, you spend it like any Nex."),
+  credits: t("Credits are separate: they pay for making games. Nex pays for what games sell."),
+  getNex: t("Get Nex"),
+} as const;
+
 export const ITEMS_WORDS = {
   title: t("Items"),
   tabsLabel: t("Browse and selling"),
@@ -5448,13 +5463,18 @@ export const ITEMS_WORDS = {
   youGetShare: (share: string) => t("You get per sale ({share})", { share }),
   /** The selling game's share of one sale, as genex.games computed it: "+1,200". */
   gain: (amount: string) => t("+{amount}", { amount }),
-  addTo: (game: string) => t("Add to {game}", { game }),
+  /** The label over the game picker: which of the account's games the item is for. */
+  forGame: t("For"),
   chooseGame: t("Choose a game"),
+  addToGame: t("Add to game"),
   agentPutsIt: t("Your agent puts it in the game."),
-  /** No design copy: an item already in the chosen game (Q5: players see it once the game releases a build). */
-  addedTo: (game: string) => t("Added to {game}", { game }),
-  addedNextRelease: t("It shows in the game after its next release."),
-  removeFrom: (game: string) => t("Remove from {game}", { game }),
+  /** An item already in the chosen game (Q5: players see it once the game publishes a build). */
+  addedToGame: t("Added to your game"),
+  seenAfterPublish: t("Players see it after your next publish."),
+  /** An item added and sold there: a build that has it went live. */
+  onSaleInGame: t("On sale in your game"),
+  buyableNow: t("Players can buy it there now."),
+  removeFromGame: t("Remove from game"),
   removeTitle: (item: string, game: string) => t("Remove {item} from {game}?", { item, game }),
   removeBody: t("It leaves the game’s Store. Players who own it keep it."),
   remove: t("Remove"),
@@ -5465,10 +5485,10 @@ export const ITEMS_WORDS = {
   noneShared: t("No one has shared an item yet."),
   more: t("Show more"),
   // Selling (screen 08).
-  newItem: t("New item"),
   readyToUse: t("Ready to use"),
   onHold: (days: number) => t("{days, plural, one {On hold for # day} other {On hold for # days}}", { days }),
-  coinNote: t("Nex you earn is spent in games, like any Nex."),
+  /** The strip's own way to the Nex sheet; its figures open it too. */
+  whatIsNex: t("What is Nex?"),
   item: t("Item"),
   price: t("Price"),
   sold: t("Sold"),
