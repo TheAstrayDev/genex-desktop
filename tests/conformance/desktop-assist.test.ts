@@ -364,6 +364,44 @@ describe("an assist's grant", () => {
     now += 1;
     assert.equal(grants.live("chat-1"), null);
   });
+
+  it("survives Genex quitting before its turn ends: the turn that answers its message after the restart holds it", async () => {
+    const file = path.join(await tmpDir("assist-grants"), "assist-grants.json");
+    let now = 1_000;
+    const before = new AssistGrants(() => now, file);
+    before.record("chat-1", { ...grant, asked: true });
+    before.steered("chat-1", "msg_running", "msg_a");
+    const after = new AssistGrants(() => now, file);
+    assert.deepEqual(after.forTurn("chat-1", "msg_a"), { ...grant, apps: new Set(grant.apps), asked: true });
+    assert.ok(after.forTurn("chat-1", "msg_running"), "the turn its message was steered into, too");
+    assert.equal(after.forTurn("chat-1", "msg_build"), null, "still never a build turn beside it");
+    now += ASSIST_GRANT_MAX_MS;
+    assert.equal(new AssistGrants(() => now, file).live("chat-1"), null, "its limit counts from the press");
+    now = 1_000;
+    after.turnEnded("chat-1", "msg_a");
+    assert.equal(new AssistGrants(() => now, file).live("chat-1"), null, "an ended grant stays ended");
+  });
+
+  it("starts with none from a grants file it can't read, and never takes a malformed one", async () => {
+    const dir = await tmpDir("assist-grants-hostile");
+    const rows: Array<[string, string]> = [
+      ["not JSON", "{"],
+      ["an array", "[]"],
+      ["a grant with no apps", JSON.stringify({ "chat-1": { ...grant, apps: "com.example.toy", at: 1_000 } })],
+      ["a grant with no time", JSON.stringify({ "chat-1": { ...grant } })],
+      ["a grant with no message", JSON.stringify({ "chat-1": { pluginId: "toy-engine", apps: [], at: 1_000 } })],
+      ["an app that is not text", JSON.stringify({ "chat-1": { ...grant, apps: [7], at: 1_000 } })],
+    ];
+    for (const [name, text] of rows) {
+      const file = path.join(dir, `${name.replaceAll(" ", "-")}.json`);
+      await writeFile(file, text);
+      const grants = new AssistGrants(() => 1_000, file);
+      assert.equal(grants.live("chat-1"), null, name);
+      assert.equal(await readFile(file, "utf8"), text, `${name}: reading changes nothing`);
+    }
+    const missing = new AssistGrants(() => 1_000, path.join(dir, "absent", "assist-grants.json"));
+    assert.equal(missing.live("chat-1"), null, "no file is no grant");
+  });
 });
 
 /** A driver that answers pictures and records clicks; nothing here clicks. */

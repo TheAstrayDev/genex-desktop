@@ -23,6 +23,8 @@
  * - **Where it can't run.** A computer with no desktop driver (Linux, or a development build
  *   without one): `unavailable`, and the plugin shows its click path instead.
  */
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import type { ComposerSendOptions } from "../../shared/composer.ts";
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
@@ -94,16 +96,74 @@ interface HeldGrant extends AssistGrant {
   into: string | null;
 }
 
+/** Text items only: an app list as a grant's file keeps it. */
+const textList = (value: unknown): string[] | null =>
+  Array.isArray(value) && value.every((item) => typeof item === "string") ? value : null;
+
+/** A held grant as its file keeps it, or null when the entry is not one. */
+function heldGrantOf(value: unknown): HeldGrant | null {
+  if (!value || typeof value !== "object") return null;
+  const { pluginId, apps, messageId, asked, at, into } = value as Record<string, unknown>;
+  const appList = textList(apps);
+  if (!appList || typeof at !== "number") return null;
+  if (typeof pluginId !== "string" || typeof messageId !== "string") return null;
+  return {
+    pluginId,
+    apps: new Set(appList),
+    messageId,
+    asked: asked === true,
+    at,
+    into: typeof into === "string" ? into : null,
+  };
+}
+
+/** The grants a file kept, by chat; none from a file that is missing or not theirs. */
+function readHeldGrants(file: string): Map<string, HeldGrant> {
+  const held = new Map<string, HeldGrant>();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return held;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return held;
+  for (const [threadId, value] of Object.entries(parsed)) {
+    const grant = heldGrantOf(value);
+    if (grant) held.set(threadId, grant);
+  }
+  return held;
+}
+
 /**
  * The chats' live assist grants, one per chat. A grant ends when the turn answering its message
  * ends: the turn that message started, or the running turn it was steered into. It never outlasts
- * {@link ASSIST_GRANT_MAX_MS}, for the turns the host cannot follow.
+ * {@link ASSIST_GRANT_MAX_MS}, for the turns the host cannot follow. With a `file`, the grants
+ * outlive Genex quitting: the person pressed Publish, then macOS asked them to reopen Genex for
+ * Screen Recording, and the queue's retry of that message is still the turn that answers it.
  */
 export class AssistGrants {
   readonly #now: () => number;
-  readonly #held = new Map<string, HeldGrant>();
-  constructor(now: () => number = Date.now) {
+  readonly #file: string | null;
+  readonly #held: Map<string, HeldGrant>;
+  constructor(now: () => number = Date.now, file: string | null = null) {
     this.#now = now;
+    this.#file = file;
+    this.#held = file ? readHeldGrants(file) : new Map();
+  }
+  /** Keep the grants in their file, where they have one; a failed write only loses them at the next quit. */
+  #save(): void {
+    if (!this.#file) return;
+    const kept = Object.fromEntries(
+      [...this.#held].map(([threadId, held]) => [threadId, { ...held, apps: [...held.apps] }]),
+    );
+    try {
+      mkdirSync(path.dirname(this.#file), { recursive: true });
+      const temporary = `${this.#file}.${process.pid}.tmp`;
+      writeFileSync(temporary, JSON.stringify(kept), { mode: 0o600 });
+      renameSync(temporary, this.#file);
+    } catch {
+      // Held in memory still: this run of Genex keeps every grant it gave.
+    }
   }
   /** Give a chat a grant for the turn that answers `messageId`; it replaces any it held. */
   record(
@@ -112,6 +172,7 @@ export class AssistGrants {
   ): void {
     const { pluginId, apps, messageId, asked = false } = grant;
     this.#held.set(threadId, { pluginId, apps: new Set(apps), messageId, asked, at: this.#now(), into: null });
+    this.#save();
   }
   /** The chat's grant while it lasts; null when it has none. */
   live(threadId: string): AssistGrant | null {
@@ -119,6 +180,7 @@ export class AssistGrants {
     if (!held) return null;
     if (this.#now() - held.at >= ASSIST_GRANT_MAX_MS) {
       this.#held.delete(threadId);
+      this.#save();
       return null;
     }
     return { pluginId: held.pluginId, apps: held.apps, messageId: held.messageId, asked: held.asked };
@@ -138,12 +200,16 @@ export class AssistGrants {
   /** A message was steered into the running turn `into`: if it is the grant's, that turn answers it. */
   steered(threadId: string, into: string, messageId: string): void {
     const held = this.#held.get(threadId);
-    if (held?.messageId === messageId) held.into = into;
+    if (held?.messageId !== messageId) return;
+    held.into = into;
+    this.#save();
   }
   /** A turn of the chat ended: the grant ends with it when that turn answered its message. */
   turnEnded(threadId: string, turn: string): void {
     const held = this.#held.get(threadId);
-    if (held && (held.messageId === turn || held.into === turn)) this.#held.delete(threadId);
+    if (!held || (held.messageId !== turn && held.into !== turn)) return;
+    this.#held.delete(threadId);
+    this.#save();
   }
 }
 
@@ -175,11 +241,15 @@ export function followAssistDeliveries(grants: AssistGrants, threadId: string, b
 /** Each core's assist grants. */
 const GRANTS = new WeakMap<object, AssistGrants>();
 
-/** The core's assist grants, made on first use. */
-export function assistGrants(core: object): AssistGrants {
+/** Where a core keeps its grants: in its own data, beside the folders no agent process may write. */
+const GRANTS_FILE = "assist-grants.json";
+
+/** The core's assist grants, made on first use, kept across Genex quitting where the core has a layout. */
+export function assistGrants(core: { readonly layout?: Pick<StudioCore["layout"], "jobs"> }): AssistGrants {
   const known = GRANTS.get(core);
   if (known) return known;
-  const made = new AssistGrants();
+  const jobs = core.layout?.jobs;
+  const made = new AssistGrants(Date.now, jobs ? path.join(path.dirname(jobs), GRANTS_FILE) : null);
   GRANTS.set(core, made);
   return made;
 }
