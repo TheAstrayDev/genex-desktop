@@ -129,7 +129,9 @@ conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 `tests/fixtures/fake-play-game.mjs`; `PLAY_GAME_COMMAND` points it at another game).
 
 A game played in its engine's editor is the `editor` runtime
-([`editor-play-target.ts`](../src/main/core/editor-play-target.ts)): the target calls its engine
+([`editor-play-target.ts`](../src/main/core/editor-play-target.ts)): it opens one play for the
+session, and once the plugin answers `not-playing` (the play ended, or the person stopped it) it
+lets that play go, so the next action opens a fresh one. The target calls its engine
 plugin's play tools ([`shared/engine-play.ts`](../src/shared/engine-play.ts): `play-open`,
 `play-input`, `play-shot`, `play-state`, `play-pause`, `play-close`, harness-only, each needing the
 plugin's editor lock for its call, the person first). Unreal provides them
@@ -327,7 +329,11 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   driver is found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
   `desktop.computer` and the seed's `tools/desktop-tools.ts`. Unattended sessions never hold it.
 - **Consent.** Nothing moves before the person answers a consent card in the chat (the studio's own,
-  `studio-desktop`): once for the session, then once for each app the agent reaches. Inside a VM the
+  `studio-desktop`): once for the chat, then once for each app the agent reaches. The yes lasts the
+  chat's later turns (and a harness restart) until the person presses Stop, uses the stop shortcut
+  or turns computer control off (`stopsAll`); then the next turn asks again. A chat in Bypass asks
+  neither. On a PC a named app is checked against what runs (`running <exe>` in the window probe):
+  a name no process has (a guessed `robloxstudio.exe`) is refused before any card. Inside a VM the
   session's yes covers every app. The turn answering an assist the person pressed (or approved on its
   card) asks neither: that press was their yes, and the grant keeps the turn to the plugin's apps. A yes stands while the driver fails to connect (missing grants, no
   driver): the next call retries without a new card. A stop ends it, and the next call asks again.

@@ -656,6 +656,7 @@ const DECLINED_MESSAGE: Record<PluginConsentBy, (name: string) => string> = {
   restart: (name) => `${name} was declined because the turn ended`,
   // A mode answers only with a yes; listed so every ending has its words.
   mode: (name) => `${name} was answered by the chat's mode`,
+  chat: (name) => `${name} was answered by the user's Allow in this chat`,
 };
 /** Rejects with the reason `signal` is aborted with, once it is: a host tool call's cut-off. */
 function cutOffOf(signal: AbortSignal): Promise<never> {

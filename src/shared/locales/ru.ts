@@ -147,8 +147,6 @@ export default {
     "Новая версия Genex скачана. Нажми, чтобы перезапустить сейчас, или она установится при следующем выходе.",
   "A new version of Genex is downloading.": "Скачивается новая версия Genex.",
   "A new version of Genex is ready and may fix this.": "Новая версия Genex готова и, возможно, это исправит.",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "В папке Plugins в Studio уже есть более новый плагин Genex, поэтому Genex его оставил.",
   "A night-vision security camera, its timestamp burned in":
     "Камера наблюдения в ночном режиме, с впечатанным временем",
   "A ninja who can only move when the music plays": "Ниндзя, который может двигаться только под музыку",
@@ -6184,4 +6182,20 @@ export default {
   "They ask before each app.": "Они спрашивают перед каждым приложением.",
   "Turn on computer control?": "Включить управление компьютером?",
   "{plugin} asks: {task}": "{plugin} просит: {task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "Добавь иконку и превью, иначе Roblox покажет серый квадрат.",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "Ответь на вопросы Roblox о том, что есть в игре, чтобы она получила возрастной рейтинг.",
+  "Make the game public, so anyone can play it.": "Сделай игру публичной, чтобы в неё мог играть кто угодно.",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "Пока открыть её можешь только ты. Roblox держит новую игру закрытой, пока ты не сделаешь это в Creator Hub:",
+  "Open Creator Hub": "Открыть Creator Hub",
+  "Studio hasn't loaded the Genex helper": "Studio не загрузил плагин Genex",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "Studio был открыт до того, как плагин добавили, поэтому твои скрипты в него пока не попадают. «Перезапустить Studio» загрузит плагин.",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "Плагин Genex уже был в папке Plugins в Studio, поэтому Genex оставил его как есть.",
+  "Allow in this chat": "Разрешить в этом чате",
+  "Allowed in this chat": "Разрешено в этом чате",
+  "Don't ask again for this action in this chat.": "Больше не спрашивать об этом действии в этом чате.",
 } satisfies LocaleCatalog;

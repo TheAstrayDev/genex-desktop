@@ -321,6 +321,20 @@ function WindowedProcess([string]$exe) {
   return $best
 }
 
+# The newest process of an executable, with a window or not (a Studio whose windows are all hidden), as
+# an app; pid 0 when none runs.
+function Running([string]$exe) {
+  if ($exe -notmatch '^[\w.-]{1,124}\.exe$') { return @{ pid = 0 } }
+  $newest = $null
+  foreach ($process in [System.Diagnostics.Process]::GetProcessesByName($exe.Substring(0, $exe.Length - 4))) {
+    try {
+      if ($null -eq $newest -or $process.StartTime -gt $newest.StartTime) { $newest = $process }
+    } catch { }
+  }
+  if ($null -eq $newest) { return @{ pid = 0 } }
+  return AppOfProcess $newest.Id
+}
+
 # Whether a process's window is in front, waiting a moment for one that takes the foreground late.
 function InFront([int]$id) {
   for ($waited = 0; $waited -le ${RAISE_WAIT_MS}; $waited += ${RAISE_POLL_MS}) {
@@ -362,6 +376,7 @@ function Ask([string]$line) {
   }
   if ($parts[0] -eq 'pid' -and $parts.Length -eq 2) { return AppOfProcess ([int]::Parse($parts[1], $Culture)) }
   if ($parts[0] -eq 'raise' -and $parts.Length -eq 2) { return Raise $parts[1] }
+  if ($parts[0] -eq 'running' -and $parts.Length -eq 2) { return Running $parts[1] }
   return @{ error = 'unknown request' }
 }
 
@@ -404,6 +419,11 @@ export interface WindowsProbe {
    * executable's is never sent.
    */
   raise(exe: string): Promise<ProbedApp | null>;
+  /**
+   * The newest running process of an executable (its name, such as `robloxstudiobeta.exe`), with a
+   * window or not; null when none runs. A name that is not a plain executable's is never sent.
+   */
+  running(exe: string): Promise<ProbedApp | null>;
   /** Stop the helper. */
   close(): Promise<void>;
 }
@@ -655,6 +675,7 @@ export function windowsProbe(
       }),
     process: (pid) => ask(() => `pid ${Math.trunc(pid)}`),
     raise: (exe) => (EXECUTABLE_NAME.test(exe) ? ask(() => `raise ${exe}`) : Promise.resolve(null)),
+    running: (exe) => (EXECUTABLE_NAME.test(exe) ? ask(() => `running ${exe}`) : Promise.resolve(null)),
     close: async () => {
       closed = true;
       await drop();

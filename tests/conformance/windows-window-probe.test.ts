@@ -145,6 +145,20 @@ describe("the Windows window probe's helper (a stand-in process)", () => {
     );
   });
 
+  it("finds a running app by its executable's name, windowed or not, and never asks for a name that isn't one", async () => {
+    const { probe, logged } = await standIn();
+    assert.equal((await probe.running("notepad.exe"))?.pid, 40);
+    assert.equal((await probe.running("robloxstudiobeta.exe"))?.pid, 50, "an app whose windows are hidden still runs");
+    assert.equal(await probe.running("robloxstudio.exe"), null, "a name no process has: none");
+    for (const hostile of ["", "notepad.exe\nfront", "a b.exe", "..\\cmd.exe", "x".repeat(300)])
+      assert.equal(await probe.running(hostile), null, JSON.stringify(hostile));
+    assert.deepEqual(
+      (await logged()).flatMap((entry) => (entry.request ? [entry.request] : [])),
+      ["running notepad.exe", "running robloxstudiobeta.exe", "running robloxstudio.exe"],
+      "only plain executable names reach the helper",
+    );
+  });
+
   it("ends a helper that does not answer in time, and starts a fresh one for the next request", async () => {
     const { probe, logged } = await standIn(["--hang", "front"], { requestMs: 200 });
     await assert.rejects(probe.front(), /did not answer "front" in time/);
@@ -195,6 +209,8 @@ describe("the Windows window probe on Windows", () => {
     await probe.ready();
     console.log(`the window probe was ready in ${Date.now() - began} ms`);
     assert.equal((await probe.process(process.pid))?.exe.toLowerCase(), "node.exe");
+    assert.ok(((await probe.running("node.exe"))?.pid ?? 0) > 0, "this very process runs");
+    assert.equal(await probe.running("genex-no-such-app.exe"), null, "a name no process has is none");
     // A runner may have no desktop in front (a service session): either answer is an answer.
     const front = await probe.front();
     assert.ok(front === null || front.pid > 0);

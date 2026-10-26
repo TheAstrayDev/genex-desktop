@@ -42,6 +42,7 @@ import { settleWithin } from "../app-lifecycle.ts";
 import { threadOr } from "./main-thread.ts";
 import { CapabilityAudience } from "../planning-capabilities.ts";
 import { isQueueMessageId } from "./rewind.ts";
+import { forgetChatComputerYes } from "./desktop-session.ts";
 import {
   type MentionSources,
   type MentionTarget,
@@ -1021,6 +1022,8 @@ export class ConversationService {
     // unbound), and nothing the chat was answering is the person's to answer any more. A message
     // still queued behind it is: the queue answers it next, and its session asks.
     this.#x.consent.cancel(project ? { project } : { threadId }, "stop");
+    // Stop also ends the chat's yes to computer control: its next turn asks again.
+    forgetChatComputerYes(this.#core, threadId);
     this.#x.permissions.cancel(project ? { project } : { threadId }, ToolPermissionBy.Stop);
     this.#x.permissions.stopPersonMessages(threadId);
     await cancelling;

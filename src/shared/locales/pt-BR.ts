@@ -166,8 +166,6 @@ export default {
     "Uma nova versão do Genex foi baixada. Clique para reiniciar agora, ou ela será instalada na próxima vez que você sair.",
   "A new version of Genex is downloading.": "Uma nova versão do Genex está sendo baixada.",
   "A new version of Genex is ready and may fix this.": "Uma nova versão do Genex está pronta e pode resolver isso.",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "Já existe um plugin do Genex mais novo na pasta Plugins do Studio, então o Genex o manteve.",
   "A night-vision security camera, its timestamp burned in":
     "Uma câmera de segurança com visão noturna, com a hora gravada na imagem",
   "A ninja who can only move when the music plays": "Um ninja que só consegue se mover quando a música toca",
@@ -6217,4 +6215,20 @@ export default {
   "They ask before each app.": "Eles perguntam antes de cada app.",
   "Turn on computer control?": "Ativar o controle do computador?",
   "{plugin} asks: {task}": "{plugin} pede: {task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "Adicione um ícone e uma miniatura, ou o Roblox mostra um quadrado cinza.",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "Responda às perguntas do Roblox sobre o que tem no jogo, para ele ganhar uma classificação etária.",
+  "Make the game public, so anyone can play it.": "Deixe o jogo público, para qualquer pessoa poder jogar.",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "Por enquanto só você consegue abrir. O Roblox deixa um jogo novo privado até você terminar isto no Creator Hub:",
+  "Open Creator Hub": "Abrir Creator Hub",
+  "Studio hasn't loaded the Genex helper": "O Studio não carregou o plugin do Genex",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "O Studio já estava aberto antes de o plugin ser adicionado, então seus scripts ainda não chegam nele. «Reiniciar Studio» carrega o plugin.",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "O plugin do Genex já estava na pasta Plugins do Studio, então o Genex o deixou como estava.",
+  "Allow in this chat": "Permitir neste chat",
+  "Allowed in this chat": "Permitido neste chat",
+  "Don't ask again for this action in this chat.": "Não perguntar de novo sobre esta ação neste chat.",
 } satisfies LocaleCatalog;

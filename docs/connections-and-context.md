@@ -385,6 +385,10 @@ saved is that Connect's failure. Studio resolves its launch environment through 
 login-shell PATH. A changed launch command requires renewed user trust.
 Connect completes setup in one Studio flow. A connected row shows its tool count;
 Connect is offered for recovery, not as an extra required step after a successful connection.
+Each agent session asks every in-scope connector for its tools as it starts
+(`McpRegistry.toolsReport`); one that fails, or lists none (an editor's connection whose editor isn't
+there yet), is logged with why and named in the session's brief as missing this turn, so the agent
+doesn't search for the tools its plugin's guidance names.
 
 Folder roots are opt-in. A server receives only the host-bound project's root when the user
 enabled sharing. Roots describe relevant files; they are not an OS filesystem sandbox. Agent

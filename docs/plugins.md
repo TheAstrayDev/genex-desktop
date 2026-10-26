@@ -158,6 +158,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` and `game-engine` |
 | `tools[]` | 1 | `{name, description, parameters}`; scalar properties only; agent-invoked as `<id>__<name>` |
 | `tools[].confirmation` | 2 | 1–300 characters. The tool needs the user's consent before it runs; see the consent model below |
+| `tools[].onAccount` | 3 | `true`, with `confirmation`: the call acts on the person's account with another service; its card asks in Bypass too and offers Allow in this chat (consent model below) |
 | `tools[].confirmationInput` | 3 | `{parameter, label}`, with `confirmation`: one of the tool's string parameters the person may edit on the card, under a one-line label of at most 60 characters; see the consent model below |
 | `tools[].timeoutMs` | 3 | 1,000–540,000: the longest one call may run in the backend when that is longer than the host's 190-second ceiling (a game engine's import or export), within an agent's own call deadline |
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
@@ -1476,7 +1477,12 @@ beside it (whole or not at all, never over a file), adds the lock lines to `.git
 --universeId` for a published place (ids of digits only), each starting a Studio of its own, so
 **Open Studio** brings Studio forward instead when the game's place is already listed. **Quit
 Studio** and **Restart Studio** use Studio's normal quit and are refused while a build uses Studio
-(`game.engine.runs`). `use-project` links a game to an open place by its label from `places` or a
+(`game.engine.runs`). Still open three seconds after it was asked (`QUIT_RAISE_MS`), Studio is
+brought to the front once, its minimized window restored on Windows (`raiseLaunches`), so its save
+question shows; the quit then waits for the person's answer up to two minutes and never forces.
+Setup counts as done only once the Genex helper in the game's Studio is bound: a Studio that answers
+but was opened before the helper reached its Plugins folder (`helperAway`) keeps the helper step
+open with Restart Studio, and Set it up for me restarts it. `use-project` links a game to an open place by its label from `places` or a
 file by path (the agent's own call when the game has no place or lost it; another place only when
 the person asks), never reading Documents, Desktop or Downloads: a file there is linked by its label
 once open in Studio. `show-steps` puts the steps card in the chat.
@@ -1501,9 +1507,10 @@ person's and the answers give its path.
 
 **Ask first.** Roblox's own AI tools, uploads and Creator Store inserts are plugin tools with a
 `confirmation` card (`ai-tools.ts`, `insert-asset.ts`, `AskFirstTool` in `studio-tools.ts`), so
-they ask the person every call in every chat mode, Bypass included: they run on the person's Roblox
-account, against its limits, and Roblox's moderation of what they make or upload lands on that
-account. Each card is at most 300 characters and says what goes to Roblox. `generate-mesh`,
+they are `onAccount`: they ask in every chat mode, Bypass included, because they run on the
+person's Roblox account, against its limits, and Roblox's moderation of what they make or upload
+lands on that account. Each card offers **Allow in this chat**, after which that tool asks no more
+in that chat. Each card is at most 300 characters and says what goes to Roblox. `generate-mesh`,
 `generate-model` (Studio's `generate_procedural_model`, about 50 a day), `generate-texture`,
 `generate-material`, `segment-mesh`, `roblox-playtest` and `roblox-explore` (Studio's `subagent`
 types `playtest` and `explore`), `upload-image`, `store-image` and `insert-asset` each call one
@@ -1550,7 +1557,12 @@ clicks File › Publish to Roblox in Studio itself, as the `publish` skill says.
 their go-ahead: the actions ask on no card, while the agent's tools still do. A Roblox game's strip
 shows Genex's **Publish** (when no other Publish does), whose card (`RobloxPublish.tsx`) has one
 press and then follows the publish through `publish-status`: handed to the agent, in Studio, on
-Roblox, with the game's page once it is there. The publish under way is recorded
+Roblox, with the game's page once it is there. After a first publish the card says only the person
+can open the game yet (Roblox keeps a new game private and unrated, so its page reads "not
+accessible" to anyone else), lists what Creator Hub still needs (Roblox's content questions,
+making it public, an icon and a thumbnail) and opens the game's Creator Hub page
+(`robloxCreatorHubUrl`, from the universe id `publish-status` answers); the agent's last line says
+the same and does neither for the person. The publish under way is recorded
 (`publish-attempts/<game>.json`) when the chat takes it; the agent ends it with `publish-result`
 (published, or stopped with what Roblox asked, one plain line; a publish it could not confirm is
 published when Studio's own log records one that went through since the press, `studio-logs.ts`,
@@ -1748,6 +1760,13 @@ the set-up with the link. The host — never the plugin, never the agent — ask
   one plain line of 1–200 characters; otherwise the agent's value stands. The answered card records
   the value the call ran with. A yes from a mode never edits. The Roblox plugin's `first-publish`
   uses it for the game's name on Roblox.
+- Bypass asks nothing: in a chat in Bypass an agent's card is logged approved by the mode
+  (`by: 'mode'`, "Allowed in Bypass"), and a card that waited when the person switched to Bypass is
+  answered by the switch. These still ask: a card for the person's own press (`afresh`), an
+  export's review, a local plugin's (below), and an `onAccount` tool's. An `onAccount` card offers
+  **Allow in this chat** (answered as `always`, logged with `chatOffered`): the tool's later calls
+  in that chat go on with no card, logged `by: 'chat'`, read back from the chat's own log
+  (`allowedInChat`), so it outlasts a restart and a new chat asks again.
 - A local plugin's agent tools ask too, each call, even with no `confirmation`: the card says the
   plugin was loaded from a folder on this Mac and runs with your access, and offers **Always
   allow** for that one tool. The grant (`PluginInfo.allowedTools`) goes when the plugin's code

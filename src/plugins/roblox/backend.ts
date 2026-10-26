@@ -465,6 +465,17 @@ async function placeFacts(
   return { ...facts, published: false, firstName };
 }
 
+/**
+ * Whether the game's Studio answers without the Genex helper connected for this game: its link has
+ * no Studio bound, and Genex didn't just open Studio (a helper takes a moment to connect). Only
+ * where the backend has the helper link; without it no helper is ever bound.
+ */
+async function helperAway(deps: RobloxDeps, context: PluginContext, storage: string | undefined): Promise<boolean> {
+  if (!deps.moments || !context.project || !storage) return false;
+  if (await startingNow(storage, deps.now())) return false;
+  return deps.moments.bound(context.project) === undefined;
+}
+
 /** Where Get Roblox Studio stands, as the rows read it: under way, or stopped and why. */
 function installFacts(job: InstallJob | undefined): Pick<RobloxStepFacts, "getting" | "failed"> {
   if (!job) return {};
@@ -483,8 +494,10 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
   const mcp = facts.installed ? await mcpSwitch(deps) : undefined;
   const helper = facts.setUp && storage ? await recordedHelper(storage, deps.helper) : undefined;
   const { published, firstName, ...place } = await placeFacts(context, storage);
+  const away = place.linked && facts.answering && (await helperAway(deps, context, storage));
   const rows: RobloxStepFacts = {
     ...facts,
+    ...(away ? { helperAway: true } : {}),
     running,
     ...(install?.version ? { version: install.version } : {}),
     ...installFacts(job),
@@ -563,8 +576,8 @@ function setupDoneAnswer(setup: SetupDone): SetupAnswer {
       choices: openStudioChoices().filter((choice) => choice.action === RobloxAction.DoItForMe),
       clickPath: MCP_SWITCH_CLICK_PATH,
     };
-  const newer = setup.helper === HelperChange.Kept && setup.switches.turnedOn === 0;
-  return { done: true, setup, message: newer ? MESSAGE.Setup.NewerHelper() : MESSAGE.Setup.Done() };
+  const kept = setup.helper === HelperChange.Kept && setup.switches.turnedOn === 0;
+  return { done: true, setup, message: kept ? MESSAGE.Setup.HelperAlreadyThere() : MESSAGE.Setup.Done() };
 }
 
 /** Runs Set up, answering its refusals in plain words. Studio is checked first: nothing is read while it runs. */
@@ -671,7 +684,8 @@ async function nextForMe(deps: RobloxDeps, context: PluginContext, snapshot: boo
   const running = await studioRunning(deps);
   if (!(await setUpIn(deps, storage))) return running ? ForMeStep.Restart : ForMeStep.SetUp;
   if (!running || place.written) return ForMeStep.Open;
-  if (await deps.answers()) return ForMeStep.Done;
+  // Studio answers, but opened before the helper was added: a restart loads it.
+  if (await deps.answers()) return (await helperAway(deps, context, storage)) ? ForMeStep.Restart : ForMeStep.Done;
   const mcp = await mcpSwitch(deps);
   // The switch is on: Studio waits for the person's sign-in.
   if (mcp && mcp.on > 0) return ForMeStep.SignIn;
@@ -1090,8 +1104,10 @@ async function publishStatus(
     published: Boolean(remote),
     canClick: await canClickHere(deps, context),
   };
-  if (remote) state.placeId = remote.placeId;
-  else if (place.link) state.name = firstPublishName(place);
+  if (remote) {
+    state.placeId = remote.placeId;
+    state.universeId = remote.universeId;
+  } else if (place.link) state.name = firstPublishName(place);
   if (!context.project) return state;
   const storage = await context.host(PluginService.StorageRoot);
   const recorded = await readAttempt(storage, context.project);

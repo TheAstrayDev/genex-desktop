@@ -201,6 +201,12 @@ export interface PluginManifestTool extends PluginTool {
    * Their Allow runs the call with what the field holds (one plain line, 1–200 characters).
    */
   confirmationInput?: { parameter: string; label: string };
+  /**
+   * API 3, with `confirmation`: the call acts on the person's account with another service (an
+   * upload it moderates, a generation that counts against its limits, a publish). Its card asks in
+   * every chat mode, Bypass included, and offers Allow in this chat, which covers the tool there.
+   */
+  onAccount?: true;
   /** API 3, agent tools only: the kind of asset a call makes. */
   asset?: PluginToolAsset;
   /**

@@ -339,7 +339,8 @@ it("a harness that ends stops its desktop.computer sessions: the driver closes a
     }
     const cards = asked.length;
     await call({ project, threadId, args: { action: "screenshot" } });
-    assert.ok(asked.length > cards, "the next harness's call asks the person again");
+    assert.equal(asked.length, cards, "the chat's yes outlives the harness: the next harness's call asks nothing");
+    assert.equal(desktop.active(), 1, "and it holds the computer again");
   } finally {
     await lite.close();
   }

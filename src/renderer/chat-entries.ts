@@ -235,6 +235,7 @@ export type Entry =
       consentExport?: ExportReview;
       /** A connector's card: Always allow is offered. */
       consentAlwaysOffered?: boolean;
+      consentChatOffered?: boolean;
       /** A card with a field the person may edit before Allow: its label and the value it holds. */
       consentInput?: { label: string; value: string };
       /** action "permission": Claude's own Allow / Deny question (or a plan to approve), as first asked, and how it ended. */
@@ -1948,7 +1949,13 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
   const consentId = consent.consentId ?? event.id;
   const existing = chat.entries.find((e): e is ActionEntry => isConsentCard(e) && e.consentId === consentId);
   const pending = consent.state === "pending";
-  const outcome = () => consentOutcomeWords({ state: consent.state, by: consent.by, always: consent.always });
+  const outcome = () =>
+    consentOutcomeWords({
+      state: consent.state,
+      by: consent.by,
+      always: consent.always,
+      chatOffered: consent.chatOffered,
+    });
   if (existing) {
     existing.pending = pending;
     if (!pending) existing.outcome = outcome();
@@ -1967,6 +1974,7 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
     ...(consent.note ? { consentNote: consent.note } : {}),
     consentExport: consent.exportReview,
     ...(consent.alwaysOffered ? { consentAlwaysOffered: true } : {}),
+    ...(consent.chatOffered ? { consentChatOffered: true } : {}),
     ...(consent.input ? { consentInput: consent.input } : {}),
     text: consentAskWords({
       pluginName: consent.pluginName,

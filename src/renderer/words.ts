@@ -3266,6 +3266,7 @@ export const CONSENT_CHOICE_WORDS = {
     label: t("Always allow"),
     description: t("Don't ask again for this action in {source}.", { source }),
   }),
+  inChat: { label: t("Allow in this chat"), description: t("Don't ask again for this action in this chat.") },
   decline: { label: t("Don't allow"), description: t("The agent carries on without it.") },
 } as const;
 
@@ -3283,6 +3284,14 @@ export const COMPUTER_SETTING_CARD_WORDS = {
 export const consentNeededWords = (source: string | undefined): string =>
   t("{source} needs your permission", { source: source || A_PLUGIN });
 
+/** How an approved consent question was approved: by the chat's Bypass, for the chat, for good, or once. */
+function approvedWords(outcome: { by?: string | null; always?: boolean | null; chatOffered?: boolean | null }) {
+  if (outcome.by === "mode") return t("Allowed in Bypass");
+  const inChat = outcome.by === "chat" || (outcome.always === true && outcome.chatOffered === true);
+  if (inChat) return t("Allowed in this chat");
+  return outcome.always ? t("Always allowed") : t("Allowed");
+}
+
 /** A settled consent question as one line, as Claude's own are: how it ended, then whose it was. */
 export const consentLineWords = (outcome: string, source: string | undefined): string =>
   `${outcome} · ${source || A_PLUGIN}`;
@@ -3292,8 +3301,9 @@ export function consentOutcomeWords(outcome: {
   state?: string | null;
   by?: string | null;
   always?: boolean | null;
+  chatOffered?: boolean | null;
 }): string {
-  if (outcome.state === "approved") return outcome.always ? t("Always allowed") : t("Allowed");
+  if (outcome.state === "approved") return approvedWords(outcome);
   if (outcome.by === "timeout") return t("Nobody answered");
   if (outcome.by === "restart") return t("Withdrawn when the studio restarted");
   if (outcome.by === "stop" || outcome.by === "turn") return t("Withdrawn when the turn stopped");
@@ -6250,6 +6260,11 @@ export const ROBLOX_PUBLISH_WORDS = {
   publishedFirst: t("Your game is on Roblox"),
   publishedUpdate: t("The update is on Roblox"),
   open: t("Open on Roblox"),
+  onlyYou: t("Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:"),
+  nextQuestions: t("Answer Roblox's questions about what's in the game, so it gets an age rating."),
+  nextPublic: t("Make the game public, so anyone can play it."),
+  nextIcon: t("Add an icon and a thumbnail, or Roblox shows a grey square."),
+  openHub: t("Open Creator Hub"),
   stoppedLine: t("The agent stopped before Studio published. The chat says why."),
   tryAgain: t("Try again"),
   noPlace: t("This game has no Roblox place yet. Set up Roblox Studio first."),

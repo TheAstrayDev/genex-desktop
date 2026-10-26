@@ -21,6 +21,8 @@ export interface ConsentCardFields {
   consentPrompt?: string;
   consentNote?: string;
   consentAlwaysOffered?: boolean;
+  /** An `onAccount` tool's card: Allow in this chat is offered. */
+  consentChatOffered?: boolean;
 }
 
 /** Whether this is the studio's card that turns computer control on for every chat. */
@@ -50,16 +52,24 @@ export function consentTitle(entry: ConsentCardFields): string {
   return entry.consentPrompt || consentNeededWords(entry.consentSource);
 }
 
-/** The choices a consent card offers: Always allow only on a connector's, for that exact tool. */
+/**
+ * The card's lasting yes, answered as Always: Always allow on a connector's, for that exact tool;
+ * Allow in this chat on a tool's that acts on the person's account elsewhere; none on any other.
+ */
+function alwaysChoice(entry: ConsentCardFields): ChatChoice[] {
+  if (entry.consentAlwaysOffered)
+    return [{ id: ConsentChoice.Always, ...CONSENT_CHOICE_WORDS.always(entry.consentSource ?? "") }];
+  return entry.consentChatOffered ? [{ id: ConsentChoice.Always, ...CONSENT_CHOICE_WORDS.inChat }] : [];
+}
+
+/** The choices a consent card offers: Once, the card's lasting yes where it has one, and Don't allow. */
 export function consentChoices(entry: ConsentCardFields): ChatChoice[] {
   if (turnsComputerControlOn(entry))
     return [
       { id: ConsentChoice.Once, ...COMPUTER_SETTING_CARD_WORDS.turnOn },
       { id: ConsentChoice.Decline, ...COMPUTER_SETTING_CARD_WORDS.notNow },
     ];
-  const always = entry.consentAlwaysOffered
-    ? [{ id: ConsentChoice.Always, ...CONSENT_CHOICE_WORDS.always(entry.consentSource ?? "") }]
-    : [];
+  const always = alwaysChoice(entry);
   return [
     { id: ConsentChoice.Once, ...CONSENT_CHOICE_WORDS.once },
     ...always,

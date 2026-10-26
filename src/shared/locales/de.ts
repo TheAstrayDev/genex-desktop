@@ -168,8 +168,6 @@ export default {
   "A new version of Genex is downloading.": "Eine neue Version von Genex wird geladen.",
   "A new version of Genex is ready and may fix this.":
     "Eine neue Version von Genex ist bereit und behebt das vielleicht.",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "Im Plugins-Ordner von Studio liegt schon ein neueres Genex-Plugin, deshalb hat Genex es dort gelassen.",
   "A night-vision security camera, its timestamp burned in":
     "Eine Überwachungskamera mit Nachtsicht, Zeitstempel eingebrannt",
   "A ninja who can only move when the music plays": "Ein Ninja, der sich nur bewegen kann, wenn die Musik spielt",
@@ -6286,4 +6284,20 @@ export default {
   "They ask before each app.": "Sie fragen vor jeder App.",
   "Turn on computer control?": "Computersteuerung einschalten?",
   "{plugin} asks: {task}": "{plugin} fragt: {task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "Füg ein Symbol und ein Vorschaubild hinzu, sonst zeigt Roblox ein graues Quadrat.",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "Beantworte Roblox' Fragen zum Inhalt des Spiels, damit es eine Altersfreigabe bekommt.",
+  "Make the game public, so anyone can play it.": "Mach das Spiel öffentlich, damit alle es spielen können.",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "Gerade kannst nur du es öffnen. Roblox hält ein neues Spiel privat, bis du das hier in Creator Hub erledigt hast:",
+  "Open Creator Hub": "Creator Hub öffnen",
+  "Studio hasn't loaded the Genex helper": "Studio hat das Genex-Plugin nicht geladen",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "Studio war schon offen, bevor das Plugin dazukam, deshalb kommen deine Skripte noch nicht an. „Studio neu starten“ lädt das Plugin.",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "Das Genex-Plugin lag schon in Studios Plugins-Ordner, deshalb hat Genex es so gelassen.",
+  "Allow in this chat": "In diesem Chat erlauben",
+  "Allowed in this chat": "In diesem Chat erlaubt",
+  "Don't ask again for this action in this chat.": "In diesem Chat für diese Aktion nicht mehr fragen.",
 } satisfies LocaleCatalog;

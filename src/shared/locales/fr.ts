@@ -165,8 +165,6 @@ export default {
     "Une nouvelle version de Genex est téléchargée. Clique pour redémarrer maintenant, sinon elle s’installera la prochaine fois que tu quitteras.",
   "A new version of Genex is downloading.": "Une nouvelle version de Genex est en cours de téléchargement.",
   "A new version of Genex is ready and may fix this.": "Une nouvelle version de Genex est prête et pourrait régler ça.",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "Un plugin Genex plus récent est déjà dans le dossier Plugins de Studio, donc Genex l’a laissé.",
   "A night-vision security camera, its timestamp burned in":
     "Une caméra de surveillance en vision nocturne, l’horodatage incrusté",
   "A ninja who can only move when the music plays": "Un ninja qui ne peut bouger que quand la musique joue",
@@ -6250,4 +6248,20 @@ export default {
   "They ask before each app.": "Ils demandent avant chaque app.",
   "Turn on computer control?": "Activer le contrôle de l’ordinateur ?",
   "{plugin} asks: {task}": "{plugin} demande : {task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "Ajoute une icône et une miniature, sinon Roblox affiche un carré gris.",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "Réponds aux questions de Roblox sur le contenu du jeu, pour qu'il reçoive une classification par âge.",
+  "Make the game public, so anyone can play it.": "Rends le jeu public, pour que tout le monde puisse y jouer.",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "Pour l'instant, toi seul peux l'ouvrir. Roblox garde un nouveau jeu privé tant que tu n'as pas fait ceci dans Creator Hub :",
+  "Open Creator Hub": "Ouvrir Creator Hub",
+  "Studio hasn't loaded the Genex helper": "Studio n'a pas chargé le plugin Genex",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "Studio était ouvert avant l'ajout du plugin, donc tes scripts ne lui parviennent pas encore. « Redémarrer Studio » charge le plugin.",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "Le plugin Genex était déjà dans le dossier Plugins de Studio, donc Genex l'a laissé tel quel.",
+  "Allow in this chat": "Autoriser dans ce chat",
+  "Allowed in this chat": "Autorisé dans ce chat",
+  "Don't ask again for this action in this chat.": "Ne plus demander pour cette action dans ce chat.",
 } satisfies LocaleCatalog;
