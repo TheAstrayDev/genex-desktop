@@ -1104,8 +1104,10 @@ async function publishStatus(
     published: Boolean(remote),
     canClick: await canClickHere(deps, context),
   };
-  if (remote) state.placeId = remote.placeId;
-  else if (place.link) state.name = firstPublishName(place);
+  if (remote) {
+    state.placeId = remote.placeId;
+    state.universeId = remote.universeId;
+  } else if (place.link) state.name = firstPublishName(place);
   if (!context.project) return state;
   const storage = await context.host(PluginService.StorageRoot);
   const recorded = await readAttempt(storage, context.project);

@@ -144,7 +144,11 @@ they must answer stays open in front of them.
    and take a screenshot. Never force-quit Studio; if it is still saving, wait.
 3. Look that it is gone (`bring_to_front` with its `window` now finds no such window).
 4. Only now end the turn, with one message to the person: published (under which name), the cover
-   set or left, and what you closed. That message is the turn's last word. Genex then closes this
+   set or left, and what you closed. After a first publish, add that only they can open the game for
+   now: Roblox keeps a new game private and without an age rating, so its link shows "not
+   accessible" to anyone else until they answer Roblox's questions about its content and make it
+   public in Creator Hub, which their publishing card opens. Those are theirs; never do them. That
+   message is the turn's last word. Genex then closes this
    game's Studio if it is still open and comes back to the front by itself; never click in Genex.
 
 ## If it fails or stops
