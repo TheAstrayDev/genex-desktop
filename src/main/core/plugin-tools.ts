@@ -348,6 +348,8 @@ export class PluginToolService {
     options: {
       offerAlways?: boolean;
       displayName?: string;
+      /** One line the card shows under its question (the studio's own cards). */
+      note?: string;
       modeAnswers?: PluginConsentRequest["modeAnswers"];
       /**
        * Asked for the person's own act (a press, or a card they just approved): an earlier no to the
@@ -374,6 +376,7 @@ export class PluginToolService {
       prompt: card.tool.confirmation ?? "",
       ...(exportReview ? { exportReview } : {}),
       ...(options.offerAlways ? { alwaysOffered: true } : {}),
+      ...(options.note ? { note: options.note } : {}),
     };
     const field = cardField(card.tool, args);
     const asked: PluginConsentEvent = {

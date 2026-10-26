@@ -31,6 +31,7 @@ import { MINUTE_MS } from "../../shared/duration.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
 import {
+  computerSettingNote,
   computerSettingQuestion,
   type EngineAssistAnswer,
   EngineAssistRefusal,
@@ -54,10 +55,11 @@ export const ASSIST_GRANT_MAX_MS = 20 * MINUTE_MS;
  * message, which the chat's agent reads as the task, stay English.
  */
 const MESSAGE = {
-  task: (plugin: string, task: string) =>
-    t("Let this chat's agent do this for you with computer control? {plugin} asks: {task}", { plugin, task }),
+  task: () => t("Let the agent do this with computer control?"),
+  taskNote: (plugin: string, task: string) => t("{plugin} asks: {task}", { plugin, task }),
   taskDescription: "a setup step done with computer control",
   setting: computerSettingQuestion,
+  settingNote: computerSettingNote,
   settingDescription: "turning on computer control for every chat",
   asks: (plugin: string, task: string) => `${plugin} asks: ${task}`,
 } as const;
@@ -426,16 +428,18 @@ function consentOf(card: AssistCard) {
         parameters,
       },
       args: {},
+      note: MESSAGE.settingNote(),
     };
   return {
     source: card.pluginId,
     tool: {
       name: "do-it-for-me",
       description: MESSAGE.taskDescription,
-      confirmation: MESSAGE.task(card.pluginName, card.task),
+      confirmation: MESSAGE.task(),
       parameters,
     },
     args: { task: card.task },
+    note: MESSAGE.taskNote(card.pluginName, card.task),
   };
 }
 
@@ -483,8 +487,8 @@ export function coreAssistHost(core: StudioCore): AssistHost {
     },
     gameChat: (project) => core.threadForGame(project),
     ask: async (card, binding, signal) => {
-      const { source, tool, args } = consentOf(card);
-      const answer = await core.requestConsent(source, tool, args, binding, signal, undefined, { afresh: true });
+      const { source, tool, args, note } = consentOf(card);
+      const answer = await core.requestConsent(source, tool, args, binding, signal, undefined, { afresh: true, note });
       return answer.approved;
     },
     post: async (threadId, project, text, messageId) => {

@@ -314,7 +314,7 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   app and its grants are Electron's, not those of the terminal or agent that ran the script.
   Moving to a newer driver: change both pins and the notices, then verify the web and desktop
   scenarios live on both systems.
-- **The setting.** Settings → Permissions → **Let agents control your computer** (`computerControl`
+- **The setting.** Settings → Permissions → **Let agents use your computer** ("They ask before each app."; `computerControl`
   in the studio's `settings.json`) is off for every install, new or existing; only an explicit on
   turns it on, and only macOS and Windows offer it (`computerControlOffered`,
   [`shared/computer-control.ts`](../src/shared/computer-control.ts)). Off, no session is handed the `desktop` tool, no consent card

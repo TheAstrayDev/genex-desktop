@@ -1,11 +1,12 @@
 /* ── Play's people: friends, profiles, stats, Top creators, the account's avatar ─────────────────── */
-/* genex.games' blue in its roles: the light tint of secondary actions, the gradient of the one primary
-   action, the translucent chips, the green of people playing now and of Accept, the requests badge.
-   The tinted families (chips, tint buttons, the credits card, the invite card) wear the Play / Create
-   switch's selected blue until the colour tweaker's "Play: chips, buttons and cards" group gives one
-   its own hue (`--*-hue`), so a theme that sets Play's blue carries them. That group and "Play: people
-   and stats" set the other colours here by name; their defaults for an unset role are copied in
-   `PEOPLE_COLORS`, tweaker.ts: change both together. */
+/* genex.games' blue, the app's accent, in its roles: the light tint of secondary actions, the filled
+   blue of the one primary action, the translucent chips, the green of people playing now and of
+   Accept, the requests badge. The tinted families (chips, tint buttons, the credits card, the invite
+   card) wear the Play / Create switch's selected blue until the colour tweaker's "Play: chips, buttons
+   and cards" group gives one its own hue (`--*-hue`), so a theme that sets Play's blue carries them.
+   That group and "Play: people and stats" set the other colours here by name; their defaults for an
+   unset role are copied in `PEOPLE_COLORS`, tweaker.ts, except the ones that follow the accent
+   (`ACCENT_PEOPLE`): change both together. */
 :root {
   --people-blue: var(--play-selected, var(--play-blue));
   --people-tint-color: var(--people-tint-hue, var(--people-blue));
@@ -15,8 +16,9 @@
   --people-tint: color-mix(in srgb, var(--people-tint-color) 16%, transparent);
   --people-tint-hover: color-mix(in srgb, var(--people-tint-color) 24%, transparent);
   --people-tint-edge: color-mix(in srgb, var(--people-tint-color) 55%, transparent);
-  --people-primary-top: #4b60bf;
-  --people-primary-bottom: #3f51a8;
+  /* The one main action is the accent button, filled flat: a palette may still shade it top to bottom. */
+  --people-primary-top: var(--accent-fill);
+  --people-primary-bottom: var(--accent-fill);
   --people-accept: rgb(34 165 91 / 0.16);
   --people-accept-hover: rgb(34 165 91 / 0.24);
   --people-accept-edge: rgb(34 165 91 / 0.5);
@@ -27,7 +29,7 @@
   --people-live-ink: #5fd18b;
   --people-pro: #8d9bff;
   --people-pro-ring: rgb(103 120 245 / 0.7);
-  --people-request: #3f61f5;
+  --people-request: var(--accent);
   --people-card-hover: var(--hover);
   /* On the dark canvas a chip's edge is its hue lifted toward white, so it reads as a rim. */
   --people-chip-top: color-mix(in srgb, var(--people-chip-color) 22%, transparent);
@@ -127,9 +129,7 @@
 }
 .people-button[data-tone="primary"] {
   background: linear-gradient(180deg, var(--people-primary-top), var(--people-primary-bottom));
-  box-shadow:
-    0 0.5px 1.5px rgb(75 96 191 / 0.25),
-    inset 0 0.8px 0 -0.25px rgb(255 255 255 / 0.2);
+  box-shadow: 0 0.5px 1.5px color-mix(in srgb, var(--people-primary-bottom) 25%, transparent);
   color: #ffffff;
 }
 .people-button[data-tone="primary"]:hover {
@@ -163,9 +163,7 @@
 }
 .play-fill {
   background: linear-gradient(180deg, var(--people-primary-top), var(--people-primary-bottom));
-  box-shadow:
-    0 0.5px 1.5px rgb(75 96 191 / 0.25),
-    inset 0 0.8px 0 -0.25px rgb(255 255 255 / 0.2);
+  box-shadow: 0 0.5px 1.5px color-mix(in srgb, var(--people-primary-bottom) 25%, transparent);
   color: #ffffff;
 }
 .play-fill:enabled:hover {

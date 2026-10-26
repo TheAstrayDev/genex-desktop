@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "roblox",
-  "version": "0.1.29",
+  "version": "0.1.30",
   "icon": "icon.svg",
   "name": "Roblox Studio",
   "publisher": "Genex",
@@ -809,7 +809,7 @@
   "toolbar": [
     {
       "id": "studio",
-      "label": "Roblox Studio",
+      "label": "Roblox",
       "ariaLabel": "Roblox Studio",
       "icon": "roblox",
       "facts": ["roblox-project"],

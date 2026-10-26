@@ -281,8 +281,6 @@ export default {
   "Agents build in it in your Studio, and its scripts are files in this game's folder.":
     "智能体在你的 Studio 里用这个地点制作，它的脚本是这个游戏文件夹里的文件。",
   "Agents can edit and play it from this chat.": "智能体可以在这个对话中编辑和游玩它。",
-  "Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex.":
-    "即使不开启，智能体也能查看应用窗口，但绝不会查看密码管理器、系统设置、密码弹窗或 Genex。",
   "Agents didn’t start": "智能体未能启动",
   "Agents only run in a protected space that Windows has to allow once. If you aren’t an administrator of this PC, ask one to enter their password when Windows asks, then press Set up.":
     "智能体只在受保护的空间中运行，这需要 Windows 允许一次。如果你不是这台电脑的管理员，请在 Windows 询问时让管理员输入密码，然后点击“设置”。",
@@ -297,7 +295,6 @@ export default {
   "All done": "全部完成",
   "All done.": "全部完成。",
   "All games": "所有游戏",
-  Allow: "允许",
   "Allow all edits in this chat": "允许此对话中的所有编辑",
   "Allow calls without asking, including changes this tool can make": "允许无需询问即可调用，包括此工具可能做出的更改",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
@@ -579,7 +576,6 @@ export default {
   "Character approval no longer available": "角色批准已不可用",
   Characters: "字符",
   Chat: "对话",
-  "Chat about this": "聊聊这个",
   "Chat actions": "对话操作",
   "Chat name": "对话名称",
   "Chat turn from {day}": "{day}的对话",
@@ -652,7 +648,6 @@ export default {
   "Choose a provider below and finish signing in. OpenCode keeps the sign-in.":
     "在下方选择提供方并完成登录。OpenCode 会保存登录状态。",
   "Choose a theme smaller than 128 KB.": "请选择小于 128 KB 的主题。",
-  "Choose an answer": "选择一个答案",
   "Choose an auto-compaction threshold between 5% and 95%.": "请选择 5% 到 95% 之间的自动压缩阈值。",
   "Choose an empty folder, or create one. Games you already have stay where they are.":
     "选择一个空文件夹，或新建一个。已有的游戏会留在原处。",
@@ -1182,7 +1177,6 @@ export default {
   "Drop to add {count, plural, one {# file} other {# files}}": "松开以添加 {count, plural, other {# 个文件}}",
   "Drop to add {count, plural, one {# picture} other {# pictures}}": "松开以添加 {count, plural, other {# 张图片}}",
   "Drove the route": "已沿路线行驶",
-  "Each chat session asks you first, and {keys} stops it.": "每个对话会话都会先问你，按 {keys} 即可停止。",
   Earlier: "更早",
   "Earlier builds": "更早的构建",
   "Earlier conversation · no folder": "之前的对话 · 无文件夹",
@@ -1891,7 +1885,6 @@ export default {
   "Judge who played it": "亲自游玩的评审",
   "Jump to latest": "跳到最新",
   "Jump to now": "回到当前",
-  "Just this once.": "仅此一次。",
   Keep: "保留",
   "Keep building": "继续制作",
   "Keep building where you left off.": "从上次停下的地方继续制作。",
@@ -1944,19 +1937,10 @@ export default {
   "Left {count, plural, one {# game} other {# games}} alone while they work.":
     "{count, plural, other {# 个游戏}}正在制作中，已跳过。",
   "Left {game} alone while it works.": "{game} 正在制作中，已跳过。",
-  "Let agents control your computer": "允许智能体控制你的电脑",
   "Let go of every input": "已松开所有输入",
   "Let it see this game's folder": "允许它查看此游戏的文件夹",
   "Let the agent use {name}?": "允许智能体使用 {name} 吗？",
   "Let the game settle": "已等待游戏稳定",
-  "Let this chat's agent do this for you with computer control? {plugin} asks: {task}":
-    "允许这个对话的智能体通过电脑控制替你完成这件事吗？{plugin} 请求：{task}",
-  "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or {shortcut}.":
-    "允许这个对话的智能体在本次会话中查看你的屏幕并使用你的电脑吗？它每用到一个应用都会先征求你的同意。随时可以用“停止”或 {shortcut} 让它停下。",
-  "Let this chat's agent use this app? It can click, type and read what this app shows.":
-    "允许这个对话的智能体使用这个应用吗？它可以点击、输入，并读取这个应用显示的内容。",
-  "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
-    "允许这个对话的智能体使用 {app} 吗？它可以点击、输入，并读取 {app} 显示的内容。",
   "Letters a–z, digits and dashes.": "字母 a–z、数字和短横线。",
   "Letting go of every input": "正在松开所有输入",
   "Letting the game settle": "正在等待游戏稳定",
@@ -2925,7 +2909,6 @@ export default {
   "Repository tree is truncated; point the spec at a smaller subdirectory":
     "仓库目录树被截断；请把标识指向更小的子目录",
   "Repository tree is unreadable": "无法读取仓库目录树",
-  "Request details": "请求详情",
   "Request sent": "请求已发送",
   Requests: "请求",
   Reset: "重置",
@@ -3171,7 +3154,6 @@ export default {
     "自我改进已关闭。在 Studio 顶部打开它即可寻找改进。",
   Send: "发送",
   "Send a report": "发送报告",
-  "Send answer": "发送回答",
   "Send feedback": "发送反馈",
   "Send idea": "发送想法",
   "Send report": "发送报告",
@@ -4075,8 +4057,6 @@ export default {
   "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.":
     "在 Windows 服务中开启 Secondary Logon（启动类型：手动），然后重试。",
   "Turn on Studio's MCP server": "开启 Studio 的 MCP 服务器",
-  "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.":
-    "要开启电脑控制吗？开启后，每个对话里的智能体都可以请求使用这台电脑上的应用，一次一个。",
   "Turn on mic": "打开麦克风",
   "Turn on microphone": "打开麦克风",
   "Turn on {name}": "开启 {name}",
@@ -4384,7 +4364,6 @@ export default {
     "Windows 会请你允许一次。如果要求输入密码，这台电脑的管理员可以输入自己的密码。智能体在自己的受保护空间里工作，远离你的文件。",
   "Windows wouldn’t start Genex’s protected space.": "Windows 未能启动 Genex 的受保护空间。",
   "Wireframe terrain flying by at dusk": "黄昏中飞掠而过的线框地形",
-  "With this on, an agent can click and type in the apps you allow.": "开启后，智能体可以在你允许的应用中点击和输入。",
   "Withdrawn by a restart": "因重启已撤回",
   "Withdrawn when the studio restarted": "Studio 重启，已撤回",
   "Withdrawn when the turn ended": "回复已结束，已撤回",
@@ -4505,7 +4484,6 @@ export default {
   "Your open Unity editor, where agents build Unity games.": "你打开的 Unity 编辑器，智能体在这里制作 Unity 游戏。",
   "Your open Roblox Studio, where agents build Roblox games.": "你打开的 Roblox Studio，智能体在这里制作 Roblox 游戏。",
   "Your open Unreal Editor, where agents build Unreal games.": "你打开的 Unreal 编辑器，智能体在这里制作 Unreal 游戏。",
-  "Your own answer": "你自己的回答",
   "Your profile link": "你的主页链接",
   "Your profile link.": "你的个人主页链接。",
   "Your profile, friends and Publish stay.": "你的个人主页、好友和发布功能都会保留。",
@@ -5793,4 +5771,17 @@ export default {
   "Make the {kind} with Genex now: {prompt}": "现在用 Genex 制作：{kind} — {prompt}",
   "Not enough credits": "积分不足",
   "{count, plural, other {# need credits}}": "{count, plural, other {# 个需要积分}}",
+  "Agents in any chat can then ask to use your apps.": "开启后，任何对话里的智能体都可以请求使用你的应用。",
+  "It asks before each app.": "每个应用都会先问你。",
+  "It can click and type there.": "它可以在里面点击和输入。",
+  "It never uses password managers, System Settings, password prompts or Genex.":
+    "它绝不会使用密码管理器、系统设置、密码弹窗或 Genex。",
+  "Let agents use your computer": "允许智能体使用你的电脑",
+  "Let the agent do this with computer control?": "允许智能体通过电脑控制完成这件事吗？",
+  "Let the agent see your screen in this chat?": "允许智能体在这个对话里查看你的屏幕吗？",
+  "Let the agent use this app?": "允许智能体使用这个应用吗？",
+  "Let the agent use {app}?": "允许智能体使用 {app} 吗？",
+  "They ask before each app.": "它们会在每个应用前先问你。",
+  "Turn on computer control?": "要开启电脑控制吗？",
+  "{plugin} asks: {task}": "{plugin} 请求：{task}",
 } satisfies LocaleCatalog;

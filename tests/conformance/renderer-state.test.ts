@@ -1158,8 +1158,12 @@ describe("Settings → Permissions: Let agents control your computer", () => {
     assert.doesNotMatch(windows.accelerator, /Command|Cmd|Super|Meta/);
     assert.notEqual(windows.accelerator, "Control+Shift+Escape");
     assert.equal(stopShortcutWords(windows), "Ctrl+Alt+Shift+Esc");
-    assert.match(computerControlDetail(StudioPlatform.Windows), /Ctrl\+Alt\+Shift\+Esc stops it/);
-    assert.match(computerControlDetail(StudioPlatform.Mac), /⌃⌥⌘Esc stops it/);
+  });
+
+  it("says in one line that agents ask before each app, and never names the stop shortcut", () => {
+    for (const platform of [StudioPlatform.Mac, StudioPlatform.Windows])
+      assert.equal(computerControlDetail(platform), "They ask before each app.");
+    assert.equal(computerControlDetail(StudioPlatform.Linux), "macOS and Windows only.");
   });
 
   it("the switch sends only this setting and shows what the host saved", async () => {

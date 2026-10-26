@@ -298,8 +298,6 @@ export default {
   "Agents build in it in your Studio, and its scripts are files in this game's folder.":
     "エージェントはあなたのStudioでこのプレイスを使ってつくり、スクリプトはこのゲームのフォルダーにファイルとして入ります。",
   "Agents can edit and play it from this chat.": "エージェントがこのチャットから編集もプレイもできます。",
-  "Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex.":
-    "オフでもエージェントはアプリのウィンドウを見られますが、パスワードマネージャー、システム設定、パスワード入力画面、Genexは決して見ません。",
   "Agents didn’t start": "エージェントが起動しませんでした",
   "Agents only run in a protected space that Windows has to allow once. If you aren’t an administrator of this PC, ask one to enter their password when Windows asks, then press Set up.":
     "エージェントは、Windowsで一度だけ許可が必要な保護スペースの中でだけ動きます。このPCの管理者でない場合は、Windowsに聞かれたときに管理者にパスワードを入力してもらい、それから「セットアップ」を押してください。",
@@ -314,7 +312,6 @@ export default {
   "All done": "すべて完了",
   "All done.": "すべて完了しました。",
   "All games": "すべてのゲーム",
-  Allow: "許可",
   "Allow all edits in this chat": "このチャットのすべての編集を許可",
   "Allow calls without asking, including changes this tool can make":
     "確認なしでの呼び出しを許可（このツールによる変更も含む）",
@@ -606,7 +603,6 @@ export default {
   "Character approval no longer available": "キャラクターの承認はもう利用できません",
   Characters: "文字",
   Chat: "チャット",
-  "Chat about this": "これについてチャット",
   "Chat actions": "チャットの操作",
   "Chat name": "チャット名",
   "Chat turn from {day}": "{day}のチャット",
@@ -683,7 +679,6 @@ export default {
   "Choose a provider below and finish signing in. OpenCode keeps the sign-in.":
     "下でプロバイダーを選んでサインインを完了してください。サインイン情報はOpenCodeが保持します。",
   "Choose a theme smaller than 128 KB.": "128 KB未満のテーマを選んでください。",
-  "Choose an answer": "答えを選んでください",
   "Choose an auto-compaction threshold between 5% and 95%.": "自動圧縮のしきい値は5%〜95%の間で選んでください。",
   "Choose an empty folder, or create one. Games you already have stay where they are.":
     "空のフォルダーを選ぶか、新しく作ってください。今あるゲームは今の場所に残ります。",
@@ -1258,8 +1253,6 @@ export default {
   "Drop to add {count, plural, one {# picture} other {# pictures}}":
     "ドロップして{count, plural, other {#枚の画像}}を追加",
   "Drove the route": "ルートを走りました",
-  "Each chat session asks you first, and {keys} stops it.":
-    "チャットのセッションごとに最初に確認があり、{keys}で止められます。",
   Earlier: "それ以前",
   "Earlier builds": "以前のビルド",
   "Earlier conversation · no folder": "以前の会話 · フォルダーなし",
@@ -2018,7 +2011,6 @@ export default {
   "Judge who played it": "プレイした審査員",
   "Jump to latest": "最新へ移動",
   "Jump to now": "現在に移動",
-  "Just this once.": "今回だけ。",
   Keep: "残す",
   "Keep building": "続きをつくる",
   "Keep building where you left off.": "中断したところから続きをつくってください。",
@@ -2071,19 +2063,10 @@ export default {
   "Left {count, plural, one {# game} other {# games}} alone while they work.":
     "作業中の{count, plural, other {ゲーム#本}}はそのままにしました。",
   "Left {game} alone while it works.": "作業中の{game}はそのままにしました。",
-  "Let agents control your computer": "エージェントにコンピューターの操作を許可",
   "Let go of every input": "すべての入力を離しました",
   "Let it see this game's folder": "このゲームのフォルダーへのアクセスを許可",
   "Let the agent use {name}?": "エージェントに{name}を使わせますか？",
   "Let the game settle": "ゲームが落ち着くのを待ちました",
-  "Let this chat's agent do this for you with computer control? {plugin} asks: {task}":
-    "このチャットのエージェントに、コンピューター操作でこれを代わりにやってもらいますか？{plugin}からの依頼：{task}",
-  "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or {shortcut}.":
-    "このセッション中、このチャットのエージェントに画面を見てコンピューターを使ってもらいますか？アプリごとに、まずあなたに確認します。「停止」または{shortcut}でいつでも止められます。",
-  "Let this chat's agent use this app? It can click, type and read what this app shows.":
-    "このチャットのエージェントにこのアプリを使わせますか？このアプリに表示される内容を読み、クリックや入力ができます。",
-  "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
-    "このチャットのエージェントに{app}を使わせますか？{app}に表示される内容を読み、クリックや入力ができます。",
   "Letters a–z, digits and dashes.": "a–zの英字、数字、ハイフンが使えます。",
   "Letting go of every input": "すべての入力を離しています",
   "Letting the game settle": "ゲームが落ち着くのを待っています",
@@ -3096,7 +3079,6 @@ export default {
   "Repository tree is truncated; point the spec at a smaller subdirectory":
     "リポジトリのツリーが途中で切れています。もっと小さいサブディレクトリを指定してください",
   "Repository tree is unreadable": "リポジトリのツリーを読み取れません",
-  "Request details": "リクエストの詳細",
   "Request sent": "リクエスト送信済み",
   Requests: "リクエスト",
   Reset: "リセット",
@@ -3354,7 +3336,6 @@ export default {
     "自己改善はオフです。改善点を探すには、Studioの上部でオンにしてください。",
   Send: "送信",
   "Send a report": "レポートを送信",
-  "Send answer": "回答を送信",
   "Send feedback": "フィードバックを送信",
   "Send idea": "アイデアを送信",
   "Send report": "レポートを送信",
@@ -4339,8 +4320,6 @@ export default {
   "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.":
     "WindowsのサービスでSecondary Logonをオンにして（スタートアップの種類：手動）、もう一度試してください。",
   "Turn on Studio's MCP server": "StudioのMCPサーバーをオンにする",
-  "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.":
-    "コンピューター操作をオンにしますか？オンにすると、どのチャットのエージェントも、このコンピューターのアプリを使わせてほしいと頼めるようになります（一度に1つのアプリずつ）。",
   "Turn on mic": "マイクをオン",
   "Turn on microphone": "マイクをオン",
   "Turn on {name}": "{name}をオンにする",
@@ -4665,8 +4644,6 @@ export default {
     "Windowsから一度だけ許可を求められます。パスワードを求められたら、このPCの管理者が自分のパスワードを入力できます。エージェントは、あなたのファイルから離れた専用の保護スペースで作業します。",
   "Windows wouldn’t start Genex’s protected space.": "WindowsでGenexの保護スペースを起動できませんでした。",
   "Wireframe terrain flying by at dusk": "夕暮れに流れていくワイヤーフレームの地形",
-  "With this on, an agent can click and type in the apps you allow.":
-    "オンにすると、許可したアプリでエージェントがクリックや入力をできます。",
   "Withdrawn by a restart": "再起動で取り下げ",
   "Withdrawn when the studio restarted": "アプリの再起動で取り下げ",
   "Withdrawn when the turn ended": "応答の終了で取り下げ",
@@ -4794,7 +4771,6 @@ export default {
     "開いているRoblox Studioです。エージェントはここでRobloxのゲームをつくります。",
   "Your open Unreal Editor, where agents build Unreal games.":
     "開いているUnreal Editorです。エージェントはここでUnrealのゲームをつくります。",
-  "Your own answer": "自分の答え",
   "Your profile link": "あなたのプロフィールリンク",
   "Your profile link.": "プロフィールのリンクです。",
   "Your profile, friends and Publish stay.": "プロフィール、フレンド、公開はそのまま使えます。",
@@ -6129,4 +6105,18 @@ export default {
   "Make the {kind} with Genex now: {prompt}": "Genexで今すぐつくって：{kind} — {prompt}",
   "Not enough credits": "クレジットが足りません",
   "{count, plural, other {# need credits}}": "{count, plural, other {#件クレジット不足}}",
+  "Agents in any chat can then ask to use your apps.":
+    "オンにすると、どのチャットのエージェントもアプリを使わせてほしいと頼めます。",
+  "It asks before each app.": "アプリごとに先に確認します。",
+  "It can click and type there.": "そのアプリでクリックや入力ができます。",
+  "It never uses password managers, System Settings, password prompts or Genex.":
+    "パスワードマネージャー、システム設定、パスワード入力画面、Genexは決して操作しません。",
+  "Let agents use your computer": "エージェントにコンピューターの使用を許可",
+  "Let the agent do this with computer control?": "コンピューター操作でエージェントにこれをやってもらいますか？",
+  "Let the agent see your screen in this chat?": "このチャットでエージェントに画面を見せますか？",
+  "Let the agent use this app?": "エージェントにこのアプリを使わせますか？",
+  "Let the agent use {app}?": "エージェントに{app}を使わせますか？",
+  "They ask before each app.": "エージェントはアプリごとに先に確認します。",
+  "Turn on computer control?": "コンピューター操作をオンにしますか？",
+  "{plugin} asks: {task}": "{plugin}からの依頼：{task}",
 } satisfies LocaleCatalog;
