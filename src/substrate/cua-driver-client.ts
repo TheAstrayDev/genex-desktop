@@ -384,13 +384,11 @@ async function listedWindows(call: CuaCall, pid?: number): Promise<CuaWindow[]> 
  * Bring a running app to the front by its bundle id: the driver activates the process that owns its
  * frontmost window (on any Space, or in Stage Manager's strip). An app with no window is left alone.
  */
-async function bringAppToFront(call: CuaCall, app: string, pid?: number): Promise<void> {
-  if (pid) {
-    await call("bring_to_front", { pid });
-    return;
-  }
-  const [front] = await appWindowRows(call, app);
-  if (front?.pid) await call("bring_to_front", { pid: front.pid });
+async function bringAppToFront(call: CuaCall, app: string, window?: DesktopWindow): Promise<void> {
+  const [front] = window ? [window] : await appWindows(call, app);
+  if (!front) return;
+  // A process with more than one window (Studio keeps a small untitled one) is raised only by window.
+  await call("bring_to_front", { pid: front.pid, ...(front.windowId !== null ? { window_id: front.windowId } : {}) });
 }
 
 /** An app's windows by its bundle id or name, front first. */
@@ -402,7 +400,7 @@ async function appWindowRows(call: CuaCall, app: string): Promise<CuaWindow[]> {
 /** An app's windows that a process owns, front first, with their titles. */
 async function appWindows(call: CuaCall, app: string): Promise<DesktopWindow[]> {
   const owned = (await appWindowRows(call, app)).filter((window) => window.pid !== null);
-  return owned.map((window) => ({ pid: window.pid ?? 0, title: window.title }));
+  return owned.map((window) => ({ pid: window.pid ?? 0, windowId: window.windowId, title: window.title }));
 }
 
 /** A running Mac app by its bundle id in any case, or its name: the app under its own id, or null. */
@@ -598,10 +596,10 @@ export function cuaDriver(
           runningApp: (name: string) => runningMacApp(call, name),
           appWindows: (app: string) => appWindows(call, app),
         }),
-    bringToFront: async (app: string, pid?: number) => {
+    bringToFront: async (app: string, window?: DesktopWindow) => {
       // Windows raises by executable through its own probe: the driver's bring_to_front is the Mac's.
       if (options.windows) await options.windows.raise(app);
-      else await bringAppToFront(call, app, pid);
+      else await bringAppToFront(call, app, window);
     },
     // move_cursor takes no delivery mode, and a desktop target is its own scope.
     move: (x, y) => call("move_cursor", { target: DESKTOP, x, y }).then(() => undefined),

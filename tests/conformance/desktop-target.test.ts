@@ -543,8 +543,8 @@ describe("bringing an app to the front", () => {
     }
 
     describe("picking one of an app's windows by its title", () => {
-      const JUMP = { pid: 62, title: "Jump on Platforms - Roblox Studio" };
-      const BLOCK = { pid: 64, title: "spinning-colored-block.rbxlx - Roblox Studio" };
+      const JUMP = { pid: 62, windowId: 620, title: "Jump on Platforms - Roblox Studio" };
+      const BLOCK = { pid: 64, windowId: 640, title: "/Users/x/games/spinning-colored-block.rbxlx - Roblox Studio" };
 
       /** Two Studios, one per place as a Mac runs them, Jump on Platforms in front; a raise of a pid fronts it. */
       function twoStudios(raises = true) {
@@ -553,9 +553,9 @@ describe("bringing an app to the front", () => {
         fake.driver.focus = async () => ({ app: front, secure: false });
         fake.driver.runningApp = async () => MAC_STUDIO;
         fake.driver.appWindows = async () => [JUMP, BLOCK];
-        fake.driver.bringToFront = async (id, pid) => {
-          fake.calls.push(`raise ${id} ${pid}`);
-          if (raises && pid) front = { ...MAC_STUDIO, pid };
+        fake.driver.bringToFront = async (id, window) => {
+          fake.calls.push(`raise ${id} ${window?.pid} ${window?.windowId}`);
+          if (raises && window) front = { ...MAC_STUDIO, pid: window.pid };
         };
         const target = desktopTarget({ driver: fake.driver, allowApp: async () => true, frontSettleMs: 0 });
         return { target, calls: fake.calls };
@@ -564,7 +564,7 @@ describe("bringing an app to the front", () => {
       it("raises the window whose title names the place, though another of the app's is in front", async () => {
         const { target, calls } = twoStudios();
         assert.equal(await target.front?.("com.Roblox.RobloxStudio", "Spinning-Colored-Block"), null);
-        assert.deepEqual(calls, [`raise com.Roblox.RobloxStudio ${BLOCK.pid}`]);
+        assert.deepEqual(calls, [`raise com.Roblox.RobloxStudio ${BLOCK.pid} ${BLOCK.windowId}`]);
       });
 
       it("names the app's windows when none has that title, and raises nothing", async () => {

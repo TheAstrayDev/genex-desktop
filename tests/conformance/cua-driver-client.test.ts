@@ -214,7 +214,7 @@ describe("cua-driver as the desktop driver", () => {
       fake.calls.map(({ tool, args }) => [tool, args]),
       [
         ["list_windows", { app: "com.Roblox.RobloxStudio" }],
-        ["bring_to_front", { pid: 65113 }],
+        ["bring_to_front", { pid: 65113, window_id: 9 }],
       ],
     );
     const none = fakeConnection({ list_windows: json({ windows: [] }) });
@@ -238,12 +238,14 @@ describe("cua-driver as the desktop driver", () => {
       }),
     });
     const driver = cuaDriver(fake.connection);
-    assert.deepEqual(await driver.appWindows?.("com.Roblox.RobloxStudio"), [
-      { pid: 94330, title: "Jump on Platforms" },
-      { pid: 92718, title: "spinning-colored-block.rbxlx" },
+    const windows = await driver.appWindows?.("com.Roblox.RobloxStudio");
+    assert.deepEqual(windows, [
+      { pid: 94330, windowId: 9, title: "Jump on Platforms" },
+      { pid: 92718, windowId: 4, title: "spinning-colored-block.rbxlx" },
     ]);
-    await driver.bringToFront?.("com.Roblox.RobloxStudio", 92718);
-    assert.deepEqual(fake.actions(), [{ tool: "bring_to_front", args: { pid: 92718 } }]);
+    // Studio's process owns a second, untitled window too: the driver raises only a window it is named.
+    await driver.bringToFront?.("com.Roblox.RobloxStudio", windows?.[1]);
+    assert.deepEqual(fake.actions(), [{ tool: "bring_to_front", args: { pid: 92718, window_id: 4 } }]);
   });
 
   it("names a running Mac app under its own bundle id, asked in any case or by its name", async () => {

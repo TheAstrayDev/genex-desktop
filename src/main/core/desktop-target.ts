@@ -35,6 +35,7 @@ import type {
   DesktopFocus,
   DesktopKeys,
   DesktopShot,
+  DesktopWindow,
 } from "../../substrate/desktop-driver.ts";
 import {
   MAX_HOLD_KEY_MS,
@@ -151,14 +152,14 @@ async function titledWindow(
   id: string,
   name: string,
   raw: string | undefined,
-): Promise<{ pid?: number; why?: string }> {
+): Promise<{ window?: DesktopWindow; why?: string }> {
   const window = raw?.trim();
   if (!window) return {};
   if (!driver.appWindows) return { why: MESSAGE.noWindowPick(name) };
   const windows = await driver.appWindows(id);
   const wanted = window.toLowerCase();
   const titled = windows.find((w) => w.title.toLowerCase().includes(wanted));
-  if (titled) return { pid: titled.pid };
+  if (titled) return { window: titled };
   return { why: MESSAGE.noTitled(name, window, windows.map((w) => w.title).filter(Boolean)) };
 }
 
@@ -539,9 +540,9 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
     if (refusal) return refusal;
     const pick = await titledWindow(driver, app.bundleId, appName(app), window);
     if (pick.why) return pick.why;
-    await driver.bringToFront(app.bundleId, pick.pid);
+    await driver.bringToFront(app.bundleId, pick.window);
     await sleep(options.frontSettleMs ?? FRONT_SETTLE_MS);
-    return inFront(await driver.focus(), app.bundleId, pick.pid) ? null : MESSAGE.notInFront(appName(app));
+    return inFront(await driver.focus(), app.bundleId, pick.window?.pid) ? null : MESSAGE.notInFront(appName(app));
   };
   /** Whether an action may go ahead: every point and keyboard it aims at is cleared, before any input. */
   const cleared = async (action: PreviewInputAction): Promise<boolean> => {
