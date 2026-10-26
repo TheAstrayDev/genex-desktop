@@ -296,8 +296,6 @@ export default {
   "Agents build in it in your Studio, and its scripts are files in this game's folder.":
     "에이전트가 내 Studio에서 이 플레이스에 만들고, 스크립트는 이 게임 폴더에 파일로 있어요.",
   "Agents can edit and play it from this chat.": "이 채팅에서 에이전트가 게임을 수정하고 플레이할 수 있어요.",
-  "Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex.":
-    "꺼져 있어도 에이전트는 앱 창을 볼 수 있지만, 비밀번호 관리자, 시스템 설정, 비밀번호 입력 창, Genex는 절대 보지 않아요.",
   "Agents didn’t start": "에이전트가 시작되지 않았어요",
   "Agents only run in a protected space that Windows has to allow once. If you aren’t an administrator of this PC, ask one to enter their password when Windows asks, then press Set up.":
     "에이전트는 Windows가 한 번 허용해야 하는 보호 공간에서만 실행돼요. 이 PC의 관리자가 아니라면 Windows가 물을 때 관리자에게 비밀번호를 입력해 달라고 한 뒤 ‘설정하기’를 눌러 주세요.",
@@ -312,7 +310,6 @@ export default {
   "All done": "모두 완료",
   "All done.": "모두 완료됐어요.",
   "All games": "모든 게임",
-  Allow: "허용",
   "Allow all edits in this chat": "이 채팅의 모든 편집 허용",
   "Allow calls without asking, including changes this tool can make": "묻지 않고 호출 허용(이 도구가 하는 변경 포함)",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
@@ -602,7 +599,6 @@ export default {
   "Character approval no longer available": "캐릭터 승인을 더 이상 할 수 없어요",
   Characters: "문자",
   Chat: "채팅",
-  "Chat about this": "채팅으로 이야기하기",
   "Chat actions": "채팅 작업",
   "Chat name": "채팅 이름",
   "Chat turn from {day}": "{day} 채팅",
@@ -677,7 +673,6 @@ export default {
   "Choose a provider below and finish signing in. OpenCode keeps the sign-in.":
     "아래에서 제공자를 고르고 로그인을 마무리하세요. 로그인 정보는 OpenCode가 보관해요.",
   "Choose a theme smaller than 128 KB.": "128KB보다 작은 테마를 고르세요.",
-  "Choose an answer": "답을 골라 주세요",
   "Choose an auto-compaction threshold between 5% and 95%.": "자동 압축 기준을 5%~95% 사이로 선택하세요.",
   "Choose an empty folder, or create one. Games you already have stay where they are.":
     "빈 폴더를 선택하거나 새로 만들어 주세요. 이미 있는 게임은 원래 위치에 그대로 있어요.",
@@ -1227,7 +1222,6 @@ export default {
   "Drop to add {count, plural, one {# picture} other {# pictures}}":
     "놓으면 {count, plural, other {이미지 #개}}가 추가돼요",
   "Drove the route": "경로를 주행했어요",
-  "Each chat session asks you first, and {keys} stops it.": "채팅 세션마다 먼저 물어보고, {keys} 키로 멈출 수 있어요.",
   Earlier: "이전",
   "Earlier builds": "이전 빌드",
   "Earlier conversation · no folder": "이전 대화 · 폴더 없음",
@@ -1963,7 +1957,6 @@ export default {
   "Judge who played it": "직접 플레이한 심사위원",
   "Jump to latest": "최신으로 이동",
   "Jump to now": "현재로 이동",
-  "Just this once.": "이번 한 번만.",
   Keep: "유지",
   "Keep building": "계속 만들기",
   "Keep building where you left off.": "멈춘 곳부터 계속 만들어 주세요.",
@@ -2016,19 +2009,10 @@ export default {
   "Left {count, plural, one {# game} other {# games}} alone while they work.":
     "작업 중인 {count, plural, other {게임 #개}}는 그대로 뒀어요.",
   "Left {game} alone while it works.": "{game}: 작업 중이라 그대로 뒀어요.",
-  "Let agents control your computer": "에이전트의 컴퓨터 제어 허용",
   "Let go of every input": "모든 입력을 뗐어요",
   "Let it see this game's folder": "이 게임 폴더 보기 허용",
   "Let the agent use {name}?": "에이전트에게 {name} 사용을 허용할까요?",
   "Let the game settle": "게임이 안정되길 기다렸어요",
-  "Let this chat's agent do this for you with computer control? {plugin} asks: {task}":
-    "이 채팅의 에이전트가 컴퓨터 제어로 대신 처리하게 할까요? {plugin}의 요청: {task}",
-  "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or {shortcut}.":
-    "이 세션 동안 이 채팅의 에이전트가 화면을 보고 컴퓨터를 사용하게 할까요? 앱마다 먼저 물어봐요. 언제든 ‘중지’ 버튼이나 {shortcut} 키로 멈출 수 있어요.",
-  "Let this chat's agent use this app? It can click, type and read what this app shows.":
-    "이 채팅의 에이전트가 이 앱을 쓰게 할까요? 이 앱 화면을 읽고 클릭하고 입력할 수 있어요.",
-  "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
-    "이 채팅의 에이전트가 {app} 앱을 쓰게 할까요? {app} 화면을 읽고 클릭하고 입력할 수 있어요.",
   "Letters a–z, digits and dashes.": "영문 a–z, 숫자, 대시만 쓸 수 있어요.",
   "Letting go of every input": "모든 입력을 떼는 중",
   "Letting the game settle": "게임이 안정되길 기다리는 중",
@@ -3016,7 +3000,6 @@ export default {
   "Repository tree is truncated; point the spec at a smaller subdirectory":
     "저장소 트리가 잘렸어요. 더 작은 하위 디렉터리를 지정하세요",
   "Repository tree is unreadable": "저장소 트리를 읽을 수 없어요",
-  "Request details": "요청 세부 정보",
   "Request sent": "요청 보냄",
   Requests: "요청",
   Reset: "초기화",
@@ -3272,7 +3255,6 @@ export default {
     "자기 개선이 꺼져 있어요. 개선할 점을 찾으려면 Studio 상단에서 켜 주세요.",
   Send: "보내기",
   "Send a report": "보고서 보내기",
-  "Send answer": "답변 보내기",
   "Send feedback": "피드백 보내기",
   "Send idea": "아이디어 보내기",
   "Send report": "보고서 보내기",
@@ -4224,8 +4206,6 @@ export default {
   "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.":
     "Windows 서비스에서 보조 로그온(Secondary Logon)을 켜고(시작 유형: 수동) 다시 시도해 주세요.",
   "Turn on Studio's MCP server": "Studio의 MCP 서버 켜기",
-  "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.":
-    "컴퓨터 제어를 켤까요? 그러면 모든 채팅의 에이전트가 이 컴퓨터의 앱을 한 번에 하나씩 사용하겠다고 요청할 수 있어요.",
   "Turn on mic": "마이크 켜기",
   "Turn on microphone": "마이크 켜기",
   "Turn on {name}": "{name} 켜기",
@@ -4544,8 +4524,6 @@ export default {
     "Windows가 한 번 허용을 요청해요. 비밀번호를 물으면 이 PC의 관리자가 자기 비밀번호를 입력하면 돼요. 에이전트는 내 파일과 떨어진 전용 보호 공간에서 작업해요.",
   "Windows wouldn’t start Genex’s protected space.": "Windows가 Genex 보호 공간을 시작하지 않았어요.",
   "Wireframe terrain flying by at dusk": "해 질 녘 스쳐 지나가는 와이어프레임 지형",
-  "With this on, an agent can click and type in the apps you allow.":
-    "켜면 허용한 앱에서 에이전트가 클릭하고 입력할 수 있어요.",
   "Withdrawn by a restart": "다시 시작되어 취소됨",
   "Withdrawn when the studio restarted": "Studio가 다시 시작되어 취소됨",
   "Withdrawn when the turn ended": "응답이 끝나서 취소됨",
@@ -4670,7 +4648,6 @@ export default {
     "열려 있는 Roblox Studio예요. 에이전트가 여기서 Roblox 게임을 만들어요.",
   "Your open Unreal Editor, where agents build Unreal games.":
     "열려 있는 Unreal 에디터예요. 에이전트가 여기서 Unreal 게임을 만들어요.",
-  "Your own answer": "직접 쓴 답변",
   "Your profile link": "내 프로필 링크",
   "Your profile link.": "내 프로필 링크예요.",
   "Your profile, friends and Publish stay.": "프로필, 친구, 게시 기능은 그대로예요.",
@@ -5983,4 +5960,18 @@ export default {
   "Ask for changes": "변경 요청",
   "Ask for changes below": "아래에서 변경을 요청하세요",
   Shop: "상점",
+  "Agents in any chat can then ask to use your apps.":
+    "그러면 모든 채팅의 에이전트가 앱을 사용하겠다고 요청할 수 있어요.",
+  "It asks before each app.": "앱마다 먼저 물어봐요.",
+  "It can click and type there.": "그 앱에서 클릭하고 입력할 수 있어요.",
+  "It never uses password managers, System Settings, password prompts or Genex.":
+    "비밀번호 관리자, 시스템 설정, 비밀번호 입력 창, Genex는 절대 사용하지 않아요.",
+  "Let agents use your computer": "에이전트의 컴퓨터 사용 허용",
+  "Let the agent do this with computer control?": "에이전트가 컴퓨터 제어로 처리하게 할까요?",
+  "Let the agent see your screen in this chat?": "이 채팅에서 에이전트가 화면을 보게 할까요?",
+  "Let the agent use this app?": "에이전트가 이 앱을 쓰게 할까요?",
+  "Let the agent use {app}?": "에이전트가 {app} 앱을 쓰게 할까요?",
+  "They ask before each app.": "에이전트는 앱마다 먼저 물어봐요.",
+  "Turn on computer control?": "컴퓨터 제어를 켤까요?",
+  "{plugin} asks: {task}": "{plugin}의 요청: {task}",
 } satisfies LocaleCatalog;

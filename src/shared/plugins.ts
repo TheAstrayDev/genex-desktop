@@ -826,6 +826,8 @@ export interface PluginConsentEvent {
   project: string;
   threadId?: string;
   prompt: string;
+  /** One line the card shows under its question: what a yes lets the agent do. */
+  note?: string;
   /** A connector's card: the person may also allow this exact tool from now on. */
   alwaysOffered?: boolean;
   /** Approved with Always allow: the tool runs without asking from now on. */
@@ -1012,9 +1014,12 @@ export type StudioConsentSource = (typeof StudioConsentSource)[keyof typeof Stud
  * consent record keeps it as the prompt, so both say the same words.
  */
 export function computerSettingQuestion(): string {
-  return t(
-    "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.",
-  );
+  return t("Turn on computer control?");
+}
+
+/** The line under that question: the setting is one for every chat. */
+export function computerSettingNote(): string {
+  return t("Agents in any chat can then ask to use your apps.");
 }
 
 /** The name a studio consent card shows; getters, as main reads it in the language it sets after loading. */

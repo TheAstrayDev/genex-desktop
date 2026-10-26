@@ -133,15 +133,12 @@ updates. Long work trails mount 30 steps at a time, workers initially show six, 
 is paged/windowed. Studio build reports and learning use the same `ChatDisclosure` heading, body font and framed expansion as work logs; only genuine decisions get answer controls. Routine build decisions remain activity text, with failures visible. A new running build opens Builds once (after the idea-to-crane hand-off when Live shows the first-idea state); later tab choices remain with the user. There is one elapsed timer, without a second build-total line. Scroll-follow accounts for the composer/question dock changing height and
 never pulls a reader away from history.
 
-Loop intake uses the same question surface for `ask_user`: its options, then a row with a radio and an inline "Write your own answer…" field (focus or typing selects it; Enter sends), each radio on its label's first line. The footer pins **Chat about this** (a filled quiet button with a chat icon, at the leading edge) opposite **Send answer**; it puts the card aside behind its "Answer question" reopener and focuses the composer. The choices scroll inside the card (at most 60% of the window); the footer never does. That card has no close icon. **Send answer** stays disabled until a choice or typed text exists. Selection alone never sends. Questions survive reload and pagination; any submitted reply settles the question. Model-generated questions must be requested through the tool, not inferred from arbitrary prose or routine progress. Host handoff/session narration stays in diagnostics, including suppression of known older host templates.
+Every question waiting on the person uses one surface, asked as Claude asks (`chat/ChatQuestion.tsx`): a full-width composer-colored card; an agent's one-line recap in ink-2 above the question when it wrote one (`ask_user`'s `recap`); the question at 15px semibold; one ink-2 line under it when there is something to know (a plugin's name, what a yes lets the agent do), ending in **Details ›** where the request has more; then the answers as buttons from the card's left edge, wrapping when they do not fit, never more than three. The first answer is the recommended one: filled in ink with two keycaps (⌘ ↩ on a Mac, Ctrl ↵ elsewhere; `aria-keyshortcuts`) that press it from anywhere in the chat, the composer included, unless a dialog is open or another field has the typing (`chat/answer-keys.ts`); the others are outlined in the card's color. A press answers at once: no radios and no Continue; while it sends only a filled "Sending…" stays. A choice's description is its tooltip. The words scroll inside the card (at most 60% of the window); the answers never do. The cross in the corner, or Esc on the card, puts it aside behind its reopener ("Answer question", "Review permission request", "Review plan"), which brings focus back to the first answer; Esc in the composer still stops the turn. The person's own words go in the composer, whose placeholder says what they do: "Write your own answer…" under an agent's question (the next message is its answer), "Tell Claude what to do instead…" or "Keep planning: what should change?" under Claude's (a Deny with those words). Questions survive reload and pagination; any submitted reply settles an agent's question. Model-generated questions must be requested through the tool, not inferred from arbitrary prose or routine progress. Host handoff/session narration stays in diagnostics, including suppression of known older host templates.
 
-Permission questions use one full-width composer-colored surface: 16px horizontal/12px
-vertical padding, full-row choices with 16px radio marks and visible descriptions. Selection
-never submits permission. Continue explicitly sends the selected answer; a busy request blocks
-duplicate submission. Putting a question aside only collapses it and leaves a keyboard-reachable
-reopener. Pending plugin and Claude permission questions are pinned above the composer even if
+Permission questions use that surface; a busy request blocks duplicate submission, and putting
+one aside only collapses it. Pending plugin and Claude permission questions are pinned above the composer even if
 their history page is unloaded; settled outcomes remain in history. Request arguments are disclosed in context. Plans appear expanded with a scrolling Markdown
-body and a fixed compact footer: primary **Approve**, secondary **Make changes** and **Cancel**.
+body and a fixed compact footer: primary **Approve** with the answer keys, secondary **Make changes** and **Cancel**.
 Make changes shows a chat status and focuses the existing composer without overwriting its
 draft. Approve remains disabled while that revision is being drafted; sending it requests a
 new plan and explicit approval. Failed plan generation uses a recovery card with Choose model, Model providers, Try again and Dismiss; approval controls appear only for a prepared plan. Raw error details expand on demand. Steering can prefill the composer. These reuse existing consent
@@ -168,15 +165,14 @@ Claude Code's own permission requests use that surface too (`chat/PermissionRequ
 title is Claude Code's sentence ("Claude wants to edit main.js"); for Bash it reads "Claude wants
 to run a command" and the command follows once, in highlighted mono (`chat-tool-code`), never
 repeated in the title. A file tool shows its path as a link; the description line is Claude's
-description, else its reason. Choices: **Allow** ("Just this once."), the offered grants in words,
-every one named ("Always allow npm install commands in this game"; absent when none is offered)
-and **Deny**, then an own-words row, "Tell Claude what to do instead…", which denies with that
-message. **Request details** discloses the reason and the tool input. A plan leaving Plan mode is
+description, else its reason. Answers: **Allow once**, the offered grants in words, every one
+named ("Always allow npm install commands in this game"; absent when none is offered) and **Deny**;
+words in the composer deny with that message. **Details** discloses the reason and the tool input. A plan leaving Plan mode is
 **Approve this plan?**: its Markdown in a focusable region that scrolls (at most
 max(5rem, 45vh − 19rem); its last line fades over 32px while more lies below), then **Yes, in Auto mode** (left out where Auto is unavailable for the
-model), **Yes, and accept edits**, **Yes, and ask before changes** and a "Keep planning: what
-should change?" row. Continue confirms; put aside, a card reopens from Review permission request
-or Review plan. Settled, history keeps one disclosure line in the "Worked on N steps" type: the
+model), **Yes, and accept edits**, **Yes, and ask before changes**, with "Keep planning: what
+should change?" in the composer. Put aside, a card reopens from Review permission request or
+Review plan. Settled, history keeps one disclosure line in the "Worked on N steps" type: the
 outcome, then what it was about (Allowed · npm install three, Always allowed · …, Denied · …,
 Withdrawn when the work stopped · …, and for a build's lead's card nobody answered in five minutes
 Withdrawn: nobody answered · …; a plan reads Plan approved · Auto). It opens to the question as
@@ -1008,7 +1004,8 @@ Use `npm run test:design-ui` for shared Genex primitive changes selected by the 
 gallery and tests it in credential-disabled disposable Electron: actual per-script font
 selection, 32px controls, pointer cursors, keyboard menus/tabs/switches, modal focus trapping
 and restoration, disclosure collapse, reduced motion and zoom. Chat specimens also exercise
-radio-key navigation, explicit submission, collapse focus, expanded plans and all three footer
+answers from the left edge, the answer keys, Tab order, the sending state, Esc and reopen focus,
+an agent's recap, expanded plans and all three footer
 actions, scroll-stable plan actions, single-line tool labels/highlighted code output, long-message
 folding with keyboard expansion, timer placement,
 300px width and 200% zoom. The gallery window is parked and nonfocusable, uses CDP keyboard

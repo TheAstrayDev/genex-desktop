@@ -4919,8 +4919,9 @@ button.chat-header-title:hover {
   color: var(--ink-3);
   cursor: default;
 }
-/* The card's choices scroll inside it; its footer (Chat about this, Send answer) always shows. */
+/* A waiting question: its words scroll inside it, its answers always show under them. */
 .chat-question {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -4930,37 +4931,143 @@ button.chat-header-title:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--composer);
+  outline: none;
 }
-/* A choice's mark sits on its first line, beside the label, however long the description runs. */
-.chat-choice {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-inline: -8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-control);
-  transition: background-color 100ms;
+.chat-question-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 0;
+  overflow-wrap: anywhere;
 }
-.chat-choice:has(input:enabled):hover,
-.chat-choice:focus-within {
-  background: var(--control-hover, var(--hover));
+/* The first line leaves room for the put-aside cross in the corner. */
+.chat-question-body > :first-child {
+  padding-inline-end: 28px;
 }
-.chat-choice-input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
+.chat-question-recap {
+  margin-bottom: 6px;
+  color: var(--ink-2);
   font-family: var(--font-family-content);
   font-size: 15px;
   line-height: 22px;
   letter-spacing: -0.26px;
-  outline: none;
 }
-.chat-choice-input::placeholder {
+.chat-question-title {
+  color: var(--ink);
+  font-family: var(--font-family-content);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: -0.26px;
+}
+.chat-question-sub {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 20px;
+}
+.chat-question-sub [data-question-details-toggle] {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   color: var(--ink-3);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chat-question-sub [data-question-details-toggle]:hover {
+  color: var(--ink);
+}
+.chat-question-details {
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: 14px;
+  line-height: 20px;
+}
+.chat-question-aside {
+  position: absolute;
+  top: 12px;
+  inset-inline-end: 10px;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.chat-question-aside:enabled:hover {
+  background: var(--control-hover, var(--hover));
+  color: var(--control-text-hover, var(--ink));
+}
+.chat-question-aside:disabled {
+  cursor: default;
+}
+/* The answers, from the card's left edge: the recommended one filled and first, the rest outlined. */
+.chat-answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 14px 16px 16px;
+}
+.chat-answer {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: start;
+  cursor: pointer;
+}
+.chat-answer:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chat-answer[aria-busy="true"] {
+  opacity: 1;
+}
+.chat-answer-primary {
+  background: var(--ink);
+  color: var(--page);
+}
+.chat-answer-primary:enabled:hover {
+  opacity: 0.85;
+}
+/* A focused recommended answer keeps its fill; its edge sits outside it, where it shows on any fill. */
+:root .chat-answer-primary:focus-visible {
+  outline-offset: 2px;
+}
+.chat-answer-secondary {
+  background: var(--composer);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 70%, var(--line));
+}
+.chat-answer-secondary:enabled:hover {
+  background: var(--control-hover, var(--hover));
+}
+.chat-answer-keys {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 3px;
+}
+.chat-answer-keys kbd {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  font-family: -apple-system, BlinkMacSystemFont, var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
 }
 .chat-choice-mark {
   appearance: none;
@@ -5001,23 +5108,6 @@ button.chat-header-title:hover {
 .chat-question-submit:enabled:hover {
   opacity: 0.85;
 }
-.chat-question-secondary {
-  display: flex;
-  min-height: 28px;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--radius-control);
-  background: var(--control-fill, var(--control-quiet));
-  color: var(--ink-2);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 22px;
-}
-.chat-question-secondary:hover {
-  background: var(--control-hover, var(--hover));
-  color: var(--ink);
-}
 
 /* Shared theme roles; custom accents always retain a readable action label. */
 :root {
@@ -5053,6 +5143,7 @@ button.chat-header-title:hover {
 :is(button, [role="button"], [role="tab"], summary):focus-visible:not(
   .theme-primary,
   .theme-destructive,
+  .chat-answer-primary,
   [data-slot="switch"]
 ) {
   outline: none;
