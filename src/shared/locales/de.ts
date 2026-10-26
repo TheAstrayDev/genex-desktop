@@ -599,6 +599,8 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "Bau die App für {players} von {title} neu, damit ich sie veröffentlichen kann.",
   "Build updated": "Build aktualisiert",
+  "Build with the Cursor plan you already have.": "Bau mit dem Cursor-Tarif, den du schon hast.",
+  "Build with the Grok account you already have.": "Bau mit dem Grok-Konto, das du schon hast.",
   "Build with workers": "Bau mit Helfern",
   Building: "Baut",
   "Building the game": "Spiel wird gebaut",
@@ -853,10 +855,13 @@ export default {
     "Die Skill-Suche von Codex wurde beendet. Aktualisiere, um es erneut zu versuchen.",
   "Codex skill discovery timed out. Refresh to retry.":
     "Die Skill-Suche von Codex hat zu lange gedauert. Aktualisiere, um es erneut zu versuchen.",
+  "Connect Cursor": "Cursor verbinden",
+  "Connect Grok Build": "Grok Build verbinden",
   "Cursor didn't answer. Check the installation, then try again.":
     "Cursor hat nicht geantwortet. Prüfe die Installation und versuche es erneut.",
   "Cursor is unavailable": "Cursor ist nicht verfügbar",
   "Cursor isn't installed on this computer.": "Cursor ist auf diesem Computer nicht installiert.",
+  "Cursor ready": "Cursor bereit",
   "Cursor sign-in": "Anmeldung bei Cursor",
   "Cursor {version}, {count, plural, other {# model(s)}}":
     "Cursor {version}, {count, plural, one {# Modell} other {# Modelle}}",
@@ -870,6 +875,7 @@ export default {
     "Grok Build hat nicht geantwortet. Prüf die Installation und versuch es noch mal.",
   "Grok Build isn't installed on this Mac.": "Grok Build ist auf diesem Mac nicht installiert.",
   "Grok Build isn't signed in.": "Grok Build ist nicht angemeldet.",
+  "Grok Build ready": "Grok Build bereit",
   "Grok Build sign-in": "Grok Build-Anmeldung",
   "Grok Build {version}, {count, plural, one {# model} other {# models}}":
     "Grok Build {version}, {count, plural, one {# Modell} other {# Modelle}}",
@@ -1722,6 +1728,8 @@ export default {
   Nex: "Nex",
   "Not signed in to Cursor.": "Nicht bei Cursor angemeldet.",
   "Runs on your Grok account": "Läuft über dein Grok-Konto",
+  "Setting up Cursor…": "Cursor wird eingerichtet…",
+  "Setting up Grok Build…": "Grok Build wird eingerichtet…",
   "Sign in again…": "Erneut anmelden…",
   "Sign in to Cursor from Settings › Model Providers.":
     "Melde dich unter Einstellungen › Modellanbieter bei Cursor an.",

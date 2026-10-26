@@ -8,7 +8,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { t } from "../../shared/i18n.ts";
 import { EngineId } from "../../shared/providers.ts";
-import { TerminalKind, type TerminalSession } from "../../shared/terminal.ts";
+import type { TerminalSession } from "../../shared/terminal.ts";
 import { useCliInstall } from "../cli-install.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
@@ -24,6 +24,7 @@ import {
   useRecheck,
   useRun,
 } from "./MeteredProviders.tsx";
+import { CLI_SIGN_IN, type CliProvider } from "./cli-sign-in.ts";
 import { OpenCodeRowState, openCodeRowState } from "./opencode-row.ts";
 import { type ProviderWords, RowTone, type RowView } from "./provider-row.tsx";
 import { useSignInTerminal } from "./use-sign-in-terminal.ts";
@@ -290,31 +291,11 @@ function connectedView(act: CliRowActions, words: CliRowWords): RowView {
   };
 }
 
-/** The CLIs whose row this is. */
-type CliProvider = typeof EngineId.OpenCode | typeof EngineId.Grok | typeof EngineId.Cursor;
-
-/** Each CLI's sign-in terminal, its sign-in call (and sign-out, for Cursor) and its words. */
-const CLI_ROWS: Record<
-  CliProvider,
-  {
-    terminal: TerminalKind;
-    signIn: () => Promise<{ started: boolean }>;
-    signOut?: () => Promise<unknown>;
-    words: CliRowWords;
-  }
-> = {
-  [EngineId.OpenCode]: {
-    terminal: TerminalKind.OpenCodeLogin,
-    signIn: () => window.studio.openCodeSignIn(),
-    words: OPEN_CODE_ROW,
-  },
-  [EngineId.Grok]: { terminal: TerminalKind.GrokLogin, signIn: () => window.studio.grokSignIn(), words: GROK_ROW },
-  [EngineId.Cursor]: {
-    terminal: TerminalKind.CursorLogin,
-    signIn: () => window.studio.cursorSignIn(),
-    signOut: () => window.studio.cursorSignOut(),
-    words: CURSOR_ROW,
-  },
+/** Each CLI's words. */
+const CLI_WORDS: Record<CliProvider, CliRowWords> = {
+  [EngineId.OpenCode]: OPEN_CODE_ROW,
+  [EngineId.Grok]: GROK_ROW,
+  [EngineId.Cursor]: CURSOR_ROW,
 };
 
 /** The row of one CLI that signs in in its own terminal. */
@@ -323,7 +304,8 @@ export default function CliSignInRow({
   onEnginesRefresh,
   provider,
 }: { engine: EngineDescriptor; provider: CliProvider } & Pick<MeteredProviderProps, "onEnginesRefresh">) {
-  const { terminal: terminalKind, signIn: startSignIn, signOut: forgetSignIn, words } = CLI_ROWS[provider];
+  const { terminal: terminalKind, signIn: startSignIn, signOut: forgetSignIn } = CLI_SIGN_IN[provider];
+  const words = CLI_WORDS[provider];
   const install = useCliInstall(provider);
   const { run, error } = useRun();
   const { checking, recheck } = useRecheck(provider, onEnginesRefresh);

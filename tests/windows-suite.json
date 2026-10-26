@@ -170,6 +170,7 @@
   "tests/conformance/native-sandbox.test.ts",
   "tests/conformance/notifications.test.ts",
   "tests/conformance/ollama-registry.test.ts",
+  "tests/conformance/onboarding-ways-row.test.ts",
   "tests/conformance/onboarding.test.ts",
   "tests/conformance/optimization-preview-pool.test.ts",
   "tests/conformance/optimization-result.test.ts",

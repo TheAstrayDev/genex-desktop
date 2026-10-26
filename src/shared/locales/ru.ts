@@ -563,6 +563,8 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "Пересобери приложение «{title}» для {players}, чтобы его можно было опубликовать.",
   "Build updated": "Сборка обновлена",
+  "Build with the Cursor plan you already have.": "Собирай на тарифе Cursor, который у тебя уже есть.",
+  "Build with the Grok account you already have.": "Собирай на аккаунте Grok, который у тебя уже есть.",
   "Build with workers": "Собирай с помощниками",
   Building: "Собирает",
   "Building the game": "Собираем игру",
@@ -811,10 +813,13 @@ export default {
   "Codex skill discovery closed. Refresh to retry.": "Поиск навыков Codex прервался. Обнови, чтобы попробовать снова.",
   "Codex skill discovery timed out. Refresh to retry.":
     "Поиск навыков Codex не уложился во время. Обнови, чтобы попробовать снова.",
+  "Connect Cursor": "Подключить Cursor",
+  "Connect Grok Build": "Подключить Grok Build",
   "Cursor didn't answer. Check the installation, then try again.":
     "Cursor не ответил. Проверь установку и попробуй снова.",
   "Cursor is unavailable": "Cursor недоступен",
   "Cursor isn't installed on this computer.": "Cursor не установлен на этом компьютере.",
+  "Cursor ready": "Cursor готов",
   "Cursor sign-in": "Вход в Cursor",
   "Cursor {version}, {count, plural, other {# model(s)}}":
     "Cursor {version}, {count, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}",
@@ -828,6 +833,7 @@ export default {
     "Grok Build не ответил. Проверь установку и попробуй ещё раз.",
   "Grok Build isn't installed on this Mac.": "Grok Build не установлен на этом Mac.",
   "Grok Build isn't signed in.": "Grok Build не выполнил вход.",
+  "Grok Build ready": "Grok Build готов",
   "Grok Build sign-in": "Вход в Grok Build",
   "Grok Build {version}, {count, plural, one {# model} other {# models}}":
     "Grok Build {version}, {count, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}",
@@ -1669,6 +1675,8 @@ export default {
   Nex: "Nex",
   "Not signed in to Cursor.": "Вход в Cursor не выполнен.",
   "Runs on your Grok account": "Работает на твоём аккаунте Grok",
+  "Setting up Cursor…": "Устанавливаем Cursor…",
+  "Setting up Grok Build…": "Устанавливаем Grok Build…",
   "Sign in again…": "Войти заново…",
   "Sign in to Cursor from Settings › Model Providers.": "Войди в Cursor в разделе «Настройки › Провайдеры моделей».",
   "Sign in to Grok from Settings › Model Providers.": "Войди в Grok в разделе «Настройки › Провайдеры моделей».",
