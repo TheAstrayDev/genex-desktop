@@ -3,7 +3,7 @@
  * button's word and dot for each state of Studio (not installed, not set up, not open, starting,
  * ready), the panel's status, the lock's probe, and that none of it reads the person's Documents
  * folder. Then the built package: it builds, seeds off, shows no button while off, and shows the
- * "Roblox Studio" button with the box glyph and a status word once turned on.
+ * "Roblox" button with the box glyph and a status word once turned on.
  */
 import assert from "node:assert/strict";
 import { access, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -860,7 +860,7 @@ describe("the built Roblox Studio plugin", () => {
         );
       assert.equal(on({ facts: [{ id: "web-game", path: "." }] }), undefined, "a web game shows no Roblox button");
       const entry = on({ facts: [{ id: "roblox-project", path: "." }] });
-      assert.deepEqual([entry?.item.label, entry?.item.icon], ["Roblox Studio", "roblox"]);
+      assert.deepEqual([entry?.item.label, entry?.item.icon], ["Roblox", "roblox"]);
       const status = (await lite.core.plugins.action("roblox", "toolbar-status", {})) as PluginToolbarStatus;
       const words = STATES.map(([, , badge]) => badge);
       assert.ok(words.includes(status.badge ?? ""), `a status word: ${JSON.stringify(status)}`);

@@ -68,7 +68,10 @@ const LOCAL_ASK = "Make an Ice Shield for the store, 300 coin. It blocks one hit
 const LOCAL_REPLY = "Done. Ice Shield waits as a draft until the game is published. Say if it should go on sale then.";
 
 /** The CLI's hash of a draft's fields and picture, as the contract computes it. */
-function contentHashOf(draft: Omit<LocalListingDraft, "contentHash" | "project" | "state">, picture: Buffer): string {
+function contentHashOf(
+  draft: Omit<LocalListingDraft, "contentHash" | "project" | "state" | "picture">,
+  picture: Buffer,
+): string {
   const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
   const { description, name, priceCoins, shareable, tags, type } = draft;
   const canonical = JSON.stringify({ description, name, priceCoins, shareable, tags, type });
@@ -93,7 +96,13 @@ async function writeIceShield(game: string, project: string): Promise<LocalListi
   const at = "2026-10-23T09:00:00.000Z";
   const record = { ...fields, files: { image: "picture.png" }, createdAt: at, updatedAt: at };
   await writeFile(path.join(items, `${ICE_SHIELD_ID}.json`), `${JSON.stringify(record, null, 2)}\n`);
-  return { project, state: LOCAL_DRAFT_STATE, ...fields, contentHash: contentHashOf(fields, picture) };
+  return {
+    project,
+    state: LOCAL_DRAFT_STATE,
+    ...fields,
+    contentHash: contentHashOf(fields, picture),
+    picture: [...LOCAL_ITEMS_DIR, ICE_SHIELD_ID, "picture.png"].join("/"),
+  };
 }
 
 /** Claude of Duty, not on Genex yet, its local draft and its chat's ask, reply and card. */

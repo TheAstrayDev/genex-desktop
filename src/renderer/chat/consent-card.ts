@@ -1,7 +1,7 @@
 /**
- * A consent card's words: its title and its choices. A plugin's card asks its own question with
- * Allow once (Always allow on a connector's) and Don't allow; the studio's card that turns computer
- * control on asks in its own words, Turn on or Not now.
+ * A consent card's words: its title, the line under it and its choices. A plugin's card asks its
+ * own question with Allow once (Always allow on a connector's) and Don't allow; the studio's card
+ * that turns computer control on asks in its own words, Turn on or Not now.
  */
 import { StudioConsentSource } from "../../shared/plugins.ts";
 import { COMPUTER_SETTING_CARD_WORDS, CONSENT_CHOICE_WORDS, consentNeededWords } from "../words.ts";
@@ -11,17 +11,38 @@ import type { ChatChoice } from "./ChatQuestion.tsx";
 export const ConsentChoice = { Once: "once", Always: "always", Decline: "decline" } as const;
 export type ConsentChoice = (typeof ConsentChoice)[keyof typeof ConsentChoice];
 
-/** What a card's words are read from: whose card it is, its name, its question and whether Always allow is offered. */
+/**
+ * What a card's words are read from: whose card it is, its name, its question, the line under it
+ * and whether Always allow is offered.
+ */
 export interface ConsentCardFields {
   consentSourceId?: string;
   consentSource?: string;
   consentPrompt?: string;
+  consentNote?: string;
   consentAlwaysOffered?: boolean;
 }
 
 /** Whether this is the studio's card that turns computer control on for every chat. */
 const turnsComputerControlOn = (entry: ConsentCardFields): boolean =>
   entry.consentSourceId === StudioConsentSource.ComputerSetting;
+
+const STUDIO_SOURCES: ReadonlySet<string> = new Set(Object.values(StudioConsentSource));
+
+/** Whether the studio itself asks (computer control), never a plugin. */
+export function consentIsStudios(entry: ConsentCardFields): boolean {
+  return STUDIO_SOURCES.has(entry.consentSourceId ?? "");
+}
+
+/**
+ * The line under the card's question: what a yes lets the agent do (the studio's own note), else
+ * whose question a plugin's own words are. A connector's question already names it.
+ */
+export function consentLine(entry: ConsentCardFields): string | undefined {
+  if (entry.consentNote) return entry.consentNote;
+  if (consentIsStudios(entry)) return undefined;
+  return entry.consentPrompt && !entry.consentAlwaysOffered ? entry.consentSource : undefined;
+}
 
 /** The card's title: the studio's own words for its setting card, else the question asked. */
 export function consentTitle(entry: ConsentCardFields): string {

@@ -8,6 +8,8 @@ import { SteerDelivery } from "./steer-delivery.ts";
 export const RunControlAction = {
   /** Wrap up: let the current attempts finish, then integrate and show what is ready. */
   Finish: "finish",
+  /** Stop the run once the chat's reply ends (the coordinator's `stop_run`), and with `restart` go on again. */
+  Stop: "stop",
 } as const;
 export type RunControlAction = (typeof RunControlAction)[keyof typeof RunControlAction];
 
@@ -54,6 +56,18 @@ export const coordinatorTools = [
     description:
       "Finish the current attempts, then integrate and check the accepted work and show it live. No new facet rounds, no reset, no cancellation. Use when the user asks to wrap up or wait for the remaining workers and show what is ready.",
     parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "stop_run",
+    description:
+      "Stop the build when your reply ends: its workers stop, what it built is kept, and it pauses. With restart true it goes on again as soon as it has stopped, with text as the user's instruction for it. Use when the user asks to stop, cancel, kill or halt the build or its workers, or to restart it; never steer_run for that, and never send the user to a button.",
+    parameters: {
+      type: "object",
+      properties: {
+        restart: { type: "boolean", description: "true to start the build again once it has stopped." },
+        text: { type: "string", description: "With restart: the user's instruction for the build as it goes on." },
+      },
+    },
   },
   {
     name: "resume_run",

@@ -22,6 +22,11 @@ import { packagedApp } from "./packaged-app.mjs";
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const show = process.argv.includes("--show");
 const keep = process.argv.includes("--keep");
+/**
+ * `--userdata=<dir>`: run the self test on that data folder and keep it, as the release canary's
+ * upgrade mode does on the profile an earlier release left; by default a folder of its own.
+ */
+const givenUserData = process.argv.find((arg) => arg.startsWith("--userdata="))?.slice("--userdata=".length);
 // `--claude-worker`: the self test also runs one Claude Code worker on the real CLI, its model the
 // scripted Anthropic stand-in below (the release canary asks for it; it needs a machine that has
 // or may install the CLI).
@@ -347,7 +352,7 @@ const appArgs = packaged ? [] : ["."];
 // The self test's own data folder, named here so its log can be shown when a check fails: on a
 // machine only the release canary reaches, that log is the one account of what the core did.
 // Windows' temp folder can be spelled with 8.3 names (GENEXO~1), which the app's folders never are.
-const userData = realpathSync.native(await mkdtemp(path.join(os.tmpdir(), "studio-selftest-")));
+const userData = givenUserData ?? realpathSync.native(await mkdtemp(path.join(os.tmpdir(), "studio-selftest-")));
 const args = [...appArgs, "--studio-selftest", `--ollama-host=${server.host}`, `--userdata=${userData}`];
 if (show) args.push("--show");
 const anthropic = claudeWorker ? await startFakeAnthropic({ command: CLAUDE_WORKER_COMMAND }) : null;
@@ -405,7 +410,7 @@ async function settleUserData(failed) {
     const tail = log.split(/\r?\n/).slice(-LOG_TAIL_LINES).join("\n");
     console.log(`\n── the self test's log (last ${LOG_TAIL_LINES} lines) ──\n${tail || "(no log)"}`);
   }
-  if (!keep) await rm(userData, { recursive: true, force: true }).catch(() => {});
+  if (!keep && !givenUserData) await rm(userData, { recursive: true, force: true }).catch(() => {});
 }
 
 const match = /__SELFTEST_JSON__([\s\S]*?)__END__/.exec(stdout);

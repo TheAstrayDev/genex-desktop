@@ -198,6 +198,8 @@ export type Entry =
       kind: typeof EntryKind.Question;
       id: string;
       text: string;
+      /** The agent's one line above its question: what it found or did. */
+      recap?: string;
       choices: Array<{ id: string; label: string; description?: string }>;
       pending: boolean;
     }
@@ -228,6 +230,8 @@ export type Entry =
       consentSourceId?: string;
       consentSource?: string;
       consentPrompt?: string;
+      /** The line the card shows under its question (the studio's own cards). */
+      consentNote?: string;
       consentExport?: ExportReview;
       /** A connector's card: Always allow is offered. */
       consentAlwaysOffered?: boolean;
@@ -781,6 +785,7 @@ function readConversation(chat: ChatDraft, event: EventEnvelope): boolean {
       kind: EntryKind.Question,
       id: event.id,
       text: asked.question,
+      ...(asked.recap ? { recap: asked.recap } : {}),
       choices: asked.choices ?? [],
       pending: true,
     });
@@ -1959,6 +1964,7 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
     ...(consent.pluginId ? { consentSourceId: consent.pluginId } : {}),
     consentSource: consent.pluginName || A_PLUGIN,
     consentPrompt: consent.prompt || undefined,
+    ...(consent.note ? { consentNote: consent.note } : {}),
     consentExport: consent.exportReview,
     ...(consent.alwaysOffered ? { consentAlwaysOffered: true } : {}),
     ...(consent.input ? { consentInput: consent.input } : {}),

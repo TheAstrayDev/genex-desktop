@@ -826,6 +826,8 @@ export interface PluginConsentEvent {
   project: string;
   threadId?: string;
   prompt: string;
+  /** One line the card shows under its question: what a yes lets the agent do. */
+  note?: string;
   /** A connector's card: the person may also allow this exact tool from now on. */
   alwaysOffered?: boolean;
   /** Approved with Always allow: the tool runs without asking from now on. */
@@ -1012,9 +1014,12 @@ export type StudioConsentSource = (typeof StudioConsentSource)[keyof typeof Stud
  * consent record keeps it as the prompt, so both say the same words.
  */
 export function computerSettingQuestion(): string {
-  return t(
-    "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.",
-  );
+  return t("Turn on computer control?");
+}
+
+/** The line under that question: the setting is one for every chat. */
+export function computerSettingNote(): string {
+  return t("Agents in any chat can then ask to use your apps.");
 }
 
 /** The name a studio consent card shows; getters, as main reads it in the language it sets after loading. */
@@ -1093,6 +1098,11 @@ export const PluginService = {
    * has a desktop and its driver, and the plugin's engine declares apps here. Asks the person nothing.
    */
   GameEngineCanAssist: "game.engine.canAssist",
+  /**
+   * `game-engine`: whether the bound game's chat still runs the turn this plugin's Do it for me
+   * started: false once that turn has ended (answered, failed or taken back) or its time is up.
+   */
+  GameEngineAssisting: "game.engine.assisting",
   /**
    * `game-engine`: a long job of the plugin's (an engine's build or package) started in Genex's
    * process sandbox, writing only folders inside the bound game; answers its id at once, and the

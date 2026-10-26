@@ -155,6 +155,10 @@ const MESSAGE = {
   unknownFacet: (facetId: string) => `Unknown facet: ${facetId}`,
   nothingToFinish: (known: boolean) =>
     `That build is ${known ? "no longer running" : "not in this conversation"}; nothing was asked to finish.`,
+  nothingToStop: (state: string) => `That build is ${state}, not running; nothing was stopped.`,
+  stops: "The build stops when your reply ends: its workers stop, what it built is kept, and it pauses.",
+  stopsThenRestarts:
+    "The build stops when your reply ends, what it built is kept, and it goes on again as soon as it has stopped, with the instruction you gave.",
 } as const;
 
 type ThreadMeta = { kind?: string; project?: string | null } | undefined;
@@ -716,6 +720,8 @@ export class ConversationService {
       case CoordinatorTool.FinishRun:
         this.#assertSteerable(call);
         return this.#core.requestRunFinish(threadId, runId);
+      case CoordinatorTool.StopRun:
+        return this.#stopRun(call);
       case CoordinatorTool.SteerRun:
         this.#assertSteerable(call);
         return this.#steerRun(call);
@@ -889,6 +895,31 @@ export class ConversationService {
     if (this.#x.activeRunIds.has(runId) && run.state === RunState.Running) return;
     const state = run.state === RunState.Running ? "inactive" : run.state;
     throw new Error(MESSAGE.notSteerable(state));
+  }
+
+  /**
+   * The coordinator's stop, recorded for its message: the harness does it once the reply has ended
+   * (stopping now would cut that reply short) and, with `restart`, resumes the build once it has
+   * stopped, with the instruction given (`loop/chat-stop.ts`).
+   */
+  async #stopRun({ threadId, runId, args, messageId, run }: CoordinatorCall): Promise<string> {
+    if (run.state !== RunState.Running) throw new Error(MESSAGE.nothingToStop(run.state));
+    const restart = args.restart === true;
+    const text = restart ? textArg(args.text) : "";
+    await this.#core.append(
+      [
+        customEventData(CustomEvent.RunControl, {
+          runId,
+          action: RunControlAction.Stop,
+          ...(messageId ? { sourceMessageId: messageId } : {}),
+          ...(restart ? { restart: true } : {}),
+          ...(text ? { text } : {}),
+          at: new Date().toISOString(),
+        }),
+      ],
+      threadId,
+    );
+    return restart ? MESSAGE.stopsThenRestarts : MESSAGE.stops;
   }
 
   async #steerRun({ threadId, runId, args, messageId, events }: CoordinatorCall): Promise<string> {

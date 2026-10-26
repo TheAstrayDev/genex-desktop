@@ -18,7 +18,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, sta
 import os from "node:os";
 import path from "node:path";
 import { sandboxBesidePlugins } from "./core/boot-side-by-side.ts";
-import { assistAvailable, coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
+import { assistAvailable, assistUnderWay, coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { MentionSources } from "./core/mention-tags.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
@@ -160,10 +160,10 @@ import {
   standCredentialFile,
 } from "./core/genex-cli.ts";
 import { isLocalDraft, type ListingRecord } from "../shared/item-draft.ts";
-import { type CreatorItem, type StoreRefused, StoreRefusal } from "../shared/store-items.ts";
+import { type CreatorItem, type Selling, type StoreRefused, StoreRefusal } from "../shared/store-items.ts";
 import { ITEM_APPROVALS_FILE, ItemApprovals } from "./core/item-approvals.ts";
 import { hasLocalDrafts } from "./core/local-item-files.ts";
-import { LocalItems, type LocalItemsDeps } from "./core/local-items.ts";
+import { hostedDraftIds, LocalItems, type LocalItemsDeps } from "./core/local-items.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { boundGameFolder } from "./core/genex-bound-game.ts";
 import { assertPublishable } from "./core/genex-publish.ts";
@@ -476,6 +476,8 @@ export interface StudioCoreOptions {
    */
   localItems?: {
     putOnSale(skuId: string): Promise<CreatorItem | StoreRefused>;
+    /** The account's items on genex.games (Selling), for the drafts a publish puts on sale. */
+    selling(): Promise<Selling | StoreRefused>;
     runs?: Pick<LocalItemsDeps, "sync" | "setShared">;
   };
 }
@@ -1142,11 +1144,7 @@ export class StudioCore {
     };
     // `game.engine.runs`: the games whose run is going, so an engine plugin never quits an editor a Loop uses.
     this.pluginServices.runningGames = () => this.#runningGames();
-    // `game.engine.assist`: Do it for me, a setup task handed to the game's chat (`desktop-assist.ts`).
-    this.pluginServices.engineAssist = (pluginId, binding, task, call) =>
-      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...call });
-    // `game.engine.canAssist`: whether that can run here, so a plugin shows its click path instead.
-    this.pluginServices.engineCanAssist = (pluginId) => assistAvailable(coreAssistHost(this), pluginId);
+    this.#wireAssists(this.pluginServices);
     this.plugins = new PluginRegistry(
       path.join(this.layout.engineHomes, "plugins"),
       path.join(this.options.paths.resources, "plugins"),
@@ -1207,6 +1205,17 @@ export class StudioCore {
       return result;
     };
     await this.#initPlugins();
+  }
+
+  /** Do it for me's host services (`desktop-assist.ts`). */
+  #wireAssists(services: PluginServices): void {
+    // `game.engine.assist`: Do it for me, a setup task handed to the game's chat.
+    services.engineAssist = (pluginId, binding, task, call) =>
+      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...call });
+    // `game.engine.canAssist`: whether that can run here, so a plugin shows its click path instead.
+    services.engineCanAssist = (pluginId) => assistAvailable(coreAssistHost(this), pluginId);
+    // `game.engine.assisting`: whether the chat still runs it, so a plugin's card ends with its turn.
+    services.engineAssisting = (pluginId, binding) => assistUnderWay(coreAssistHost(this), pluginId, binding);
   }
 
   /** The registry's start, each part of it marked so a slow plugin setup's log says which part held it. */
@@ -1281,6 +1290,11 @@ export class StudioCore {
       setShared:
         options?.runs?.setShared ?? ((project, localId, shared) => cli.setLocalShared(project, localId, shared)),
       putOnSale: (skuId) => (options ? options.putOnSale(skuId) : Promise.resolve({ refused: StoreRefusal.Unknown })),
+      hostedDrafts: async (project) => {
+        const hosted = await cli.hostedProjectId(project);
+        if (!hosted || !options) return [];
+        return hostedDraftIds(await options.selling(), hosted);
+      },
       now: Date.now,
       changed: (project) => this.emit(UiEvent.ItemsLocal, { project }),
     });

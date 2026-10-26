@@ -6,7 +6,6 @@
  */
 import path from "node:path";
 import { type AgentScreen, ScreenRole } from "../../shared/agent-screen.ts";
-import { desktopStopShortcut, stopShortcutWords } from "../../shared/computer-control.ts";
 import { t } from "../../shared/i18n.ts";
 import { type PluginBinding, StudioConsentSource } from "../../shared/plugins.ts";
 import { DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
@@ -14,20 +13,29 @@ import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
-import { assistGrants, declaredEngineApps, declaredPlayerApps } from "./desktop-assist.ts";
+import {
+  assistGrants,
+  assistOpensPages,
+  assistPageRefusal,
+  declaredEngineApps,
+  declaredPlayerApps,
+} from "./desktop-assist.ts";
 import { engineAppRefusal } from "./desktop-target.ts";
 import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 
-/** What the person reads on the consent card and the agent screen. */
+/**
+ * What the person reads on the consent card (a short question, one line under it) and the agent
+ * screen. The stop shortcut is never in it: Stop in the chat stops the agent.
+ */
 const MESSAGE = {
   label: () => t("your computer"),
-  session: () =>
-    t(
-      "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or {shortcut}.",
-      { shortcut: stopShortcutWords(desktopStopShortcut(process.platform)) },
-    ),
-  app: (app: string) => t("Let this chat's agent use {app}? It can click, type and read what {app} shows.", { app }),
-  unnamedApp: () => t("Let this chat's agent use this app? It can click, type and read what this app shows."),
+  session: () => t("Let the agent see your screen in this chat?"),
+  sessionNote: () => t("It asks before each app."),
+  app: (app: string) => t("Let the agent use {app}?", { app }),
+  unnamedApp: () => t("Let the agent use this app?"),
+  appNote: () => t("It can click and type there."),
+  /** The agent's words, never the person's: English. */
+  noBrowser: "this computer opens no pages in the person's browser",
 } as const;
 
 /** Who asks for computer control on the consent card: the studio itself, never a plugin. */
@@ -40,11 +48,11 @@ const DESKTOP_CONSENT_TOOL = {
   parameters: { type: "object" as const, properties: {} },
 };
 
-/** What the person is asked: computer control for the session, or one app. */
-function consentPrompt(question: DesktopQuestion, app: DesktopApp | undefined): string {
-  if (question !== DesktopQuestion.App || !app) return MESSAGE.session();
+/** What the person is asked, and the line under it: computer control for the session, or one app. */
+function consentWords(question: DesktopQuestion, app: DesktopApp | undefined): { prompt: string; note: string } {
+  if (question !== DesktopQuestion.App || !app) return { prompt: MESSAGE.session(), note: MESSAGE.sessionNote() };
   const name = app.name || app.bundleId;
-  return name ? MESSAGE.app(name) : MESSAGE.unnamedApp();
+  return { prompt: name ? MESSAGE.app(name) : MESSAGE.unnamedApp(), note: MESSAGE.appNote() };
 }
 
 /** Where a chat's computer control is asked about, and what stops a question waiting. */
@@ -84,23 +92,56 @@ export async function desktopSessionTools(
     facetId: null,
     role: ScreenRole.Operator,
   };
+  const grants = assistGrants(core);
   const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<boolean> => {
-    const tool = { ...DESKTOP_CONSENT_TOOL, confirmation: consentPrompt(question, app) };
+    // The person's press (or the card they approved) for this turn's assist already said yes to the
+    // session and the grant's apps; any other app (their browser, for the game's page) is asked.
+    const grant = grants.forTurn(place.threadId, place.turn);
+    const covered = !app || (app.bundleId !== null && grant?.apps.has(app.bundleId) === true);
+    if (grant?.asked && covered) return true;
+    const { prompt, note } = consentWords(question, app);
+    const tool = { ...DESKTOP_CONSENT_TOOL, confirmation: prompt };
     const asked = app ? { app: app.name, bundleId: app.bundleId } : {};
-    const answer = await x.pluginTools.requestConsent(DESKTOP_CONSENT_SOURCE, tool, asked, place.binding, place.signal);
+    const answer = await x.pluginTools.requestConsent(
+      DESKTOP_CONSENT_SOURCE,
+      tool,
+      asked,
+      place.binding,
+      place.signal,
+      undefined,
+      { note },
+    );
     return answer.approved;
   };
-  const grants = assistGrants(core);
   // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,
   // read afresh on every action.
-  const engineApps = (app: DesktopApp) =>
-    engineAppRefusal(app, {
+  const engineApps = (app: DesktopApp) => {
+    const grant = grants.forTurn(place.threadId, place.turn);
+    return engineAppRefusal(app, {
       declared: declaredEngineApps(core.plugins.list()),
       players: declaredPlayerApps(core.plugins.list()),
-      granted: grants.forTurn(place.threadId, place.turn)?.apps ?? null,
+      granted: grant?.apps ?? null,
+      others: grant ? assistOpensPages(grant, core.plugins.list()) : false,
     });
+  };
+  // The turn answering an assist the person pressed starts with the plugin's app in front, where the
+  // task's clicks go, and gets it back when it reopens behind Genex: nothing else it may click (the
+  // Dock, Stage Manager, a PC's taskbar) could bring it there.
+  const keepInFront = () => {
+    const grant = grants.forTurn(place.threadId, place.turn);
+    const [app] = grant?.asked ? grant.apps : [];
+    return app ?? null;
+  };
+  // A page of the task this turn answers, on a host its engine declares: the grant's own, never any other.
+  const openPage = async (address: URL): Promise<string | null> => {
+    const refusal = assistPageRefusal(address, grants.forTurn(place.threadId, place.turn), core.plugins.list());
+    if (refusal) return refusal;
+    return (await desktop.openPage(address.href)) ? null : MESSAGE.noBrowser;
+  };
   const tools = desktop.toolsFor({
     enabled: () => computerControlOn(core),
+    keepInFront,
+    openPage,
     engineApps,
     frameDir: path.join(core.layout.scratch, "desktop", safePathSegment(place.threadId)),
     ask,

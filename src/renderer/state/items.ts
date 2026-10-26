@@ -535,8 +535,9 @@ function localPresses(ctx: ItemsContext, readSelling: () => Promise<void>) {
     const before = ctx.store.getState().local[project];
     set((state) => localRead(state, view));
     const uploaded = Object.keys(view.outcomes).some((localId) => !before?.outcomes[localId]);
-    // An item that went up is the account's on genex.games now: Selling, once shown, reads it again.
-    if (uploaded && ctx.store.getState().selling.read !== ItemsRead.Idle) await readSelling();
+    // An item that went up, or a publish that put the game's drafts on sale, changed the account's
+    // items on genex.games: Selling, once read, reads them again.
+    if ((uploaded || force) && ctx.store.getState().selling.read !== ItemsRead.Idle) await readSelling();
   };
   return { readLocal, pressLocal, settleLocal };
 }

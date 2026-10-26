@@ -36,7 +36,7 @@ import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
 import { computerSettingQuestion, type GithubLookupProblem } from "../shared/plugins.ts";
-import { computerControlOffered, desktopStopShortcut } from "../shared/computer-control.ts";
+import { computerControlOffered } from "../shared/computer-control.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayRemixRefusal, PlayShelf, RemixStep } from "../shared/play.ts";
 import {
@@ -1812,19 +1812,20 @@ export const AUTO_RESUME_SETTING_WORDS = {
 /** Settings → Permissions: the switch that lets agents ask to control the person's computer. */
 export const COMPUTER_CONTROL_SETTING_WORDS = {
   section: t("Computer control"),
-  label: t("Let agents control your computer"),
+  label: t("Let agents use your computer"),
 } as const;
 
-/** What the switch says on `platform`: how to stop it there and what it never touches, or where it runs. */
+/** What the switch says on `platform`, in one line: agents ask first, or where it runs. */
 export function computerControlDetail(platform: string): string {
-  const can = t("With this on, an agent can click and type in the apps you allow.");
-  if (!computerControlOffered(platform)) return `${can} ${t("macOS and Windows only.")}`;
-  const stops = t("Each chat session asks you first, and {keys} stops it.", {
-    keys: desktopStopShortcut(platform).keys,
-  });
+  if (!computerControlOffered(platform)) return t("macOS and Windows only.");
+  return t("They ask before each app.");
+}
+
+/** What computer control never touches on `platform`, under a computer-control card's Details. */
+export function computerNeverWords(platform: string): string {
   if (platform === StudioPlatform.Windows)
-    return `${can} ${stops} ${t("It never uses password managers, Windows Settings, password prompts or Genex.")}`;
-  return `${can} ${stops} ${t("Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex.")}`;
+    return t("It never uses password managers, Windows Settings, password prompts or Genex.");
+  return t("It never uses password managers, System Settings, password prompts or Genex.");
 }
 
 export function resumedWords(parts: number): string {
@@ -1869,7 +1870,14 @@ export const STAGE_WORDS = {
   /** The folded views' button: the switcher's name and the view it shows ("Game view: Builds"). */
   viewsButton: (view: string) => t("Game view: {view}", { view }),
   /** The view switcher's tabs; a folder with more than one Live view names each by what it shows. */
-  tabs: { live: t("Live"), builds: t("Builds"), assets: t("Assets"), webGame: t("Web game"), unreal: "Unreal" },
+  tabs: {
+    live: t("Live"),
+    builds: t("Builds"),
+    shop: t("Shop"),
+    assets: t("Assets"),
+    webGame: t("Web game"),
+    unreal: "Unreal",
+  },
 } as const;
 
 /** Live for a folder with no view of its own (Godot, Blender, files of its own): the latest pictures its runs kept. */
@@ -4014,6 +4022,18 @@ export const MAKING_WORDS = {
   /** A candidate's tab, and its picture. */
   candidate: (n: number) => t("Candidate {index}", { index: n }),
   candidates: t("Candidates"),
+  /** A job the account had too few Genex credits for: nothing was made or charged. */
+  needsCredits: t("Not enough credits"),
+  /** Its action: genex.games' plans in the browser. */
+  getCredits: t("Get credits"),
+  getCreditsLabel: t("Get Genex credits on genex.games"),
+  /** Once the balance pays for it: the chat's agent is asked to make it now. */
+  makeIt: t("Make it"),
+  /** What Make it sends in the game's chat, as if typed: "Make the 3D model with Genex now: Dragon boss". */
+  makeAgain: (kind: string, prompt: string | null) =>
+    prompt
+      ? t("Make the {kind} with Genex now: {prompt}", { kind, prompt })
+      : t("Make the {kind} with Genex now.", { kind }),
   /** The chat's cards of the assets a piece of work is still making. */
   inChat: t("Assets being made"),
   spoken: {
@@ -4263,7 +4283,7 @@ export const PLUGINS_WORDS = {
   /** The MCP servers section before anyone has added one. */
   servers: {
     emptyTitle: t("Connect any MCP server"),
-    emptyText: t("A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools."),
+    emptyText: t("A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools."),
   },
   own: {
     title: t("Make a community plugin"),
@@ -4310,7 +4330,7 @@ export const PLUGINS_WORDS = {
     folders: t("Folders"),
     folder: (path: string, why: string) => `${path} — ${why}`,
     scan: t("Code scan"),
-    trusted: t("This plugin runs trusted code on your Mac."),
+    trusted: t("This plugin runs trusted code on your computer."),
     /** A plugin loaded from a folder, in place of `trusted`. */
     localAccess: t(
       "Loaded from a folder on this Mac. It runs with your access: its code isn't sandboxed. Each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.",
@@ -4608,6 +4628,8 @@ export const GENEX_WORDS = {
     kinds: {
       [CreditKind.Model]: { name: t("3D model"), tool: "Tripo" },
       [CreditKind.Character]: { name: t("Rigged character"), tool: "Meshy" },
+      [CreditKind.CharacterPreview]: { name: t("Character preview"), tool: "Meshy" },
+      [CreditKind.CharacterFinalize]: { name: t("Finished character"), tool: "Meshy" },
       [CreditKind.ModelAnimation]: { name: t("Animation clip"), tool: "Tripo · Uthana" },
       [CreditKind.Image]: { name: t("Image or sprite"), tool: "GPT Image" },
       [CreditKind.Texture]: { name: t("Texture set"), tool: "Nano Banana" },
@@ -4885,15 +4907,19 @@ export const PLAY_WORDS = {
   people: {
     friends: t("Friends"),
     friendsLabel: (waiting: number) => (waiting > 0 ? t("Friends, {count} waiting", { count: waiting }) : t("Friends")),
+    hideFriends: t("Hide friends"),
+    showFriends: t("Show friends"),
     plateLabel: (name: string) => t("{name}, Genex account", { name }),
     pro: "Pro",
     proTag: "PRO",
     menuLabel: t("Genex account"),
     profile: t("Profile"),
-    credits: t("Credits"),
+    /** The menu's row for the account's credits, which pay for Genex tools only. */
+    credits: t("Genex credits"),
     creditsUnlimited: t("Unlimited"),
-    /** The credits beside the plate's name: "1,700 credits, open Credits". */
-    creditsLabel: (amount: string) => t("{amount} credits, open Credits", { amount }),
+    /** Under the credits row once none are left: genex.games' plans in the browser. */
+    getCredits: t("Get credits"),
+    getCreditsLabel: t("Get Genex credits on genex.games"),
     coins: t("Nex"),
     /** The coin beside the plate's name in Play: "1,240 coin, get coin". */
     coinsLabel: (amount: string) => t("{amount} Nex, get Nex", { amount }),
@@ -5461,19 +5487,18 @@ export const ITEMS_WORDS = {
   askAgent: t("Ask the agent to change it"),
   /** No design copy: Selling with nothing made yet. */
   noItems: t("Items you make show up here. Ask your game’s agent for one."),
-  // The Listing draft card (screen 09).
-  orAsk: t("or ask for changes below"),
+  // The Listing draft card (screen 09): in the chat its composer below takes a change; on Shop, a pencil.
+  askBelow: t("Ask for changes below"),
+  askForChanges: t("Ask for changes"),
   /** No design copy: the card once its item is on sale. */
   onSale: t("On sale"),
   listingLabel: (name: string) => t("Listing draft: {name}", { name }),
-  // A local draft's card: an item made before its game is on Genex.
-  localStatus: t("Draft · goes on sale when you publish"),
-  sellWhenPublished: t("Sell when published"),
-  /** "Sell when published", pressed. */
-  willSell: t("Will go on sale when you publish"),
-  undoSell: t("Undo"),
-  /** No design copy: the person approved what the draft held before the agent changed it. */
-  changedSinceApproved: t("It changed since you approved it."),
+  /** A draft, here or on Genex: Studio puts it on sale when the game is published. */
+  draftStatus: t("Draft · goes on sale when you publish"),
+  /** The same in a word, on a Shop tile's picture. */
+  draft: t("Draft"),
+  /** Above the Shop tab's tiles. */
+  draftsNote: t("Drafts go on sale when you publish."),
   /** No design copy: after the publish, a draft changed since its approval stays a draft. */
   stayedDraft: t("It changed since you approved it, so it stayed a draft."),
   /** No design copy: Genex got a version of the item this card never showed (an edit outside Studio). */
@@ -5977,8 +6002,8 @@ export const ACCOUNT_WORDS = {
   credits: t("Credits"),
   creditsCount: (count: string) => t("{count} credits", { count }),
   creditsUnlimited: t("Unlimited credits"),
-  buyCredits: t("Buy credits"),
-  buyCreditsLabel: t("Buy credits on genex.games"),
+  buyCredits: t("Get credits"),
+  buyCreditsLabel: t("Get Genex credits on genex.games"),
   /** Under the balance: what credits pay for, the plugin's name a link to its page. */
   creditsNote: t("For <plugin>Genex plugin</plugin> tools: 3D, animation, textures, music. Optional."),
   creditsPluginLabel: t("Open the Genex plugin page"),
@@ -6195,7 +6220,7 @@ export const ROBLOX_PUBLISH_WORDS = {
   publishUpdate: t("Publish an update"),
   updateLine: t("Everyone who plays gets this version."),
   handing: t("Handing it to the agent…"),
-  chatAsks: t("If the chat asks to use computer control, answer it there."),
+  chatAsks: t("If the chat or macOS asks for permission, allow it: publishing goes on by itself."),
   progress: t("Publishing to Roblox"),
   stepAgent: t("To the agent"),
   stepStudio: t("In Roblox Studio"),

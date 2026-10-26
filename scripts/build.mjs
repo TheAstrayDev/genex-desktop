@@ -371,8 +371,10 @@ async function copyResources() {
       .join(", ")}`,
   );
   // Computer control's driver ships with every macOS and Windows release, so it works once the app is
-  // installed (scripts/vendor-cua-driver.ts); a development build takes it only when asked to.
-  const vendorCua = release || process.env.GENEX_VENDOR_CUA_DRIVER === "1";
+  // installed (scripts/vendor-cua-driver.ts); a development build takes it only when asked to
+  // (`--vendor-cua-driver`, which every live studio:dev profile passes).
+  const vendorCua =
+    release || process.argv.includes("--vendor-cua-driver") || process.env.GENEX_VENDOR_CUA_DRIVER === "1";
   const driverShipsHere = process.platform === "darwin" || process.platform === "win32";
   if (driverShipsHere && vendorCua) {
     const cua = await vendorCuaDriver(root, resources);
