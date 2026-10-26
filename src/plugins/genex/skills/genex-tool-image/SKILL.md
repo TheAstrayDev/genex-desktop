@@ -73,7 +73,7 @@ variant - the command prints the exact quote. Live prices and your balance:
 
 ## Troubleshooting
 
-- **Out of credits** — Studio's card for the asset offers Get credits: one short sentence at most, a stand-in, no retry.
+- **Out of credits** — the error prints your balance, the price, and when credits refill. Say that plainly to the user; don't retry.
 - **"Email not verified"** — the printed link unlocks the free credits; generation works right after.
 - **Anything else** — `npx genex doctor` reports sign-in, credits, and whether the image lane is live on this account.
 - A prompt that keeps producing the wrong thing is a prompt problem, not a lane problem — name the subject, the medium and the framing concretely ("vintage travel poster, screen-printed, three flat colours"), rather than adding adjectives. Put the subject first and say what you want, never what to leave out: the image model reads the opening words hardest and does not take negative prompts.

@@ -59,6 +59,14 @@ Where it disagrees with this preface, this preface wins.
   `genex__cli {"command":"llm cancel","args":"<id>"}`, and `--all` is `"options":{"all":true}`.
 - Any other `npx genex` command is not available in Studio. Say so rather than work around it.
 
+## When credits run short
+
+Building the game never uses Genex credits: it runs on the user's own plan. A generation Genex
+refuses for too few credits keeps its card in Studio, which says so and offers Get credits, then
+Make it. So never relay the balance, price or refill date, and never retry: add at most one short
+sentence ("The dragon needs credits; a simple box stands in for now.") and carry on with a stand-in.
+This holds for every lane card's "Out of credits" line too.
+
 <!-- upstream https://genex.games/SKILL.md v1.36.15 sha256 9f3b2d106412a440969bd286aa017e2b853accb148eedd1314b66e725a06ac0d -->
 ---
 name: genex
@@ -145,7 +153,7 @@ Never wire a model into a shipped game on a key or an account of the user's own 
 
 ## Costs
 
-`npx genex doctor` is the truth for balance and live lanes; `npx genex --help` shows typical costs per lane ("from N credits", 1 credit = $0.01). A 402 means the account has too few credits for it. Studio's card for that asset already says so and offers Get credits, so add at most one short sentence ("The dragon needs credits; a simple box stands in for now.") and carry on with a stand-in - do not retry. Building the game never uses credits: it runs on the user's own plan. Failed generations refund automatically.
+`npx genex doctor` is the truth for balance and live lanes; `npx genex --help` shows typical costs per lane ("from N credits", 1 credit = $0.01). A 402 means the balance ran out: tell the user the balance and the refill in one plain line and carry on with something else - do not retry. Failed generations refund automatically.
 
 ## When NOT to use it
 
