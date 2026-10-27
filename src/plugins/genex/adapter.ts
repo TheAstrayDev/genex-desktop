@@ -1259,8 +1259,11 @@ export class GenexTools {
   ): Promise<HostedMeta> {
     const existing = await readJsonOr<HostedMeta>(metaFile(dir));
     if (existing?.slug && !(await this.#linkGone(existing, signal))) return existing;
-    // A deleted game, or one this account doesn't own, refuses every upload: publish as a new game.
+    // A deleted game, or one this account doesn't own, refuses every upload: this account's own
+    // game set aside earlier (another sign-in's publish) comes back, else a new game is made.
     if (existing?.slug) await this.#unlink(dir);
+    const restored = await this.#relinkOwn(dir, signal);
+    if (restored) return restored;
     job.phase = GenexPublishPhase.CreatingProject;
     await this.#persistJob(project, job);
     // Without `--no-auth` the fd-3 token satisfies the CLI, so the hosted project is created here
@@ -1272,15 +1275,17 @@ export class GenexTools {
   }
   /**
    * Whether the game this workspace is linked to is gone or not this account's: Genex knows no such
-   * game for this sign-in (it answers a stranger's game as unknown too), or {@link linkedElsewhere}.
-   * False when Genex can't be asked: no answer is evidence of nothing.
+   * game for this signed-in account (it answers a stranger's game as unknown too), or
+   * {@link linkedElsewhere}. False when Genex can't be asked, or the sign-in no longer holds (a dead
+   * sign-in reads every game as unknown): no answer is evidence of nothing.
    */
   async #linkGone(meta: HostedMeta, signal: AbortSignal): Promise<boolean> {
+    const session = await this.#session(signal).catch(() => null);
+    if (!session?.user) return false;
     try {
       const answer = await this.#fetch(GenexRoute.projectBySlug(String(meta.slug)), withSignal(signal));
-      const session = await this.#session(signal).catch(() => null);
       const project = answer?.project;
-      return linkedElsewhere(meta, { id: project?.id, ownerId: project?.owner?.id }, session?.user?.id);
+      return linkedElsewhere(meta, { id: project?.id, ownerId: project?.owner?.id }, session.user.id);
     } catch (error) {
       return statusOf(error) === HTTP_NOT_FOUND;
     }
@@ -1288,6 +1293,22 @@ export class GenexTools {
   /** Sets a stale link aside, never deleting it, so `genex init` makes a new hosted project. */
   async #unlink(dir: string): Promise<void> {
     await rename(metaFile(dir), path.join(dir, ".genex", `${UNLINKED_PREFIX}${Date.now()}.json`));
+  }
+  /** The newest link set aside that is this account's game again, put back; null when none is. */
+  async #relinkOwn(dir: string, signal: AbortSignal): Promise<HostedMeta | null> {
+    const folder = path.join(dir, ".genex");
+    const names = await readdir(folder).catch(() => []);
+    const aside = names
+      .filter((name) => name.startsWith(UNLINKED_PREFIX))
+      .sort()
+      .reverse();
+    for (const name of aside) {
+      const meta = await readJsonOr<HostedMeta>(path.join(folder, name));
+      if (!meta?.slug || (await this.#linkGone(meta, signal))) continue;
+      await rename(path.join(folder, name), metaFile(dir));
+      return meta;
+    }
+    return null;
   }
   /**
    * Finished CLI runs, one output per step: record the pages they printed, then verify the draft
