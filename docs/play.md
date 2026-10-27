@@ -142,13 +142,14 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   cancels it on genex.games, and the next sheet waits 5 seconds; a page that reloads or leaves, or a
   viewer that closes, cancels one still unpaid. Its states: Ask (`× N` above one; a game-priced
   payment's terms whole, in a scroll area), Paying, Paid (the receipt and what is left), Not enough
-  coin (Get Nex opens genex.games; once the coin arrives, Review; after genex.games refused Pay for
-  want of coin, try again in the game), Sign in (Review once signed in), Pending (genex.games has not
-  answered; asked every 2 seconds) and Failed (timed out, canceled, refused or refunded). A purchase
+  coin (Get Nex opens genex.games' Buy Nex picker, `/inventory?buy=nex`; once the coin arrives,
+  Review; after genex.games refused Pay for want of coin, try again in the game), Sign in (Review
+  once signed in), Pending (genex.games has not answered; asked every 2 seconds) and Failed (timed
+  out, canceled, refused or refunded). A purchase
   genex.games still holds open never times out sooner than its two minutes after the game asked, by
   the app's own clock, however far that clock runs ahead. Signing in from the sheet signs the bar in
-  too. UNCONFIRMED with genex.games: confirming from Studio on the `native_modal` surface, and
-  `/inventory` as Get Nex's page; each is one constant (`STUDIO_CONFIRM_SURFACE`, `playCoinPageUrl`).
+  too. UNCONFIRMED with genex.games: confirming from Studio on the `native_modal` surface, one
+  constant (`STUDIO_CONFIRM_SURFACE`). Get Nex's page is the website's own coin page (`playCoinPageUrl`).
   A development profile pointing Studio at another API catches nothing.
 - The page stays on Genex games' addresses; a link it opens goes to the browser, at most one every
   few seconds. A coin purchase's popup is the exception above: its confirm address no longer goes to
