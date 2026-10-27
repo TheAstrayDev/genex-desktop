@@ -3,7 +3,6 @@
  * captures and computer sessions agents look through, the agent screens on the stage, and a run's
  * builds played or landed. Composed by `StudioCore`; its state stays in the core.
  */
-import { isLocalPicture } from "../../shared/item-draft.ts";
 import {
   genexJobDir,
   isGenexInspectionFile,
@@ -61,6 +60,7 @@ import {
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { CAMERA_SETTLE_MS, DEFAULT_SHOT_QUALITY, DEFAULT_STILL_QUALITY, captureSurface, tookPage } from "./capture.ts";
 import { delegationsIn, PreviewIdentityState, type ServedRoot } from "./internals.ts";
+import { readItemPicture } from "./item-pictures.ts";
 import { iterationDir, safePathSegment } from "./run-shots.ts";
 import { readyNote, servedKey, strayPage } from "./page-report.ts";
 import type { SessionPort } from "./session-port.ts";
@@ -79,9 +79,6 @@ import { type LiveBehindEvent, WebBuildLoad } from "../../shared/live-behind.ts"
 import type { GameSoundRequest } from "../../shared/game-sound.ts";
 import { liveAudible, type LiveSound } from "../game-sound.ts";
 import { liveMaxFps } from "../live-pace.ts";
-
-/** Where a store item's local draft keeps its files in the game. */
-const LOCAL_ITEMS_PREFIX = ".genex/items/";
 /** The most cameras one capture photographs. */
 const MAX_CAPTURE_CAMERAS = 8;
 /** How many times a capture asks a registered camera to switch before it says the switch is dead. */
@@ -1426,13 +1423,10 @@ export class PreviewService {
       if (!dir || !isGenexInspectionFile(p.file)) return null;
       return readContainedImage(dir, p.file, { prefixes: [], ...resize });
     }
-    // A store item's picture lives in its local draft's own folder, which is no asset folder.
+    // A store item's picture: Studio's kept copy, else its local draft's own folder in the game.
     if (p.scope === ProjectAssetScope.ItemPicture) {
-      if (!isLocalPicture(p.file)) return null;
-      return readContainedImage(this.#core.games.dirFor(p.project), p.file, {
-        prefixes: [LOCAL_ITEMS_PREFIX],
-        ...resize,
-      });
+      const where = { root: this.#core.layout.itemPictures, game: this.#core.games.dirFor(p.project) };
+      return readItemPicture(where, p.project, p.file, resize);
     }
     if (isGenexRef(p.file)) return this.#readGenexOutput(p.project, p.file, resize);
     if (!isAssetPath(p.file, await this.#x.assets.assetFolders(p.project))) return null;
