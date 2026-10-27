@@ -79,7 +79,9 @@ counters carry the regression gates.
 - Fixture messages for journeys: `fixture:stream` (a short streamed reply) and `fixture:stream-long`
   (about ten thousand characters of Markdown and code, streamed at a fast model's pace, in a game chat).
 - `dist/renderer/bundle-report.json`: eager renderer bytes against the budget in
-  `scripts/renderer-build.mjs`; three.js must stay out of the eager graph.
+  `scripts/renderer-build.mjs`; three.js must stay out of the eager graph. CI's own build bundles
+  production React, so `renderer-build.test.ts` bundles the studio as an owned fixture build and a
+  packaged build do and holds each to its budget.
 - The eval ledger's `time.*` fields and `npm run eval -- compare|check` for whole-build timing
   ([evals](evals.md)).
 - `scripts/bench/event-log.ts` for event-store reads at scale.
@@ -98,6 +100,8 @@ counters carry the regression gates.
 
 ## Rules that keep work off the critical path
 
+- Launch opens Create's home, so what covers it later loads the first time it opens, each a chunk
+  of its own outside the eager graph: Plugins, Create › Items, Play's pages and Settings.
 - The chat transcript mounts rows three screens ahead both ways and keeps them four screens
   back (`chat/transcript-window.ts`): a GPU busy with Live's game draws newly mounted rows late,
   so rows mounted just in time showed as a blank block under a fast fling.
