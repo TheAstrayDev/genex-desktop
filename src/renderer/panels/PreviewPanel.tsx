@@ -403,13 +403,20 @@ function usePlanningEnded(
     const since = firstPlan.since ?? Date.now();
     wait.current = { project, since, fromHome: firstPlan.since !== undefined, gameRef: gameRef(project) };
   }, [project, firstPlan, building]);
-  useEffect(
-    () => () => {
-      const open = wait.current;
-      if (open) track(AnalyticsEvent.BuildPlanningEnded, planningEnded(open, PlanningEnd.LeftGame, Date.now()));
-    },
-    [],
-  );
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      // StrictMode's development remount follows at once: only a stage that stays gone ends the wait.
+      queueMicrotask(() => {
+        const open = wait.current;
+        if (mounted.current || !open) return;
+        wait.current = null;
+        track(AnalyticsEvent.BuildPlanningEnded, planningEnded(open, PlanningEnd.LeftGame, Date.now()));
+      });
+    };
+  }, []);
 }
 
 /** What Live's wait needs to know of the game: when it was made, and when its chat's first message went. */

@@ -27,6 +27,36 @@ function ConsentRow({ icon, title, text, muted }: { icon: IconName; title: strin
   );
 }
 
+/** What the question lists and its two answers, the replay line only for an install that records one. */
+export function ConsentChoices({
+  replay,
+  onAnswer,
+}: {
+  replay: boolean;
+  onAnswer: (choice: AnalyticsChoice) => void;
+}): JSX.Element {
+  return (
+    <>
+      <ul data-analytics-consent className="flex flex-col gap-3.5">
+        <ConsentRow icon="graph" title={ANALYTICS_WORDS.events} text={ANALYTICS_WORDS.eventsWhat} />
+        {replay && <ConsentRow icon="video" title={ANALYTICS_WORDS.replay} text={ANALYTICS_WORDS.replayWhat} />}
+        <ConsentRow icon="eye-off" title={ANALYTICS_WORDS.never} text={ANALYTICS_WORDS.neverWhat} muted />
+      </ul>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-1">
+        <p className="text-[13px] leading-[18px] text-ink-3">{ANALYTICS_WORDS.later}</p>
+        <div className="flex shrink-0 gap-2">
+          <Button data-analytics-choice={AnalyticsChoice.Off} onClick={() => onAnswer(AnalyticsChoice.Off)}>
+            {ANALYTICS_WORDS.keep}
+          </Button>
+          <Button data-analytics-choice={AnalyticsChoice.On} onClick={() => onAnswer(AnalyticsChoice.On)}>
+            {ANALYTICS_WORDS.share}
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function AnalyticsConsent({
   replay,
   onChoice,
@@ -47,22 +77,7 @@ export function AnalyticsConsent({
       dismissible={false}
       onDismiss={() => {}}
     >
-      <ul data-analytics-consent className="flex flex-col gap-3.5">
-        <ConsentRow icon="graph" title={ANALYTICS_WORDS.events} text={ANALYTICS_WORDS.eventsWhat} />
-        {replay && <ConsentRow icon="video" title={ANALYTICS_WORDS.replay} text={ANALYTICS_WORDS.replayWhat} />}
-        <ConsentRow icon="eye-off" title={ANALYTICS_WORDS.never} text={ANALYTICS_WORDS.neverWhat} muted />
-      </ul>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-1">
-        <p className="text-[13px] leading-[18px] text-ink-3">{ANALYTICS_WORDS.later}</p>
-        <div className="flex shrink-0 gap-2">
-          <Button data-analytics-choice={AnalyticsChoice.Off} onClick={() => answer(AnalyticsChoice.Off)}>
-            {ANALYTICS_WORDS.keep}
-          </Button>
-          <Button data-analytics-choice={AnalyticsChoice.On} onClick={() => answer(AnalyticsChoice.On)}>
-            {ANALYTICS_WORDS.share}
-          </Button>
-        </div>
-      </div>
+      <ConsentChoices replay={replay} onAnswer={answer} />
     </DialogSurface>
   );
 }

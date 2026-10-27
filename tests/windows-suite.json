@@ -6,6 +6,7 @@
   "tests/conformance/agent-settings.test.ts",
   "tests/conformance/analytics-builds.test.ts",
   "tests/conformance/analytics-chat.test.ts",
+  "tests/conformance/analytics-consent.test.ts",
   "tests/conformance/analytics-guard.test.ts",
   "tests/conformance/analytics-launch.test.ts",
   "tests/conformance/analytics-plugins.test.ts",
