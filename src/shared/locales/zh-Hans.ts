@@ -4314,6 +4314,7 @@ export default {
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.":
     "Claude 无需询问就会执行的操作。在对话中选择“始终允许”，该操作就会添加到这里，仅对那个游戏生效。",
   "What Harness has learned": "Harness 学到了什么",
+  "What changed": "改了什么",
   "What changes": "更改内容",
   "What credits pay for": "积分可用于",
   "What do you want to make?": "你想做什么？",

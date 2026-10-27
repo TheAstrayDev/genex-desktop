@@ -4697,6 +4697,7 @@ export default {
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.":
     "Was Claude tut, ohne zu fragen. Wählst du in einem Chat „Immer erlauben“, landet die Aktion hier – für dieses Spiel.",
   "What Harness has learned": "Was Harness gelernt hat",
+  "What changed": "Was sich geändert hat",
   "What changes": "Was sich ändert",
   "What credits pay for": "Wofür Credits da sind",
   "What do you want to make?": "Was willst du machen?",
