@@ -13,6 +13,7 @@ import { problemWords } from "../../words.ts";
 import { useGameSound } from "./game-sound.ts";
 import type { useLiveLoad } from "./live-load.ts";
 import { useLoaderPresence } from "./loader-presence.ts";
+import { errorCode } from "../../../shared/errors.ts";
 
 /** Where the Live game is, as the Play/Stop button shows it. */
 export const LiveRun = {
@@ -71,7 +72,7 @@ export function useLiveRun(
         })
         .catch((err: unknown) => {
           track(AnalyticsEvent.LivePlayToggled, { to: LiveRun.Stopped, ok: false });
-          onNotice(problemWords(err), ToastTone.Error);
+          onNotice(problemWords(err), ToastTone.Error, errorCode(err));
         })
         .finally(() => setStopping(false));
       return;
@@ -86,7 +87,7 @@ export function useLiveRun(
         track(AnalyticsEvent.LivePlayToggled, { to: LiveRun.Running, ok: false });
         if (!idle) setStopped(true);
         setStarting(false);
-        onNotice(problemWords(err), ToastTone.Error);
+        onNotice(problemWords(err), ToastTone.Error, errorCode(err));
       },
     );
   }, [project, run, idle, setStopped, loadLive, onNotice]);

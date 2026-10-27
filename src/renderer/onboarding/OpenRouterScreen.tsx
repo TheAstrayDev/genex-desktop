@@ -49,8 +49,9 @@ export function useOpenRouter(engines: EngineDescriptor[], onEnginesRefresh: () 
     try {
       const result = await window.studio.openRouterSignIn();
       if (mine !== attempt.current) return;
-      reportSignInSettled(EngineId.OpenRouter, result.outcome);
-      if (result.outcome === OpenRouterSignInOutcome.Failed) setProblem(result.error);
+      const failed = result.outcome === OpenRouterSignInOutcome.Failed ? result : null;
+      reportSignInSettled(EngineId.OpenRouter, result.outcome, failed?.problem ?? null);
+      if (failed) setProblem(failed.error);
       onEnginesRefresh();
     } catch (err) {
       if (mine !== attempt.current) return;

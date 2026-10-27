@@ -8,6 +8,8 @@ import { useEffect, useRef } from "react";
 import type { CliInstallOperation } from "../../shared/cli-install.ts";
 import type { CodingCliState } from "../../shared/coding-cli.ts";
 import type { EngineDescriptor, EngineStatusCode } from "../../shared/engine-descriptor.ts";
+import type { StudioErrorCode } from "../../shared/error-codes.ts";
+import { errorCode } from "../../shared/errors.ts";
 import type { FoundLocalServer, LocalServerConnectResult } from "../../shared/local-server.ts";
 import type { HardwareReport, StudioApi } from "../../shared/studio-api.ts";
 import type { PromoAccount } from "../genex-promo.ts";
@@ -17,6 +19,7 @@ import { readText, removeKey, STORAGE_KEYS, writeText } from "../storage.ts";
 import { prefersReducedMotion } from "../ui/media-queries.ts";
 import { track } from "./client.ts";
 import { AnalyticsEvent } from "./events.ts";
+import type { SignInProblem } from "./events/welcome.ts";
 import { elapsedMs } from "./properties.ts";
 import {
   connectModelClicked,
@@ -67,14 +70,14 @@ import {
 /** The clock every report reads; durations measured at a call site start from it too. */
 export const reportClock = (): number => Date.now();
 
-/** Run `work`, then say whether it went through; its answer and its error still reach the caller. */
-export async function settled<T>(work: () => Promise<T>, done: (ok: boolean) => void): Promise<T> {
+/** Run `work`, then say whether it went through, and how it failed; its answer and its error still reach the caller. */
+export async function settled<T>(work: () => Promise<T>, done: (ok: boolean, error?: unknown) => void): Promise<T> {
   try {
     const value = await work();
     done(true);
     return value;
   } catch (err) {
-    done(false);
+    done(false, err);
     throw err;
   }
 }
@@ -87,9 +90,14 @@ export function reportProviderPress(engine: string, action: ProviderAction, surf
   );
 }
 
-/** A provider's button was refused at once; its reason is English only, so none is sent. */
-export function reportProviderActionFailed(engine: string, action: ProviderAction, surface: ProviderSurface): void {
-  track(AnalyticsEvent.ProviderActionFailed, { engine: engineRef(engine), action, surface });
+/** A provider's button was refused at once, by the failure's code when it had one. */
+export function reportProviderActionFailed(
+  engine: string,
+  action: ProviderAction,
+  surface: ProviderSurface,
+  error: unknown,
+): void {
+  track(AnalyticsEvent.ProviderActionFailed, { engine: engineRef(engine), action, surface, code: errorCode(error) });
 }
 
 /** A sign-in was asked for, and whether it started. */
@@ -100,16 +108,23 @@ export function reportSignInStarted(engine: string, started: boolean, missingCli
   );
 }
 
-/** A sign-in that settles in one call (OpenRouter's browser sign-in) ended. */
-export function reportSignInSettled(engine: string, outcome: SignInOutcome): void {
-  track(AnalyticsEvent.ProviderSignInFinished, signInSettled(providerMemory, { engine, outcome }, reportClock()));
+/** A sign-in that settles in one call (OpenRouter's browser sign-in) ended; a failure may say why. */
+export function reportSignInSettled(
+  engine: string,
+  outcome: SignInOutcome,
+  problem: SignInProblem | null = null,
+): void {
+  track(
+    AnalyticsEvent.ProviderSignInFinished,
+    signInSettled(providerMemory, { engine, outcome, problem }, reportClock()),
+  );
 }
 
 /** A help beside a sign-in was used; `accepted` for a submitted code. */
 export function reportSignInHelper(
   engine: string,
   helper: SignInHelper,
-  extra: { surface?: ProviderSurface; accepted?: boolean; phase?: LoginPhase } = {},
+  extra: { surface?: ProviderSurface; accepted?: boolean; phase?: LoginPhase; code?: StudioErrorCode | null } = {},
 ): void {
   track(
     AnalyticsEvent.ProviderSignInHelperUsed,
@@ -122,9 +137,12 @@ export function reportTerminalSignInCancelled(engine: string): void {
   terminalSignInCancelled(providerMemory, engine);
 }
 
-/** An install or update refused before it started. */
-export function reportCliInstallRefused(provider: string, operation: CliInstallOperation): void {
-  track(AnalyticsEvent.CliInstallRefused, cliInstallRefused(providerMemory, { provider, operation }, reportClock()));
+/** An install or update refused before it started, with what refused it. */
+export function reportCliInstallRefused(provider: string, operation: CliInstallOperation, error: unknown): void {
+  track(
+    AnalyticsEvent.CliInstallRefused,
+    cliInstallRefused(providerMemory, { provider, operation, error }, reportClock()),
+  );
 }
 
 /** A missing CLI looked for again on coming back to the window: the next engines list answers it. */
@@ -176,8 +194,9 @@ export function reportDownloadFinished(
   model: string,
   ok: boolean,
   ollama: Pick<EngineDescriptor, "status"> | undefined,
+  error?: unknown,
 ): void {
-  const finished = downloadFinished(providerMemory, { model, ok, ollama }, reportClock());
+  const finished = downloadFinished(providerMemory, { model, ok, ollama, error }, reportClock());
   if (finished) track(AnalyticsEvent.LocalModelDownloadFinished, finished);
 }
 
@@ -187,7 +206,7 @@ export function downloadReported<T>(
   ollama: () => Pick<EngineDescriptor, "status"> | undefined,
   work: () => Promise<T>,
 ): Promise<T> {
-  return settled(work, (ok) => reportDownloadFinished(model, ok, ollama()));
+  return settled(work, (ok, error) => reportDownloadFinished(model, ok, ollama(), error));
 }
 
 /** The screen downloads started on closed while they ran. */

@@ -16,6 +16,7 @@ import { stopRequestedProperties } from "../analytics/chat-properties.ts";
 import { StopIgnored, StopVia } from "../analytics/chat-vocabulary.ts";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
+import { errorCode } from "../../shared/errors.ts";
 
 /**
  * How long after a Stop it acted on the chat ignores the button: a double press must not cancel
@@ -128,7 +129,7 @@ export function useChatStop({
   const requestStop = useCallback((): void => {
     const next = requestChatStop(window.studio, { threadId, stopping, events, mark }, (err) => {
       setMark(null);
-      onNotice(problemWords(err), ToastTone.Error);
+      onNotice(problemWords(err), ToastTone.Error, errorCode(err));
     });
     const ignored = next ? StopIgnored.None : StopIgnored.RepeatWithin5s;
     if (threadId) trackStop(threadId, { via: StopVia.Button, ignored, buildRunning: Boolean(runId) });

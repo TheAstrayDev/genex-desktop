@@ -373,6 +373,8 @@ describe("chat_turn_ended", () => {
           streamed: true,
           stream_failed: true,
           failure_kind: EngineFailureKind.RateLimit,
+          // A direct engine's failed call that was a limit is the limit the turn ended on.
+          limit_kind: EngineFailureKind.RateLimit,
           launched_build: false,
         },
       },

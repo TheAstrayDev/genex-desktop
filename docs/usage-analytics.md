@@ -57,6 +57,17 @@ stops recording, opts out and resets the id.
   (the newest counted is kept in `studio.analytics.logSeen`), and main's UI events through the
   stores' own subscription (`studio.onUiEvent`). `track`, the super-properties and every listener
   run guarded: analytics failing never reaches the app.
+- **Failure codes**: a failure is told by a typed code, never its words. Main throws a refusal it
+  names as a `CodedError` (`shared/errors.ts`); `main/ipc-handle.ts` sends its code beside the words
+  (`IpcResult.code`), the preload rejects with it again, and the renderer reads it with `errorCode`
+  (`errorCodeIn` for one vocabulary). Only values of the vocabularies in `shared/error-codes.ts`
+  cross, each unique across them, so `error_toast_shown` (from `notify`'s code) says which failure
+  it was; a Node `ENOENT`, words or a path read as none. Other failures ride their own records:
+  the sign-in states' `problem` (`ClaudeLoginProblem`, `CodexLoginProblem`), OpenRouter's
+  `OpenRouterSignInProblem`, a model install job's `problem` and `failedPhase`, `EngineStatus.reason`,
+  `chat.error`'s `failure` or `refusal`, `PlanReview.failure`, `compaction_failed`'s `failure`, and
+  a delegated chat turn's `failure` and `limit`, which main adds to its `turn_ended` (the harness
+  ends the turn knowing only the words). Builders re-check every value against its vocabulary.
 - **The welcome** keeps the step an unfinished welcome stood on (`studio.analytics.welcomeScreen`),
   so the next launch's `welcome_shown` says it resumed and where.
 - **Every event** carries app version, platform, language, a per-launch id, first launch, the
@@ -85,5 +96,7 @@ on "Discard client IP data".
 releases carry no analytics. `tests/conformance/analytics.test.ts` covers the build and launch
 gates, the CSP, the answer and the replay draw, screens, masking, the last pass and a yes or no
 while the chunk loads; `analytics-<area>.test.ts` cover each part's events;
-`renderer-state.test.ts` covers asking once per version and the replay draw. A build with a key
+`renderer-state.test.ts` covers asking once per version and the replay draw;
+`analytics-failure-codes.test.ts` covers each failure code from where main names it to its event,
+with hostile values (words, paths, Node codes) that must read as none. A build with a key
 shows the extra `connect-src` origins in `dist/renderer/index.html`.

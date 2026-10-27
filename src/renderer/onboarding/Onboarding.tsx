@@ -27,7 +27,8 @@ import { SECOND_MS } from "../../shared/duration.ts";
 import { t } from "../../shared/i18n.ts";
 import type { CodexLoginState } from "../../shared/codex-login.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
-import type { ModelInstallJob } from "../../shared/model-install.ts";
+import { type ModelInstallJob, ModelPullStatus } from "../../shared/model-install.ts";
+import { errorCode } from "../../shared/errors.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { type ModelPullProgress, UiEvent } from "../../shared/ui-events.ts";
 import { track } from "../analytics/client.ts";
@@ -642,12 +643,12 @@ function followPull(
   { setPulling, setProgress, setError }: DownloadSetters,
   onEnginesRefresh: () => void,
 ) {
-  if (progress.status === "error") {
+  if (progress.status === ModelPullStatus.Error) {
     setPulling(null);
     setError(progress.error ?? t("Download failed"));
     return;
   }
-  if (progress.status === "success") {
+  if (progress.status === ModelPullStatus.Success) {
     setPulling(null);
     onEnginesRefresh();
   } else setPulling(model);
@@ -852,8 +853,12 @@ function ConnectButton({
     event.preventDefault();
     if (!code.trim()) return;
     setCodeError(null);
-    const helped = (accepted: boolean) =>
-      reportSignInHelper(id, SignInHelper.CodeSubmitted, { surface: ProviderSurface.Onboarding, accepted });
+    const helped = (accepted: boolean, error?: unknown) =>
+      reportSignInHelper(id, SignInHelper.CodeSubmitted, {
+        surface: ProviderSurface.Onboarding,
+        accepted,
+        code: errorCode(error),
+      });
     void settled(() => window.studio.claudeLoginCode(code.trim()), helped)
       .then(() => setCode(""))
       .catch((err: Error) => setCodeError(problemWords(err)));
@@ -944,7 +949,7 @@ function useSubscriptions(engines: EngineDescriptor[], onEnginesRefresh: () => v
     reportProviderPress(id, view.action, ProviderSurface.Onboarding);
     setProblem(null);
     void Promise.resolve(step(id, view)).catch((err) => {
-      reportProviderActionFailed(id, view.action, ProviderSurface.Onboarding);
+      reportProviderActionFailed(id, view.action, ProviderSurface.Onboarding, err);
       setProblem(problemWords(err));
     });
   };

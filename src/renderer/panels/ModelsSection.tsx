@@ -9,7 +9,7 @@ import type { JSX } from "react";
 import { useEffect, useState } from "react";
 import { type ClaudeLoginState, isClaudeLoginActive } from "../../shared/claude-login.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
-import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
+import { EngineStatusCode, EngineStatusReason } from "../../shared/engine-descriptor.ts";
 import { t } from "../../shared/i18n.ts";
 import { EngineId } from "../../shared/providers.ts";
 import {
@@ -51,6 +51,7 @@ import { CatalogNoteKind, catalogNote } from "./catalog-note.ts";
 import { type ProviderWords, RowHeading, RowTone, type RowView } from "./provider-row.tsx";
 import { MeteredProviderRows } from "./MeteredProviders.tsx";
 import { LocalServerRow } from "./LocalServerRow.tsx";
+import { errorCode } from "../../shared/errors.ts";
 
 const PROVIDERS: Record<string, ProviderWords> = {
   [EngineId.ClaudeCode]: {
@@ -81,7 +82,7 @@ interface RowActions {
   /** Tell usage analytics which of the row's buttons was pressed. */
   press: (action: ProviderAction) => void;
   /** Tell usage analytics which help beside the sign-in was used. */
-  helped: (helper: SignInHelper, accepted?: boolean) => void;
+  helped: (helper: SignInHelper, accepted?: boolean, error?: unknown) => void;
   run: (action: () => Promise<unknown>) => Promise<void>;
   recheck: () => Promise<void>;
   /** Asks the CLI for its model list again. */
@@ -348,7 +349,7 @@ function signInLine(words: ProviderWords, engine: EngineDescriptor): string {
   const account = engine.account;
   if (account?.source === "env" && account.variable)
     return t("Check the account set by {variable}.", { variable: account.variable });
-  if (/api key/i.test(engine.status.detail))
+  if (engine.status.reason === EngineStatusReason.ApiKeyLogin)
     return t("{name} is using an API key. Sign in to use your {plans} plan.", { name: words.name, plans: words.plans });
   return t("Use your {plans} plan.", { plans: words.plans });
 }
@@ -450,7 +451,7 @@ function CodeEntry({
     act.run(async () => {
       await settled(
         () => window.studio.claudeLoginCode(code),
-        (accepted) => act.helped(SignInHelper.CodeSubmitted, accepted),
+        (accepted, error) => act.helped(SignInHelper.CodeSubmitted, accepted, error),
       );
       setCode("");
     });
@@ -506,10 +507,11 @@ function useRowActions(
     checking,
     actionError,
     press: (action) => reportProviderPress(engineId, action, ProviderSurface.Settings),
-    helped: (helper, accepted) =>
+    helped: (helper, accepted, error) =>
       reportSignInHelper(engineId, helper, {
         surface: ProviderSurface.Settings,
         ...(accepted === undefined ? {} : { accepted }),
+        code: errorCode(error),
       }),
     run,
     recheck,

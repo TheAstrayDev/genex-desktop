@@ -48,6 +48,19 @@ export const SendBlock = {
 } as const;
 export type SendBlock = (typeof SendBlock)[keyof typeof SendBlock];
 
+/** Where a message that did not go stopped: its send was rejected, or its chat refused it. */
+export const SendFailStage = { Rejected: "rejected", Refused: "refused" } as const;
+export type SendFailStage = (typeof SendFailStage)[keyof typeof SendFailStage];
+
+/** How long a provider said to wait before trying again. */
+export const RetryAfterBucket = {
+  Minute: "<1m",
+  Hour: "1-60m",
+  Day: "1-24h",
+  Longer: "24h+",
+} as const;
+export type RetryAfterBucket = (typeof RetryAfterBucket)[keyof typeof RetryAfterBucket];
+
 /** An engine as analytics names it: one of the app's engine ids, else other; none when there is none. */
 export const EngineRefOther = { Other: "other", None: "none" } as const;
 /** A model as analytics names it: a catalog id of a subscription or OpenRouter, else one of these. */

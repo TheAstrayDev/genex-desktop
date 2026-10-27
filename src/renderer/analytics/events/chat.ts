@@ -3,15 +3,20 @@
  * turn, stopping and rewinding. Every value is one of the app's own vocabularies, a switch, a count
  * or a duration: never the words, a name, a path or an id (they are paired in `chat-memory.ts`).
  */
-import type { PlanReviewState } from "../../../shared/composer.ts";
+import type { PlanReviewState, SendFailure, SendRefusal } from "../../../shared/composer.ts";
 import type { ChatActivityPhase } from "../../../shared/chat-activity.ts";
 import type { FilesStay } from "../../../shared/chat-rewind.ts";
 import type { EngineKind } from "../../../shared/engine-descriptor.ts";
-import type { EngineFailureKind } from "../../../shared/engine-requests.ts";
+import type { EngineFailureKind, LimitKind } from "../../../shared/engine-requests.ts";
 import type { ToolCategory } from "../../../shared/eval-lane.ts";
 import type { SteerDelivery } from "../../../shared/message-queue.ts";
 import type { ReasoningEffort } from "../../../shared/model-preferences.ts";
-import type { PermissionDecision, PermissionMode, SteadyPermissionMode } from "../../../shared/permissions.ts";
+import type {
+  ModeSwitchFailure,
+  PermissionDecision,
+  PermissionMode,
+  SteadyPermissionMode,
+} from "../../../shared/permissions.ts";
 import type { MentionKind, MentionOrigin } from "../../../shared/prompt-mention.ts";
 import type { ConsentChoice } from "../../chat/consent-card.ts";
 import type { SendPlacement } from "../../chat/pending-sends.ts";
@@ -36,9 +41,11 @@ import type {
   PlanModeVia,
   QuestionDeferral,
   QuestionVia,
+  RetryAfterBucket,
   RewindAction,
   RewindFilesState,
   SendBlock,
+  SendFailStage,
   SendRoute,
   SendSource,
   SignInAction,
@@ -146,8 +153,25 @@ export type ChatTurnEndedProperties = {
   engine_kind?: EngineKind;
   streamed: boolean;
   stream_failed: boolean;
+  /** How its engine failed: a direct engine's call, or main's word on a delegated one. */
   failure_kind?: EngineFailureKind;
+  /** The provider's limit it ended on, and how long the provider said to wait. */
+  limit_kind?: LimitKind;
+  retry_after_bucket?: RetryAfterBucket;
   launched_build: boolean;
+};
+
+/**
+ * A message that did not go: its send rejected (`rejected`, with the send's facts) or its chat
+ * refusing what it commissions (`refused`, heard from main), with the code of either.
+ */
+export type MessageSendFailedProperties = {
+  stage: SendFailStage;
+  code: SendFailure | SendRefusal | null;
+  route?: SendRoute;
+  ack_ms?: number;
+  pictures?: number;
+  mentions?: number;
 };
 
 export type ChatEventProperties = {
@@ -159,7 +183,7 @@ export type ChatEventProperties = {
     /** Presses on a dead Send since the last message that went. */
     attempts_in_row: number;
   };
-  [ChatEvent.MessageSendFailed]: { route: SendRoute; ack_ms: number; pictures: number; mentions: number };
+  [ChatEvent.MessageSendFailed]: MessageSendFailedProperties;
   [ChatEvent.MessageQueueWaited]: { queue_wait_ms: number; placement?: SendPlacement };
   [ChatEvent.MessageSteered]: { how?: SteerDelivery; requeued: boolean; steer_wait_ms?: number };
   [ChatEvent.ReplyFirstTokenReceived]: {
@@ -173,7 +197,7 @@ export type ChatEventProperties = {
   };
   [ChatEvent.MessageRowMissing]: { placement?: SendPlacement };
   [ChatEvent.ChatTurnEnded]: ChatTurnEndedProperties;
-  [ChatEvent.MessageAnswerFailed]: { engine: EngineRef };
+  [ChatEvent.MessageAnswerFailed]: { engine: EngineRef; failure_kind?: EngineFailureKind };
   [ChatEvent.QueuedMessageRemoved]: { waited_ms?: number };
   [ChatEvent.ChatStopRequested]: {
     via: StopVia;
@@ -207,7 +231,14 @@ export type ChatEventProperties = {
     plugin_ref?: string;
   };
   [ChatEvent.ChatLeftWhileWaiting]: { card: WaitingCardKind; wait_ms: number; to: LeftTo; cards_waiting: number };
-  [ChatEvent.PermissionModeChanged]: { from?: PermissionMode; to: PermissionMode; via: ModeVia; failed: boolean };
+  [ChatEvent.PermissionModeChanged]: {
+    from?: PermissionMode;
+    to: PermissionMode;
+    via: ModeVia;
+    failed: boolean;
+    /** Why a switch failed, when the session said. */
+    code?: ModeSwitchFailure | null;
+  };
   [ChatEvent.ChatQuestionAsked]: { choices: number; cards_waiting: number };
   [ChatEvent.ChatQuestionAnswered]: {
     via: QuestionVia;
@@ -217,7 +248,12 @@ export type ChatEventProperties = {
   };
   [ChatEvent.ChatQuestionDeferred]: { action: QuestionDeferral };
   [ChatEvent.PlanModeToggled]: { on: boolean; via: PlanModeVia };
-  [ChatEvent.PlanReviewChanged]: { state: PlanReviewState; generation_ms?: number; revision_index: number };
+  [ChatEvent.PlanReviewChanged]: {
+    state: PlanReviewState;
+    generation_ms?: number;
+    revision_index: number;
+    failure_kind?: EngineFailureKind;
+  };
   [ChatEvent.PlanAnswered]: { action: PlanAction; wait_ms?: number; refused?: boolean };
   [ChatEvent.RewindOpened]: { messages_back: number };
   [ChatEvent.RewindPreviewed]: {
@@ -257,6 +293,7 @@ export type ChatEventProperties = {
     trigger: CompactTrigger;
     native: boolean;
     failed: boolean;
+    failure_kind?: EngineFailureKind;
     percent_before_bucket?: ContextBucket;
   };
   [ChatEvent.ChatOpened]: { load_ms: number; has_more_history: boolean; attempt: number; failed: boolean };

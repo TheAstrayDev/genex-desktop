@@ -52,7 +52,7 @@ import type { Studio } from "../../state/studio.ts";
 import { guarded, track } from "../client.ts";
 import { gameRef } from "../game-ref.ts";
 import type { AreaObservers } from "../observers.ts";
-import { type CountBucket, countBucket, elapsedMs } from "../properties.ts";
+import { type CountBucket, countBucket, elapsedMs, oneOf } from "../properties.ts";
 
 /** A plugin call that fails again within this long of a failed one of the same kind in the same chat is a retry. */
 export const RETRY_OF_FAILED_MS = 10 * MINUTE_MS;
@@ -499,12 +499,6 @@ export const amountOf = (value: unknown): number | null =>
 const flagOf = (value: unknown): boolean | null => (typeof value === "boolean" ? value : null);
 const hoursOf = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
-
-/** The word of a vocabulary a value spells, or null: never a free string. */
-export function oneOf<V extends string>(vocabulary: Readonly<Record<string, V>>, value: unknown): V | null {
-  for (const word of Object.values(vocabulary)) if (word === value) return word;
-  return null;
-}
 
 /** A vocabulary's word, or `other` for a string it does not know; null for none. */
 function wordOrOther<V extends string>(vocabulary: Readonly<Record<string, V>>, value: unknown): V | Unlisted | null {

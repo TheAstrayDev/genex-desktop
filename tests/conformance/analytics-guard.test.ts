@@ -21,6 +21,7 @@ import { createChatMemory } from "../../src/renderer/analytics/chat-memory.ts";
 import { createChatObservers } from "../../src/renderer/analytics/chat-observe.ts";
 import { type AreaObservers, startObservers } from "../../src/renderer/analytics/observers.ts";
 import type { Studio } from "../../src/renderer/state/studio.ts";
+import { createToastsStore } from "../../src/renderer/state/toasts.ts";
 
 const BROKEN = { needs_install: false, showing_last_build: false, skipped_scripts: false, killed: false };
 
@@ -107,7 +108,7 @@ function failingListeners(): FailingListener[] {
     {
       name: "launch's update (its moment later fails)",
       area: createLaunchObservers(() => 0, fail("later")),
-      app: { update, session: createStore(() => ({ status: "loading" })) },
+      app: { update, session: createStore(() => ({ status: "loading" })), toasts: createToastsStore(() => undefined) },
       move: () => update.setState({ ready: { action: "restart", version: "9.9.9" } }),
     },
   ];

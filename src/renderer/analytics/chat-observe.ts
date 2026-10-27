@@ -8,10 +8,11 @@
  * window that catches up later still reports them right.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
-import { PlanReviewState } from "../../shared/composer.ts";
+import { PlanReviewState, SendRefusal } from "../../shared/composer.ts";
 import { type CustomEventData, CustomEvent, customPayload, customRecord } from "../../shared/custom-events.ts";
 import type { EngineKind } from "../../shared/engine-descriptor.ts";
-import { EngineFailureKind } from "../../shared/engine-requests.ts";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
+import { EngineFailureKind, isLimitKind, type LimitKind } from "../../shared/engine-requests.ts";
 import { type EventData, type EventEnvelope, EventKind } from "../../shared/event-log.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
 import {
@@ -40,6 +41,8 @@ import {
   CompactTrigger,
   ContextBucket,
   LeftTo,
+  RetryAfterBucket,
+  SendFailStage,
   SignInFrom,
   StopEndedBy,
   TurnOutcome,
@@ -79,6 +82,7 @@ const STATUSES: ReadonlySet<string> = new Set(Object.values(TurnStatus));
 const FAILURE_KINDS: ReadonlySet<string> = new Set(Object.values(EngineFailureKind));
 const REVIEW_STATES: ReadonlySet<string> = new Set(Object.values(PlanReviewState));
 const DELIVERIES: ReadonlySet<string> = new Set(Object.values(SteerDelivery));
+const REFUSALS: ReadonlySet<string> = new Set(Object.values(SendRefusal));
 /** Phases that show a reply is being worked on (the first one is `first_phase`). */
 const ACTIVE_PHASES: ReadonlySet<string> = new Set([
   ChatActivityPhase.Working,
@@ -107,6 +111,7 @@ const isFailureKind = (value: unknown): value is EngineFailureKind =>
 const isReviewState = (value: unknown): value is PlanReviewState =>
   typeof value === "string" && REVIEW_STATES.has(value);
 const isDelivery = (value: unknown): value is SteerDelivery => typeof value === "string" && DELIVERIES.has(value);
+const isRefusal = (value: unknown): value is SendRefusal => typeof value === "string" && REFUSALS.has(value);
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
 /** A turn's outcome from its record: the seed's own word, `none` without one, `other` for any other. */
@@ -131,6 +136,33 @@ export function contextBucket(percent: number): ContextBucket {
   return percent < 85 ? ContextBucket.High : ContextBucket.Full;
 }
 
+/** How long a provider said to wait, bucketed. */
+export function retryAfterBucket(ms: number): RetryAfterBucket {
+  if (ms < MINUTE_MS) return RetryAfterBucket.Minute;
+  if (ms < HOUR_MS) return RetryAfterBucket.Hour;
+  return ms < DAY_MS ? RetryAfterBucket.Day : RetryAfterBucket.Longer;
+}
+
+/** The limit a turn ended on: main's record of it, else its engine's failure when that was a limit. */
+function turnLimit(
+  recorded: unknown,
+  failure: EngineFailureKind | undefined,
+): { limit_kind: LimitKind; retry_after_bucket?: RetryAfterBucket } | null {
+  const limit = recorded !== null && typeof recorded === "object" ? (recorded as Record<string, unknown>) : {};
+  const kind = typeof limit.kind === "string" && isLimitKind(limit.kind) ? limit.kind : null;
+  if (!kind) return failure && isLimitKind(failure) ? { limit_kind: failure } : null;
+  const wait = limit.retryAfterMs;
+  const known = typeof wait === "number" && Number.isFinite(wait) && wait >= 0;
+  return { limit_kind: kind, ...(known ? { retry_after_bucket: retryAfterBucket(wait) } : {}) };
+}
+
+/**
+ * How a turn's engine failed: the failed call of a direct engine this launch saw, else what main
+ * recorded on the turn's end for a delegated one.
+ */
+const turnFailureKind = (turn: OpenTurn | undefined, metadata: Record<string, unknown> | undefined) =>
+  failureKind(turn?.failure) ?? failureKind(metadata?.failure);
+
 /** `chat_turn_ended`, from the turn this launch saw begin (if it did) and its closing record. */
 export function turnEndedProperties(
   turn: OpenTurn | undefined,
@@ -139,7 +171,8 @@ export function turnEndedProperties(
   engineKind: EngineKind | undefined,
 ): ChatTurnEndedProperties {
   const outcome = turnOutcome(end.metadata?.outcome);
-  const failure = failureKind(turn?.failure);
+  const failure = turnFailureKind(turn, end.metadata);
+  const limit = turnLimit(end.metadata?.limit, failure);
   return {
     status: isStatus(end.status) ? end.status : TurnStatus.Ok,
     outcome,
@@ -150,6 +183,7 @@ export function turnEndedProperties(
     streamed: turn?.streamed ?? false,
     stream_failed: turn?.streamFailed ?? false,
     ...(failure ? { failure_kind: failure } : {}),
+    ...limit,
     launched_build: outcome === TurnOutcome.LaunchRun,
   };
 }
@@ -206,6 +240,9 @@ function turnEnded(hearing: Hearing, thread: string, end: Extract<EventData, { t
   settleStop(hearing, { thread, at }, StopEndedBy.TurnEnded, status);
   const turn = memory.turns.get(thread);
   memory.turns.delete(thread);
+  const failure = turnFailureKind(turn, end.metadata);
+  if (failure) memory.turnFailures.set(thread, failure);
+  else memory.turnFailures.delete(thread);
   // A reply the turn never streamed is not waited for any more once its message was taken.
   if (memory.replies.get(thread)?.processingAt !== undefined) memory.replies.delete(thread);
   if (!turn && end.metadata?.interrupted !== true) return;
@@ -341,10 +378,12 @@ function planReview(hearing: Hearing, heard: Heard): void {
   else memory.cards.delete(key);
   if (review.state === PlanReviewState.Failed) memory.lastFailureAt = heard.at;
   const generationMs = waits && progress.generatingAt !== undefined ? elapsedMs(progress.generatingAt, heard.at) : null;
+  const failure = review.state === PlanReviewState.Failed ? failureKind(review.failure) : undefined;
   send(ChatEvent.PlanReviewChanged, {
     state: review.state,
     ...(generationMs === null ? {} : { generation_ms: generationMs }),
     revision_index: progress.revisions,
+    ...(failure ? { failure_kind: failure } : {}),
   });
 }
 
@@ -355,7 +394,13 @@ function messageHandled(hearing: Hearing, heard: Heard): void {
   if (!handled?.messageId) return;
   const sent = hearing.memory.sends.get(handled.messageId);
   hearing.memory.sends.delete(handled.messageId);
-  if (handled.failed === true) hearing.send(ChatEvent.MessageAnswerFailed, { engine: sent?.engine ?? engineRef(null) });
+  const failure = hearing.memory.turnFailures.get(heard.thread);
+  hearing.memory.turnFailures.delete(heard.thread);
+  if (handled.failed !== true) return;
+  hearing.send(ChatEvent.MessageAnswerFailed, {
+    engine: sent?.engine ?? engineRef(null),
+    ...(failure ? { failure_kind: failure } : {}),
+  });
 }
 
 function steering(hearing: Hearing, heard: Heard): void {
@@ -414,10 +459,12 @@ function compacted(hearing: Hearing, heard: Heard, failed: boolean): void {
   const payload = customRecord(heard.data)?.payload ?? {};
   const percent = hearing.memory.context.get(heard.thread);
   hearing.memory.context.delete(heard.thread);
+  const failure = failed ? failureKind(payload.failure) : undefined;
   hearing.send(ChatEvent.ChatContextCompacted, {
     trigger: compactTrigger(payload.trigger),
     native: payload.native === true,
     failed,
+    ...(failure ? { failure_kind: failure } : {}),
     ...(percent === undefined ? {} : { percent_before_bucket: contextBucket(percent) }),
   });
 }
@@ -485,6 +532,12 @@ function streamEnded(hearing: Hearing, payload: { threadId: string; failed?: boo
   if (turn && payload.failed === true) turn.streamFailed = true;
 }
 
+/** A message its chat refused for what it commissions; a send that failed is counted where it was sent. */
+function chatRefused(hearing: Hearing, payload: { refusal?: SendRefusal }): void {
+  if (isRefusal(payload.refusal))
+    hearing.send(ChatEvent.MessageSendFailed, { stage: SendFailStage.Refused, code: payload.refusal });
+}
+
 /** One of main's UI events. */
 export function hearUiEvent(hearing: Hearing, event: UiEvent): void {
   if (event.type === UiEvent.CoordinatorProcessing) processing(hearing, event.payload);
@@ -493,6 +546,7 @@ export function hearUiEvent(hearing: Hearing, event: UiEvent): void {
     firstToken(hearing, event.payload.threadId, event.payload.streamId);
   } else if (event.type === UiEvent.ChatDelta) firstToken(hearing, event.payload.threadId, event.payload.streamId);
   else if (event.type === UiEvent.ChatStreamEnded) streamEnded(hearing, event.payload);
+  else if (event.type === UiEvent.ChatError) chatRefused(hearing, event.payload);
   else if (event.type === UiEvent.ContextUsage) {
     const { threadId, percent } = event.payload;
     if (threadId && typeof percent === "number") hearing.memory.context.set(threadId, percent);

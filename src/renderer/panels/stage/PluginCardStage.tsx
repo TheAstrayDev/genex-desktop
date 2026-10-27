@@ -9,7 +9,7 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
-import { isUserCancelled } from "../../../shared/errors.ts";
+import { isUserCancelled, errorCode } from "../../../shared/errors.ts";
 import { type PluginStageButton, type PluginStageCard, stageCardFrom } from "../../../shared/plugin-stage-card.ts";
 import { type PluginInfo, PluginSourceKind } from "../../../shared/plugins.ts";
 import { runPluginAction } from "../../plugin-actions.ts";
@@ -103,7 +103,7 @@ export function PluginCardStage({
     try {
       await press(source, step, game.name);
     } catch (err) {
-      if (!isUserCancelled(err)) onNotice(problemWords(err), ToastTone.Error);
+      if (!isUserCancelled(err)) onNotice(problemWords(err), ToastTone.Error, errorCode(err));
     } finally {
       setBusy(false);
       await refresh();

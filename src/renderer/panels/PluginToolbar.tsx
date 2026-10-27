@@ -68,6 +68,7 @@ import { useCoverAfterTurns } from "./plugins/genex/use-cover-after-turns.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PluginPanelDialog } from "./PluginPanelDialog.tsx";
 import { useEngineSlot } from "./engine-slot.ts";
+import { errorCode } from "../../shared/errors.ts";
 
 /** Status refreshes coalesce: a burst of change events wakes each plugin's process once. */
 const STATUS_DEBOUNCE_MS = SECOND_MS;
@@ -385,7 +386,7 @@ async function openToolbarPanel(entry: PluginToolbarEntry, panelId: string, deps
     deps.setPanel({ key: entry.key, plugin, title: doc.title, document: doc });
     reportPluginAction(press, ActionOutcome.Ok, started, performance.now());
   } catch (err) {
-    deps.onNotice(problemWords(err), ToastTone.Error);
+    deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
     reportPluginAction(press, ActionOutcome.Failed, started, performance.now());
   }
 }
@@ -422,7 +423,7 @@ async function runToolbarAction(
     deps.refreshRef.current();
     reportPluginAction(press, ActionOutcome.Ok, started, performance.now());
   } catch (err) {
-    if (!declined(err)) deps.onNotice(problemWords(err), ToastTone.Error);
+    if (!declined(err)) deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
     const outcome = reviewDeclined ? ActionOutcome.DeclinedReview : actionOutcome(err, true);
     reportPluginAction(press, outcome, started, performance.now());
   } finally {

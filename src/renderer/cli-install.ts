@@ -65,7 +65,7 @@ export function useCliInstall(provider: string) {
       const started = await window.studio.cliInstall(provider);
       setJob((current) => newerReport(current, started));
     } catch (err) {
-      reportCliInstallRefused(provider, CliInstallOperation.Install);
+      reportCliInstallRefused(provider, CliInstallOperation.Install, err);
       setRefused(problemWords(err));
     }
   }, [provider]);
@@ -75,7 +75,7 @@ export function useCliInstall(provider: string) {
       const started = await window.studio.cliUpdate(provider);
       setJob((current) => newerReport(current, started));
     } catch (err) {
-      reportCliInstallRefused(provider, CliInstallOperation.Update);
+      reportCliInstallRefused(provider, CliInstallOperation.Update, err);
       setRefused(problemWords(err));
     }
   }, [provider]);

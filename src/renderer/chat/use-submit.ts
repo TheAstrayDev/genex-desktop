@@ -124,7 +124,7 @@ export function useSubmit(
     } catch (error) {
       // The composer gets the text back (PromptBar) and the chat says why (main): no bubble stays.
       if (clientId) chat.sends.drop(clientId);
-      tracking.failed();
+      tracking.failed(error);
       throw error;
     } finally {
       endSend();
@@ -174,7 +174,7 @@ export function useReport(
     try {
       await props.onSend(text, { ...composerSendOptions(model, key, options), origin });
     } catch (error) {
-      tracking.failed();
+      tracking.failed(error);
       throw error;
     }
     tracking.sent();

@@ -14,7 +14,8 @@ import type { AssetDeliveredPayload } from "./game-assets.ts";
 import type { LiveBehindEvent } from "./live-behind.ts";
 import type { McpChange } from "./mcp.ts";
 import type { CliInstallJob } from "./cli-install.ts";
-import type { ModelInstallJob } from "./model-install.ts";
+import type { ModelInstallJob, ModelInstallProblem, ModelPullProblem } from "./model-install.ts";
+import type { SendFailure, SendRefusal } from "./composer.ts";
 import type { ProviderUsageReport } from "./provider-usage.ts";
 import type { ToolPermissionState } from "./permissions.ts";
 import type { PlayViewerEvent, RemixProgress } from "./play.ts";
@@ -32,11 +33,14 @@ export type ThreadStatusMap = Record<string, { status: string; since: number }>;
 
 /** A download step for a local model: Ollama's pull stream, Bonsai's installer, or the failure. */
 export interface ModelPullProgress {
+  /** Ollama's own step, Bonsai's `DownloadStatus`, or the app's end (`ModelPullStatus`). */
   status: string;
   digest?: string;
   completed?: number;
   total?: number;
   error?: string;
+  /** Why the download failed (`ModelPullStatus.Error`). */
+  problem?: ModelPullProblem | ModelInstallProblem;
 }
 
 /** A contractor's reply streaming into a thread, before its words land in the log. */
@@ -53,7 +57,8 @@ export interface ChatDelta {
 export interface UiEventMap {
   // — chat and threads —
   "chat.message": { threadId?: string; role?: string; content?: string };
-  "chat.error": { threadId?: string; message?: string };
+  /** A message that did not reach its chat (`failure`), or reached it and was refused there (`refusal`). */
+  "chat.error": { threadId?: string; message?: string; failure?: SendFailure; refusal?: SendRefusal };
   "chat.delta": ChatDelta;
   "chat.stream.started": { threadId: string; streamId: string; afterEventId: string | null };
   "chat.stream.ended": { threadId: string; streamId: string; failed?: boolean };

@@ -36,6 +36,7 @@ import {
 import { CountBucket } from "../../src/renderer/analytics/properties.ts";
 import { SessionStatus } from "../../src/renderer/state/session.ts";
 import type { Studio } from "../../src/renderer/state/studio.ts";
+import { createToastsStore } from "../../src/renderer/state/toasts.ts";
 
 /** A V8 stack as the renderer throws it, from an app installed in `home`. */
 const stack = (home: string, message: string): string =>
@@ -220,7 +221,8 @@ describe("updates", () => {
       ready: null,
     }));
     const session = createStore(() => ({ status: SessionStatus.Ready }));
-    const stop = observers.start?.({ update, session } as unknown as Studio);
+    const toasts = createToastsStore(() => undefined);
+    const stop = observers.start?.({ update, session, toasts } as unknown as Studio);
 
     // Found by the bootstrap: the store moves, and nothing announces it.
     update.setState({ ready: { version: "0.2.0", action: UpdateAction.Restart } });

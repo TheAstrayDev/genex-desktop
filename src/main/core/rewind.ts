@@ -36,10 +36,10 @@ import {
   undoRewindRefusalWords,
   withoutRewound,
 } from "../../shared/chat-rewind.ts";
-import type { PlanReview } from "../../shared/composer.ts";
+import { type PlanReview, SendFailure } from "../../shared/composer.ts";
 import { CustomEvent, customEventData, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { CodedError, errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { EventKind, type EventData, type EventEnvelope, type Message, ThreadKind } from "../../shared/event-log.ts";
 import { messageQueueState } from "../../shared/message-queue.ts";
@@ -347,7 +347,7 @@ export class ChatRewindService {
    * resume the session the rewind is clearing, or land between its plan and its marker.
    */
   async whileSending(threadId: string, send: () => Promise<void>): Promise<void> {
-    this.assertNotRewinding(threadId, MESSAGE.WaitToSend);
+    if (this.#rewinding.has(threadId)) throw new CodedError(SendFailure.Rewinding, MESSAGE.WaitToSend());
     this.#sending.set(threadId, (this.#sending.get(threadId) ?? 0) + 1);
     const sending = send();
     const inFlight = this.#inFlight.get(threadId) ?? new Set<Promise<void>>();

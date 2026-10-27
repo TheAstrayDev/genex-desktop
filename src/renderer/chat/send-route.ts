@@ -26,6 +26,7 @@ import type { ChatWorkView } from "./use-chat-work.ts";
 import type { ComposerModel } from "./use-composer-model.ts";
 import type { FollowScroll } from "./use-follow-scroll.ts";
 import type { ReplyingAbout } from "./use-reply-about.ts";
+import { errorCode } from "../../shared/errors.ts";
 
 /** A legacy in-run plan that holds the worker until it is answered. */
 export const isHeldPlan = (entry: ConversationEntry, runId: string | null, now: number): boolean =>
@@ -57,7 +58,7 @@ async function sendNote(about: ReplyAbout, text: string, onNotice: Notify): Prom
   await window.studio
     .runFeedback({ threadId: about.threadId, runId: about.runId, ...about.target, text, label: about.label })
     .catch((err: unknown) => {
-      onNotice(problemWords(err), ToastTone.Error);
+      onNotice(problemWords(err), ToastTone.Error, errorCode(err));
       throw err;
     });
   onNotice(noteSentWords(about), ToastTone.Ok);

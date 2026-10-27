@@ -4,7 +4,8 @@ import { MentionRetry, readMentionRefs } from "../../shared/prompt-mention.ts";
 import type { SmokeReadGates } from "../smoke/read-gates.ts";
 import type { StudioCore } from "../studio-core.ts";
 import type { IpcHandle } from "./registrar.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { CodedError, errorCodeIn, errorMessage } from "../../shared/errors.ts";
+import { SendFailure } from "../../shared/composer.ts";
 import type { EngineBoot } from "../engine-boot.ts";
 import type { AnalyticsConfig } from "../../shared/analytics.ts";
 
@@ -113,9 +114,13 @@ export function registerThreadsIpc(handle: IpcHandle, deps: ThreadsIpcDeps): voi
       // The composer already cleared the draft, and the renderer's send is fire-and-forget —
       // a swallowed rejection here would leave no trace of the ask ever failing.
       const message = String(errorMessage(err));
+      const failure = errorCodeIn(SendFailure, err) ?? SendFailure.Other;
       await appendErrorDurably(payload.thread, `The message could not be sent: ${message}`);
-      pushUiEvent({ type: UiEvent.ChatError, payload: { threadId: payload.thread ?? core.mainThread, message } });
-      throw err;
+      pushUiEvent({
+        type: UiEvent.ChatError,
+        payload: { threadId: payload.thread ?? core.mainThread, message, failure },
+      });
+      throw new CodedError(failure, message);
     }
     return true;
   });

@@ -14,6 +14,7 @@ import type { ChatActivityPhase } from "./chat-activity.ts";
 import type { ChatRewind, CheckpointSkippedPayload, RewindUndonePayload } from "./chat-rewind.ts";
 import type { PlanReviewRecord } from "./composer.ts";
 import type { ContextMeasurement } from "./context.ts";
+import type { EngineFailureKind } from "./engine-requests.ts";
 import type { AssetDeliveredPayload, PluginToolFinishedPayload, PluginToolStartedPayload } from "./game-assets.ts";
 import type { MentionTaggedPayload } from "./prompt-mention.ts";
 import type { PluginConsentEvent } from "./plugins.ts";
@@ -647,6 +648,8 @@ export interface CustomEventMap {
    * (shared/chat-rewind.ts `endsChatSessions`); its summary, when it reports one, is the provider's own.
    */
   compacted: Partial<ContextMeasurement> & { messages?: number; trigger?: string; summary?: string; native?: boolean };
+  /** A summary that could not be written (loop/compact.ts): its engine, the words, and why. */
+  compaction_failed: { engine?: string; model?: string; error?: string; failure?: EngineFailureKind };
   completion_call: CompletionCallPayload;
   connector_tool: RunScope & Omit<ConnectorToolEvent, "error"> & { error?: string | null };
   connector_tool_started: RunScope & ConnectorToolStartedEvent;
