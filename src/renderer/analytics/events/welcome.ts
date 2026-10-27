@@ -1,11 +1,19 @@
 /** The welcome, Connect and the model providers (plan §1.3): where a first launch gets stuck before a model is ready. */
-import type { ClaudeLoginState } from "../../../shared/claude-login.ts";
-import type { CliInstallOperation, CliInstallPhase, CliInstallProblem } from "../../../shared/cli-install.ts";
-import type { CodexLoginState } from "../../../shared/codex-login.ts";
+import type { ClaudeLoginProblem, ClaudeLoginState } from "../../../shared/claude-login.ts";
+import type {
+  CliInstallOperation,
+  CliInstallPhase,
+  CliInstallProblem,
+  CliInstallRefusal,
+} from "../../../shared/cli-install.ts";
+import type { CodexLoginProblem, CodexLoginState } from "../../../shared/codex-login.ts";
 import type { CodingCliState } from "../../../shared/coding-cli.ts";
-import type { EngineStatusCode, LoginSource } from "../../../shared/engine-descriptor.ts";
+import type { EngineStatusCode, EngineStatusReason, LoginSource } from "../../../shared/engine-descriptor.ts";
+import type { StudioErrorCode } from "../../../shared/error-codes.ts";
 import type { LocalServerKind, LocalServerProblem } from "../../../shared/local-server.ts";
 import type { ModelCatalogProblemCode, ModelCatalogState } from "../../../shared/model-catalog.ts";
+import type { InstallPhase, ModelInstallProblem, ModelPullProblem } from "../../../shared/model-install.ts";
+import type { OpenRouterSignInProblem } from "../../../shared/openrouter-login.ts";
 import { EngineId } from "../../../shared/providers.ts";
 import { UiEvent } from "../../../shared/ui-events.ts";
 import type { PromoAccount, PromoPhase } from "../../genex-promo.ts";
@@ -91,10 +99,15 @@ export const WelcomeEvent = {
 /** A press on a provider's button, wherever it stands. */
 type ProviderPress = { engine: EngineRef; action: ProviderAction; surface: ProviderSurface };
 
+/** Why a sign-in failed, as its provider's stream or call said. */
+export type SignInProblem = ClaudeLoginProblem | CodexLoginProblem | OpenRouterSignInProblem;
+
 /** A sign-in's end; a CLI that signs in in its own terminal adds how that terminal exited. */
 export type SignInFinishedProperties = {
   engine: EngineRef;
   outcome: SignInOutcome;
+  /** Why it failed; null when it did not, or the provider did not say. */
+  problem: SignInProblem | null;
   method: SignInMethod;
   /** The last step the sign-in was on before it ended. */
   phase_at_end: LoginPhase | null;
@@ -127,6 +140,8 @@ export type ProviderStatusProperties = {
   engine: EngineRef;
   from: EngineStatusCode | null;
   to: EngineStatusCode | null;
+  /** Why the engine is not ready now, when it says. */
+  reason: EngineStatusReason | null;
   cli_state: CodingCliState | null;
   catalog_state: ModelCatalogState | null;
   catalog_problem: ModelCatalogProblemCode | null;
@@ -149,6 +164,10 @@ export type DownloadFinishedProperties = {
   surface: ProviderSurface;
   outcome: DownloadOutcome;
   percent_at_end: number;
+  /** For a failed managed install: the phase it failed in. */
+  failed_phase: InstallPhase | null;
+  /** For a failed download: why, as its install or pull said. */
+  problem: ModelInstallProblem | ModelPullProblem | null;
   duration_ms: number;
   needs_ollama: boolean;
   left_screen_while_downloading: boolean;
@@ -200,19 +219,20 @@ export type WelcomeEventProperties = {
     ready_failed: boolean;
   };
   [WelcomeEvent.ProviderActionClicked]: ProviderPress;
-  /** Refused at once; the reason is English only today, so none is sent. */
-  [WelcomeEvent.ProviderActionFailed]: ProviderPress;
+  /** Refused at once, by the failure's code; null when it had none. */
+  [WelcomeEvent.ProviderActionFailed]: ProviderPress & { code: StudioErrorCode | null };
   [WelcomeEvent.CliInstallStarted]: CliJobProperties;
   [WelcomeEvent.CliInstallFinished]: CliJobProperties & {
     phase: CliInstallPhase;
     problem: CliInstallProblem | null;
     duration_ms: number | null;
   };
-  /** Refused before it started; the reason is English only today, so none is sent. */
+  /** Refused before it started, by the refusal's code; null when the call itself failed. */
   [WelcomeEvent.CliInstallRefused]: {
     provider: EngineRef;
     operation: CliInstallOperation;
     surface: ProviderSurface | null;
+    code: CliInstallRefusal | null;
   };
   [WelcomeEvent.CliRecheckReturned]: RecheckReturnedProperties;
   [WelcomeEvent.ProviderSignInStarted]: {
@@ -229,6 +249,8 @@ export type WelcomeEventProperties = {
     surface: ProviderSurface | null;
     /** For a submitted code: whether the sign-in took it. */
     accepted?: boolean;
+    /** For a refused code: why, as the refusal's code. */
+    code?: StudioErrorCode;
     phase: LoginPhase | null;
   };
   [WelcomeEvent.ProviderSignInFinished]: SignInFinishedProperties;

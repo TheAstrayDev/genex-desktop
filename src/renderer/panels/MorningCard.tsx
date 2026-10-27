@@ -31,6 +31,7 @@ import { StillToFixCard } from "../chat/StillToFixCard.tsx";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import { BuildSurface } from "../analytics/events/builds.ts";
+import { errorCode } from "../../shared/errors.ts";
 
 /** A build played from the card, and whether it played. */
 const playedHere = (ok: boolean): void =>
@@ -180,6 +181,7 @@ export function MorningCard({
 }: MorningCardProps): JSX.Element {
   const outcome = useRunSummary(project, runId);
   const waiting = useResultWait(outcome !== null);
+  const noticeFailure = (err: unknown): void => onNotice?.(problemWords(err), ToastTone.Error, errorCode(err));
   const words = morningWords({
     rounds,
     kept,
@@ -214,7 +216,7 @@ export function MorningCard({
     // thing after a run in which a merged build may have been shown from a worktree.
     if (project) {
       webBuildShown(project);
-      void window.studio.loadPreview(project).catch((err) => onNotice?.(problemWords(err), ToastTone.Error));
+      void window.studio.loadPreview(project).catch(noticeFailure);
     }
     onShowLive?.();
   };
@@ -254,10 +256,7 @@ export function MorningCard({
         title={t("Load this build in the Live tab from a copy; your game folder stays as it is")}
         onClick={() => {
           webBuildShown(project);
-          void playFromCard(
-            { project, head: commit },
-            { failed: (err) => onNotice?.(problemWords(err), ToastTone.Error) },
-          );
+          void playFromCard({ project, head: commit }, { failed: noticeFailure });
           onShowLive?.();
         }}
       >

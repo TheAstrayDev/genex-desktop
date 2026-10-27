@@ -11,7 +11,7 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
-import { isUserCancelled } from "../../../shared/errors.ts";
+import { isUserCancelled, errorCode } from "../../../shared/errors.ts";
 import { projectName } from "../../../shared/game-engine.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
 import { runPluginAction } from "../../plugin-actions.ts";
@@ -160,7 +160,7 @@ async function press(deps: PressDeps, which: StageAct): Promise<boolean> {
 
 /** Shows a press's failure, unless the person cancelled it in a confirmation. */
 const failed = (deps: PressDeps) => (err: unknown) => {
-  if (!isUserCancelled(err)) deps.onNotice(problemWords(err), ToastTone.Error);
+  if (!isUserCancelled(err)) deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
 };
 
 /**

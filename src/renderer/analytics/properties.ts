@@ -55,3 +55,9 @@ export function countBucket(count: number): CountBucket {
 
 /** A duration in whole milliseconds, never negative: clocks that jump back report 0. */
 export const elapsedMs = (from: number, to: number): number => Math.max(0, Math.round(to - from));
+
+/** The word of a vocabulary a value spells, or null: never a free string. */
+export function oneOf<V extends string>(vocabulary: Readonly<Record<string, V>>, value: unknown): V | null {
+  for (const word of Object.values(vocabulary)) if (word === value) return word;
+  return null;
+}

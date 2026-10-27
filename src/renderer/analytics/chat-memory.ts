@@ -7,6 +7,7 @@
 import type { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import type { EngineKind } from "../../shared/engine-descriptor.ts";
+import type { EngineFailureKind } from "../../shared/engine-requests.ts";
 import type { SendPlacement } from "../chat/pending-sends.ts";
 import type { WaitingCardKind } from "./chat-vocabulary.ts";
 import { elapsedMs } from "./properties.ts";
@@ -88,6 +89,8 @@ export interface ChatMemory {
   engineKinds: Map<string, EngineKind>;
   /** The last turn that failed or hit a limit, or plan that failed. */
   lastFailureAt: number | null;
+  /** How each chat's last turn's engine failed, until its message is handled. */
+  turnFailures: Map<string, EngineFailureKind>;
   /** Presses on a dead Send since the last message that went. */
   blockedInRow: number;
   /** The composer that just sent, and how many files it attached (they reach the chat as links in the words). */
@@ -111,6 +114,7 @@ export function createChatMemory(): ChatMemory {
     context: new Map(),
     engineKinds: new Map(),
     lastFailureAt: null,
+    turnFailures: new Map(),
     blockedInRow: 0,
     composed: null,
   };

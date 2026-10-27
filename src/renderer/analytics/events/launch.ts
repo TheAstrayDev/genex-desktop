@@ -15,9 +15,11 @@ import {
 } from "../../../shared/app-update.ts";
 import { MINUTE_MS } from "../../../shared/duration.ts";
 import { EngineStatusCode } from "../../../shared/engine-descriptor.ts";
+import { isStudioErrorCode, type StudioErrorCode } from "../../../shared/error-codes.ts";
 import { UiEvent } from "../../../shared/ui-events.ts";
 import { SessionStatus } from "../../state/session.ts";
 import type { Studio } from "../../state/studio.ts";
+import { ToastTone, type ToastsState } from "../../state/toasts.ts";
 import { guarded, track } from "../client.ts";
 import type { AreaObservers } from "../observers.ts";
 import { type CountBucket, countBucket, elapsedMs } from "../properties.ts";
@@ -40,6 +42,7 @@ export const LaunchEvent = {
   UpdateReady: "update_ready",
   UpdateRestartPressed: "update_restart_pressed",
   UpdateCheckFinished: "update_check_finished",
+  ErrorToastShown: "error_toast_shown",
 } as const;
 
 /** Where an error was caught. */
@@ -102,7 +105,22 @@ export type LaunchEventProperties = {
   [LaunchEvent.UpdateReady]: { action: UpdateAction; at_bootstrap: boolean };
   [LaunchEvent.UpdateRestartPressed]: { surface: UpdateSurface; outcome: RestartOutcome; waited_ms: number | null };
   [LaunchEvent.UpdateCheckFinished]: UpdateCheckProperties;
+  [LaunchEvent.ErrorToastShown]: ErrorToastProperties;
 };
+
+/** `error_toast_shown`'s properties: the failure's code (null when it had none) and the screen it showed on. */
+export type ErrorToastProperties = { code: StudioErrorCode | null; screen: string };
+
+/** The error toasts added since `before`, as `error_toast_shown`. */
+export function errorToastsShown(
+  before: Pick<ToastsState, "lastId">,
+  after: ToastsState,
+  screen: string,
+): ErrorToastProperties[] {
+  return after.items
+    .filter((toast) => toast.id > before.lastId && toast.tone === ToastTone.Error)
+    .map((toast) => ({ code: isStudioErrorCode(toast.code) ? toast.code : null, screen }));
+}
 
 /** `workspace_load_retried`'s properties: which Retry of this launch, whether it loaded, and how long it took. */
 export type WorkspaceRetriedProperties = { attempt: number; succeeded: boolean; elapsed_ms: number };
@@ -425,7 +443,16 @@ export const updateCheckProperties = (
   duration_ms: Math.max(0, Math.round(ms)),
 });
 
-/** What this area hears: main's update announcement, the session, the window's errors and its long tasks. */
+/** Each error toast, with its failure's code and the screen it showed on. */
+function watchErrorToasts(app: Studio): () => void {
+  return app.toasts.subscribe(
+    guarded((state: ToastsState, before: ToastsState) => {
+      for (const shown of errorToastsShown(before, state, currentScreen())) track(LaunchEvent.ErrorToastShown, shown);
+    }),
+  );
+}
+
+/** What this area hears: main's update announcement, the session, the window's errors, its long tasks and error toasts. */
 export function createLaunchObservers(
   clock: () => number = Date.now,
   later: (run: () => void) => void = (run) => void setTimeout(run, 0),
@@ -444,6 +471,7 @@ export function createLaunchObservers(
         followUpdate(app, announced, clock, later),
         watchErrors(),
         watchStalls(),
+        watchErrorToasts(app),
       ];
       return () => {
         for (const stop of stops) stop();

@@ -29,6 +29,10 @@ import os from "node:os";
 import path from "node:path";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import type { CodexLoginState } from "../../src/shared/codex-login.ts";
+import { OpenRouterSignInProblem } from "../../src/shared/openrouter-login.ts";
+import { ModelPullProblem } from "../../src/shared/model-install.ts";
+import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
+import { EngineError } from "../../src/substrate/engines/types.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
 import { UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
@@ -1146,7 +1150,9 @@ it("the browser sign-in hands its key to the engine, and only how it ended comes
       start: async (saveKey) => {
         calls.push("start");
         const status = await saveKey(key);
-        return status.code === "ready" ? { outcome: "connected" } : { outcome: "failed", error: status.detail };
+        return status.code === "ready"
+          ? { outcome: "connected" }
+          : { outcome: "failed", error: status.detail, problem: OpenRouterSignInProblem.KeyRefused };
       },
       reopen: async () => {
         calls.push("reopen");
@@ -1187,6 +1193,46 @@ it("the browser sign-in hands its key to the engine, and only how it ended comes
     );
   } finally {
     await server.close();
+  }
+});
+
+it("an Ollama download that fails rejects with why, as a code, never with the server's words", async () => {
+  let failure: unknown = null;
+  const ollama = {
+    client: {
+      // biome-ignore lint/correctness/useYield: the pull fails before its first step
+      pull: async function* () {
+        throw failure;
+      },
+    },
+  };
+  const core = {
+    engines: { has: (id: string) => id === "ollama", get: () => ollama },
+  } as unknown as ModelsIpcDeps["core"];
+  const { handle, invoke } = registrar();
+  registerModelsIpc(handle, {
+    core,
+    subscription: () => null,
+    usage: noUsage,
+    pushUiEvent: () => undefined,
+    openRouterLogin: noSignIn,
+  });
+  const failures: ReadonlyArray<[unknown, ModelPullProblem]> = [
+    [
+      new EngineError(EngineFailureKind.Unavailable, "ollama", "Ollama isn't running at http://10.0.0.7:11434"),
+      ModelPullProblem.Unavailable,
+    ],
+    [
+      new EngineError(EngineFailureKind.Other, "ollama", "pull model manifest: file does not exist"),
+      ModelPullProblem.Refused,
+    ],
+    [Object.assign(new TypeError("terminated"), { code: "ECONNRESET" }), ModelPullProblem.Interrupted],
+  ];
+  for (const [thrown, problem] of failures) {
+    failure = thrown;
+    const result = await invoke("studio:pull-model", { model: "gemma4:12b" });
+    assert.equal(result.ok, false);
+    assert.equal(result.ok === false && result.code, problem, String(thrown));
   }
 });
 

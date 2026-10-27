@@ -10,6 +10,7 @@ import {
   DEFAULT_PERMISSION_MODE,
   engineMode,
   isPermissionMode,
+  ModeSwitchFailure,
   PermissionMode,
   planContinuations,
 } from "../../shared/permissions.ts";
@@ -22,6 +23,7 @@ import { problemWords } from "../words.ts";
 import { ModeVia } from "../analytics/chat-vocabulary.ts";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
+import { errorCode, errorCodeIn } from "../../shared/errors.ts";
 
 export interface ChatPermissionMode {
   /** The composer's pill, or null in Studio's own chat. */
@@ -74,9 +76,15 @@ export function usePermissionMode(input: {
   const mode = shownPermissionMode({ engine, picked, recorded, defaultMode: settings?.defaultMode });
   const onMode = (next: PermissionMode): void => {
     setPick({ thread: threadId, mode: next });
-    // Why a switch failed reaches the renderer in English only, so only that it did is counted.
-    const changed = (failed: boolean): void =>
-      track(AnalyticsEvent.PermissionModeChanged, { from: mode, to: next, via: ModeVia.Composer, failed });
+    // Why a switch failed is its error's code, when the session gave one.
+    const changed = (failed: boolean, error?: unknown): void =>
+      track(AnalyticsEvent.PermissionModeChanged, {
+        from: mode,
+        to: next,
+        via: ModeVia.Composer,
+        failed,
+        ...(failed ? { code: errorCodeIn(ModeSwitchFailure, error) } : {}),
+      });
     void window.studio
       .setPermissionMode(threadId ?? null, next)
       .then((settings) => {
@@ -85,8 +93,8 @@ export function usePermissionMode(input: {
       })
       .catch((error) => {
         setPick(null);
-        changed(true);
-        onNotice(problemWords(error), ToastTone.Error);
+        changed(true, error);
+        onNotice(problemWords(error), ToastTone.Error, errorCode(error));
       });
   };
   return { bar: { mode, onMode, autoUnavailable, engine }, planModes };

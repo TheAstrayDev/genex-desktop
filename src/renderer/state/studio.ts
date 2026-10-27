@@ -125,10 +125,11 @@ import {
   type ThreadsState,
   type ThreadsStore,
 } from "./threads.ts";
-import { createToastsStore, notifyProblem, ToastTone, type ToastsStore } from "./toasts.ts";
+import { createToastsStore, type Notify, notifyProblem, ToastTone, type ToastsStore } from "./toasts.ts";
 import { uiEventReads } from "./ui-event-routes.ts";
 import { createUpdateStore, updateDownloaded, type UpdateStore } from "./update.ts";
 import { agentsFailed, agentsStarted, type AgentsStartStore, createAgentsStartStore } from "./agents-start.ts";
+import { errorCode } from "../../shared/errors.ts";
 
 /** The log is the source of truth; this poll is the safety net for anything the stream missed. */
 export const EVENT_POLL_MS = 3 * SECOND_MS;
@@ -198,7 +199,7 @@ export interface Studio {
    * extra IPC listener costs the preload one more). Returns the stop.
    */
   onUiEvent(listener: (event: UiEvent) => void): () => void;
-  notify(text: string, tone?: ToastTone): void;
+  notify: Notify;
   /** Open a conversation the user picked. */
   selectThread(threadId: string): void;
   /** Go home: no conversation open, the composer that starts a new game. */
@@ -324,7 +325,7 @@ interface StudioContext {
   readonly visibility: VisibilitySource;
   /** The wall clock, for when a launch began. */
   now(): number;
-  notify(text: string, tone?: ToastTone): void;
+  notify: Notify;
   selectThread(threadId: string): void;
 }
 
@@ -565,7 +566,7 @@ async function enterProject(
   try {
     record = await api.threadForGame(name);
   } catch (error) {
-    notify(problemWords(error), ToastTone.Error);
+    notify(problemWords(error), ToastTone.Error, errorCode(error));
     return null;
   }
   stores.threads.setState((state) => threadAdded(state, record), true);
@@ -681,7 +682,7 @@ async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void>
     }
     launch.setState((state) => launchOpened(state, id, { project: game.name, threadId: record.id }), true);
   } catch (error) {
-    notify(problemWords(error), ToastTone.Error);
+    notify(problemWords(error), ToastTone.Error, errorCode(error));
     launch.setState((state) => launchFailed(state, id), true);
     // A game made and then lost on the way to its chat failed opening; otherwise main refused making it.
     if (made) stopped(LaunchStage.Opening, LaunchFailReason.OpenRefused);
@@ -759,7 +760,7 @@ export function createStudio(
   const visibility = options.visibility ?? browserVisibility;
   const stores = createStores(api, storage, timers, visibility);
   const { session, threads, library } = stores;
-  const notify = (text: string, tone: ToastTone = ToastTone.Info): void => stores.toasts.notify(text, tone);
+  const notify: Notify = (text, tone = ToastTone.Info, code = null) => stores.toasts.notify(text, tone, code);
   const selectThread = (threadId: string): void => {
     threads.setState((state) => threadSelected(state, threadId), true);
     writeText(STORAGE_KEYS.activeThread, threadId, storage);

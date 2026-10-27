@@ -18,13 +18,12 @@ import {
   type LiveOutcome,
   type LiveTrigger,
   NodeKind,
-  oneOf,
   type PlanningEnd,
   pluginRef,
   PressOutcome,
   SetupStepState,
 } from "./events/builds.ts";
-import { elapsedMs } from "./properties.ts";
+import { elapsedMs, oneOf } from "./properties.ts";
 
 /** A game shown this long without drawing anything is suspected blank. */
 export const BLANK_AFTER_MS = 10 * SECOND_MS;

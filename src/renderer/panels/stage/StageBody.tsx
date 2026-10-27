@@ -12,7 +12,8 @@ import { StageLoading } from "./LiveLoaderArt.tsx";
 import { PlannerArt } from "./PlannerArt.tsx";
 import { track } from "../../analytics/client.ts";
 import { AnalyticsEvent } from "../../analytics/events.ts";
-import { BuildSurface, EmptyAction, EmptyArt, oneOf } from "../../analytics/events/builds.ts";
+import { BuildSurface, EmptyAction, EmptyArt } from "../../analytics/events/builds.ts";
+import { oneOf } from "../../analytics/properties.ts";
 import { elapsedMs } from "../../analytics/properties.ts";
 
 /** A Play of a run's build from the stage: which build, and the stage it was pressed on. */

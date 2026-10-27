@@ -28,6 +28,7 @@ import type { ModelSettingsProps } from "./ModelsSection.tsx";
 import { Pending } from "../ui/Pending.tsx";
 import { LOCAL_SERVER_WORDS } from "../words.ts";
 import { SkeletonLines } from "../ui/Skeleton.tsx";
+import { ModelPullStatus } from "../../shared/model-install.ts";
 
 /** Where the Add from Ollama hint sends the user to find a model's name. */
 const OLLAMA_LIBRARY_URL = "https://ollama.com/search";
@@ -428,12 +429,12 @@ function useModelInstalls(onEnginesRefresh: () => void) {
       if (next.total) setProgress(next.completed / next.total);
     };
     const applyPull = ({ model, progress }: PullEvent): void => {
-      if (progress.status === "error") {
+      if (progress.status === ModelPullStatus.Error) {
         setPulling(null);
         setFailure({ model, message: progress.error ?? t("Download failed") });
         return;
       }
-      if (progress.status === "success") {
+      if (progress.status === ModelPullStatus.Success) {
         setPulling(null);
         onEnginesRefresh();
       } else {

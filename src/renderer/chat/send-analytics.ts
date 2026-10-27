@@ -5,10 +5,18 @@
  */
 import { chatMemory, takeComposedFiles } from "../analytics/chat-memory.ts";
 import { forgetSend, noteMessageSent, type SendFacts, sendBlockedProperties } from "../analytics/chat-properties.ts";
-import { ComposerRoom, type SendBlock, type SendRoute, SendSource } from "../analytics/chat-vocabulary.ts";
+import {
+  ComposerRoom,
+  type SendBlock,
+  SendFailStage,
+  type SendRoute,
+  SendSource,
+} from "../analytics/chat-vocabulary.ts";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import { elapsedMs } from "../analytics/properties.ts";
+import { SendFailure } from "../../shared/composer.ts";
+import { errorCodeIn } from "../../shared/errors.ts";
 import { loopCommissions } from "../loop-setting.ts";
 import { parseModelKey } from "../model-key.ts";
 import type { ComposerExtras } from "../ui/PromptBar.tsx";
@@ -89,10 +97,10 @@ export function trackSendBlocked(parts: Pick<SendParts, "chat">, reason: SendBlo
   );
 }
 
-/** What a send reports once it is known how it went. */
+/** What a send reports once it is known how it went; a failure with what it threw. */
 export interface SendTracking {
   sent(): void;
-  failed(): void;
+  failed(error: unknown): void;
 }
 
 const UNTRACKED: SendTracking = { sent: () => undefined, failed: () => undefined };
@@ -117,7 +125,7 @@ function tracking(parts: SendParts, send: RoutedSend): SendTracking {
   const properties = noteMessageSent(chatMemory, facts, at);
   return {
     sent: () => track(AnalyticsEvent.MessageSent, properties),
-    failed: () => {
+    failed: (error) => {
       forgetSend(chatMemory, facts.thread, send.clientId);
       const input = { autopilot: loopCommissions(parts.chat.run), ...(send.extras ? { extras: send.extras } : {}) };
       const block = sendBlockOf(parts.composer.model, send.key, input);
@@ -126,6 +134,8 @@ function tracking(parts: SendParts, send: RoutedSend): SendTracking {
         return;
       }
       track(AnalyticsEvent.MessageSendFailed, {
+        stage: SendFailStage.Rejected,
+        code: errorCodeIn(SendFailure, error),
         route: send.route,
         ack_ms: elapsedMs(at, Date.now()),
         pictures: facts.pictures,

@@ -9,6 +9,7 @@ import { EngineId } from "../../shared/providers.ts";
 import { signInVendor, useClaudeLogin } from "../subscription-auth.ts";
 import { useCliInstall } from "../cli-install.ts";
 import { SHOW_TERMINAL_EVENT } from "../panels/terminal-events.ts";
+import { errorCode } from "../../shared/errors.ts";
 
 const CODE_FIELD =
   "h-7 w-44 rounded-control bg-field px-2.5 text-xs text-ink shadow-hairline outline-none placeholder:text-ink-3";
@@ -73,11 +74,12 @@ function signInLabel({ engine, busy, stalled, flat }: CardState): string {
 const cancelSignIn = (engine: string): Promise<unknown> =>
   engine === EngineId.Codex ? window.studio.codexLoginCancel() : window.studio.claudeLoginCancel();
 
-/** A help beside the card's sign-in was used (usage analytics). */
-const helped = (engine: string, helper: SignInHelper, accepted?: boolean): void =>
+/** A help beside the card's sign-in was used (usage analytics); a refused code says why. */
+const helped = (engine: string, helper: SignInHelper, accepted?: boolean, error?: unknown): void =>
   reportSignInHelper(engine, helper, {
     surface: ProviderSurface.ChatCard,
     ...(accepted === undefined ? {} : { accepted }),
+    code: errorCode(error),
   });
 
 /** The Claude sign-in's own steps: its page again, the code box on request, and its terminal. */
@@ -171,7 +173,7 @@ export function SignInCard({
     setCodeError(null);
     void settled(
       () => window.studio.claudeLoginCode(code),
-      (accepted) => helped(engine, SignInHelper.CodeSubmitted, accepted),
+      (accepted, error) => helped(engine, SignInHelper.CodeSubmitted, accepted, error),
     )
       .then(() => setCode(""))
       .catch((err: Error) => setCodeError(err.message));

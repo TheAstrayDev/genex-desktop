@@ -5,15 +5,28 @@
  * (`StreamPairing`, fresh for each start). Ids, model names and addresses stay in memory, never in
  * what leaves: every property is an engine id, a typed state, a switch, a count or a duration.
  */
-import { type ClaudeLoginState, isClaudeLoginActive } from "../../shared/claude-login.ts";
-import { type CliInstallJob, CliInstallOperation, CliInstallPhase } from "../../shared/cli-install.ts";
-import { type CodexLoginState, isCodexLoginActive } from "../../shared/codex-login.ts";
+import { ClaudeLoginProblem, type ClaudeLoginState, isClaudeLoginActive } from "../../shared/claude-login.ts";
+import {
+  type CliInstallJob,
+  CliInstallOperation,
+  CliInstallPhase,
+  CliInstallRefusal,
+} from "../../shared/cli-install.ts";
+import { CodexLoginProblem, type CodexLoginState, isCodexLoginActive } from "../../shared/codex-login.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
-import { type EngineDescriptor, EngineStatusCode } from "../../shared/engine-descriptor.ts";
+import { type EngineDescriptor, EngineStatusCode, EngineStatusReason } from "../../shared/engine-descriptor.ts";
 import type { FoundLocalServer, LocalServerConnectResult } from "../../shared/local-server.ts";
 import { ModelCatalogState } from "../../shared/model-catalog.ts";
-import { InstallPhase, type ModelInstallJob } from "../../shared/model-install.ts";
+import type { StudioErrorCode } from "../../shared/error-codes.ts";
+import { errorCodeIn } from "../../shared/errors.ts";
+import {
+  InstallPhase,
+  type ModelInstallJob,
+  ModelInstallProblem,
+  ModelPullProblem,
+} from "../../shared/model-install.ts";
+import { OpenRouterSignInProblem } from "../../shared/openrouter-login.ts";
 import { EngineId } from "../../shared/providers.ts";
 import type { HardwareReport, LocalModelChoice, StudioApi } from "../../shared/studio-api.ts";
 import { type TerminalEvent, TerminalKind, type TerminalSession } from "../../shared/terminal.ts";
@@ -25,10 +38,11 @@ import type {
   RecheckReturnedProperties,
   SignInFinishedProperties,
   SignInPhaseProperties,
+  SignInProblem,
   WelcomeEvent,
   WelcomeEventProperties,
 } from "./events/welcome.ts";
-import { elapsedMs } from "./properties.ts";
+import { elapsedMs, oneOf } from "./properties.ts";
 import {
   DownloadOutcome,
   DownloadSource,
@@ -119,6 +133,10 @@ export interface DownloadAttempt {
   startedAt: number;
   percent: number;
   phase: InstallPhase | null;
+  /** The phase a managed install failed in, as its job said. */
+  failedPhase: InstallPhase | null;
+  /** Why it failed, as its job or its pull said. */
+  problem: ModelInstallProblem | ModelPullProblem | null;
   /** The screen it started on closed while it ran. */
   left: boolean;
 }
@@ -222,7 +240,15 @@ function newAttempt(surface: ProviderSurface | null, method: SignInMethod, now: 
 /** A help beside a sign-in was used; the code box marks the sign-in as one that needed it. */
 export function signInHelperUsed(
   memory: ProviderMemory,
-  use: { engine: string; helper: SignInHelper; surface?: ProviderSurface; accepted?: boolean; phase?: LoginPhase },
+  use: {
+    engine: string;
+    helper: SignInHelper;
+    surface?: ProviderSurface;
+    accepted?: boolean;
+    phase?: LoginPhase;
+    /** Why a submitted code was refused, as its failure's code. */
+    code?: StudioErrorCode | null;
+  },
   now: number,
 ): Props<typeof WelcomeEvent.ProviderSignInHelperUsed> {
   const attempt = memory.signIns.get(use.engine);
@@ -232,19 +258,25 @@ export function signInHelperUsed(
   // A retry starts a sign-in of its own, credited where the first one was pressed.
   if (surface && use.helper === SignInHelper.Retried) memory.clicks.set(use.engine, { surface, action: null, at: now });
   const accepted = use.accepted === undefined ? {} : { accepted: use.accepted };
+  const refused = use.code ? { code: use.code } : {};
   const phase = use.phase ?? attempt?.phase ?? null;
-  return { engine: engineRef(use.engine), helper: use.helper, surface, ...accepted, phase };
+  return { engine: engineRef(use.engine), helper: use.helper, surface, ...accepted, ...refused, phase };
 }
 
-/** A sign-in that settles in one call (OpenRouter's browser sign-in) ended. */
+/** A sign-in's problem, when it is one of the providers' own words for it: never free text. */
+export const signInProblem = (value: unknown): SignInProblem | null =>
+  oneOf(ClaudeLoginProblem, value) ?? oneOf(CodexLoginProblem, value) ?? oneOf(OpenRouterSignInProblem, value);
+
+/** A sign-in that settles in one call (OpenRouter's browser sign-in) ended; a failure may say why. */
 export function signInSettled(
   memory: ProviderMemory,
-  end: { engine: string; outcome: SignInOutcome },
+  end: { engine: string; outcome: SignInOutcome; problem?: unknown },
   now: number,
 ): SignInFinishedProperties {
   const attempt = memory.signIns.get(end.engine) ?? null;
   memory.signIns.delete(end.engine);
-  return loginEnded(end.engine, end.outcome, attempt, now);
+  const problem = end.outcome === SignInOutcome.Failed ? signInProblem(end.problem) : null;
+  return loginEnded(end.engine, end.outcome, attempt, now, problem);
 }
 
 /** A provider row's face, as a visit first shows it. */
@@ -305,7 +337,8 @@ export function loginSeen(
   // An end with no press and no step seen before it is an old sign-in's, not news.
   if (!outcome || !attempt) return {};
   memory.signIns.delete(engine);
-  return { finished: loginEnded(engine, outcome, attempt, now) };
+  const problem = outcome === SignInOutcome.Failed ? signInProblem(state.problem) : null;
+  return { finished: loginEnded(engine, outcome, attempt, now, problem) };
 }
 
 function stepTaken(memory: ProviderMemory, update: LoginUpdate, now: number): SignInPhaseProperties {
@@ -331,10 +364,12 @@ function loginEnded(
   outcome: SignInOutcome,
   attempt: SignInAttempt | null,
   now: number,
+  problem: SignInProblem | null = null,
 ): SignInFinishedProperties {
   return {
     engine: engineRef(engine),
     outcome,
+    problem,
     method: attempt?.method ?? signInMethod(engine),
     phase_at_end: attempt?.phase ?? null,
     duration_ms: attempt ? elapsedMs(attempt.startedAt, now) : null,
@@ -422,16 +457,17 @@ function creditJob(memory: ProviderMemory, job: CliInstallJob, now: number) {
   return { startedAt: job.startedAt, surface: click?.surface ?? null, button: click?.action ?? null };
 }
 
-/** An install or update refused before it started; the reason is English only, so none is sent. */
+/** An install or update refused before it started, by the refusal's code (null when the call itself failed). */
 export function cliInstallRefused(
   memory: ProviderMemory,
-  refusal: { provider: string; operation: CliInstallOperation },
+  refusal: { provider: string; operation: CliInstallOperation; error: unknown },
   now: number,
 ): Props<typeof WelcomeEvent.CliInstallRefused> {
   return {
     provider: engineRef(refusal.provider),
     operation: refusal.operation,
     surface: creditedClick(memory, refusal.provider, now)?.surface ?? null,
+    code: errorCodeIn(CliInstallRefusal, refusal.error),
   };
 }
 
@@ -439,6 +475,7 @@ export function cliInstallRefused(
 function engineFacts(engine: EngineDescriptor | undefined) {
   return {
     status: engine?.status.code ?? null,
+    reason: oneOf(EngineStatusReason, engine?.status.reason),
     cli: engine?.account?.cli.state ?? null,
     unlisted: engine?.catalog?.state === ModelCatalogState.Unavailable,
   };
@@ -452,12 +489,14 @@ function statusChange(
 ): ProviderStatusProperties | null {
   const was = engineFacts(before);
   const is = engineFacts(after);
-  const same = was.status === is.status && was.cli === is.cli && was.unlisted === is.unlisted;
+  const same =
+    was.status === is.status && was.reason === is.reason && was.cli === is.cli && was.unlisted === is.unlisted;
   if (same) return null;
   return {
     engine: engineRef(id),
     from: was.status,
     to: is.status,
+    reason: is.reason,
     cli_state: is.cli,
     catalog_state: after?.catalog?.state ?? null,
     catalog_problem: after?.catalog?.problem?.code ?? null,
@@ -588,6 +627,8 @@ export function downloadStarted(
     startedAt: now,
     percent: 0,
     phase: null,
+    failedPhase: null,
+    problem: null,
     left: false,
   });
   const ollamaRunning = engine === EngineId.Ollama ? start.ollama?.status.code === EngineStatusCode.Ready : null;
@@ -610,12 +651,22 @@ export function downloadJobSeen(memory: ProviderMemory, job: ModelInstallJob): v
   if (!attempt) return;
   attempt.phase = job.phase;
   attempt.percent = share(job.completed, job.total) ?? attempt.percent;
+  attempt.failedPhase = oneOf(InstallPhase, job.failedPhase) ?? attempt.failedPhase;
+  attempt.problem = oneOf(ModelInstallProblem, job.problem) ?? attempt.problem;
 }
 
-/** A pull's progress: how far it got. */
+/** A pull's progress: how far it got, and why it failed when it says. */
 export function downloadPullSeen(memory: ProviderMemory, pull: { model: string; progress: ModelPullProgress }): void {
   const attempt = memory.downloads.get(pull.model);
-  if (attempt) attempt.percent = share(pull.progress.completed, pull.progress.total) ?? attempt.percent;
+  if (!attempt) return;
+  attempt.percent = share(pull.progress.completed, pull.progress.total) ?? attempt.percent;
+  const { problem } = pull.progress;
+  attempt.problem = oneOf(ModelInstallProblem, problem) ?? oneOf(ModelPullProblem, problem) ?? attempt.problem;
+}
+
+/** Why a download's call failed, by its code: a managed install's problem or a pull's. */
+function downloadProblem(error: unknown): ModelInstallProblem | ModelPullProblem | null {
+  return errorCodeIn(ModelInstallProblem, error) ?? errorCodeIn(ModelPullProblem, error);
 }
 
 /** The screen a download started on closed while it ran. */
@@ -629,7 +680,7 @@ export function downloadsLeft(memory: ProviderMemory, surface: ProviderSurface):
  */
 export function downloadFinished(
   memory: ProviderMemory,
-  end: { model: string; ok: boolean; ollama: Pick<EngineDescriptor, "status"> | undefined },
+  end: { model: string; ok: boolean; ollama: Pick<EngineDescriptor, "status"> | undefined; error?: unknown },
   now: number,
 ): DownloadFinishedProperties | null {
   const attempt = memory.downloads.get(end.model);
@@ -644,6 +695,8 @@ export function downloadFinished(
     surface: attempt.surface,
     outcome,
     percent_at_end: end.ok ? 100 : attempt.percent,
+    failed_phase: outcome === DownloadOutcome.Failed ? attempt.failedPhase : null,
+    problem: outcome === DownloadOutcome.Failed ? (attempt.problem ?? downloadProblem(end.error)) : null,
     duration_ms: elapsedMs(attempt.startedAt, now),
     needs_ollama: needsOllama,
     left_screen_while_downloading: attempt.left,
