@@ -4024,6 +4024,8 @@ export default {
     "これはRoblox Studioの設定ではありません。Studioは設定を1つのJSONオブジェクトで保存します。",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "これらのファイルは保存するには大きすぎたため、巻き戻しでもそのままにしました：{files}。",
+  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
+    "一度の変更が{size}を超えたためこれらのファイルは保存されず、巻き戻しでもそのままになりました：{files}。",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "これらのサーフェスには別々の文字色が必要です。背景の明るさをそろえるか、このテーマをリセットしてください。",
   "They can": "できること",
@@ -5488,6 +5490,8 @@ export default {
     "{count, plural, other {元の履歴は.git.studio-backupという名前に変えて、すぐ横に保存してあります。}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, other {ゲームのファイルを#個復元しました。}}",
+  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
+    "{count, plural, other {この変更は一度に{size}を超えたため、大きいファイル#件が保存されず、巻き戻しで元に戻せません：{files}。}}",
   "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
     "{count, plural, other {保存するには大きすぎるファイル#件は、巻き戻しで元に戻せません：{files}。}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":

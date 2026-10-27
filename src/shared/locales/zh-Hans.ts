@@ -3788,6 +3788,8 @@ export default {
     "这不是 Roblox Studio 的设置：Studio 只保存一个 JSON 对象。",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "这些文件过大，无法保存，因此回退时保持原样：{files}。",
+  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
+    "这些文件未保存，因为这次更改一次超过了 {size}，所以回退保留了它们原样：{files}。",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "这些表面需要不同的文字颜色。请使用亮度相近的背景，或重置此主题。",
   "They can": "他们可以",
@@ -5182,6 +5184,8 @@ export default {
     "{count, plural, other {原有的历史记录已改名为 .git.studio-backup，保存在旁边。}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, other {已恢复 # 个游戏文件。}}",
+  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
+    "{count, plural, other {这次更改一次超过了 {size}，最大的 # 个文件未保存，回退时无法恢复：{files}。}}",
   "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
     "{count, plural, other {有 # 个文件过大，无法保存，回退时无法恢复：{files}。}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":

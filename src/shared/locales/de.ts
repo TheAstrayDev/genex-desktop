@@ -4120,6 +4120,8 @@ export default {
     "Das sind nicht die Einstellungen von Roblox Studio: Studio speichert ein einziges JSON-Objekt.",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "Diese Dateien waren zu groß zum Speichern, deshalb hat das Zurückspulen sie so gelassen, wie sie sind: {files}.",
+  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
+    "Diese Dateien wurden nicht gespeichert, weil ihre Änderung auf einmal größer als {size} war, also hat das Zurückspulen sie gelassen, wie sie sind: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Diese Flächen brauchen unterschiedliche Textfarben. Nutze Hintergründe mit ähnlicher Helligkeit oder setz dieses Design zurück.",
   "They can": "Sie dürfen",
@@ -5623,6 +5625,8 @@ export default {
     "{count, plural, one {Sein eigener Verlauf bleibt daneben erhalten, umbenannt in .git.studio-backup.} other {Ihre eigenen Verläufe bleiben daneben erhalten, umbenannt in .git.studio-backup.}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, one {# Spieldatei wiederhergestellt.} other {# Spieldateien wiederhergestellt.}}",
+  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
+    "{count, plural, one {Zurückspulen kann # Datei aus dieser Änderung nicht zurückholen: Sie war auf einmal größer als {size}, also blieben die größten draußen: {files}.} other {Zurückspulen kann # Dateien aus dieser Änderung nicht zurückholen: Sie war auf einmal größer als {size}, also blieben die größten draußen: {files}.}}",
   "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
     "{count, plural, one {Zurückspulen kann # Datei nicht zurückholen, weil sie zu groß zum Speichern ist: {files}.} other {Zurückspulen kann # Dateien nicht zurückholen, weil sie zu groß zum Speichern sind: {files}.}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":

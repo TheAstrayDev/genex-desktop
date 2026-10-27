@@ -4087,6 +4087,8 @@ export default {
     "Estos no son los ajustes de Roblox Studio: Studio guarda un solo objeto JSON.",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "Estos archivos eran demasiado grandes para guardarse, así que al retroceder se quedaron como estaban: {files}.",
+  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
+    "Estos archivos no se guardaron porque su cambio superó {size} de una vez, así que retroceder los dejó como están: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Estas superficies necesitan colores de texto distintos. Usa fondos con un brillo parecido o restablece este tema.",
   "They can": "Pueden",
@@ -5573,6 +5575,8 @@ export default {
     "{count, plural, one {Su propio historial se guarda al lado, renombrado como .git.studio-backup.} other {Sus propios historiales se guardan al lado, renombrados como .git.studio-backup.}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, one {Se restauró # archivo del juego.} other {Se restauraron # archivos del juego.}}",
+  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
+    "{count, plural, one {Retroceder no puede recuperar # archivo de este cambio: superó {size} de una vez, así que los más grandes quedaron fuera: {files}.} other {Retroceder no puede recuperar # archivos de este cambio: superó {size} de una vez, así que los más grandes quedaron fuera: {files}.}}",
   "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
     "{count, plural, one {Retroceder no puede recuperar # archivo demasiado grande para guardarse: {files}.} other {Retroceder no puede recuperar # archivos demasiado grandes para guardarse: {files}.}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":

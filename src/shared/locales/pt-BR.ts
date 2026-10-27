@@ -4076,6 +4076,8 @@ export default {
     "Estas não são as configurações do Roblox Studio: o Studio guarda um único objeto JSON.",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "Estes arquivos eram grandes demais para salvar, então ficaram como estavam ao voltar: {files}.",
+  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
+    "Estes arquivos não foram salvos porque a mudança passou de {size} de uma vez, então voltar os deixou como estão: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Estas superfícies precisam de cores de texto diferentes. Use fundos com brilho parecido ou redefina este tema.",
   "They can": "Podem",
@@ -5561,6 +5563,8 @@ export default {
     "{count, plural, one {O histórico dele fica guardado ao lado, renomeado para .git.studio-backup.} other {Os históricos deles ficam guardados ao lado, renomeados para .git.studio-backup.}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, one {# arquivo do jogo restaurado.} other {# arquivos do jogo restaurados.}}",
+  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
+    "{count, plural, one {Ao voltar, não dá para recuperar # arquivo desta mudança: ela passou de {size} de uma vez, então os maiores ficaram de fora: {files}.} other {Ao voltar, não dá para recuperar # arquivos desta mudança: ela passou de {size} de uma vez, então os maiores ficaram de fora: {files}.}}",
   "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
     "{count, plural, one {Ao voltar, não dá para recuperar # arquivo grande demais para salvar: {files}.} other {Ao voltar, não dá para recuperar # arquivos grandes demais para salvar: {files}.}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":
