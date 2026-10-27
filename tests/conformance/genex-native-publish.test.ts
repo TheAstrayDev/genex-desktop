@@ -549,6 +549,23 @@ describe("a game with only apps, published", () => {
     assert.equal(aside.length, 1, "the other sign-in's link is set aside in its turn");
   });
 
+  it("puts back no link set aside that Genex can't vouch for: a new game is made instead", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/flaky")) return reply.json({ error: "down" }, 503);
+    });
+    servers.push(server);
+    const { genex, runs } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "gone", id: "p3", status: "draft" });
+    await writeFile(
+      path.join(workspace, ".genex", "project.unlinked-1793000000000.json"),
+      JSON.stringify({ slug: "flaky", id: "p1", status: "published" }),
+    );
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    await genex.publishWait("dust");
+    assert.equal((await runs())[0]?.args[0], "init", "a new hosted project, not a link Genex didn't answer for");
+  });
+
   it("keeps the apps live but fails the publish when Genex refuses the listing, in its words", async () => {
     const { genex } = await toolsWithStandIn(true, await fixtureApi());
     await genex.publishAppsOnly("dust", [app("Refused")], "Dust Runners");

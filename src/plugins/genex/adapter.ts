@@ -1294,7 +1294,19 @@ export class GenexTools {
   async #unlink(dir: string): Promise<void> {
     await rename(metaFile(dir), path.join(dir, ".genex", `${UNLINKED_PREFIX}${Date.now()}.json`));
   }
-  /** The newest link set aside that is this account's game again, put back; null when none is. */
+  /**
+   * Whether Genex says the game `meta` links to is this signed-in account's: it answered, and
+   * names the same project and no other owner. Not knowing is no.
+   */
+  async #linkOwned(meta: HostedMeta, signal: AbortSignal): Promise<boolean> {
+    const session = await this.#session(signal).catch(() => null);
+    if (!session?.user) return false;
+    const answer = await this.#fetch(GenexRoute.projectBySlug(String(meta.slug)), withSignal(signal)).catch(() => null);
+    const project = answer?.project;
+    if (!project) return false;
+    return !linkedElsewhere(meta, { id: project.id, ownerId: project.owner?.id }, session.user.id);
+  }
+  /** The newest link set aside that Genex says is this account's game, put back; null when none is. */
   async #relinkOwn(dir: string, signal: AbortSignal): Promise<HostedMeta | null> {
     const folder = path.join(dir, ".genex");
     const names = await readdir(folder).catch(() => []);
@@ -1304,7 +1316,7 @@ export class GenexTools {
       .reverse();
     for (const name of aside) {
       const meta = await readJsonOr<HostedMeta>(path.join(folder, name));
-      if (!meta?.slug || (await this.#linkGone(meta, signal))) continue;
+      if (!meta?.slug || !(await this.#linkOwned(meta, signal))) continue;
       await rename(path.join(folder, name), metaFile(dir));
       return meta;
     }
