@@ -381,7 +381,9 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   show again (a burst once, `REREAD_GAP_MS`); Put on sale, Take off sale and sharing read Selling
   again at once, Add to and Remove from the item's detail.
 - The **Listing draft card**: when `genex__cli` runs `shop add` (no card asks first; it refuses an item
-  without its picture, `image`, and runs at any time, with or without a build) or `genex__cli-paid` runs `shop set` and the pinned
+  without its picture, `image`, and a picture that is not a square PNG or WebP of at least 768 × 768,
+  since the card shows it edge to edge (`item-pictures.ts` `fitsItemCard`); it runs at any time, with
+  or without a build) or `genex__cli-paid` runs `shop set` and the pinned
   CLI answers its `--json` draft (`kind: "genex.item_draft"`, version 1) for the game's own hosted
   project, main records `item_drafted` in the chat (`main/core/item-draft.ts`) and announces
   `item.drafted`. The harness may write neither, and a draft an agent writes in words is text. The
@@ -414,7 +416,8 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   publish it also puts on sale the game's items still drafts on genex.games (`hostedDraftIds` over
   Selling), never on a mere focus, since only a publish carries the code that delivers them. The card
   then becomes the item's: On sale, or genex.games' refusal; a refused upload stays local with its
-  reason. When the content Genex got is not the draft the card shows (files edited outside Studio),
+  reason, and with genex.games' own code beside the words when Studio has none for it
+  (`unwordedRefusalCode`, `[data-listing-refusal]`). When the content Genex got is not the draft the card shows (files edited outside Studio),
   the card offers no sharing and sends the person to Items › Selling. Nothing in the game folder names
   what goes up, so a `last-sync.json` from a terminal `genex publish` uploads nothing.
 - The **Shop** tab (`panels/shop/`): beside Live and Builds once the game sells something, every item
