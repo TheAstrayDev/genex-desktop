@@ -25,7 +25,7 @@ const CATALOG_SOURCE = /(?:^|[\\/])src[\\/]shared[\\/]locales[\\/](?!index\.ts$|
 /**
  * Main's language catalogs stay files of their own. `loadCatalog` imports one on demand, but a
  * bundle without splitting inlines all eight into app.mjs, which every launch reads and compiles
- * whatever the language: 5 MB of the file and about 11 MB of main's heap. The import becomes
+ * whatever the language: 5 MB of the file and about 10 MB of main's heap. The import becomes
  * `./locales/<locale>.mjs`, built beside app.mjs from {@link mainCatalogEntries}.
  *
  * @returns {import("esbuild").Plugin}
