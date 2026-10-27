@@ -20,6 +20,7 @@ const EAGER_ENTRIES = ["src/renderer/main.tsx", "src/renderer/studio-entry.tsx"]
  * wrap the app in Profilers (`renderer/performance.tsx`).
  *
  * @param {{ release?: boolean; development?: boolean; commitCounts?: boolean }} [mode]
+ * @returns {{ define: Record<string, string>; minify: boolean; keepNames: boolean; charset: import("esbuild").Charset }}
  */
 export function rendererBuildOptions({ release = false, development = false, commitCounts = false } = {}) {
   if (release && development) throw new Error("A release renderer cannot bundle development React");
@@ -31,6 +32,9 @@ export function rendererBuildOptions({ release = false, development = false, com
     },
     minify: release,
     keepNames: true,
+    // Module scripts are always read as UTF-8, so the language catalogs keep their letters instead
+    // of six-byte `\u` escapes: the Russian catalog a window reads before it shows, 1.1 → 0.56 MB.
+    charset: "utf8",
   };
 }
 

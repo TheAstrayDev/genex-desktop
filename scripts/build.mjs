@@ -1,5 +1,5 @@
 import { rendererBuildOptions, rendererBundleReport } from "./renderer-build.mjs";
-import { mainStartupReport } from "./main-build.mjs";
+import { MAIN_CATALOG_DIR, mainCatalogEntries, mainCatalogs, mainStartupReport } from "./main-build.mjs";
 import { buildPlugins, vendorEmbedSdk } from "./build-plugins.mjs";
 import { assertThreeLibsListed, stylesheetPackages, writeBundledNotices } from "./third-party-notices.mjs";
 import { patchSandboxRuntime } from "./patch-sandbox-runtime.mjs";
@@ -21,6 +21,7 @@ import { vendorGenexMultiplayer } from "./vendor-genex-multiplayer.ts";
  *
  *   dist/main/main.mjs        Electron's entry: turns on V8's compile cache, imports app.mjs
  *   dist/main/app.mjs         substrate + app shell (ESM, Electron 43 supports ESM main)
+ *   dist/main/locales/*.mjs   main's language catalogs, each read when its language is chosen
  *   dist/preload/preload.cjs  renderer bridge (sandboxed preloads must be CommonJS)
  *   dist/preload/play-mic.cjs Play game view's microphone (the app's mic in a published game's page)
  *   dist/renderer/*           React UI
@@ -113,6 +114,7 @@ async function nodeContexts() {
       entryPoints: [path.join(root, "src/main/index.ts")],
       outfile: path.join(dist, "main/app.mjs"),
       format: "esm",
+      plugins: [mainCatalogs()],
       // ESM output in a CJS-ish host: give bundled deps their expected globals.
       banner: {
         js: [
@@ -124,6 +126,15 @@ async function nodeContexts() {
           "const __dirname = __dirname_fn(__filename);",
         ].join("\n"),
       },
+    }),
+    // Main's language catalogs beside app.mjs, each read only when its language is chosen.
+    await esbuild.context({
+      ...shared,
+      entryPoints: mainCatalogEntries(root),
+      outdir: path.join(dist, "main", MAIN_CATALOG_DIR),
+      outExtension: { ".js": ".mjs" },
+      format: "esm",
+      charset: "utf8",
     }),
     await esbuild.context({
       ...shared,

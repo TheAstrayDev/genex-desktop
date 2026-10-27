@@ -93,6 +93,7 @@ counters carry the regression gates.
 | three.js in the eager renderer graph | none | `scripts/renderer-build.mjs` |
 | Production React in a packaged app | required | `tests/e2e/run-packaged-smoke.mjs` |
 | sandbox-runtime, the Agent SDK or the MCP SDK imported at the top of main | none | `scripts/main-build.mjs` |
+| A language catalog inside `app.mjs` | none | `scripts/main-build.mjs` |
 | Chat typing commits | unchanged per key | `tests/e2e/run-chat-ui.mjs` |
 
 ## Rules that keep work off the critical path
@@ -143,13 +144,18 @@ counters carry the regression gates.
 differs from an owned development build:
 
 - **Renderer:** minified, production React, no StrictMode replays, no Profiler or journey marks.
-  Owned builds overstate render cost; a packaged measurement needs `--studio-diagnostics`.
+  Owned builds overstate render cost; a packaged measurement needs `--studio-diagnostics`. In
+  every mode its chunks keep a catalog's letters as UTF-8 rather than `\u` escapes, which halves
+  the Russian catalog a window reads before it shows (1.1 → 0.56 MB).
 - **Main bundle:** `main.mjs` is a small entry (`main/boot.ts`) that turns on V8's compile cache
   and then imports the app, `app.mjs`, which is not minified in any mode. A packaged normal launch
   keeps the compiled code in `<userData>/v8-compile-cache` (`main/compile-cache.ts`), written 30 s
   after launch and at quit, so later launches skip most parsing and compiling (Electron 43, Linux:
   the bundle's import 238 → 168 ms median). Development, test and runner launches never write it.
-  Heavy packages load on first use, not at its top.
+  Heavy packages load on first use, not at its top, and each language catalog but English is a
+  file of its own beside it (`main/locales/<locale>.mjs`), read only when that language is chosen:
+  bundled in, the eight of them made `app.mjs` 12.2 MB instead of 7 and kept 10 MB more of main's
+  heap.
 - **Archive:** the app loads from `app.asar` with integrity validation; `dist/resources` (harness
   seed, vendored TypeScript, three.js, plugin payloads), node-pty and the sandbox vendor folder
   are unpacked because they are spawned or served. Packages esbuild bundles (React, xterm,

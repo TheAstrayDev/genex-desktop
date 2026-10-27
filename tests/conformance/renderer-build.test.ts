@@ -45,6 +45,23 @@ test("a release cannot ask for development React", () => {
   assert.throws(() => rendererBuildOptions({ release: true, development: true }));
 });
 
+// A module script is always read as UTF-8, so a catalog keeps its letters: escaped, each Cyrillic
+// letter took six bytes and the Russian catalog a window reads before it shows doubled.
+for (const { name, mode } of MODES) {
+  test(`${name} renderer keeps a catalog's letters rather than escapes`, async () => {
+    const result = await build({
+      stdin: { contents: 'export default { "Try again": "Попробовать снова" };', loader: "ts" },
+      bundle: true,
+      write: false,
+      format: "esm",
+      logLevel: "silent",
+      platform: "browser",
+      ...rendererBuildOptions(mode),
+    });
+    assert.match(result.outputFiles[0]?.text ?? "", /Попробовать снова/);
+  });
+}
+
 test("the bundle report refuses development React outside a development build", async () => {
   const metafile = await bundleReactDom({ development: true });
   assert.throws(() => rendererBundleReport(metafile, {}), /Development React/);
