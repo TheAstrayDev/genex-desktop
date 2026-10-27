@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { build, type Metafile } from "esbuild";
-import { rendererBuildOptions, rendererBundleReport } from "../../scripts/renderer-build.mjs";
+import { rendererBuildOptions, rendererBundleReport, studioRendererBuild } from "../../scripts/renderer-build.mjs";
 
 const DEVELOPMENT_REACT = /react.*\/cjs\/.*\.development\.js$/;
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 // React's development build keeps a User Timing measure per component render; shipped in
 // `npm start` builds it filled the UI renderer's memory during a long Autopilot run. Only watch
@@ -134,6 +137,21 @@ function splitMetafile(studioInputs: Record<string, object>): Metafile {
       "dist/renderer/chunks/ru.js": output("src/shared/locales/ru.ts", 9_000_000, { "src/shared/locales/ru.ts": {} }),
     },
   } as unknown as Metafile;
+}
+
+// CI builds production React, so the development budget was met only by an owned build, which
+// failed before its window opened: measure the studio itself as each budgeted build bundles it.
+for (const { name, mode, performance } of [
+  { name: "an owned fixture build", mode: { development: true, commitCounts: true }, performance: true },
+  { name: "a packaged build", mode: { release: true }, performance: false },
+]) {
+  test(`${name}'s studio fits its eager budget`, async () => {
+    const outdir = path.join(ROOT, "dist/renderer");
+    const options = studioRendererBuild({ root: ROOT, outdir, mode, performance });
+    const { metafile } = await build({ ...options, write: false, logLevel: "silent" });
+    assert.ok(metafile);
+    assert.ok(rendererBundleReport(metafile, mode).entryBytes > 0, "the report finds the eager entries");
+  });
 }
 
 test("the eager budget counts the studio the entry loads after the language, never the languages", () => {

@@ -4,7 +4,7 @@
  * not studio state: they live here, not in a store. App opens them through `useAppDialogs()`.
  */
 import type { JSX, RefObject } from "react";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef } from "react";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import { type SheetFacts, sheetClosedProperties } from "../analytics/workspace-properties.ts";
@@ -33,7 +33,11 @@ import { FeedbackDialog } from "./FeedbackDialog.tsx";
 import { DeleteGameDialog, RenameGameDialog } from "./GameDialogs.tsx";
 import { GameSearchDialog } from "./GameSearchDialog.tsx";
 import { OpenGameSheet } from "./OpenGameSheet.tsx";
-import { SettingsDialog } from "./SettingsDialog.tsx";
+
+/** Settings: loaded the first time it opens, as a window's first screen never shows it. */
+const SettingsDialog = lazy(() =>
+  import("./SettingsDialog.tsx").then((dialog) => ({ default: dialog.SettingsDialog })),
+);
 
 export interface DialogsState {
   searching: boolean;
@@ -261,18 +265,20 @@ export function AppDialogs({
   return (
     <>
       {state.settingsOpen && (
-        <SettingsDialog
-          returnFocus={dialogs.settingsReturnFocus}
-          section={state.settingsSection}
-          onSection={(section) => dispatch({ type: "section", section })}
-          onDismiss={() => dispatch({ type: "close-settings" })}
-          engines={engines}
-          // The store's own refresh: one function for the app's life. Settings keys an effect on it,
-          // so a new closure per render would re-read the engines on every update while it is open.
-          onEnginesRefresh={app.engines.refresh}
-          gamesRootLabel={rootLabel}
-          onGamesRoot={(label) => app.library.setState((s) => rootLabelChanged(s, label), true)}
-        />
+        <Suspense fallback={null}>
+          <SettingsDialog
+            returnFocus={dialogs.settingsReturnFocus}
+            section={state.settingsSection}
+            onSection={(section) => dispatch({ type: "section", section })}
+            onDismiss={() => dispatch({ type: "close-settings" })}
+            engines={engines}
+            // The store's own refresh: one function for the app's life. Settings keys an effect on it,
+            // so a new closure per render would re-read the engines on every update while it is open.
+            onEnginesRefresh={app.engines.refresh}
+            gamesRootLabel={rootLabel}
+            onGamesRoot={(label) => app.library.setState((s) => rootLabelChanged(s, label), true)}
+          />
+        </Suspense>
       )}
       {state.searching && (
         <GameSearchDialog

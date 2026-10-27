@@ -23,7 +23,6 @@ import { AppDialogs } from "./panels/AppDialogs.tsx";
 import { GenexPromo } from "./panels/GenexPromo.tsx";
 import { nativeViewsUp } from "./play/play-model.ts";
 import { AvatarWelcome } from "./play/AvatarWelcome.tsx";
-import { PlayPages } from "./play/PlayPages.tsx";
 import { PlayViewerLayer } from "./play/PlayViewerLayer.tsx";
 import { useGuestSignIn } from "./play/use-genex-sign-in.ts";
 import { usePlayRemixes } from "./play/use-play-remixes.ts";
@@ -38,6 +37,8 @@ import { CodexLoginPanel } from "./ui/CodexLoginPanel.tsx";
 
 /** Create › Items, a room over the workspace: loaded the first time it opens, as most sessions never do. */
 const ItemsPage = lazy(() => import("./panels/items/ItemsPage.tsx").then((room) => ({ default: room.ItemsPage })));
+/** Play's pages over the workspace: loaded the first time Play opens. */
+const PlayPages = lazy(() => import("./play/PlayPages.tsx").then((room) => ({ default: room.PlayPages })));
 
 /** `data-room` while Plugins covers the workspace. */
 const PLUGINS_ROOM = "plugins";
@@ -82,7 +83,11 @@ function Rooms({
           />
         </Suspense>
       )}
-      {chrome.playOpen && !chrome.pluginsOpen && <PlayPages chrome={chrome} onNewGame={navigation.newGame} />}
+      {chrome.playOpen && !chrome.pluginsOpen && (
+        <Suspense fallback={null}>
+          <PlayPages chrome={chrome} onNewGame={navigation.newGame} />
+        </Suspense>
+      )}
     </>
   );
 }

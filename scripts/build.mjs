@@ -1,4 +1,4 @@
-import { rendererBuildOptions, rendererBundleReport } from "./renderer-build.mjs";
+import { rendererBuildOptions, rendererBundleReport, studioRendererBuild } from "./renderer-build.mjs";
 import { MAIN_CATALOG_DIR, mainCatalogEntries, mainCatalogs, mainStartupReport } from "./main-build.mjs";
 import { buildPlugins, vendorEmbedSdk } from "./build-plugins.mjs";
 import { assertThreeLibsListed, stylesheetPackages, writeBundledNotices } from "./third-party-notices.mjs";
@@ -164,27 +164,14 @@ async function nodeContexts() {
 /** The renderer, its Basis decoder worker and the startup loader's scripts: browser bundles. */
 async function rendererContexts() {
   return [
-    await esbuild.context({
-      ...rendererBuildOptions(rendererMode),
-      define: {
-        ...rendererBuildOptions(rendererMode).define,
-        __STUDIO_PERFORMANCE__: JSON.stringify(Boolean(devId)),
-      },
-      bundle: true,
-      platform: "browser",
-      metafile: true,
-      target: "chrome130",
-      sourcemap: true,
-      logLevel: "info",
-      format: "esm",
-      jsx: "automatic",
-      entryPoints: [path.join(root, "src/renderer/main.tsx")],
-      outdir: path.join(dist, "renderer"),
-      entryNames: "renderer",
-      chunkNames: "chunks/[name]-[hash]",
-      splitting: true,
-      loader: { ".css": "css" },
-    }),
+    await esbuild.context(
+      studioRendererBuild({
+        root,
+        outdir: path.join(dist, "renderer"),
+        mode: rendererMode,
+        performance: Boolean(devId),
+      }),
+    ),
     // Play's bar layer (`play-bar.html`): a page of its own over the game's view, with only the bar and Comments.
     await esbuild.context({
       ...rendererBuildOptions(rendererMode),
