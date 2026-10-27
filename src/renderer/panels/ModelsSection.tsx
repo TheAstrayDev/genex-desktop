@@ -12,6 +12,22 @@ import { CodingCliState } from "../../shared/coding-cli.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { t } from "../../shared/i18n.ts";
 import { EngineId } from "../../shared/providers.ts";
+import {
+  reportAccountChanged,
+  reportProviderPress,
+  reportRecheckOnReturn,
+  reportSignInHelper,
+  RowViewed,
+  settled,
+  useNotStartingShown,
+} from "../analytics/welcome-report.ts";
+import {
+  AccountAction,
+  ProviderAction,
+  ProviderSurface,
+  SignInHelper,
+  SubscriptionRowFace,
+} from "../analytics/welcome-vocabulary.ts";
 import { SUBSCRIPTION_ENGINES, useClaudeLogin, useSubscriptionAuth } from "../subscription-auth.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
@@ -62,6 +78,10 @@ type Account = EngineDescriptor["account"];
 
 /** The row's own actions: re-check, open the provider's guide, sign in or out, and the sign-in's steps. */
 interface RowActions {
+  /** Tell usage analytics which of the row's buttons was pressed. */
+  press: (action: ProviderAction) => void;
+  /** Tell usage analytics which help beside the sign-in was used. */
+  helped: (helper: SignInHelper, accepted?: boolean) => void;
   run: (action: () => Promise<unknown>) => Promise<void>;
   recheck: () => Promise<void>;
   /** Asks the CLI for its model list again. */
@@ -92,14 +112,37 @@ function missingView(
         ? t("Updating {name}. This can take a minute.", { name: words.name })
         : t("Installing {name}. This can take a minute.", { name: words.name }),
       actions: null,
+      face: outdated ? SubscriptionRowFace.Updating : SubscriptionRowFace.Installing,
     };
   const actions = (
     <>
-      <Button variant="default" onClick={() => void install.install()}>
+      <Button
+        variant="default"
+        onClick={() => {
+          act.press(outdated ? ProviderAction.Update : ProviderAction.Install);
+          void install.install();
+        }}
+      >
         {outdated ? t("Update {name}", { name: words.name }) : t("Install {name}", { name: words.name })}
       </Button>
-      {install.problem && <Button onClick={() => void act.openGuide()}>{t("Install guide")}</Button>}
-      <Button onClick={() => void act.recheck()}>{t("Check again")}</Button>
+      {install.problem && (
+        <Button
+          onClick={() => {
+            act.press(ProviderAction.InstallGuide);
+            void act.openGuide();
+          }}
+        >
+          {t("Install guide")}
+        </Button>
+      )}
+      <Button
+        onClick={() => {
+          act.press(ProviderAction.Recheck);
+          void act.recheck();
+        }}
+      >
+        {t("Check again")}
+      </Button>
     </>
   );
   if (outdated)
@@ -108,6 +151,7 @@ function missingView(
       status: t("Update needed"),
       line: t("This version is too old for Studio."),
       actions,
+      face: SubscriptionRowFace.UpdateNeeded,
     };
   if (runtime)
     return {
@@ -117,12 +161,14 @@ function missingView(
         name: words.name,
       }),
       actions,
+      face: SubscriptionRowFace.NeedsNode,
     };
   return {
     tone: RowTone.Off,
     status: t("Not installed"),
     line: t("Install it to use your {plans} plan.", { plans: words.plans }),
     actions,
+    face: SubscriptionRowFace.NotInstalled,
   };
 }
 
@@ -140,6 +186,7 @@ function signingInView(engineId: string, act: RowActions): RowView {
     status: t("Signing in…"),
     line: null,
     actions: <Button onClick={() => void act.run(() => cancel())}>{t("Cancel")}</Button>,
+    face: SubscriptionRowFace.SigningIn,
   };
 }
 
@@ -181,18 +228,33 @@ function SignInStrip({
       {phase === "terminal" && (
         <Button
           className="h-7 bg-control-hover px-2.5"
-          onClick={() => window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT))}
+          onClick={() => {
+            act.helped(SignInHelper.TerminalShown);
+            window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT));
+          }}
         >
           {PROVIDER_ACCOUNT_WORDS.showTerminal}
         </Button>
       )}
       {canOpen && (
-        <Button className="h-7 bg-control-hover px-2.5" onClick={() => void act.run(() => openPage())}>
+        <Button
+          className="h-7 bg-control-hover px-2.5"
+          onClick={() => {
+            act.helped(SignInHelper.PageReopened);
+            void act.run(() => openPage());
+          }}
+        >
           {PROVIDER_ACCOUNT_WORDS.openPage}
         </Button>
       )}
       {claude && phase === "code" && (
-        <Button className="h-7 bg-control-hover px-2.5" onClick={codeFallback.pasteCode}>
+        <Button
+          className="h-7 bg-control-hover px-2.5"
+          onClick={() => {
+            act.helped(SignInHelper.CodeBoxOpened);
+            codeFallback.pasteCode();
+          }}
+        >
           {PROVIDER_ACCOUNT_WORDS.haveCode}
         </Button>
       )}
@@ -246,13 +308,20 @@ function AccountMenu({
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuItem
           onSelect={() => {
+            act.press(ProviderAction.CheckConnection);
             void act.recheck();
             void act.refreshModels();
           }}
         >
           <ItemWords title={t("Check connection")} line={t("Also refreshes the model list")} />
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={install.installing} onSelect={() => void install.update()}>
+        <DropdownMenuItem
+          disabled={install.installing}
+          onSelect={() => {
+            act.press(ProviderAction.Update);
+            void install.update();
+          }}
+        >
           {version ? (
             <ItemWords title={t("Update {name}", { name: words.name })} line={t("You have {version}", { version })} />
           ) : (
@@ -261,7 +330,8 @@ function AccountMenu({
         </DropdownMenuItem>
         {signOutOf && <DropdownMenuSeparator />}
         {signOutOf && (
-          <DropdownMenuItem onSelect={() => void act.signOut(signOutOf.id)}>
+          // The item names the account (its email): a replay shows it masked.
+          <DropdownMenuItem data-analytics-mask onSelect={() => void act.signOut(signOutOf.id)}>
             <ItemWords
               title={PROVIDER_ACCOUNT_WORDS.signOut(accountLabel(signOutOf))}
               line={PROVIDER_ACCOUNT_WORDS.signOutLine}
@@ -304,6 +374,7 @@ function rowView(row: {
       status: t("Updating…"),
       line: t("Updating {name}. This can take a minute.", { name: words.name }),
       actions: null,
+      face: SubscriptionRowFace.Updating,
     };
   if (engine.status.code === EngineStatusCode.Ready)
     return {
@@ -313,23 +384,55 @@ function rowView(row: {
       actions: (
         <AccountMenu words={words} account={engine.account} accounts={row.accounts} act={act} install={row.install} />
       ),
+      face: SubscriptionRowFace.Connected,
     };
-  if (engine.status.code === EngineStatusCode.NeedsLogin)
-    return {
-      tone: RowTone.Off,
-      status: t("Not connected"),
-      line: signInLine(words, engine),
-      actions: (
-        <Button variant="default" onClick={() => void act.run(() => act.signIn())}>
-          {row.loginError ? t("Try again") : t("Sign in")}
-        </Button>
-      ),
-    };
+  if (engine.status.code === EngineStatusCode.NeedsLogin) return notConnectedView(words, engine, act, row.loginError);
+  return couldNotCheckView(words, act);
+}
+
+/** Signed out: why, and Sign in (Try again after a sign-in that failed). */
+function notConnectedView(
+  words: ProviderWords,
+  engine: EngineDescriptor,
+  act: RowActions,
+  loginError: string | null | undefined,
+): RowView {
+  return {
+    tone: RowTone.Off,
+    status: t("Not connected"),
+    line: signInLine(words, engine),
+    actions: (
+      <Button
+        variant="default"
+        onClick={() => {
+          act.press(loginError ? ProviderAction.TryAgain : ProviderAction.SignIn);
+          void act.run(() => act.signIn());
+        }}
+      >
+        {loginError ? t("Try again") : t("Sign in")}
+      </Button>
+    ),
+    face: SubscriptionRowFace.NotConnected,
+  };
+}
+
+/** The provider did not answer: Try again. */
+function couldNotCheckView(words: ProviderWords, act: RowActions): RowView {
   return {
     tone: RowTone.Danger,
     status: t("Couldn't check"),
     line: t("{name} didn't answer. Check your internet connection, then try again.", { name: words.name }),
-    actions: <Button onClick={() => void act.recheck()}>{t("Try again")}</Button>,
+    actions: (
+      <Button
+        onClick={() => {
+          act.press(ProviderAction.TryAgain);
+          void act.recheck();
+        }}
+      >
+        {t("Try again")}
+      </Button>
+    ),
+    face: SubscriptionRowFace.CouldntCheck,
   };
 }
 
@@ -345,7 +448,10 @@ function CodeEntry({
 }): JSX.Element {
   const submitCode = (): Promise<void> =>
     act.run(async () => {
-      await window.studio.claudeLoginCode(code);
+      await settled(
+        () => window.studio.claudeLoginCode(code),
+        (accepted) => act.helped(SignInHelper.CodeSubmitted, accepted),
+      );
       setCode("");
     });
   return (
@@ -395,16 +501,23 @@ function useRowActions(
         setChecking(false);
       }
     });
+  const signedOut = (ok: boolean) => reportAccountChanged(engineId, AccountAction.SignedOut, ok);
   return {
     checking,
     actionError,
+    press: (action) => reportProviderPress(engineId, action, ProviderSurface.Settings),
+    helped: (helper, accepted) =>
+      reportSignInHelper(engineId, helper, {
+        surface: ProviderSurface.Settings,
+        ...(accepted === undefined ? {} : { accepted }),
+      }),
     run,
     recheck,
     refreshModels: () => run(() => window.studio.refreshModels(engineId)),
     openGuide: () => run(() => window.studio.openUrl(guide)),
     signOut: (account) =>
       run(async () => {
-        await window.studio.subscriptionForgetStudioLogin(engineId, account);
+        await settled(() => window.studio.subscriptionForgetStudioLogin(engineId, account), signedOut);
         await refresh();
       }),
     signIn,
@@ -457,11 +570,26 @@ function CatalogLine({
       {problem && <Icon name="info" size={16} className="text-orange" />}
       {note && <span title={note.detail}>{note.text}</span>}
       {note?.retry && (
-        <Button disabled={note.retrying} onClick={() => void act.refreshModels()}>
+        <Button
+          disabled={note.retrying}
+          onClick={() => {
+            act.press(ProviderAction.CatalogRetry);
+            void act.refreshModels();
+          }}
+        >
           {note.retrying ? t("Trying again…") : t("Try again")}
         </Button>
       )}
-      {install.problem && <Button onClick={() => void act.openGuide()}>{t("Installation guide")}</Button>}
+      {install.problem && (
+        <Button
+          onClick={() => {
+            act.press(ProviderAction.InstallGuide);
+            void act.openGuide();
+          }}
+        >
+          {t("Installation guide")}
+        </Button>
+      )}
     </div>
   );
 }
@@ -483,13 +611,17 @@ function AccountTabs({
 }): JSX.Element {
   const items = accounts.map((account) => ({ key: account.id, label: accountLabel(account) }));
   const active = activeAccount(accounts)?.id ?? "";
-  const pick = (account: string): Promise<void> =>
-    act.run(async () => {
-      await switchAccount(engineId, account, act.signIn);
+  const pick = (account: string): Promise<void> => {
+    const change = account === NEW_ACCOUNT ? AccountAction.Added : AccountAction.Switched;
+    const changed = (ok: boolean) => reportAccountChanged(engineId, change, ok);
+    return act.run(async () => {
+      await settled(() => switchAccount(engineId, account, act.signIn), changed);
       await act.recheck();
     });
+  };
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-account-tabs={engineId}>
+    // The tabs name the accounts (their emails): a replay shows them masked.
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-account-tabs={engineId} data-analytics-mask>
       <ViewSwitcher
         items={items}
         active={active}
@@ -515,6 +647,26 @@ function AccountTabs({
   );
 }
 
+/**
+ * Coming back from installing the CLI in another app is the moment to look again; usage analytics
+ * hears whether it was found.
+ */
+function useRecheckOnFocus(
+  engineId: string,
+  engine: EngineDescriptor | undefined,
+  cliMissing: boolean,
+  refresh: () => Promise<void>,
+): void {
+  const cliState = engine?.account?.cli.state ?? null;
+  useEffect(() => {
+    if (!cliMissing) return;
+    const onFocus = (): void =>
+      void refresh().then(() => reportRecheckOnReturn(engineId, cliState, ProviderSurface.Settings));
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [cliMissing, refresh, engineId, cliState]);
+}
+
 function ProviderRow({
   engineId,
   engines,
@@ -530,14 +682,8 @@ function ProviderRow({
   const [code, setCode] = useState("");
   // Read again whenever the engines are: a sign-in or a switch elsewhere changes the list.
   const { accounts } = useSubscriptionAccounts(engineId, engine);
-
-  // Coming back from installing the CLI in another app is the moment to look again.
-  useEffect(() => {
-    if (!cliMissing) return;
-    const onFocus = (): void => void refresh();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [cliMissing, refresh]);
+  useRecheckOnFocus(engineId, engine, cliMissing, refresh);
+  useNotStartingShown(engine, ProviderSurface.Settings);
 
   if (!engine) return null;
   const { claudeLogin, signingIn, loginError } = signInState(engineId, login, waiting, error);
@@ -554,6 +700,12 @@ function ProviderRow({
   const showAccounts = !cliMissing && !signingIn && engine.account?.source !== "env" && accounts.length > 0;
   return (
     <section aria-label={words.name} className="settings-card gap-2">
+      <RowViewed
+        engine={engineId}
+        face={view.face}
+        surface={ProviderSurface.Settings}
+        cliState={engine.account?.cli.state}
+      />
       <RowHeading words={words} version={engine.account?.cli.version} tone={tone} status={status} view={view} />
       {showAccounts && <AccountTabs engineId={engineId} words={words} accounts={accounts} act={act} />}
       {signingIn && (

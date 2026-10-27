@@ -1,7 +1,13 @@
 import type { JSX } from "react";
 import { useMemo } from "react";
 import { t } from "../../shared/i18n.ts";
+import { trackedRestart, UpdateSurface } from "../analytics/events/launch.ts";
+import { noteNav } from "../analytics/workspace-trackers.ts";
+import { trackGameManaged } from "../analytics/workspace-track.ts";
+import { ActionOutcome, GameAction, ManageVia, NavVia } from "../analytics/workspace-vocabulary.ts";
 import type { AppDialogs as Dialogs } from "../panels/AppDialogs.tsx";
+import { SettingsOpenedFrom } from "../settings-navigation.ts";
+import type { GameProject } from "../types.ts";
 import { feedbackAbout } from "../feedback-about.ts";
 import { BootstrapGate } from "../panels/BootstrapGate.tsx";
 import { Sidebar } from "../panels/Sidebar.tsx";
@@ -15,11 +21,24 @@ import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import type { Notifications } from "../use-notifications.ts";
 import { problemWords } from "../words.ts";
+import { trackNavClicked } from "./nav-analytics.ts";
 import { useCoveredByRemix } from "./RemixLayer.tsx";
 import type { Navigation } from "./use-navigation.ts";
 import type { ShellChrome } from "./use-shell-chrome.ts";
 
 const SIDEBAR_PANE = "h-full border-r border-line bg-base px-3 pt-12";
+
+/** Pin or unpin a game from its menu, counted as it ends; a failure is said in the person's words. */
+function pinGame(app: Studio, game: GameProject, notifyFailure: (error: unknown) => void): void {
+  const action = game.pinned ? GameAction.Unpinned : GameAction.Pinned;
+  void app.saveGame(game.name, { pinned: !game.pinned }).then(
+    () => trackGameManaged(action, ManageVia.Menu, ActionOutcome.Ok, game),
+    (error: unknown) => {
+      trackGameManaged(action, ManageVia.Menu, ActionOutcome.Failed, game);
+      notifyFailure(error);
+    },
+  );
+}
 
 /** The plugin updates waiting, whether Update plugins is installing them, and its press. */
 function usePluginUpdates(app: Studio) {
@@ -72,7 +91,7 @@ export function AppSidebar({
   const hidden = !chrome.sidebarVisible || welcoming;
   const notifyFailure = notifyProblem(app.notify);
   const restartToUpdate = (): Promise<boolean> =>
-    app.api.restartToUpdate().catch((error: unknown) => {
+    trackedRestart(UpdateSurface.Sidebar, () => app.api.restartToUpdate()).catch((error: unknown) => {
       notifyFailure(error);
       return false;
     });
@@ -111,7 +130,8 @@ export function AppSidebar({
           onItems={chrome.openItems}
           playOpen={chrome.playOpen}
           onPlayMode={chrome.setPlayOpen}
-          onSettings={() => dialogs.openSettings()}
+          onNav={(item) => trackNavClicked(app, item, { play: chrome.playOpen, compact: chrome.compactWindow })}
+          onSettings={() => dialogs.openSettings(undefined, null, SettingsOpenedFrom.Sidebar)}
           stagedCount={stagedCount}
           threads={threads}
           games={games}
@@ -125,12 +145,13 @@ export function AppSidebar({
           threadStatus={threadStatus}
           onNewGame={navigation.newGame}
           onSelectThread={navigation.selectThread}
-          onSelectGame={navigation.selectGame}
+          onSelectGame={(name) => {
+            noteNav(NavVia.Sidebar);
+            void navigation.selectGame(name);
+          }}
           onShowRemix={navigation.showRemix}
           onRenameGame={(game) => dialogs.dispatch({ type: "game", kind: "rename", game })}
-          onPinGame={(game) => {
-            void app.saveGame(game.name, { pinned: !game.pinned }).catch(notifyFailure);
-          }}
+          onPinGame={(game) => pinGame(app, game, notifyFailure)}
           onDeleteGame={(game) => dialogs.dispatch({ type: "game", kind: "delete", game })}
           onChangeCover={(game) => dialogs.dispatch({ type: "game", kind: "cover", game })}
           update={update}

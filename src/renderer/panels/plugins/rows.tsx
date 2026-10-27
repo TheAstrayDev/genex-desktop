@@ -3,6 +3,16 @@ import type { JSX, ReactNode } from "react";
 import { GENEX_PLUGIN_ID } from "../../../shared/genex.ts";
 import { intlLocale, t } from "../../../shared/i18n.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
+import {
+  installedNow,
+  PluginAction,
+  PluginInstallOrigin,
+  PluginInstallSurface,
+  PluginSurface,
+  trackedPluginAction,
+  trackedPluginInstall,
+} from "../../analytics/plugins-page.ts";
+import { isOwnPlugin } from "../../analytics/plugins-ref.ts";
 import { installPluginUpdate } from "../../state/plugins.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon, type IconName } from "../../ui/icons.tsx";
@@ -85,12 +95,32 @@ export function PluginToggle({ plugin, page }: { plugin: PluginInfo; page: Plugi
       onChange={(on) =>
         void page.act(async () => {
           page.setSelected(null);
-          await window.studio.pluginEnable(plugin.manifest.id, on);
+          const press = pagePress(on ? PluginAction.Enable : PluginAction.Disable, plugin);
+          await trackedPluginAction(press, () => window.studio.pluginEnable(plugin.manifest.id, on));
         })
       }
     />
   );
 }
+
+/** A press on the Plugins page, as usage analytics names it. */
+export const pagePress = (action: PluginAction, plugin: PluginInfo) => ({
+  action,
+  plugin,
+  surface: PluginSurface.PluginsPage,
+});
+
+/** Install a catalog or index plugin by its id, reported as the install it is. */
+export const installListed = (
+  id: string,
+  origin: PluginInstallOrigin,
+  surface: PluginInstallSurface,
+): Promise<unknown> =>
+  trackedPluginInstall({ origin, surface, id, source: null }, () => window.studio.pluginInstall(id), installedNow(id));
+
+/** Install a plugin's waiting update, reported as the page's Update. */
+export const updatePlugin = (plugin: PluginInfo, update: Parameters<typeof installPluginUpdate>[1]): Promise<void> =>
+  trackedPluginAction(pagePress(PluginAction.Update, plugin), () => installPluginUpdate(window.studio, update));
 
 /** Run one of a plugin's account actions (connect, cancel) through the shared review, then re-read the account. */
 async function runAccountAction(plugin: PluginInfo, page: PluginsPage, name: string): Promise<void> {
@@ -111,14 +141,16 @@ async function runAccountAction(plugin: PluginInfo, page: PluginsPage, name: str
  */
 function connectAccount(plugin: PluginInfo, page: PluginsPage): Promise<void> {
   const { manifest } = plugin;
-  return page.act(async () => {
-    const panel = accountPanel(manifest, page.project);
-    if (panel) {
-      page.openPlugin(manifest.id);
-      page.setSelected({ id: manifest.id, document: await window.studio.pluginPanel(manifest.id, panel.id) });
-    }
-    if (manifest.account) await runAccountAction(plugin, page, manifest.account.connect);
-  });
+  return page.act(() =>
+    trackedPluginAction(pagePress(PluginAction.AccountConnect, plugin), async () => {
+      const panel = accountPanel(manifest, page.project);
+      if (panel) {
+        page.openPlugin(manifest.id);
+        page.setSelected({ id: manifest.id, document: await window.studio.pluginPanel(manifest.id, panel.id) });
+      }
+      if (manifest.account) await runAccountAction(plugin, page, manifest.account.connect);
+    }),
+  );
 }
 
 /** A balance as the row says it: "1,240 credits", "Unlimited credits", or nothing while unknown. */
@@ -183,7 +215,13 @@ export function AccountStep({
             <Button
               variant="ghost"
               disabled={page.busy}
-              onClick={() => void page.act(() => runAccountAction(plugin, page, account.cancel ?? ""))}
+              onClick={() =>
+                void page.act(() =>
+                  trackedPluginAction(pagePress(PluginAction.AccountCancel, plugin), () =>
+                    runAccountAction(plugin, page, account.cancel ?? ""),
+                  ),
+                )
+              }
             >
               {ACCOUNT_WORDS.cancel}
             </Button>
@@ -204,8 +242,16 @@ export function AccountStep({
 
 /** Install a removed plugin again, or allow one found on disk. */
 export function ReinstallButton({ plugin, page }: { plugin: PluginInfo; page: PluginsPage }): JSX.Element {
+  const { id } = plugin.manifest;
+  const press = {
+    origin: plugin.removed ? PluginInstallOrigin.Reinstall : PluginInstallOrigin.AllowUnlisted,
+    surface: PluginInstallSurface.DetailReinstall,
+    id,
+    source: plugin.source,
+  };
+  const install = () => trackedPluginInstall(press, () => window.studio.pluginInstall(id), installedNow(id));
   return (
-    <Button disabled={page.busy} onClick={() => void page.act(() => window.studio.pluginInstall(plugin.manifest.id))}>
+    <Button disabled={page.busy} onClick={() => void page.act(install)}>
       {plugin.removed ? t("Reinstall") : t("Allow…")}
     </Button>
   );
@@ -237,7 +283,12 @@ function PluginRow({
   const description = shownDescription(plugin);
   const update = page.updates.get(manifest.id);
   return (
-    <article className="extension-row" data-plugin-row={manifest.id}>
+    <article
+      className="extension-row"
+      data-plugin-row={manifest.id}
+      // A local or GitHub plugin is the person's own: its names stay out of usage recordings.
+      {...(isOwnPlugin(plugin) ? { "data-analytics-mask": "" } : {})}
+    >
       <button
         type="button"
         className="extension-open"
@@ -250,7 +301,12 @@ function PluginRow({
           <span className="extension-description" title={description}>
             <RowLine plugin={plugin} description={description} />
           </span>
-          {plugin.error && <span className="text-xs text-red">{plugin.error}</span>}
+          {plugin.error && (
+            // An error can quote paths or the person's work, even from a catalog plugin.
+            <span data-analytics-mask className="text-xs text-red">
+              {plugin.error}
+            </span>
+          )}
           {plugin.pendingVersion && (
             <span className="text-xs text-orange">
               {t("Update {version} waits for active sessions.", { version: plugin.pendingVersion })}
@@ -263,7 +319,7 @@ function PluginRow({
         <Button
           disabled={page.busy}
           aria-label={t("Update {name}", { name })}
-          onClick={() => void page.act(() => installPluginUpdate(window.studio, update))}
+          onClick={() => void page.act(() => updatePlugin(plugin, update))}
         >
           {t("Update to {version}", { version: update.version })}
         </Button>

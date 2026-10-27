@@ -5,15 +5,48 @@
  * seen what the studio found (tests/conformance/project-shape.test.ts).
  */
 import type { OpenChoice } from "../shared/shape-words.ts";
+import type { WorkspaceEvent, WorkspaceEventProperties } from "./analytics/events/workspace.ts";
+import { elapsedMs } from "./analytics/properties.ts";
+import { FolderPickOutcome } from "./analytics/workspace-vocabulary.ts";
 import type { FolderInspection, GameProject } from "./types.ts";
 
-/** Home's Open a folder…: pick a folder and inspect it. Cancelling the picker inspects nothing. */
-export async function inspectPickedFolder(api: {
-  pickProject(): Promise<string | null>;
-  inspectFolder(dir: string): Promise<FolderInspection>;
-}): Promise<FolderInspection | null> {
-  const dir = await api.pickProject();
-  return dir ? api.inspectFolder(dir) : null;
+/** How the picker and the inspection went, for usage analytics: how each ended and how long each took. */
+export type FolderPicked = WorkspaceEventProperties[typeof WorkspaceEvent.OpenFolderPicked];
+
+/** What hears how a pick went; by default nothing does. */
+type PickReport = (picked: FolderPicked) => void;
+
+/**
+ * Home's Open a folder…: pick a folder and inspect it. Cancelling the picker inspects nothing.
+ * `report` hears how it went, refusals included, before a refusal is thrown on.
+ */
+export async function inspectPickedFolder(
+  api: {
+    pickProject(): Promise<string | null>;
+    inspectFolder(dir: string): Promise<FolderInspection>;
+  },
+  report: PickReport = () => undefined,
+  now: () => number = Date.now,
+): Promise<FolderInspection | null> {
+  const started = now();
+  const dir = await api.pickProject().catch((error: unknown) => {
+    report({ outcome: FolderPickOutcome.Refused, pick_ms: elapsedMs(started, now()) });
+    throw error;
+  });
+  const picked = now();
+  const pickMs = elapsedMs(started, picked);
+  if (!dir) {
+    report({ outcome: FolderPickOutcome.Cancelled, pick_ms: pickMs });
+    return null;
+  }
+  const inspected = (outcome: FolderPickOutcome): void =>
+    report({ outcome, pick_ms: pickMs, inspect_ms: elapsedMs(picked, now()) });
+  const inspection = await api.inspectFolder(dir).catch((error: unknown) => {
+    inspected(FolderPickOutcome.Refused);
+    throw error;
+  });
+  inspected(FolderPickOutcome.Picked);
+  return inspection;
 }
 
 /** The open sheet's answer: adopt the inspected folder the way the user chose. */

@@ -6147,4 +6147,21 @@ export default {
   "Allow in this chat": "このチャットで許可",
   "Allowed in this chat": "このチャットで許可済み",
   "Don't ask again for this action in this chat.": "このチャットでは今後この操作を確認しません。",
+  "A replay of your first week": "最初の1週間の記録",
+  "Change it anytime in Settings.": "設定でいつでも変更できます。",
+  "Don't share": "共有しない",
+  "Help improve Genex?": "Genexの改善に協力しますか？",
+  "How you move through the app, with your work blanked out": "アプリ内での動き方。作品の中身は隠されます",
+  "Never your work or name": "作品や名前は送りません",
+  "Prompts, code, files, game names and accounts are left out":
+    "プロンプト、コード、ファイル、ゲーム名、アカウントは含みません",
+  "Screens, clicks and errors": "画面、クリック、エラー",
+  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.":
+    "画面、クリック、エラー、待ち時間。{date}までは、作品の中身を隠したうえでアプリ内での動き方も記録します。ランダムなIDでEUのPostHogに送られます。",
+  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.":
+    "画面、クリック、エラー、待ち時間。ランダムなIDでEUのPostHogに送られます。",
+  "Share usage data": "使用データを共有",
+  "Show us where Genex gets in your way.": "Genexで困っているところを教えてください。",
+  "Where you go, what fails and how long it takes": "どこへ行き、何が失敗し、どれだけ時間がかかったか",
+  "usage data\u0004Share": "共有する",
 } satisfies LocaleCatalog;

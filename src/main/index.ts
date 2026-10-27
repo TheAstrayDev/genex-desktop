@@ -244,6 +244,7 @@ import { GamePreview, registerGameScheme } from "./preview.ts";
 import { RunSummaryReader } from "./run-summary-reader.ts";
 import { registerRunSharingIpc } from "./ipc/run-sharing.ts";
 import { createRunSharing, finishedBuildRef, launchSends, runsOrigin } from "./run-sharing.ts";
+import { type AnalyticsConfig, sessionAnalytics } from "../shared/analytics.ts";
 import { readFinishedFacts } from "./run-sharing-facts.ts";
 import { fieldPlatform } from "../shared/run-sharing.ts";
 import type { SmokeReadGates } from "./smoke/read-gates.ts";
@@ -422,6 +423,8 @@ const userModelId = appUserModelId(process.platform, process.execPath, existsSyn
 if (userModelId) app.setAppUserModelId(userModelId);
 
 declare const __STUDIO_DEV_BUILD__: { checkout: string; buildId: string } | null;
+/** The build's usage analytics, from `STUDIO_POSTHOG_KEY` at build time (scripts/build.mjs); null without it. */
+declare const __STUDIO_ANALYTICS__: AnalyticsConfig | null;
 const devLaunchConfig = flagValue(StudioFlag.DevLaunch);
 const asksForDeveloper = process.argv.some((arg) => arg.startsWith(StudioFlag.Dev));
 const developerBuildUnlaunched = Boolean(__STUDIO_DEV_BUILD__) && devLaunchConfig === undefined;
@@ -544,6 +547,19 @@ const interactiveFixture = process.env.STUDIO_FIXTURE_INTERACTIVE === "1";
 const parkedFixtureWindow = isSmoke || (fixtureProviders && !interactiveFixture);
 const rendererConsole: Array<{ level: string; message: string; source?: string; line?: number; at?: string }> = [];
 let core: StudioCore | null = null;
+/** Whether this launch may ever send: share build metrics and usage analytics both ask it. */
+const launchMaySend = launchSends({
+  packaged: app.isPackaged,
+  argv: process.argv,
+  developerProfile: dev !== null,
+  testData: testUserData !== null,
+});
+/** Usage analytics the renderer may offer; the person still decides (src/renderer/analytics/). */
+const analytics = sessionAnalytics(__STUDIO_ANALYTICS__, {
+  sends: launchMaySend,
+  env: process.env,
+  version: app.getVersion(),
+});
 /**
  * Share build metrics (Settings → Privacy): off by default, and silent in every developer and test
  * launch. Node's own fetch carries no cookies; Electron's session fetch would carry the profile's.
@@ -551,12 +567,7 @@ let core: StudioCore | null = null;
 const runSharing = createRunSharing({
   dir: path.join(userDataRoot, "run-sharing"),
   origin: runsOrigin(process.env),
-  sends: launchSends({
-    packaged: app.isPackaged,
-    argv: process.argv,
-    developerProfile: dev !== null,
-    testData: testUserData !== null,
-  }),
+  sends: launchMaySend,
   fetch: (url, init) => globalThis.fetch(url, init),
   app: { version: app.getVersion(), platform: fieldPlatform(process.platform) },
   readFacts: async (ref) => (core ? readFinishedFacts(core.store, ref) : null),
@@ -2090,6 +2101,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     welcome: showsWelcome,
     developer: !app.isPackaged,
     playWeb: playOrigin.web,
+    analytics,
   });
   registerMentionRetry(handle, studio);
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });

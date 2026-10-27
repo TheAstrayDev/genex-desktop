@@ -1,3 +1,4 @@
+import type { AnalyticsConfig } from "./analytics.ts";
 import type {
   PlayControl,
   PlayFeedPage,
@@ -125,6 +126,8 @@ export interface Bootstrap {
   developer?: boolean;
   /** The website Play links to: genex.games', unless a development profile points Play elsewhere. */
   playWebOrigin?: string;
+  /** Usage analytics this session may offer; null in builds without a key and in launches that never send. */
+  analytics?: AnalyticsConfig | null;
 }
 
 /** The window-control overlay's background and glyph colours, as `#rrggbb`. */

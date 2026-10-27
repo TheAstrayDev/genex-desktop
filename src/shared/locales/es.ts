@@ -6244,4 +6244,21 @@ export default {
   "Allow in this chat": "Permitir en este chat",
   "Allowed in this chat": "Permitido en este chat",
   "Don't ask again for this action in this chat.": "No volver a preguntar por esta acción en este chat.",
+  "A replay of your first week": "Una grabación de tu primera semana",
+  "Change it anytime in Settings.": "Puedes cambiarlo cuando quieras en Ajustes.",
+  "Don't share": "No compartir",
+  "Help improve Genex?": "¿Ayudas a mejorar Genex?",
+  "How you move through the app, with your work blanked out": "Cómo te mueves por la app, con tu trabajo tapado",
+  "Never your work or name": "Nunca tu trabajo ni tu nombre",
+  "Prompts, code, files, game names and accounts are left out":
+    "Quedan fuera los mensajes, el código, los archivos, los nombres de juegos y las cuentas",
+  "Screens, clicks and errors": "Pantallas, clics y errores",
+  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.":
+    "Pantallas, clics, errores y tiempos de espera, y hasta el {date} una grabación de cómo te mueves por la app con tu trabajo tapado. Se envía a PostHog en la UE con un id aleatorio.",
+  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.":
+    "Pantallas, clics, errores y tiempos de espera. Se envía a PostHog en la UE con un id aleatorio.",
+  "Share usage data": "Compartir datos de uso",
+  "Show us where Genex gets in your way.": "Muéstranos dónde Genex te estorba.",
+  "Where you go, what fails and how long it takes": "Adónde vas, qué falla y cuánto tarda",
+  "usage data\u0004Share": "Compartir",
 } satisfies LocaleCatalog;
