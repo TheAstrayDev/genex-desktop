@@ -23,7 +23,7 @@ import type { SendPlacement } from "../../chat/pending-sends.ts";
 import type { CommandState } from "../../state/command-runs.ts";
 import { type ChatMemory, chatMemory } from "../chat-memory.ts";
 import type { SendEvent } from "../chat-observe.ts";
-import { questionAnsweredProperties } from "../chat-properties.ts";
+import { questionAnsweredProperties, type RewindCode, type UndoRewindCode } from "../chat-properties.ts";
 import { track } from "../client.ts";
 import type {
   CardSettledBy,
@@ -262,15 +262,19 @@ export type ChatEventProperties = {
     files_bucket?: CountBucket;
     outside_changes?: number;
     stops_build: boolean;
+    /** A refused preview's code (`RewindRefusal`, `RewindBlock`, a plugin step's block); null when it had none. */
+    code?: RewindCode | null;
   };
   [ChatEvent.RewindDecided]: {
     action: RewindAction;
     restore_files: boolean;
     default_overridden: boolean;
     failed: boolean;
+    /** A failed rewind's code; null when it had none. */
+    code?: RewindCode | null;
   };
   [ChatEvent.RewindCompleted]: { files_restored_bucket?: CountBucket; held_followups: number; undo_offered: boolean };
-  [ChatEvent.RewindUndone]: { ok: boolean };
+  [ChatEvent.RewindUndone]: { ok: boolean; code?: UndoRewindCode | null };
   [ChatEvent.ModelMenuClosed]: { from: ModelMenuFrom; picked: boolean; open_ms: number };
   [ChatEvent.ModelPicked]: {
     engine: EngineRef;

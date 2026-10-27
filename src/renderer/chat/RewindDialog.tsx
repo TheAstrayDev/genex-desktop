@@ -120,15 +120,16 @@ export function RewindDialog({
       .catch((err) => {
         if (!current) return;
         setRefused(problemWords(err));
-        track(AnalyticsEvent.RewindPreviewed, rewindPreviewProperties(null));
+        track(AnalyticsEvent.RewindPreviewed, rewindPreviewProperties(null, err));
       });
     return () => {
       current = false;
     };
   }, [threadId, eventId, messageId]);
-  const decided = (failed: boolean): void => {
+  const decided = (failure: unknown = null): void => {
+    const failed = failure !== null;
     const choice = { restore, restoresByDefault: Boolean(files && restoresByDefault(files)), failed };
-    track(AnalyticsEvent.RewindDecided, rewindConfirmedProperties(files, choice));
+    track(AnalyticsEvent.RewindDecided, rewindConfirmedProperties(files, choice, failure));
   };
   const confirm = (): void => {
     setBusy(true);
@@ -136,12 +137,12 @@ export function RewindDialog({
     void window.studio
       .rewindChat(threadId, eventId, messageId, files?.state === "restore" && restore)
       .then((result) => {
-        decided(false);
+        decided();
         onRewound(result);
         onDismiss();
       })
       .catch((err) => {
-        decided(true);
+        decided(err);
         setError(problemWords(err));
         setBusy(false);
       });

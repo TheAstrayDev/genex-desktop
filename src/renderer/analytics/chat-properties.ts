@@ -4,10 +4,19 @@
  * out: a text becomes a length bucket, a model a catalog id or `custom`, an engine one of the app's
  * own ids.
  */
-import type { RewindFiles, RewindPreview, RewindResult } from "../../shared/chat-rewind.ts";
+import {
+  RewindBlock,
+  type RewindFiles,
+  type RewindPreview,
+  RewindRefusal,
+  type RewindResult,
+  UndoRewindRefusal,
+} from "../../shared/chat-rewind.ts";
 import type { EngineKind } from "../../shared/engine-descriptor.ts";
+import { errorCodeIn } from "../../shared/errors.ts";
 import { type EventEnvelope, EventKind } from "../../shared/event-log.ts";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
+import { HookRefusal } from "../../shared/plugin-hooks.ts";
 import {
   PermissionDecision,
   type PermissionMode,
@@ -329,9 +338,25 @@ export function planAnsweredProperties(
   };
 }
 
-/** What the rewind dialog found for the game files, without their names. */
-export function rewindPreviewProperties(preview: RewindPreview | null): Props<typeof ChatEvent.RewindPreviewed> {
-  if (!preview) return { files_state: RewindFilesState.Refused, stops_build: false };
+/** The code a rewind or its preview was refused with: the plan's refusal, the core's own, or a plugin step's block. */
+export type RewindCode = RewindRefusal | RewindBlock | HookRefusal;
+/** The code bringing the newer version back was refused with. */
+export type UndoRewindCode = UndoRewindRefusal | RewindBlock | HookRefusal;
+
+/** The code a refused rewind or preview crossed with, or null: never its words. */
+export const rewindCode = (error: unknown): RewindCode | null =>
+  errorCodeIn(RewindRefusal, error) ?? errorCodeIn(RewindBlock, error) ?? errorCodeIn(HookRefusal, error);
+
+/** The code a refused Bring back newer version crossed with, or null. */
+export const undoRewindCode = (error: unknown): UndoRewindCode | null =>
+  errorCodeIn(UndoRewindRefusal, error) ?? errorCodeIn(RewindBlock, error) ?? errorCodeIn(HookRefusal, error);
+
+/** What the rewind dialog found for the game files, without their names; a refused preview says its code. */
+export function rewindPreviewProperties(
+  preview: RewindPreview | null,
+  refusal: unknown = null,
+): Props<typeof ChatEvent.RewindPreviewed> {
+  if (!preview) return { files_state: RewindFilesState.Refused, stops_build: false, code: rewindCode(refusal) };
   return { ...rewindFilesFacts(preview.files), stops_build: preview.stopsBuild };
 }
 
@@ -353,6 +378,7 @@ function rewindFilesFacts(files: RewindFiles): Omit<Props<typeof ChatEvent.Rewin
 export function rewindConfirmedProperties(
   files: RewindFiles | null,
   choice: { restore: boolean; restoresByDefault: boolean; failed: boolean },
+  failure: unknown = null,
 ): Props<typeof ChatEvent.RewindDecided> {
   const offered = files?.state === RewindFilesState.Restore;
   return {
@@ -360,8 +386,13 @@ export function rewindConfirmedProperties(
     restore_files: offered && choice.restore,
     default_overridden: offered && choice.restore !== choice.restoresByDefault,
     failed: choice.failed,
+    ...(choice.failed ? { code: rewindCode(failure) } : {}),
   };
 }
+
+/** `rewind_undone`: whether the newer version came back, and the code it was refused with when not. */
+export const rewindUndoneProperties = (failure: unknown = null): Props<typeof ChatEvent.RewindUndone> =>
+  failure === null ? { ok: true } : { ok: false, code: undoRewindCode(failure) };
 
 /** `rewind_decided` on Cancel. */
 export const REWIND_CANCELLED: Props<typeof ChatEvent.RewindDecided> = {

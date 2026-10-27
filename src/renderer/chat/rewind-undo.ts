@@ -5,6 +5,7 @@
 import type { StudioApi } from "../../shared/studio-api.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { track } from "../analytics/client.ts";
+import { rewindUndoneProperties } from "../analytics/chat-properties.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 
 /** What the button asks for: the chat, and the rewind its line names. */
@@ -21,12 +22,11 @@ export function bringBackNewer(
 ): Promise<boolean> {
   return studio.undoRewind(request.threadId, request.rewindId).then(
     () => {
-      track(AnalyticsEvent.RewindUndone, { ok: true });
+      track(AnalyticsEvent.RewindUndone, rewindUndoneProperties());
       return true;
     },
     (error: unknown) => {
-      // Why it was refused reaches the renderer in English only, so only that it was is counted.
-      track(AnalyticsEvent.RewindUndone, { ok: false });
+      track(AnalyticsEvent.RewindUndone, rewindUndoneProperties(error));
       notifyProblem(onNotice)(error);
       return false;
     },

@@ -3,11 +3,13 @@
  * failures apart without reading their words. Each code's vocabulary lives with its domain; this
  * module only gathers the ones a refusal or failure may name across the boundary.
  */
+import { RewindBlock, RewindRefusal, UndoRewindRefusal } from "./chat-rewind.ts";
 import { CliInstallRefusal } from "./cli-install.ts";
 import { ClaudeLoginRefusal } from "./claude-login.ts";
 import { SendFailure } from "./composer.ts";
 import { ModelInstallProblem, ModelPullProblem } from "./model-install.ts";
 import { ModeSwitchFailure } from "./permissions.ts";
+import { HookRefusal } from "./plugin-hooks.ts";
 
 /**
  * A code a failure may carry across IPC: one value of a domain's vocabulary, never words. No two
@@ -19,7 +21,11 @@ export type StudioErrorCode =
   | SendFailure
   | ModelInstallProblem
   | ModelPullProblem
-  | ModeSwitchFailure;
+  | ModeSwitchFailure
+  | RewindRefusal
+  | RewindBlock
+  | UndoRewindRefusal
+  | HookRefusal;
 
 /**
  * The vocabularies above, read when first asked for, so a vocabulary's module may itself import
@@ -32,6 +38,10 @@ export const studioErrorVocabularies = (): ReadonlyArray<Readonly<Record<string,
   ModelInstallProblem,
   ModelPullProblem,
   ModeSwitchFailure,
+  RewindRefusal,
+  RewindBlock,
+  UndoRewindRefusal,
+  HookRefusal,
 ];
 
 let known: ReadonlySet<string> | null = null;
