@@ -4479,6 +4479,7 @@ export default {
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.":
     "Claude가 묻지 않고 하는 작업이에요. 채팅에서 ‘항상 허용’을 고르면 그 게임에 대한 작업이 여기에 추가돼요.",
   "What Harness has learned": "Harness가 배운 것",
+  "What changed": "바뀐 점",
   "What changes": "바뀌는 내용",
   "What credits pay for": "크레딧 사용처",
   "What do you want to make?": "무엇을 만들고 싶어요?",
