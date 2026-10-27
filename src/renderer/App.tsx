@@ -18,6 +18,7 @@ import { lazy, Suspense, useEffect, useRef } from "react";
 import { t } from "../shared/i18n.ts";
 import { ColorTweakerHost } from "./appearance/tweaker/ColorTweakerHost.tsx";
 import { Onboarding } from "./onboarding/Onboarding.tsx";
+import { AnalyticsConsent } from "./panels/AnalyticsConsent.tsx";
 import { AppDialogs } from "./panels/AppDialogs.tsx";
 import { GenexPromo } from "./panels/GenexPromo.tsx";
 import { nativeViewsUp } from "./play/play-model.ts";
@@ -88,8 +89,9 @@ function Rooms({
 
 export function App(): JSX.Element {
   const shell = useRef<HTMLDivElement>(null);
-  const { app, dialogs, welcoming, threads, chrome, navigation, views, notices, firstAsks, welcome, chat, handoff } =
-    useShell();
+  const parts = useShell();
+  const { app, dialogs, welcoming, threads, chrome, navigation, views, notices, firstAsks, welcome, chat } = parts;
+  const { handoff, analytics } = parts;
   const { activeThreadId, room, project } = threads;
   const engines = useEngines((s) => s.list);
   const updateReady = useUpdate((s) => s.ready !== null);
@@ -164,13 +166,18 @@ export function App(): JSX.Element {
           onEnginesRefresh={app.engines.refresh}
           onReady={welcome.readyAfterWelcome}
           onFinish={welcome.finishWelcome}
+          held={analytics.asking}
+          onScreen={analytics.onWelcomeScreen}
         />
       )}
-      <GenexPromo welcoming={welcoming} pluginsOpen={chrome.workspaceCovered} project={project} />
-      <AvatarWelcome blocked={welcoming} />
+      {/* The first-run cards wait for the analytics question: two never stack. */}
+      <GenexPromo welcoming={welcoming || analytics.asking} pluginsOpen={chrome.workspaceCovered} project={project} />
+      <AvatarWelcome blocked={welcoming || analytics.asking} />
       <PlayViewerLayer />
       <Toasts />
       <CodexLoginPanel />
+      {/* Above the welcome and any dialog a launch opens; the welcome waits behind it. */}
+      {analytics.asking && <AnalyticsConsent replay={analytics.replay} onChoice={analytics.choose} />}
       <ColorTweakerHost />
     </div>
   );

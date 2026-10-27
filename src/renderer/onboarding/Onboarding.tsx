@@ -79,19 +79,9 @@ import {
   startTrouble,
   type ConnectView,
   type Subscription,
+  WelcomeScreen,
 } from "./state.ts";
 
-/** The onboarding screens: the welcome, Connect, and one for each of Connect's other ways. */
-const Screen = {
-  Welcome: "welcome",
-  Connect: "connect",
-  Local: "local",
-  OpenRouter: "openrouter",
-  OpenCode: "opencode",
-  Grok: "grok",
-  Cursor: "cursor",
-} as const;
-type Screen = (typeof Screen)[keyof typeof Screen];
 type Hardware = Awaited<ReturnType<typeof window.studio.hardware>>;
 
 /** The composer copy on the welcome stage, in stage pixels; the send button's centre is where the pointer clicks. */
@@ -113,12 +103,12 @@ const SENT_BEAT_MS = 600;
 const LEAVE_MS = 260;
 
 /** Each of Connect's other ways opens its own screen. */
-const WAY_SCREEN: Record<OtherWay, Screen> = {
-  [OtherWay.Local]: Screen.Local,
-  [OtherWay.OpenRouter]: Screen.OpenRouter,
-  [OtherWay.OpenCode]: Screen.OpenCode,
-  [OtherWay.Grok]: Screen.Grok,
-  [OtherWay.Cursor]: Screen.Cursor,
+const WAY_SCREEN: Record<OtherWay, WelcomeScreen> = {
+  [OtherWay.Local]: WelcomeScreen.Local,
+  [OtherWay.OpenRouter]: WelcomeScreen.OpenRouter,
+  [OtherWay.OpenCode]: WelcomeScreen.OpenCode,
+  [OtherWay.Grok]: WelcomeScreen.Grok,
+  [OtherWay.Cursor]: WelcomeScreen.Cursor,
 };
 /** The engines besides OpenCode that, once ready, are something to build with (Grok Build and Cursor are ready once signed in). */
 const BUILDS_WITH: readonly string[] = [
@@ -229,8 +219,12 @@ function welcomeCaption(beat: 0 | 1, writing: boolean): string {
   return t("Open source AI harness for game development");
 }
 
-/** The welcome's two beats, its script, and what the person does to it: write an idea, send it, jump a beat. */
-function useWelcome(idea: string, onIdea: (text: string) => void) {
+/**
+ * The welcome's two beats, its script, and what the person does to it: write an idea, send it, jump
+ * a beat. While `held` (a question above the welcome waits for its answer) the script waits on the
+ * empty bar's blinking caret, and starts from the top once it is let go.
+ */
+function useWelcome(idea: string, onIdea: (text: string) => void, held: boolean) {
   const reduced = useReducedMotion();
   const prompt = idea || DEMO_IDEA;
   const [beat, setBeat] = useState<0 | 1>(0);
@@ -261,7 +255,7 @@ function useWelcome(idea: string, onIdea: (text: string) => void) {
       setPhase(0);
       return;
     }
-    if (writing) return;
+    if (writing || held) return;
     const timers: number[] = [];
     const at = (ms: number, step: () => void) => {
       timers.push(window.setTimeout(step, ms));
@@ -273,7 +267,7 @@ function useWelcome(idea: string, onIdea: (text: string) => void) {
       });
     else scheduleTyping(at, promptNow.current, sent, { setTyped, setPhase, setBeat });
     return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [beat, run, writing, reduced, sent]);
+  }, [beat, run, writing, reduced, sent, held]);
 
   const drawStage = useCallback<Draw>((ctx, palette, now) => {
     if (beatNow.current !== 1) return;
@@ -509,15 +503,17 @@ function WelcomeSteps({ w }: { w: WelcomeModel }): JSX.Element {
 function Welcome({
   idea,
   back,
+  held,
   onIdea,
   onNext,
 }: {
   idea: string;
   back: boolean;
+  held: boolean;
   onIdea: (text: string) => void;
   onNext: (draft: string) => void;
 }): JSX.Element {
-  const w = useWelcome(idea, onIdea);
+  const w = useWelcome(idea, onIdea, held);
   const [fit, scale] = useFit(STAGE.width, STAGE.height);
   const caption = welcomeCaption(w.beat, w.writing);
   return (
@@ -1272,11 +1268,28 @@ function useOtherWays(engines: EngineDescriptor[], onEnginesRefresh: () => void)
   return { local, router, code, grok, cursor, ways };
 }
 
+/** Focus comes to the welcome once nothing waits above it, and each of its screens is reported as it shows. */
+function useWelcomePresence(
+  root: RefObject<HTMLDivElement | null>,
+  held: boolean,
+  screen: WelcomeScreen,
+  onScreen: ((screen: WelcomeScreen) => void) | undefined,
+): void {
+  useEffect(() => {
+    if (!held) root.current?.focus({ preventScroll: true });
+  }, [held, root]);
+  useEffect(() => {
+    onScreen?.(screen);
+  }, [onScreen, screen]);
+}
+
 export function Onboarding({
   engines,
   onEnginesRefresh,
   onReady,
   onFinish,
+  held = false,
+  onScreen,
 }: {
   engines: EngineDescriptor[];
   onEnginesRefresh: () => void;
@@ -1284,8 +1297,15 @@ export function Onboarding({
   onReady: (idea: string | null) => Promise<void>;
   /** Welcome is over. */
   onFinish: (then?: () => void) => void;
+  /** A question above the welcome waits for its answer (usage analytics): the film holds, and focus comes here after. */
+  held?: boolean;
+  /** The welcome's screen changed (usage analytics names it). */
+  onScreen?: (screen: WelcomeScreen) => void;
 }): JSX.Element {
-  const [screen, setScreen] = useState<{ id: Screen; back: boolean }>({ id: Screen.Welcome, back: false });
+  const [screen, setScreen] = useState<{ id: WelcomeScreen; back: boolean }>({
+    id: WelcomeScreen.Welcome,
+    back: false,
+  });
   const [idea, setIdea] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const { local, router, code, grok, cursor, ways } = useOtherWays(engines, onEnginesRefresh);
@@ -1301,60 +1321,59 @@ export function Onboarding({
     finish(then);
   };
 
-  useEffect(() => {
-    root.current?.focus({ preventScroll: true });
-  }, []);
+  useWelcomePresence(root, held, screen.id, onScreen);
   // Past the welcome, home's background gets ready behind these screens, so home opens on it.
   useEffect(() => {
-    if (screen.id !== Screen.Welcome) void preloadHomeBackdrop();
+    if (screen.id !== WelcomeScreen.Welcome) void preloadHomeBackdrop();
   }, [screen.id]);
-  const go = (id: Screen, back = false) => setScreen({ id, back });
+  const go = (id: WelcomeScreen, back = false) => setScreen({ id, back });
   // Every screen after Connect goes back to it, and skips or starts the same way.
-  const after = { anyOn, onBack: () => go(Screen.Connect, true), onSkip: () => end(), onStart: () => end() };
+  const after = { anyOn, onBack: () => go(WelcomeScreen.Connect, true), onSkip: () => end(), onStart: () => end() };
 
   const current = (): JSX.Element => {
     switch (screen.id) {
-      case Screen.Welcome:
+      case WelcomeScreen.Welcome:
         return (
           <Welcome
-            key={Screen.Welcome}
+            key={WelcomeScreen.Welcome}
             idea={idea}
             back={screen.back}
+            held={held}
             onIdea={setIdea}
             onNext={(draft) => {
               if (draft) setIdea(draft);
-              go(Screen.Connect);
+              go(WelcomeScreen.Connect);
             }}
           />
         );
-      case Screen.Connect:
+      case WelcomeScreen.Connect:
         return (
           <Connect
-            key={Screen.Connect}
+            key={WelcomeScreen.Connect}
             engines={engines}
             onEnginesRefresh={onEnginesRefresh}
             ways={ways}
             anyOn={anyOn}
             back={screen.back}
-            onBack={() => go(Screen.Welcome, true)}
+            onBack={() => go(WelcomeScreen.Welcome, true)}
             onWay={(way) => go(WAY_SCREEN[way])}
             onSkip={() => end()}
             onStart={() => end()}
             onTerminal={() => end(() => window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT)))}
           />
         );
-      case Screen.OpenRouter:
-        return <OpenRouterScreen key={Screen.OpenRouter} router={router} {...after} />;
-      case Screen.OpenCode:
-        return <OpenCodeScreen key={Screen.OpenCode} code={code} free={freeModel.free} {...after} />;
-      case Screen.Grok:
-        return <CliScreen key={Screen.Grok} provider={EngineId.Grok} cli={grok} {...after} />;
-      case Screen.Cursor:
-        return <CliScreen key={Screen.Cursor} provider={EngineId.Cursor} cli={cursor} {...after} />;
+      case WelcomeScreen.OpenRouter:
+        return <OpenRouterScreen key={WelcomeScreen.OpenRouter} router={router} {...after} />;
+      case WelcomeScreen.OpenCode:
+        return <OpenCodeScreen key={WelcomeScreen.OpenCode} code={code} free={freeModel.free} {...after} />;
+      case WelcomeScreen.Grok:
+        return <CliScreen key={WelcomeScreen.Grok} provider={EngineId.Grok} cli={grok} {...after} />;
+      case WelcomeScreen.Cursor:
+        return <CliScreen key={WelcomeScreen.Cursor} provider={EngineId.Cursor} cli={cursor} {...after} />;
       default:
         return (
           <Local
-            key={Screen.Local}
+            key={WelcomeScreen.Local}
             local={local}
             {...after}
             onServer={() => end(() => openSettings(SettingsSection.Providers))}

@@ -6,6 +6,7 @@ import type { StudioCore } from "../studio-core.ts";
 import type { IpcHandle } from "./registrar.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import type { EngineBoot } from "../engine-boot.ts";
+import type { AnalyticsConfig } from "../../shared/analytics.ts";
 
 /** Why a thread read (or a tag's retry) from the renderer is refused. */
 const MESSAGE = {
@@ -33,6 +34,8 @@ export interface ThreadsIpcDeps {
   developer: boolean;
   /** The website Play links to (`play/origins.ts`). */
   playWeb: string;
+  /** Usage analytics the renderer may offer (`shared/analytics.ts`); the person still decides. */
+  analytics: AnalyticsConfig | null;
 }
 
 /** A sent message's failed @ tag tried again or taken off: the renderer names the tag, main re-checks it as a send does. */
@@ -47,19 +50,19 @@ export function registerMentionRetry(handle: IpcHandle, core: StudioCore): void 
   });
 }
 
-export function registerThreadsIpc(
+/** The bootstrap: everything a window (or a reload) opens on, read in one go. */
+function registerBootstrap(
   handle: IpcHandle,
   {
     core,
     engines: engineList,
     gamesRootLabel,
     threadStatus,
-    pushUiEvent,
-    appendErrorDurably,
     smokeReads,
     welcome,
     developer,
     playWeb,
+    analytics,
   }: ThreadsIpcDeps,
 ): void {
   handle("studio:bootstrap", async () => {
@@ -93,8 +96,14 @@ export function registerThreadsIpc(
       welcome,
       developer,
       playWebOrigin: playWeb,
+      analytics,
     };
   });
+}
+
+export function registerThreadsIpc(handle: IpcHandle, deps: ThreadsIpcDeps): void {
+  const { core, pushUiEvent, appendErrorDurably, smokeReads } = deps;
+  registerBootstrap(handle, deps);
 
   handle("studio:send", async (payload) => {
     try {

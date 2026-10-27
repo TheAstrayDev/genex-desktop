@@ -20,6 +20,13 @@ import type { GameName } from "../../shared/game-project.ts";
 import { t } from "../../shared/i18n.ts";
 import type { Bootstrap, ConversationRecord, GameProject, StudioApi } from "../../shared/studio-api.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
+import {
+  type AnalyticsChoice,
+  readAnalyticsChoice,
+  replayDraw,
+  replayRunning,
+  writeAnalyticsChoice,
+} from "../analytics/consent.ts";
 import { shouldWelcome } from "../onboarding/state.ts";
 import {
   browserStorage,
@@ -82,6 +89,7 @@ import { createPeopleStore, type PeopleStore } from "./people.ts";
 import { createItemsStore, type ItemsStore, ItemsRead } from "./items.ts";
 import { createSharingStore, type SharingStore } from "./sharing.ts";
 import {
+  analyticsChosen,
   bootstrapFailed,
   bootstrapReady,
   bootstrapStarted,
@@ -185,6 +193,8 @@ export interface Studio {
   goHome(): void;
   /** The first-launch welcome is done on this profile; home follows it. */
   finishWelcome(): void;
+  /** The person's answer about usage analytics, kept on this profile, from the question or Settings → Privacy. */
+  chooseAnalytics(choice: AnalyticsChoice): void;
   /**
    * Open a game's chat (made on demand by main) and put the game on the stage. Resolves with the
    * chat, or null when main refused (the refusal is toasted). `open` carries out the selection
@@ -348,8 +358,36 @@ function openedThreads(state: ThreadsState, boot: Bootstrap): ThreadsState {
   return statusBootstrapped(threadsLoaded(state, boot.threads), boot.threadStatus);
 }
 
+/** The clock and the dice a bootstrap draws an install's replay with. */
+interface Chance {
+  now(): number;
+  random(): number;
+}
+
+/**
+ * The analytics a bootstrap opens with: the build's config when this launch may offer it, the
+ * profile's answer, and the end of this install's replay week. The replay is drawn once, at the
+ * first launch that offers analytics (`analytics/consent.ts`).
+ */
+function analyticsOpening(boot: Bootstrap, firstLaunch: boolean, storage: KeyValueStorage | null, chance: Chance) {
+  const analytics = boot.analytics ?? null;
+  if (!analytics) return { analytics, analyticsChoice: null, replayUntil: null };
+  const now = chance.now();
+  const draw = replayDraw(storage, { firstLaunch, now, random: chance.random });
+  return {
+    analytics,
+    analyticsChoice: readAnalyticsChoice(storage),
+    replayUntil: replayRunning(draw, now) ? draw.until : null,
+  };
+}
+
 /** (Re)load everything main knows; a newer call wins over one still in flight. */
-function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage | null): () => Promise<void> {
+function bootstrapper(
+  api: StudioApi,
+  stores: Stores,
+  storage: KeyValueStorage | null,
+  chance: Chance,
+): () => Promise<void> {
   const { session, eventLog, library, engines, threads, plugins, agentScreens, update, agentsStart } = stores;
   let generation = 0;
   return async () => {
@@ -366,7 +404,8 @@ function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage |
       threads.setState((state) => openedThreads(state, boot), true);
       const welcome = shouldWelcome(boot.welcome, boot.games.length, safeStorage(storage));
       const { developer, playWebOrigin: playWeb } = boot;
-      session.setState((state) => bootstrapReady(state, { welcome, developer, playWeb }), true);
+      const analytics = analyticsOpening(boot, welcome, storage, chance);
+      session.setState((state) => bootstrapReady(state, { welcome, developer, playWeb, ...analytics }), true);
       void plugins.refresh();
       void plugins.refreshIndex();
       // An update downloaded before this window opened, or before a reload, still waits.
@@ -662,6 +701,8 @@ export function createStudio(
     timers?: StudioTimers;
     visibility?: VisibilitySource;
     now?: () => number;
+    /** A draw in [0, 1): which installs record a replay. */
+    random?: () => number;
   } = {},
 ): Studio {
   const storage = options.storage === undefined ? browserStorage() : options.storage;
@@ -685,7 +726,7 @@ export function createStudio(
     notify,
     selectThread,
   };
-  const bootstrap = bootstrapper(api, stores, storage);
+  const bootstrap = bootstrapper(api, stores, storage, { now: ctx.now, random: options.random ?? Math.random });
 
   return {
     api,
@@ -704,6 +745,10 @@ export function createStudio(
     finishWelcome() {
       writeText(STORAGE_KEYS.welcomed, "1", storage);
       session.setState((state) => welcomeFinished(state), true);
+    },
+    chooseAnalytics(choice) {
+      writeAnalyticsChoice(storage, choice);
+      session.setState((state) => analyticsChosen(state, choice), true);
     },
     enterProject: (name, hooks) => enterProject(ctx, name, hooks),
     renameThread(threadId, title) {

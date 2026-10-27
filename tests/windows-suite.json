@@ -4,6 +4,7 @@
   "tests/conformance/agent-context.test.ts",
   "tests/conformance/agent-instructions.test.ts",
   "tests/conformance/agent-settings.test.ts",
+  "tests/conformance/analytics.test.ts",
   "tests/conformance/app-lifecycle.test.ts",
   "tests/conformance/appearance.test.ts",
   "tests/conformance/architecture.test.ts",

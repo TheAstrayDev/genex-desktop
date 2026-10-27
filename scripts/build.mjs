@@ -16,6 +16,7 @@ import { MAC_GIT_DIR } from "../src/substrate/git-policy.ts";
 import { VENDORED_GIT } from "./package-git.cjs";
 import { vendorTsc } from "./vendor-tsc.ts";
 import { vendorGenexMultiplayer } from "./vendor-genex-multiplayer.ts";
+import { analyticsFromEnv, analyticsOrigins, withAnalyticsCsp } from "../src/shared/analytics.ts";
 /**
  * Build — assembles `dist/` for Electron.
  *
@@ -58,6 +59,8 @@ if (release && (watch || devId)) throw new Error("Release builds cannot watch or
 // owned build timed for docs/performance.md asks for production React (`STUDIO_REACT=production`):
 // development React times every render and overstates what a packaged app costs.
 const timedBuild = Boolean(devId) && process.env.STUDIO_REACT === "production";
+// Usage analytics ship only in a build made with STUDIO_POSTHOG_KEY; see src/shared/analytics.ts.
+const analytics = analyticsFromEnv(process.env, Boolean(devId));
 // An owned fixture profile's checks read React commit counts (`renderer/performance.tsx`); a timed
 // build's production React has no Profiler to count them.
 if (process.argv.includes("--commit-counts") && !devId) throw new Error("--commit-counts needs --dev-build");
@@ -90,6 +93,7 @@ const shared = {
   define: {
     __STUDIO_REACT__: JSON.stringify(rendererMode.development ? "development" : "production"),
     __STUDIO_DEV_BUILD__: JSON.stringify(devId ? { checkout: fsSync.realpathSync(root), buildId: devId } : null),
+    __STUDIO_ANALYTICS__: JSON.stringify(analytics),
   },
 };
 
@@ -459,8 +463,11 @@ async function copyResources() {
     )}\n`,
   );
 
-  // Renderer shell + vendored fonts (offline app; the CSP admits no font host).
-  await cp(path.join(root, "src/renderer/index.html"), path.join(dist, "renderer/index.html"));
+  // Renderer shell + vendored fonts (offline app; the CSP admits no font host). A build with
+  // analytics lets the renderer reach PostHog's hosts and nothing else; scripts stay 'self'.
+  const shell = await readFile(path.join(root, "src/renderer/index.html"), "utf8");
+  const page = analytics ? withAnalyticsCsp(shell, analyticsOrigins(analytics.host)) : shell;
+  await writeFile(path.join(dist, "renderer/index.html"), page);
   await cp(path.join(root, "src/renderer/play-bar.html"), path.join(dist, "renderer/play-bar.html"));
   await cp(path.join(root, "src/renderer/fonts"), path.join(dist, "renderer/fonts"), {
     recursive: true,
