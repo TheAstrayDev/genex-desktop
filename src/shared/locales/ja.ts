@@ -4024,8 +4024,6 @@ export default {
     "これはRoblox Studioの設定ではありません。Studioは設定を1つのJSONオブジェクトで保存します。",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "これらのファイルは保存するには大きすぎたため、巻き戻しでもそのままにしました：{files}。",
-  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
-    "一度の変更が{size}を超えたためこれらのファイルは保存されず、巻き戻しでもそのままになりました：{files}。",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "これらのサーフェスには別々の文字色が必要です。背景の明るさをそろえるか、このテーマをリセットしてください。",
   "They can": "できること",

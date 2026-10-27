@@ -4008,8 +4008,6 @@ export default {
     "Это не настройки Roblox Studio: Studio хранит их одним JSON-объектом.",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "Эти файлы были слишком большими для сохранения, поэтому откат оставил их как есть: {files}.",
-  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
-    "Эти файлы не сохранились: изменение было больше {size} за раз, поэтому откат оставил их как есть: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Этим поверхностям нужны разные цвета текста. Выбери фоны похожей яркости или сбрось эту тему.",
   "They can": "Они могут",

@@ -3540,7 +3540,6 @@ export const MESSAGES = [
   "Thermal",
   "These aren't Roblox Studio's settings: Studio keeps one JSON object.",
   "These files were too large to save, so the rewind left them as they are: {files}.",
-  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.",
   "They ask before each app.",
   "They can",

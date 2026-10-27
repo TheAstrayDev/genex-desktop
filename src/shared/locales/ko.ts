@@ -3929,8 +3929,6 @@ export default {
     "Roblox Studio 설정이 아니에요. Studio는 JSON 객체 하나로 저장해요.",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "이 파일들은 저장하기에 너무 커서 되감기 때 그대로 두었어요: {files}.",
-  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
-    "한 번의 변경이 {size}를 넘어 이 파일들은 저장되지 않았고, 되감기도 그대로 두었어요: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "이 표면들은 서로 다른 글자색이 필요해요. 배경 밝기를 비슷하게 맞추거나 이 테마를 초기화하세요.",
   "They can": "할 수 있는 것",

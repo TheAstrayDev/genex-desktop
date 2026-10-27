@@ -3788,8 +3788,6 @@ export default {
     "这不是 Roblox Studio 的设置：Studio 只保存一个 JSON 对象。",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "这些文件过大，无法保存，因此回退时保持原样：{files}。",
-  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
-    "这些文件未保存，因为这次更改一次超过了 {size}，所以回退保留了它们原样：{files}。",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "这些表面需要不同的文字颜色。请使用亮度相近的背景，或重置此主题。",
   "They can": "他们可以",

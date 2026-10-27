@@ -648,6 +648,15 @@ describe("the project's editor target", () => {
     assert.deepEqual(await snapshot(dir), before, "reading the targets changes nothing");
   });
 
+  it("reads nothing through a linked Source folder", async () => {
+    const outside = await withTargets("Elsewhere", {
+      "ElsewhereEditor.Target.cs": targetFile("ElsewhereEditor", "Editor"),
+    });
+    const { dir, file } = await blueprintProject("Elsewhere");
+    await symlink(path.join(outside.dir, "Source"), path.join(dir, "Source"));
+    assert.equal(await editorTarget(file, "GxCpp"), "GxCppEditor");
+  });
+
   it("is <Module>Editor when the project's Source can't be read, so UBT says what is missing", async () => {
     const { file } = await blueprintProject("GxCpp");
     assert.equal(await editorTarget(file, "GxCpp"), "GxCppEditor");

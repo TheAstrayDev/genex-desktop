@@ -333,11 +333,13 @@ async function buildsEditor(file: string): Promise<boolean> {
  * The editor target UnrealBuildTool builds for the project: `<Module>Editor` when its Source has
  * that editor target, else the one named after the project, else the first by name. A project can
  * name its targets as it likes (an agent renames a copied game's), and UBT finds a target only by
- * its file's name. `<Module>Editor` when the Source names none, so UBT says what is missing.
+ * its file's name. `<Module>Editor` when the Source names none, or is a link, so UBT says what is missing.
  */
 export async function editorTarget(projectFile: string, module: string): Promise<string> {
   const fallback = `${module}${EDITOR_SUFFIX}`;
   const source = path.join(path.dirname(projectFile), SOURCE_FOLDER);
+  // A linked Source is the project's no more: nothing through it is read.
+  if ((await kindOf(source)) !== PathKind.Folder) return fallback;
   const entries = await readdir(source, { withFileTypes: true }).catch(() => []);
   const named = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(TARGET_SUFFIX))

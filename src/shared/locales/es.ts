@@ -4087,8 +4087,6 @@ export default {
     "Estos no son los ajustes de Roblox Studio: Studio guarda un solo objeto JSON.",
   "These files were too large to save, so the rewind left them as they are: {files}.":
     "Estos archivos eran demasiado grandes para guardarse, así que al retroceder se quedaron como estaban: {files}.",
-  "These files weren’t saved because their change was over {size} at once, so the rewind left them as they are: {files}.":
-    "Estos archivos no se guardaron porque su cambio superó {size} de una vez, así que retroceder los dejó como están: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Estas superficies necesitan colores de texto distintos. Usa fondos con un brillo parecido o restablece este tema.",
   "They can": "Pueden",
