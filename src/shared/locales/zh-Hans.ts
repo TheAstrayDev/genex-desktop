@@ -5819,8 +5819,10 @@ export default {
   "Never your work or name": "绝不包括你的作品和名字",
   "Prompts, code, files, game names and accounts are left out": "提示词、代码、文件、游戏名称和账号都不包括",
   "Screens, clicks and errors": "页面、点击和错误",
-  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.": "页面、点击、错误和等待时长，{date}前还会录下你在应用里怎么操作，作品内容会被遮住。以随机 ID 发送到欧盟的 PostHog。",
-  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.": "页面、点击、错误和等待时长。以随机 ID 发送到欧盟的 PostHog。",
+  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.":
+    "页面、点击、错误和等待时长，{date}前还会录下你在应用里怎么操作，作品内容会被遮住。以随机 ID 发送到欧盟的 PostHog。",
+  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.":
+    "页面、点击、错误和等待时长。以随机 ID 发送到欧盟的 PostHog。",
   "Share usage data": "分享使用数据",
   "Show us where Genex gets in your way.": "告诉我们 Genex 哪里碍事了。",
   "Where you go, what fails and how long it takes": "你去了哪里、什么出错了、花了多久",

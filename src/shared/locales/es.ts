@@ -6250,10 +6250,13 @@ export default {
   "Help improve Genex?": "¿Ayudas a mejorar Genex?",
   "How you move through the app, with your work blanked out": "Cómo te mueves por la app, con tu trabajo tapado",
   "Never your work or name": "Nunca tu trabajo ni tu nombre",
-  "Prompts, code, files, game names and accounts are left out": "Quedan fuera los mensajes, el código, los archivos, los nombres de juegos y las cuentas",
+  "Prompts, code, files, game names and accounts are left out":
+    "Quedan fuera los mensajes, el código, los archivos, los nombres de juegos y las cuentas",
   "Screens, clicks and errors": "Pantallas, clics y errores",
-  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.": "Pantallas, clics, errores y tiempos de espera, y hasta el {date} una grabación de cómo te mueves por la app con tu trabajo tapado. Se envía a PostHog en la UE con un id aleatorio.",
-  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.": "Pantallas, clics, errores y tiempos de espera. Se envía a PostHog en la UE con un id aleatorio.",
+  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.":
+    "Pantallas, clics, errores y tiempos de espera, y hasta el {date} una grabación de cómo te mueves por la app con tu trabajo tapado. Se envía a PostHog en la UE con un id aleatorio.",
+  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.":
+    "Pantallas, clics, errores y tiempos de espera. Se envía a PostHog en la UE con un id aleatorio.",
   "Share usage data": "Compartir datos de uso",
   "Show us where Genex gets in your way.": "Muéstranos dónde Genex te estorba.",
   "Where you go, what fails and how long it takes": "Adónde vas, qué falla y cuánto tarda",

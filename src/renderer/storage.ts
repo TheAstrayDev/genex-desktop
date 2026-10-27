@@ -45,6 +45,8 @@ export const STORAGE_KEYS = {
   analyticsLogSeen: "studio.analytics.logSeen",
   /** A random id per game, never derived from its name (`analytics/game-ref.ts` owns the format). */
   analyticsGames: "studio.analytics.games",
+  /** The screen an unfinished welcome stood on, gone once it ends (`analytics/welcome-report.ts` owns the value). */
+  analyticsWelcomeScreen: "studio.analytics.welcomeScreen",
   /** The Genex promo after the welcome: queued, then settled (`genex-promo.ts` owns the values). */
   genexPromo: "studio.genexPromo",
   /** The games last opened in Play, newest first (`play/play-model.ts` owns the format). */

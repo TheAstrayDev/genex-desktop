@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { reportFirstScreen } from "../analytics/events/launch.ts";
 import { firstScreenReady, useAppLoaderDismissal } from "../app-loader.ts";
 import { firstAsksFromEvents } from "../chat-labels.ts";
 import { useAppDialogs } from "../panels/AppDialogs.tsx";
 import { threadLog } from "../state/event-log.ts";
 import { useEventLog, useShallow, useLayoutView, useSession, useSessionView, useThreads } from "../state/hooks.ts";
-import { studio } from "../state/studio.ts";
+import { type Studio, studio } from "../state/studio.ts";
 import { Room, roomOf, projectOf } from "../state/threads.ts";
 import { useAutoOpenBuilds } from "../use-auto-open-builds.ts";
 import { useChatHistory } from "../use-chat-history.ts";
@@ -17,6 +18,15 @@ import { useShellShortcuts } from "./use-shell-shortcuts.ts";
 import { useStageViews } from "./use-stage-views.ts";
 import { useUsageAnalytics } from "./use-usage-analytics.ts";
 import { useWelcomeExit } from "./use-welcome-exit.ts";
+
+/** The window's first real screen is up: put the loader away and measure it (once a window). */
+function useFirstScreen(app: Studio, ready: boolean): void {
+  useAppLoaderDismissal(ready);
+  // app_ready_measured, once a window: reportFirstScreen keeps itself to the first call.
+  useEffect(() => {
+    if (ready) reportFirstScreen(app);
+  }, [ready, app]);
+}
 
 /**
  * Everything the shell holds and wires: its chrome, navigation, the stage's views, notifications,
@@ -42,7 +52,7 @@ export function useShell() {
   const chatLoading = ready && history.loading;
   const status = useSession((s) => s.status);
   const chatPending = Boolean(activeThreadId) && chatLoading && !history.error;
-  useAppLoaderDismissal(firstScreenReady({ status, welcoming, chatPending }));
+  useFirstScreen(app, firstScreenReady({ status, welcoming, chatPending }));
   const handoff = useComposerHandoff(ready && !chatLoading && !welcoming, activeThreadId);
   const navigation = useNavigation(app, chrome, handoff);
   const views = useStageViews(app);

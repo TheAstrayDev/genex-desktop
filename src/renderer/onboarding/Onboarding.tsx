@@ -30,7 +30,33 @@ import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import type { ModelInstallJob } from "../../shared/model-install.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { type ModelPullProgress, UiEvent } from "../../shared/ui-events.ts";
+import { track } from "../analytics/client.ts";
+import { AnalyticsEvent } from "../analytics/events.ts";
+import { connectScreenViewed, type FilmSeen, filmInteraction, freeModelChoice } from "../analytics/welcome-flow.ts";
+import {
+  downloadReported,
+  reportClock,
+  reportDownloadStarted,
+  reportDownloadsLeft,
+  reportHardwareChecked,
+  reportProviderActionFailed,
+  reportProviderPress,
+  reportRecheckOnReturn,
+  reportSignInHelper,
+  settled,
+  useNotStartingShown,
+  useReportOnce,
+  useWelcomeJourney,
+} from "../analytics/welcome-report.ts";
+import {
+  DownloadSource,
+  FilmAction,
+  ProviderSurface,
+  SignInHelper,
+  WelcomeExit,
+} from "../analytics/welcome-vocabulary.ts";
 import { preloadHomeBackdrop } from "../home-backdrop/preload.ts";
+import { defaultModelKey } from "../model-choices.ts";
 import { Button } from "../ui/Button.tsx";
 import { GenexLogo } from "../ui/GenexLogo.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -39,7 +65,7 @@ import { CODE_FALLBACK_LABEL, useCodeFallback } from "../ui/SignInCard.tsx";
 import { useClaudeLogin, useSubscriptionAuth } from "../subscription-auth.ts";
 import { useCliInstall } from "../cli-install.ts";
 import { LOCAL_SERVER_WORDS, problemWords } from "../words.ts";
-import { openSettings, SettingsSection } from "../settings-navigation.ts";
+import { openSettings, SettingsOpenedFrom, SettingsSection } from "../settings-navigation.ts";
 import { SHOW_TERMINAL_EVENT } from "../panels/terminal-events.ts";
 import { prefersReducedMotion, REDUCED_MOTION_QUERY } from "../ui/media-queries.ts";
 import { ArtCanvas, type Draw } from "./ArtCanvas.tsx";
@@ -240,11 +266,14 @@ function useWelcome(idea: string, onIdea: (text: string) => void, held: boolean)
   const promptNow = useRef(prompt);
   promptNow.current = prompt;
   const textStyle = useComposerTextStyle(input);
+  // What Next tells usage analytics: the furthest beat reached and how often the film looped.
+  const watched = useRef({ beatReached: 0, loops: 0 });
 
   // The art's clock starts with the state it draws, before the frame that first shows it.
   useLayoutEffect(() => {
     beatNow.current = beat;
     beatAt.current = performance.now();
+    watched.current.beatReached = Math.max(watched.current.beatReached, beat);
   }, [beat, run]);
 
   // The script: type, point at Send, press, the bar lets go of the words, then the roles play
@@ -262,6 +291,7 @@ function useWelcome(idea: string, onIdea: (text: string) => void, held: boolean)
     };
     if (beat === 1)
       at(GRAPH_MS, () => {
+        watched.current.loops += 1;
         setSent(false);
         setBeat(0);
       });
@@ -280,6 +310,7 @@ function useWelcome(idea: string, onIdea: (text: string) => void, held: boolean)
     onIdea,
     reduced,
     prompt,
+    beat,
     writing,
     draft,
     input,
@@ -294,7 +325,7 @@ function useWelcome(idea: string, onIdea: (text: string) => void, held: boolean)
     /** The bar has let go of the typed words, which now stream into the art. */
     letGo: beat === 0 && phase >= 4 && !writing,
   };
-  return { reduced, prompt, beat, phase, writing, draft, sent, run, input, drawStage, ...view, ...actions };
+  return { reduced, prompt, beat, phase, writing, draft, sent, run, input, drawStage, watched, ...view, ...actions };
 }
 
 interface WelcomeSetters {
@@ -313,6 +344,7 @@ function welcomeActions(w: {
   onIdea: (text: string) => void;
   reduced: boolean;
   prompt: string;
+  beat: 0 | 1;
   writing: boolean;
   draft: string;
   input: RefObject<HTMLInputElement | null>;
@@ -321,6 +353,7 @@ function welcomeActions(w: {
 }) {
   const { set, writing, draft } = w;
   const jump = (next: 0 | 1) => {
+    track(AnalyticsEvent.WelcomeFilmInteracted, filmInteraction(FilmAction.StepJump, next));
     set.setWriting(false);
     set.setSent(false);
     set.setPhase(0);
@@ -329,6 +362,7 @@ function welcomeActions(w: {
   };
   const startWriting = () => {
     if (writing) return;
+    track(AnalyticsEvent.WelcomeFilmInteracted, filmInteraction(FilmAction.IdeaStarted, w.beat));
     set.setWriting(true);
     set.setSent(false);
     set.setBeat(0);
@@ -339,6 +373,10 @@ function welcomeActions(w: {
   const send = () => {
     const text = (writing ? draft : w.prompt).trim();
     if (!text) return;
+    const sending = writing
+      ? filmInteraction(FilmAction.IdeaSent, w.beat, text.length)
+      : filmInteraction(FilmAction.DemoSent, w.beat);
+    track(AnalyticsEvent.WelcomeFilmInteracted, sending);
     if (writing) {
       w.onIdea(text);
       w.promptNow.current = text;
@@ -356,6 +394,7 @@ function welcomeActions(w: {
   };
   const leave = () => {
     if (writing && !draft.trim()) {
+      track(AnalyticsEvent.WelcomeFilmInteracted, filmInteraction(FilmAction.IdeaAbandoned, w.beat));
       set.setWriting(false);
       set.setRun((n) => n + 1);
     }
@@ -377,9 +416,11 @@ function WelcomeComposer({ w }: { w: WelcomeModel }): JSX.Element {
   const pressing = beat === 0 && phase === 3;
   const nothingToSend = writing && !draft.trim();
   return (
+    // The idea in the composer is the person's own: a replay shows it masked.
     <div
       className="onboarding-composer composer-panel"
       data-shown={composerOn}
+      data-analytics-mask
       style={{ left: COMPOSER.left, top: COMPOSER.top, width: COMPOSER.width }}
     >
       <input
@@ -437,6 +478,7 @@ function WelcomeStage({ w, scale }: { w: WelcomeModel; scale: number }): JSX.Ele
         aria-hidden="true"
         className="onboarding-letters text-composer"
         data-shown={letGo}
+        data-analytics-mask
         style={{ left: PROMPT_ORIGIN.x, top: PROMPT_ORIGIN.y - 10 }}
       >
         {w.prompt}
@@ -511,7 +553,8 @@ function Welcome({
   back: boolean;
   held: boolean;
   onIdea: (text: string) => void;
-  onNext: (draft: string) => void;
+  /** Next: the idea being written, and what the film saw for usage analytics. */
+  onNext: (draft: string, film: FilmSeen) => void;
 }): JSX.Element {
   const w = useWelcome(idea, onIdea, held);
   const [fit, scale] = useFit(STAGE.width, STAGE.height);
@@ -535,7 +578,10 @@ function Welcome({
         size="lg"
         className="onboarding-cta"
         data-onboarding-action={OnboardingAction.Next}
-        onClick={() => onNext(w.writing ? w.draft.trim() : "")}
+        onClick={() => {
+          const draft = w.writing ? w.draft.trim() : "";
+          onNext(draft, { ...w.watched.current, ideaLength: (draft || idea).length });
+        }}
       >
         {t("Next")}
       </Button>
@@ -649,23 +695,40 @@ function useLocalModel(engines: EngineDescriptor[], onEnginesRefresh: () => void
   const load = useCallback(() => {
     if (asked.current) return;
     asked.current = true;
+    const startedAt = reportClock();
     void window.studio
       .hardware()
-      .then(setHardware)
-      .catch((err) => setHardwareError(problemWords(err)));
+      .then((report) => {
+        reportHardwareChecked(ProviderSurface.Onboarding, report, startedAt);
+        setHardware(report);
+      })
+      .catch((err) => {
+        reportHardwareChecked(ProviderSurface.Onboarding, null, startedAt);
+        setHardwareError(problemWords(err));
+      });
   }, []);
   const pick = bestFit(hardware);
   const installed = Boolean(
     pick &&
       engines.some((engine) => engine.models.some((model) => canonicalModel(model.id) === canonicalModel(pick.model))),
   );
+  const ollama = () => engines.find((engine) => engine.id === EngineId.Ollama);
   const download = async () => {
     if (!pick) return;
     setPulling(pick.model);
     setProgress(0);
     setError(null);
+    reportDownloadStarted({
+      model: pick.model,
+      surface: ProviderSurface.Onboarding,
+      engine: pick.engine,
+      source: DownloadSource.BestFit,
+      resumed: false,
+      sizeGb: pick.sizeGb,
+      ollama: ollama(),
+    });
     try {
-      await window.studio.pullModel(pick.model);
+      await downloadReported(pick.model, ollama, () => window.studio.pullModel(pick.model));
       onEnginesRefresh();
     } catch (err) {
       setError(problemWords(err));
@@ -789,8 +852,9 @@ function ConnectButton({
     event.preventDefault();
     if (!code.trim()) return;
     setCodeError(null);
-    void window.studio
-      .claudeLoginCode(code.trim())
+    const helped = (accepted: boolean) =>
+      reportSignInHelper(id, SignInHelper.CodeSubmitted, { surface: ProviderSurface.Onboarding, accepted });
+    void settled(() => window.studio.claudeLoginCode(code.trim()), helped)
       .then(() => setCode(""))
       .catch((err: Error) => setCodeError(problemWords(err)));
   };
@@ -809,7 +873,15 @@ function ConnectButton({
         )}
       </Hug>
       {view.kind === ConnectViewKind.Busy && view.offersCode && (
-        <button type="button" className="onboarding-link" data-state="idle" onClick={onPasteCode}>
+        <button
+          type="button"
+          className="onboarding-link"
+          data-state="idle"
+          onClick={() => {
+            reportSignInHelper(id, SignInHelper.CodeBoxOpened, { surface: ProviderSurface.Onboarding });
+            onPasteCode();
+          }}
+        >
           {CODE_FALLBACK_LABEL}
         </button>
       )}
@@ -869,8 +941,12 @@ function useSubscriptions(engines: EngineDescriptor[], onEnginesRefresh: () => v
   };
   const act = (id: Subscription, view: ConnectView) => {
     if (view.kind !== ConnectViewKind.Action) return;
+    reportProviderPress(id, view.action, ProviderSurface.Onboarding);
     setProblem(null);
-    void Promise.resolve(step(id, view)).catch((err) => setProblem(problemWords(err)));
+    void Promise.resolve(step(id, view)).catch((err) => {
+      reportProviderActionFailed(id, view.action, ProviderSurface.Onboarding);
+      setProblem(problemWords(err));
+    });
   };
   const cancel = (id: Subscription) => {
     const cancelled = id === EngineId.Codex ? window.studio.codexLoginCancel() : window.studio.claudeLoginCancel();
@@ -900,7 +976,10 @@ function useRecheckOnReturn(s: Subscriptions) {
     if (!installingKey) return;
     const ids = installingKey.split(",") as Subscription[];
     const onFocus = () => {
-      for (const id of ids) void s.recheck(id);
+      for (const id of ids) {
+        const before = (id === EngineId.Codex ? s.codexAuth : s.claudeAuth).engine?.account?.cli.state ?? null;
+        void s.recheck(id).then(() => reportRecheckOnReturn(id, before, ProviderSurface.Onboarding));
+      }
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -1012,6 +1091,12 @@ function Connect({
   const { views, act, cancel, shown, codeFallback } = subscriptions;
   const heading = useHeadingFocus();
   useRecheckOnReturn(subscriptions);
+  // How each subscription's button stood on arrival, and a signed-in CLI that would not start.
+  useReportOnce(WelcomeScreen.Connect, () =>
+    track(AnalyticsEvent.ConnectScreenViewed, connectScreenViewed(views, engines, anyOn)),
+  );
+  useNotStartingShown(subscriptions.claudeAuth.engine, ProviderSurface.Onboarding);
+  useNotStartingShown(subscriptions.codexAuth.engine, ProviderSurface.Onboarding);
   const { area, slots, markX, placed } = useMarkPlaces();
   const { marks, drawArt } = useMarksArt(views, markX);
 
@@ -1189,6 +1274,13 @@ function Local({
   }, [load]);
   const now = useRef({ state: local.state, percent: local.percent });
   now.current = { state: local.state, percent: local.percent };
+  // Going back while the model downloads leaves it running: usage analytics notes the screen was left.
+  useEffect(
+    () => () => {
+      if (now.current.state === ChipState.Downloading) reportDownloadsLeft(ProviderSurface.Onboarding);
+    },
+    [],
+  );
   const born = useRef(performance.now());
   const drawArt = useCallback<Draw>((ctx, palette, time) => {
     drawChip(
@@ -1234,18 +1326,28 @@ function useWelcomeExit(
   idea: string,
   onReady: (idea: string | null) => Promise<void>,
   onFinish: (then?: () => void) => void,
-): { closing: boolean; leaving: boolean; finish: (then?: () => void) => void } {
+): {
+  closing: boolean;
+  leaving: boolean;
+  /** End the welcome; `ended` hears whether what waits behind it opened. */
+  finish: (then?: () => void, ended?: (readyFailed: boolean) => void) => void;
+} {
   const reduced = useReducedMotion();
   const [closing, setClosing] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const finish = (then?: () => void) => {
+  const finish = (then?: () => void, ended?: (readyFailed: boolean) => void) => {
     if (closing) return;
     setClosing(true);
     void onReady(idea.trim() || null)
-      .catch(() => {})
-      .then(() => {
+      .then(
+        () => false,
+        () => true,
+      )
+      .then((readyFailed) => {
         setLeaving(true);
         window.setTimeout(() => onFinish(then), reduced ? 0 : LEAVE_MS);
+        // Told last, so nothing it does can hold the welcome open.
+        ended?.(readyFailed);
       });
   };
   return { closing, leaving, finish };
@@ -1268,6 +1370,44 @@ function useOtherWays(engines: EngineDescriptor[], onEnginesRefresh: () => void)
   return { local, router, code, grok, cursor, ways };
 }
 
+/** Whether anything is ready to build with, and whether anything besides OpenCode's free models is. */
+function readiness(engines: EngineDescriptor[], localInstalled: boolean): { othersOn: boolean; anyOn: boolean } {
+  const ready = (id: string) => engines.find((engine) => engine.id === id)?.status.code === EngineStatusCode.Ready;
+  const othersOn = localInstalled || BUILDS_WITH.some(ready);
+  // OpenCode's free models count: a ready OpenCode is something to build with.
+  return { othersOn, anyOn: othersOn || ready(EngineId.OpenCode) };
+}
+
+/**
+ * Every way out of the welcome: the free model picked here (if any) goes with it, and usage
+ * analytics follows the journey there, told how it ended once what waits behind it has opened.
+ */
+function useWelcomeEnd(
+  welcome: {
+    engines: EngineDescriptor[];
+    idea: string;
+    anyOn: boolean;
+    held: boolean;
+    screen: { id: WelcomeScreen; back: boolean };
+  },
+  freeModel: ReturnType<typeof useFreeModel>,
+  finish: ReturnType<typeof useWelcomeExit>["finish"],
+) {
+  const journey = useWelcomeJourney(welcome.held, welcome.screen);
+  const end = (exit: WelcomeExit, then?: () => void) => {
+    freeModel.remember();
+    const told = {
+      exit,
+      engines: welcome.engines,
+      anyReady: welcome.anyOn,
+      ideaCarried: welcome.idea.trim() !== "",
+      freeModel: freeModelChoice(freeModel.free, defaultModelKey(EngineId.OpenCode)),
+    };
+    finish(then, (readyFailed) => journey.finished({ ...told, readyFailed }));
+  };
+  return { end, next: journey.next };
+}
+
 /** Focus comes to the welcome once nothing waits above it, and each of its screens is reported as it shows. */
 function useWelcomePresence(
   root: RefObject<HTMLDivElement | null>,
@@ -1282,6 +1422,10 @@ function useWelcomePresence(
     onScreen?.(screen);
   }, [onScreen, screen]);
 }
+
+/** The welcome's local-server link: Model Providers, where a server is added. */
+const openServerSettings = (): void =>
+  openSettings(SettingsSection.Providers, undefined, SettingsOpenedFrom.WelcomeServer);
 
 export function Onboarding({
   engines,
@@ -1310,16 +1454,9 @@ export function Onboarding({
   const root = useRef<HTMLDivElement>(null);
   const { local, router, code, grok, cursor, ways } = useOtherWays(engines, onEnginesRefresh);
   const { closing, leaving, finish } = useWelcomeExit(idea, onReady, onFinish);
-  const ready = (id: string) => engines.find((engine) => engine.id === id)?.status.code === EngineStatusCode.Ready;
-  const othersOn = local.installed || BUILDS_WITH.some(ready);
-  // OpenCode's free models count: a ready OpenCode is something to build with.
-  const anyOn = othersOn || ready(EngineId.OpenCode);
+  const { othersOn, anyOn } = readiness(engines, local.installed);
   const freeModel = useFreeModel(code, engines, othersOn);
-  /** Every way out of the welcome: the free model picked here (if any) goes with it. */
-  const end = (then?: () => void) => {
-    freeModel.remember();
-    finish(then);
-  };
+  const { end, next } = useWelcomeEnd({ engines, idea, anyOn, held, screen }, freeModel, finish);
 
   useWelcomePresence(root, held, screen.id, onScreen);
   // Past the welcome, home's background gets ready behind these screens, so home opens on it.
@@ -1328,7 +1465,12 @@ export function Onboarding({
   }, [screen.id]);
   const go = (id: WelcomeScreen, back = false) => setScreen({ id, back });
   // Every screen after Connect goes back to it, and skips or starts the same way.
-  const after = { anyOn, onBack: () => go(WelcomeScreen.Connect, true), onSkip: () => end(), onStart: () => end() };
+  const after = {
+    anyOn,
+    onBack: () => go(WelcomeScreen.Connect, true),
+    onSkip: () => end(WelcomeExit.Skip),
+    onStart: () => end(WelcomeExit.Start),
+  };
 
   const current = (): JSX.Element => {
     switch (screen.id) {
@@ -1340,7 +1482,8 @@ export function Onboarding({
             back={screen.back}
             held={held}
             onIdea={setIdea}
-            onNext={(draft) => {
+            onNext={(draft, film) => {
+              next(film);
               if (draft) setIdea(draft);
               go(WelcomeScreen.Connect);
             }}
@@ -1357,9 +1500,9 @@ export function Onboarding({
             back={screen.back}
             onBack={() => go(WelcomeScreen.Welcome, true)}
             onWay={(way) => go(WAY_SCREEN[way])}
-            onSkip={() => end()}
-            onStart={() => end()}
-            onTerminal={() => end(() => window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT)))}
+            onSkip={() => end(WelcomeExit.Skip)}
+            onStart={() => end(WelcomeExit.Start)}
+            onTerminal={() => end(WelcomeExit.Terminal, () => window.dispatchEvent(new Event(SHOW_TERMINAL_EVENT)))}
           />
         );
       case WelcomeScreen.OpenRouter:
@@ -1376,7 +1519,7 @@ export function Onboarding({
             key={WelcomeScreen.Local}
             local={local}
             {...after}
-            onServer={() => end(() => openSettings(SettingsSection.Providers))}
+            onServer={() => end(WelcomeExit.ServerSettings, openServerSettings)}
           />
         );
     }

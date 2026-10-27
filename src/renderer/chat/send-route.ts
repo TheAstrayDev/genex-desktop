@@ -11,7 +11,15 @@ import { type Notify, ToastTone } from "../state/toasts.ts";
 import type { AutopilotSend, ComposerExtras } from "../ui/PromptBar.tsx";
 import { problemWords } from "../words.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
-import { leadTakesSend, newClientId, type PendingSend, sendPlacement, waitsBehindWork } from "./pending-sends.ts";
+import { SendRoute } from "../analytics/chat-vocabulary.ts";
+import {
+  leadTakesSend,
+  newClientId,
+  type PendingSend,
+  type SendPlacement,
+  sendPlacement,
+  waitsBehindWork,
+} from "./pending-sends.ts";
 import { finishingRun } from "./transcript.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import type { ChatWorkView } from "./use-chat-work.ts";
@@ -114,6 +122,22 @@ export async function sentAsNote(
   reply.drop(about.threadId);
   follow.jumpToLatest();
   return true;
+}
+
+/**
+ * Where a message that is not a note goes, for the send's analytics: the held plan's inbox, plan
+ * review, or the chat, with where its bubble waits. Read before `showSend` adds the bubble.
+ */
+export function sendDestination(
+  parts: { chat: ChatThread; work: ChatWorkView },
+  text: string,
+  extras: ComposerExtras | undefined,
+  heldRun: string | null,
+): { route: SendRoute; placement?: SendPlacement } {
+  const { chat, work } = parts;
+  if (heldRun) return { route: SendRoute.HeldPlan };
+  if (sendRoute(chat, work, extras).toPlanReview) return { route: SendRoute.PlanReview };
+  return { route: SendRoute.Chat, placement: sendPlacement(waitsBehindWork(sendWork(text, chat, work)), chat.queue) };
 }
 
 /**

@@ -6237,10 +6237,13 @@ export default {
   "Help improve Genex?": "Quer ajudar a melhorar o Genex?",
   "How you move through the app, with your work blanked out": "Como você navega pelo app, com seu trabalho escondido",
   "Never your work or name": "Nunca seu trabalho nem seu nome",
-  "Prompts, code, files, game names and accounts are left out": "Pedidos, código, arquivos, nomes de jogos e contas ficam de fora",
+  "Prompts, code, files, game names and accounts are left out":
+    "Pedidos, código, arquivos, nomes de jogos e contas ficam de fora",
   "Screens, clicks and errors": "Telas, cliques e erros",
-  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.": "Telas, cliques, erros e tempos de espera, e até {date} uma gravação de como você navega pelo app com seu trabalho escondido. Vai para o PostHog na UE com um id aleatório.",
-  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.": "Telas, cliques, erros e tempos de espera. Vai para o PostHog na UE com um id aleatório.",
+  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.":
+    "Telas, cliques, erros e tempos de espera, e até {date} uma gravação de como você navega pelo app com seu trabalho escondido. Vai para o PostHog na UE com um id aleatório.",
+  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.":
+    "Telas, cliques, erros e tempos de espera. Vai para o PostHog na UE com um id aleatório.",
   "Share usage data": "Compartilhar dados de uso",
   "Show us where Genex gets in your way.": "Mostre onde o Genex atrapalha você.",
   "Where you go, what fails and how long it takes": "Aonde você vai, o que falha e quanto tempo leva",

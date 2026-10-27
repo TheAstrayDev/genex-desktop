@@ -900,6 +900,20 @@ describe("the studio: one subscription, the bootstrap and the commands that span
     );
   });
 
+  it("hands main's events to its own listeners after the stores, through the one subscription", async () => {
+    const { fake, app } = started();
+    await tick();
+    app.selectThread("rift-chat");
+    const heard: Array<[string, string]> = [];
+    const stop = app.onUiEvent((event) => heard.push([event.type, app.layout.getState().stageView]));
+    assert.equal(fake.listeners("onEvent"), 1, "no IPC listener of its own");
+    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
+    assert.deepEqual(heard, [["stage.show", "live"]], "the stores took it first");
+    stop();
+    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
+    assert.equal(heard.length, 1, "a stopped listener hears nothing more");
+  });
+
   it("a build the chat put on screen for the game on the stage shows Live", async () => {
     const storage = memoryStorage({ "studio.previewView": "builds" });
     const { fake, app } = started({}, storage);

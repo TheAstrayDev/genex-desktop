@@ -89,19 +89,24 @@ export async function startAnalytics(
 export function stopAnalytics(): void {
   answer = Answer.No;
   early = [];
-  if (!client) return;
-  client.stopSessionRecording();
-  client.opt_out_capturing();
-  client.reset();
-  if (typeof history !== "undefined") history.replaceState(history.state, "", location.href.split("#")[0]);
+  const posthog = client;
+  if (!posthog) return;
+  quietly(() => {
+    posthog.stopSessionRecording();
+    posthog.opt_out_capturing();
+    posthog.reset();
+    if (typeof history !== "undefined") history.replaceState(history.state, "", location.href.split("#")[0]);
+  });
 }
 
 /** The screen the person is on, as a path: /game/live, /settings/privacy, /welcome/connect. */
 export function setAnalyticsScreen(path: string): void {
-  if (!screenChanged(path)) return;
-  if (!client || answer !== Answer.Yes) return;
-  showScreen();
-  pageview();
+  quietly(() => {
+    if (!screenChanged(path)) return;
+    if (!client || answer !== Answer.Yes) return;
+    showScreen();
+    pageview();
+  });
 }
 
 /**
@@ -112,25 +117,46 @@ export function track<E extends AnalyticsEvent>(
   event: E,
   properties: AnalyticsEventProperties[E] & EventProperties,
 ): void {
-  if (answer === Answer.No) return;
-  if (client && answer === Answer.Yes) {
-    client.capture(event, properties);
-    return;
-  }
-  if (early.length < EARLY_EVENTS_MAX) early.push({ event, properties, at: new Date() });
+  quietly(() => {
+    if (answer === Answer.No) return;
+    if (client && answer === Answer.Yes) {
+      client.capture(event, properties);
+      return;
+    }
+    if (early.length < EARLY_EVENTS_MAX) early.push({ event, properties, at: new Date() });
+  });
 }
 
 /** Properties sent with every event from now on: they describe the app, never the person. */
 export function registerSuperProperties(next: Partial<SuperProperties>): void {
-  superProperties = { ...superProperties, ...next };
-  if (client && answer === Answer.Yes) client.register({ ...next });
+  quietly(() => {
+    superProperties = { ...superProperties, ...next };
+    if (client && answer === Answer.Yes) client.register({ ...next });
+  });
 }
 
-/** What waited for the answer, sent with the time it happened. */
+/**
+ * Run analytics-only work so that it never stands in the app's way: whatever fails in it sends
+ * nothing and goes no further, neither to its caller nor to the store or stream that called it.
+ */
+export function quietly(run: () => void): void {
+  try {
+    run();
+  } catch {
+    // Analytics never stands in the app's way: work that fails sends nothing.
+  }
+}
+
+/** A store or stream listener that runs `quietly`, so analytics failing in it never breaks what it listens to. */
+export function guarded<A extends unknown[]>(listen: (...args: A) => void): (...args: A) => void {
+  return (...args) => quietly(() => listen(...args));
+}
+
+/** What waited for the answer, sent with the time it happened; one that fails does not hold back the rest. */
 function flushEarly(posthog: PostHog): void {
   const waiting = early;
   early = [];
-  for (const item of waiting) posthog.capture(item.event, item.properties, { timestamp: item.at });
+  for (const item of waiting) quietly(() => posthog.capture(item.event, item.properties, { timestamp: item.at }));
 }
 
 /** The address carries the screen, so heatmaps and replay navigation are filed under it as they happen. */

@@ -11,7 +11,7 @@ import type { SessionState } from "../state/session.ts";
 import { SessionStatus } from "../state/session.ts";
 import type { Studio } from "../state/studio.ts";
 import type { KeyValueStorage } from "../storage.ts";
-import { registerSuperProperties, startAnalytics, stopAnalytics, track } from "./client.ts";
+import { guarded, registerSuperProperties, startAnalytics, stopAnalytics, track } from "./client.ts";
 import { ANALYTICS_CONSENT_VERSION, AnalyticsChoice } from "./consent.ts";
 import { AnalyticsEvent } from "./events.ts";
 import type { ConsentSurface } from "./events/core.ts";
@@ -68,7 +68,7 @@ export function startUsageAnalytics(
     });
     void startAnalytics(state.analytics, { replay }).catch(() => undefined);
   };
-  const offSession = app.session.subscribe(follow);
+  const offSession = app.session.subscribe(guarded(follow));
   follow(app.session.getState());
   const engines = (list: readonly EngineDescriptor[]): void => {
     const ready = readyEngines(list);
@@ -78,9 +78,11 @@ export function startUsageAnalytics(
       any_model_ready: ready.length > 0,
     });
   };
-  const offEngines = app.engines.subscribe((state) => engines(state.list));
+  const offEngines = app.engines.subscribe(guarded((state) => engines(state.list)));
   engines(app.engines.getState().list);
-  const offPeople = app.people.subscribe((state) => registerSuperProperties({ genex_signed_in: state.me !== null }));
+  const offPeople = app.people.subscribe(
+    guarded((state) => registerSuperProperties({ genex_signed_in: state.me !== null })),
+  );
   const offObservers = startObservers(app, storage, now());
   return () => {
     offSession();

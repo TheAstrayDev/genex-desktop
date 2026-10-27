@@ -11,8 +11,9 @@ import type { EventEnvelope } from "../../shared/studio-api.ts";
 import type { UiEvent } from "../../shared/ui-events.ts";
 import type { Studio } from "../state/studio.ts";
 import { type KeyValueStorage, readNumber, STORAGE_KEYS, writeText } from "../storage.ts";
+import { createChatObservers } from "./chat-observe.ts";
+import { guarded, quietly } from "./client.ts";
 import { createBuildsObservers } from "./events/builds.ts";
-import { createChatObservers } from "./events/chat.ts";
 import { createLaunchObservers } from "./events/launch.ts";
 import { createPluginsObservers } from "./events/plugins.ts";
 import { createWelcomeObservers } from "./events/welcome.ts";
@@ -53,30 +54,50 @@ export function uncounted(events: readonly EventEnvelope[], mark: number): { fre
   return { fresh, mark: last ? Math.max(mark, recordTime(last)) : mark };
 }
 
-/** Run one listener without letting it break the others, the stores or the window. */
-function quietly(run: () => void): void {
-  try {
-    run();
-  } catch {
-    // Analytics never stands in the app's way: a listener that fails sends nothing.
-  }
+const NOTHING_TO_STOP = (): void => undefined;
+
+/** One part, made so that a part that fails to be made is a part that does not listen. */
+function makeArea(create: () => AreaObservers): AreaObservers {
+  let area: AreaObservers = {};
+  quietly(() => {
+    area = create();
+  });
+  return area;
 }
 
-/** Subscribe every part's listeners. Returns the stop. */
-export function startObservers(app: Studio, storage: KeyValueStorage | null, now: number): () => void {
-  const areas = AREAS.map((create) => create());
+/** One part's own subscriptions: a part that fails to start does not listen, and its stop never throws. */
+function startArea(area: AreaObservers, app: Studio): () => void {
+  let stop = NOTHING_TO_STOP;
+  quietly(() => {
+    stop = area.start?.(app) ?? NOTHING_TO_STOP;
+  });
+  return () => quietly(stop);
+}
+
+/** Subscribe every part's listeners (the app's parts unless a test names others). Returns the stop. */
+export function startObservers(
+  app: Studio,
+  storage: KeyValueStorage | null,
+  now: number,
+  parts: ReadonlyArray<() => AreaObservers> = AREAS,
+): () => void {
+  const areas = parts.map(makeArea);
   let mark = readNumber(STORAGE_KEYS.analyticsLogSeen, 0, Number.MAX_SAFE_INTEGER, storage) ?? now;
-  const offLog = app.eventLog.onArrived((events) => {
-    const read = uncounted(events, mark);
-    if (read.fresh.length === 0) return;
-    mark = read.mark;
-    writeText(STORAGE_KEYS.analyticsLogSeen, String(mark), storage);
-    for (const record of read.fresh) for (const area of areas) quietly(() => area.log?.(record));
-  });
-  const offUi = app.api.onEvent((event) => {
-    for (const area of areas) quietly(() => area.ui?.(event));
-  });
-  const stops = areas.map((area) => area.start?.(app) ?? (() => undefined));
+  const offLog = app.eventLog.onArrived(
+    guarded((events) => {
+      const read = uncounted(events, mark);
+      if (read.fresh.length === 0) return;
+      mark = read.mark;
+      writeText(STORAGE_KEYS.analyticsLogSeen, String(mark), storage);
+      for (const record of read.fresh) for (const area of areas) quietly(() => area.log?.(record));
+    }),
+  );
+  const offUi = app.onUiEvent(
+    guarded((event) => {
+      for (const area of areas) quietly(() => area.ui?.(event));
+    }),
+  );
+  const stops = areas.map((area) => startArea(area, app));
   return () => {
     offLog();
     offUi();
