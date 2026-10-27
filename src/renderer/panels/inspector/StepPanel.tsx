@@ -90,7 +90,7 @@ function useStepPicture(props: StepPanelProps, node: IterationNode) {
   const left = beforeNode ? leftStill : baseLeft;
   const compare = beforeNode ? Boolean(leftShot) : Boolean(baseLeft);
   const pick = (key: string): void => setPicked({ node: node.id, key });
-  return { views, view, pick, rightShot, right, left, compare };
+  return { views, view, pick, right, left, compare };
 }
 
 const PASS_MARK: Record<"pass" | "fail" | "unknown", { color: string; icon: IconName }> = {
@@ -348,7 +348,8 @@ function StepView(props: StepPanelProps & { node: IterationNode; onPick: (at: nu
     target: {
       facetId: node.facetId,
       iteration: node.iteration,
-      ...(picture.rightShot ? { camera: picture.rightShot.camera } : {}),
+      // A note names a real camera: the lead's named picture is no camera of the game's.
+      ...(picture.view && !picture.view.changed ? { camera: picture.view.shot.camera } : {}),
     },
   };
   return (
