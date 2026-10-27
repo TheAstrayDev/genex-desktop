@@ -1244,6 +1244,7 @@ export class StudioCore {
       protectedWrites: async () => [this.games.root, ...(await this.games.list()).map((game) => game.dir)],
       onListingDraft: (draft, binding, fingerprint) => this.#recordListingDraft(draft, binding.threadId, fingerprint),
       onLocalDraftsRemoved: (project, localIds) => this.localItems.forget(project, localIds),
+      picturesRoot: this.layout.itemPictures,
       gameFolder: (project) => realpath(this.games.dirFor(project)),
       // A store item's files and a shared item's folder: the bound game's own folder or its Studio worktree.
       boundGame: (binding) =>

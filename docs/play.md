@@ -398,7 +398,11 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
 - **Local drafts** (an item made before its game is on Genex, contract "Local item drafts"): the CLI
   keeps it in the game's `.genex/items/` (`<localId>.json` and a `<localId>/` folder). Studio copies
   those drafts into each `shop` run's folder and carries a `shop add|set|remove`'s change back
-  (`main/core/local-item-files.ts`: drafts only, never through a link, capped). Its card (`state:
+  (`main/core/local-item-files.ts`: drafts only, never through a link, capped). A Loop's builder makes
+  its drafts in its build's copy of the game, which reaches the game's folder only when the build
+  lands, so Studio also keeps its own copy of each draft's picture as the CLI wrote it
+  (`<userData>/item-pictures/<game>/`, `main/core/item-pictures.ts`; a plain file, never through a
+  link): the card reads that copy first, then the game's folder. Its card (`state:
   "local"`, keyed by local id) says "Draft · goes on sale when you publish" and offers no **Other games
   can use it**, since no other game can reach an item before its game is on Genex. Once the game's publish
   record says its publish made it public (`status: "published"`, written last: a publish that failed
