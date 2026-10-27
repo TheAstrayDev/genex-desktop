@@ -20,6 +20,7 @@ import { ITEM_DRAFT_KIND, ITEM_DRAFT_VERSION, type ListingRecord } from "../../s
 import type { PluginBinding } from "../../src/shared/plugins.ts";
 import { StoreRefusal } from "../../src/shared/store-items.ts";
 import type { RunRequest, RunResult } from "../../src/substrate/spawn.ts";
+import { pngPicture } from "../helpers/picture.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const ICE = "local_ab12cd34ef56";
@@ -38,7 +39,7 @@ async function profile(options: { linked?: boolean } = {}) {
   const outside = path.join(root, "elsewhere");
   for (const dir of [path.join(game, ".genex", "scratch"), outside, path.join(root, "resources")])
     await mkdir(dir, { recursive: true });
-  await writeFile(path.join(game, ".genex", "scratch", "ice.png"), "PNG-ice");
+  await writeFile(path.join(game, ".genex", "scratch", "ice.png"), pngPicture(1024, 1024, "ice"));
   await writeFile(path.join(outside, "secret.png"), "SECRET");
   if (options.linked) {
     const hosted = path.join(genexStorage, "publish", "space-race", ".genex");
@@ -241,7 +242,7 @@ describe("a draft a Loop's builder makes in its build's copy of the game", () =>
     const p = await profile();
     const build = path.join(p.scratch, "autopilot", "run_1", "arena");
     await mkdir(path.join(build, ".genex", "scratch"), { recursive: true });
-    await writeFile(path.join(build, ".genex", "scratch", "ice.png"), PNG);
+    await writeFile(path.join(build, ".genex", "scratch", "ice.png"), pngPicture(1024, 1024, "ice"));
     return { p, build, root: path.join(p.userData, "item-pictures") };
   }
 
@@ -550,7 +551,7 @@ describe("what the CLI leaves in the run folder, carried into a hostile game", (
       const p = await profile();
       await arrange(p);
       // The picture sits outside .genex, which some of these games break.
-      await writeFile(path.join(p.game, "ice.png"), "PNG-ice");
+      await writeFile(path.join(p.game, "ice.png"), pngPicture(1024, 1024, "ice"));
       const outside = await tree(p.outside);
       const sandbox = fakeSandbox({ stdout: localLine(), act: (cwd) => act(cwd, p) });
       const drafts: Array<{ draft: ListingRecord; fingerprint: string | null }> = [];
@@ -639,8 +640,15 @@ describe("Studio's own `shop sync` after a publish", () => {
     });
     const synced = await service(p, sandbox).syncLocalItems("space-race");
     assert.deepEqual(synced, [
-      { localId: ICE, contentHash: HASH, skuId: "sku_ice", refusal: null, field: null },
-      { localId: SLED, contentHash: NEW_HASH, skuId: null, refusal: StoreRefusal.PriceOffGrid, field: "price" },
+      { localId: ICE, contentHash: HASH, skuId: "sku_ice", refusal: null, field: null, code: null },
+      {
+        localId: SLED,
+        contentHash: NEW_HASH,
+        skuId: null,
+        refusal: StoreRefusal.PriceOffGrid,
+        field: "price",
+        code: null,
+      },
     ]);
     const [run] = sandbox.seen;
     assert.ok(run);

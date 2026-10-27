@@ -369,8 +369,9 @@ function LocalCard({
       <Face face={face} look={look} askable={!removed} onAsk={onAsk} />
       {removed && <p className="listing-sale-state">{WORDS.localRemoved}</p>}
       {view.refusal && (
-        <p role="alert" className="listing-refusal">
+        <p role="alert" className="listing-refusal" data-listing-refusal={view.refusalCode ?? view.refusal}>
           {itemRefusalWords(view.refusal)}
+          {view.refusalCode && <span className="listing-refusal-code">{view.refusalCode}</span>}
         </p>
       )}
       {view.failed && (
