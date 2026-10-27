@@ -71,7 +71,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { setTimeout as sleep } from "node:timers/promises";
-import { ReadyPhase, CaptureSurface, GameClock, GameFront } from "../../shared/preview-contract.ts";
+import { ReadyPhase, CaptureSurface, GameClock, GameFront, LiveLoadFailure } from "../../shared/preview-contract.ts";
 import { StateShape, keepPathsOf } from "../../shared/studio-state-shape.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { buildFinished, LiveGate, type LiveOffer, readBuild } from "./live-gate.ts";
@@ -694,7 +694,7 @@ export class PreviewService {
     const guarded = await this.#core.scriptsGuarded(project);
     const outcome = await this.#core.builds.ensure({ project, dir: base, game, shape, guarded });
     const note = outcome.problem ? buildFailureNote(outcome.problem) : null;
-    if (note) port.note?.("error", note, { loadError: true });
+    if (note) port.note?.("error", note, { loadError: true, failure: LiveLoadFailure.BuildFailed });
     // The live folder is the one the user is looking at, so it is the one whose trouble the
     // stage reports; a worktree's build failure belongs to the run that made it.
     if (root === null) {
@@ -773,7 +773,7 @@ export class PreviewService {
       if (isLive) await this.#identifyLoaded(p.project, checkedRoot, served.stale, revisionBefore);
       // Loading clears the port's error, and the build is still broken: the agent loop and the
       // judges read that flag, so the failure is put back on the page the user can see.
-      if (served.stale) port.note?.("error", served.stale, { loadError: true });
+      if (served.stale) port.note?.("error", served.stale, { loadError: true, failure: LiveLoadFailure.StaleBuild });
       return url;
     } catch (error) {
       if (isLive)
@@ -1868,7 +1868,7 @@ export class PreviewService {
     if (!served.stale && last.loaded === key) return false;
     await port.load(last.project, served.entry, served.root, { loopback: served.loopback });
     last.loaded = key;
-    if (served.stale) port.note?.("error", served.stale, { loadError: true });
+    if (served.stale) port.note?.("error", served.stale, { loadError: true, failure: LiveLoadFailure.StaleBuild });
     return true;
   }
 }

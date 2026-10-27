@@ -68,6 +68,32 @@ stops recording, opts out and resets the id.
   `chat.error`'s `failure` or `refusal`, `PlanReview.failure`, `compaction_failed`'s `failure`, and
   a delegated chat turn's `failure` and `limit`, which main adds to its `turn_ended` (the harness
   ends the turn knowing only the words). Builders re-check every value against its vocabulary.
+  The refusals that cross as codes, by part: a rewind, its preview and Bring back newer version
+  (`RewindRefusal`, `RewindBlock`, `UndoRewindRefusal`, a plugin step's `HookRefusal`) on
+  `rewind_previewed`, `rewind_decided` and `rewind_undone`; a game or a folder for one
+  (`WorkspaceRefusal`) and an export (`ExportRefusal`) on `game_launch_failed`,
+  `game_location_picked`, `open_folder_picked`, `open_folder_sheet_closed`, `game_managed`,
+  `games_root_changed` and `game_export_finished`; a plugin's install, update, reinstall, switch or
+  removal (`PluginInstallProblem`, `PluginStateRefusal`) on `plugin_install_finished`,
+  `plugin_action_finished` and the sidebar's update toasts, while `plugin_updates_run` counts
+  `failed` and `declined` apart and `plugin_failed` says how a running plugin failed
+  (`PluginChange.failure`, a `PluginFailure`).
+  Live's status (`previewLive`) names why its page did not load (`loadFailure`, a
+  `LiveLoadFailure`: Chromium's error by kind, or the game's own build that failed or fell back to
+  the last one that worked) and why its renderer went away (`gone`); a load Electron refused
+  crosses IPC with its kind, and `live_game_shown` says both as `load_failure` and `crash_reason`.
+  The harness writes `refusal` (`RunStartRefusal`) beside `run_start_blocked`'s words for
+  `run_start_refused`, and a refused Resume throws a `ResumeRefusal`.
+- **Main's own facts**: a launch that may send keeps a small marker of its session in the data
+  folder (`analytics/session.json`, `main/session-marker.ts`): counts, enums, times and the app's
+  version only. The next launch reads it once and hands typed facts with its first bootstrap alone
+  (`Bootstrap.launch`): `previous_session_ended` (quit, unclean, update installed or interrupted,
+  with crashed pages, hangs, main errors and update failures counted) and `app_ready_measured`'s
+  start facts (`StartPassage`, and `BootState.failureCode`, a `BootFailure` or the sandbox's code).
+  Main's own uncaught errors and a window's hangs arrive as `app.diagnostic` (`app_error_caught`
+  with process `main`, `window_unresponsive`), background update failures as `update.failed`
+  (`update_background_failed`), agents that would not start as `harness.start-failed`'s
+  `failureCode` (`agents_start_failed`), and Relaunch to update answers a `RestartAnswer`.
 - **The welcome** keeps the step an unfinished welcome stood on (`studio.analytics.welcomeScreen`),
   so the next launch's `welcome_shown` says it resumed and where.
 - **Every event** carries app version, platform, language, a per-launch id, first launch, the
@@ -97,6 +123,8 @@ releases carry no analytics. `tests/conformance/analytics.test.ts` covers the bu
 gates, the CSP, the answer and the replay draw, screens, masking, the last pass and a yes or no
 while the chunk loads; `analytics-<area>.test.ts` cover each part's events;
 `renderer-state.test.ts` covers asking once per version and the replay draw;
-`analytics-failure-codes.test.ts` covers each failure code from where main names it to its event,
-with hostile values (words, paths, Node codes) that must read as none. A build with a key
+`analytics-failure-codes.test.ts` and its parts (`analytics-failure-codes-<part>.test.ts`:
+rewind, workspace, runs, launch, plugins) cover each failure code from where main names it to its
+event, with hostile values (words, paths, Node codes, `tests/helpers/failure-codes.ts`) that must
+read as none. A build with a key
 shows the extra `connect-src` origins in `dist/renderer/index.html`.

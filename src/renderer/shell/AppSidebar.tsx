@@ -13,14 +13,13 @@ import { BootstrapGate } from "../panels/BootstrapGate.tsx";
 import { Sidebar } from "../panels/Sidebar.tsx";
 import { useLaunch, usePlugins, useSidebarLibrary, useThreadsView, useUpdate } from "../state/hooks.ts";
 import { launchInSidebar } from "../state/launch.ts";
-import { pluginUpdates } from "../state/plugins.ts";
+import { distinctFailures, pluginUpdates } from "../state/plugins.ts";
 import type { Studio } from "../state/studio.ts";
 import { busyThreadIds, Room } from "../state/threads.ts";
-import { notifyProblem, ToastTone } from "../state/toasts.ts";
+import { notifyProblem } from "../state/toasts.ts";
 import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import type { Notifications } from "../use-notifications.ts";
-import { problemWords } from "../words.ts";
 import { trackNavClicked } from "./nav-analytics.ts";
 import { useCoveredByRemix } from "./RemixLayer.tsx";
 import type { Navigation } from "./use-navigation.ts";
@@ -34,7 +33,7 @@ function pinGame(app: Studio, game: GameProject, notifyFailure: (error: unknown)
   void app.saveGame(game.name, { pinned: !game.pinned }).then(
     () => trackGameManaged(action, ManageVia.Menu, ActionOutcome.Ok, game),
     (error: unknown) => {
-      trackGameManaged(action, ManageVia.Menu, ActionOutcome.Failed, game);
+      trackGameManaged(action, ManageVia.Menu, ActionOutcome.Failed, game, error);
       notifyFailure(error);
     },
   );
@@ -48,9 +47,9 @@ function usePluginUpdates(app: Studio) {
   const updating = usePlugins((s) => s.updating);
   /** Install every waiting update but the unticked ones. */
   const update = (skipped: ReadonlySet<string>): void => {
-    // One cause (no connection) refuses every update alike: it is said once.
+    // One cause (no connection) refuses every update alike: it is said once, with its code.
     void app.plugins.updateAll(skipped).then((failures) => {
-      for (const words of new Set(failures.map(problemWords))) app.notify(words, ToastTone.Error);
+      for (const failure of distinctFailures(failures)) notifyProblem(app.notify)(failure);
     });
   };
   return { waiting, updating, update };

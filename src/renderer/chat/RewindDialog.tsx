@@ -126,8 +126,7 @@ export function RewindDialog({
       current = false;
     };
   }, [threadId, eventId, messageId]);
-  const decided = (failure: unknown = null): void => {
-    const failed = failure !== null;
+  const decided = (failed: boolean, failure: unknown = null): void => {
     const choice = { restore, restoresByDefault: Boolean(files && restoresByDefault(files)), failed };
     track(AnalyticsEvent.RewindDecided, rewindConfirmedProperties(files, choice, failure));
   };
@@ -137,12 +136,12 @@ export function RewindDialog({
     void window.studio
       .rewindChat(threadId, eventId, messageId, files?.state === "restore" && restore)
       .then((result) => {
-        decided();
+        decided(false);
         onRewound(result);
         onDismiss();
       })
       .catch((err) => {
-        decided(err);
+        decided(true, err);
         setError(problemWords(err));
         setBusy(false);
       });

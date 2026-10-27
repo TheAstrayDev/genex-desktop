@@ -129,7 +129,7 @@ export function GameCoverDialog({
               void onSave({ cover: pending })
                 .then(managed.done)
                 .catch((error) => {
-                  managed.failed();
+                  managed.failed(error);
                   setError(problemWords(error));
                 })
                 .finally(() => setBusy(false));

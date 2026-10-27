@@ -22,8 +22,9 @@ import { HookHold, HookRefusal } from "../../src/shared/plugin-hooks.ts";
 import {
   rewindCode,
   rewindConfirmedProperties,
+  REWIND_UNDONE,
   rewindPreviewProperties,
-  rewindUndoneProperties,
+  rewindUndoFailedProperties,
   undoRewindCode,
 } from "../../src/renderer/analytics/chat-properties.ts";
 import { RewindFilesState } from "../../src/renderer/analytics/chat-vocabulary.ts";
@@ -93,14 +94,15 @@ describe("phase 3 analytics: a refused rewind says why", () => {
       "a rewind that went has no code",
     );
     const gone = await crossed(new CodedError(UndoRewindRefusal.Gone, undoRewindRefusalWords(UndoRewindRefusal.Gone)));
-    assert.deepEqual(rewindUndoneProperties(gone), { ok: false, code: UndoRewindRefusal.Gone });
-    assert.deepEqual(rewindUndoneProperties(), { ok: true });
+    assert.deepEqual(rewindUndoFailedProperties(gone), { ok: false, code: UndoRewindRefusal.Gone });
+    assert.deepEqual(REWIND_UNDONE, { ok: true });
     for (const [label, thrown] of HOSTILE_THROWS) {
       const refused = await crossed(thrown);
       assert.equal(rewindPreviewProperties(null, refused).code, null, label);
       assert.equal(rewindConfirmedProperties(files, choice, refused).code, null, label);
-      assert.deepEqual(rewindUndoneProperties(refused), { ok: false, code: null }, label);
-      assertClean(label, rewindUndoneProperties(refused));
+      assert.deepEqual(rewindUndoFailedProperties(refused), { ok: false, code: null }, label);
+      assertClean(label, rewindUndoFailedProperties(refused));
+      assert.deepEqual(rewindUndoFailedProperties(thrown), { ok: false, code: null }, `${label}, as thrown`);
     }
     const rewound = await crossed(new CodedError(RewindRefusal.Busy, "x"));
     assert.equal(undoRewindCode(rewound), null, "a rewind's refusal is not an undo's");

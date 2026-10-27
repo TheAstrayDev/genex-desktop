@@ -4,18 +4,19 @@
  * setup card's rows and a Roblox publish. Pure, so each is tested without a DOM; every time comes
  * in from the caller.
  */
-import { isUserCancelled } from "../../shared/errors.ts";
+import { errorCodeIn, isUserCancelled } from "../../shared/errors.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { type EventEnvelope, EventKind } from "../../shared/event-log.ts";
 import type { LiveBehindReason } from "../../shared/live-behind.ts";
 import { PluginSourceKind } from "../../shared/plugins.ts";
+import { LiveLoadFailure, PreviewGone } from "../../shared/preview-contract.ts";
 import type { StepRow, StepsCard } from "../chat/engine-steps.ts";
 import { GraphSelection, isPartSelection } from "../panels/inspector/selection.ts";
 import {
   type BuildsEventProperties,
   type BuildsEvent,
   type LiveGameShownProperties,
-  type LiveOutcome,
+  LiveOutcome,
   type LiveTrigger,
   NodeKind,
   type PlanningEnd,
@@ -69,6 +70,8 @@ export interface LiveShown {
   state: Record<string, unknown> | null;
   /** The game's random ref (`game-ref.ts`). */
   gameRef: string | null;
+  /** Why this game's page failed or went away, as the probe or the refusal said (`loadFailure`, `gone`); unchecked. */
+  failure?: { load: unknown; gone: unknown } | null;
 }
 
 const timeOf = (iso: string | null): number | null => {
@@ -90,21 +93,54 @@ export function liveShownProperties(shown: LiveShown): LiveGameShownProperties {
     game_playing: says.playing,
     draws_seen: (says.draws ?? 0) > 0,
     game_ref: shown.gameRef,
+    load_failure: oneOf(LiveLoadFailure, shown.failure?.load),
+    crash_reason: oneOf(PreviewGone, shown.failure?.gone),
   };
 }
 
 /**
+ * `live_game_shown` for a load main refused before any page came (`loadLive`): its kind when Electron
+ * named one (`LiveLoadFailure`); null for a load another navigation replaced, which reports itself.
+ */
+export function liveRefusedProperties(
+  load: { since: number; trigger?: LiveTrigger },
+  refusal: unknown,
+  at: { now: number; gameRef: string | null },
+): LiveGameShownProperties | null {
+  const failure = errorCodeIn(LiveLoadFailure, refusal);
+  if (failure === LiveLoadFailure.Aborted) return null;
+  return liveShownProperties({
+    outcome: LiveOutcome.LoadFailed,
+    load,
+    now: at.now,
+    firstInLaunch: false,
+    gameCreatedAt: null,
+    firstMessageAt: null,
+    state: null,
+    gameRef: at.gameRef,
+    failure: { load: failure, gone: null },
+  });
+}
+
+/**
  * Whether a shown game looks blank: it has drawn nothing for `BLANK_AFTER_MS` since it showed.
- * Draw counters that are not live (null) count as nothing drawn, and say so in the event.
+ * Draw counters that are not live (null) count as nothing drawn, and say so in the event; so does a
+ * page whose loop stopped answering (`unresponsive`, only a plain `true` counts).
  */
 export function blankSuspected(
   shownAt: number,
   now: number,
   state: Record<string, unknown> | null,
+  unresponsive: unknown = false,
 ): Props<typeof BuildsEvent.LiveBlankSuspected> | null {
   const says = gameSays(state);
   if ((says.draws ?? 0) > 0 || now - shownAt < BLANK_AFTER_MS) return null;
-  return { ms_after_shown: elapsedMs(shownAt, now), draws_counted: says.draws !== null, game_playing: says.playing };
+  return {
+    ms_after_shown: elapsedMs(shownAt, now),
+    draws_counted: says.draws !== null,
+    game_playing: says.playing,
+    unresponsive: unresponsive === true,
+  };
 }
 
 /** A Reload: what waited for it, and whether it came right after the last one. */

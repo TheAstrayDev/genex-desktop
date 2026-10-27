@@ -4,25 +4,30 @@
  *
  * An error is told by its kind, its built-in type and a fingerprint of where it was thrown (the top
  * stack frames, file names and positions only), never by its message, which can quote anything.
- * Long tasks are summed every few minutes, by screen. What a boot screen, main's own errors or a
- * hung window would add needs main to say it first, so it is not here.
+ * Long tasks are summed every few minutes, by screen. What a boot screen or the session before
+ * this one would add comes from main with the first bootstrap (`Bootstrap.launch`), and main's own
+ * errors and a hung window as `UiEvent.AppDiagnostic`: typed facts only, each re-checked here.
  */
+import { MainDiagnostic, RendererGone, SessionExit } from "../../../shared/app-session.ts";
 import {
   type ReadyUpdate,
+  RestartAnswer,
   type UpdateAction,
   type UpdateCheckResult,
   UpdateCheckStatus,
+  UpdateFailure,
 } from "../../../shared/app-update.ts";
-import { MINUTE_MS } from "../../../shared/duration.ts";
+import { BootFailure, type BootFailureCode, SandboxProblemCode, StartPassage } from "../../../shared/boot.ts";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../../shared/duration.ts";
 import { EngineStatusCode } from "../../../shared/engine-descriptor.ts";
 import { isStudioErrorCode, type StudioErrorCode } from "../../../shared/error-codes.ts";
 import { UiEvent } from "../../../shared/ui-events.ts";
-import { SessionStatus } from "../../state/session.ts";
+import { type SessionState, SessionStatus } from "../../state/session.ts";
 import type { Studio } from "../../state/studio.ts";
 import { ToastTone, type ToastsState } from "../../state/toasts.ts";
 import { guarded, track } from "../client.ts";
 import type { AreaObservers } from "../observers.ts";
-import { type CountBucket, countBucket, elapsedMs } from "../properties.ts";
+import { type CountBucket, countBucket, elapsedMs, oneOf } from "../properties.ts";
 import { currentScreen } from "../screens.ts";
 
 /** How often the long tasks seen are summed and sent, while there were any. */
@@ -31,6 +36,8 @@ export const STALL_SUMMARY_MS = 5 * MINUTE_MS;
 const FINGERPRINT_FRAMES = 5;
 /** How many times one error (by fingerprint) is sent in a launch: a loop that throws is one problem. */
 const ERROR_REPEATS_MAX = 3;
+/** The longest hang a window reports: anything longer is not a measure. */
+const HANG_MAX_MS = DAY_MS;
 
 export const LaunchEvent = {
   AppReadyMeasured: "app_ready_measured",
@@ -43,6 +50,10 @@ export const LaunchEvent = {
   UpdateRestartPressed: "update_restart_pressed",
   UpdateCheckFinished: "update_check_finished",
   ErrorToastShown: "error_toast_shown",
+  PreviousSessionEnded: "previous_session_ended",
+  UpdateBackgroundFailed: "update_background_failed",
+  AgentsStartFailed: "agents_start_failed",
+  WindowUnresponsive: "window_unresponsive",
 } as const;
 
 /** Where an error was caught. */
@@ -55,8 +66,8 @@ export const ErrorKind = {
 } as const;
 export type ErrorKind = (typeof ErrorKind)[keyof typeof ErrorKind];
 
-/** The process an error was caught in; main's own are not sent yet. */
-export const ErrorProcess = { Renderer: "renderer" } as const;
+/** The process an error was caught in: the window's, or main's own (`UiEvent.AppDiagnostic`). */
+export const ErrorProcess = { Renderer: "renderer", Main: "main" } as const;
 export type ErrorProcess = (typeof ErrorProcess)[keyof typeof ErrorProcess];
 
 /** What the error screen offers. */
@@ -67,15 +78,8 @@ export type ErrorScreenAction = (typeof ErrorScreenAction)[keyof typeof ErrorScr
 export const UpdateSurface = { Sidebar: "sidebar", About: "about" } as const;
 export type UpdateSurface = (typeof UpdateSurface)[keyof typeof UpdateSurface];
 
-/**
- * What Relaunch came to. Main answers false both when it kept a running build going and when there
- * was nothing to install, so the two share one value until it says which.
- */
-export const RestartOutcome = {
-  Relaunching: "relaunching",
-  NotRelaunched: "not_relaunched",
-  Failed: "failed",
-} as const;
+/** What Relaunch came to: main's answer (`RestartAnswer`), or failed when the call itself did. */
+export const RestartOutcome = { ...RestartAnswer, Failed: "failed" } as const;
 export type RestartOutcome = (typeof RestartOutcome)[keyof typeof RestartOutcome];
 
 /** A Check for Updates whose call itself failed, beside the statuses main answers. */
@@ -103,10 +107,138 @@ export type LaunchEventProperties = {
   [LaunchEvent.UiStallSummarized]: StallSummaryProperties;
   [LaunchEvent.DiagnosticsCopied]: { ok: boolean };
   [LaunchEvent.UpdateReady]: { action: UpdateAction; at_bootstrap: boolean };
-  [LaunchEvent.UpdateRestartPressed]: { surface: UpdateSurface; outcome: RestartOutcome; waited_ms: number | null };
+  [LaunchEvent.UpdateRestartPressed]: {
+    surface: UpdateSurface;
+    /** Null when main answered something that is not a `RestartAnswer`. */
+    outcome: RestartOutcome | null;
+    waited_ms: number | null;
+  };
   [LaunchEvent.UpdateCheckFinished]: UpdateCheckProperties;
   [LaunchEvent.ErrorToastShown]: ErrorToastProperties;
+  [LaunchEvent.PreviousSessionEnded]: PreviousSessionProperties;
+  [LaunchEvent.UpdateBackgroundFailed]: { stage: UpdateFailure | null };
+  [LaunchEvent.AgentsStartFailed]: { code: BootFailureCode | null };
+  [LaunchEvent.WindowUnresponsive]: { duration_ms: number | null };
 };
+
+/** How long the session before this one ran, in steps that say enough. */
+export const UptimeBucket = {
+  UnderMinute: "0-1m",
+  Minutes: "1-10m",
+  Hour: "10-60m",
+  Hours: "1-4h",
+  Long: "4h+",
+} as const;
+export type UptimeBucket = (typeof UptimeBucket)[keyof typeof UptimeBucket];
+
+const UPTIME_LIMITS: ReadonlyArray<[number, UptimeBucket]> = [
+  [MINUTE_MS, UptimeBucket.UnderMinute],
+  [10 * MINUTE_MS, UptimeBucket.Minutes],
+  [HOUR_MS, UptimeBucket.Hour],
+  [4 * HOUR_MS, UptimeBucket.Hours],
+];
+
+/** The bucket an uptime falls in, or null when it is not a duration. */
+export function uptimeBucket(ms: unknown): UptimeBucket | null {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return null;
+  return UPTIME_LIMITS.find(([limit]) => ms < limit)?.[1] ?? UptimeBucket.Long;
+}
+
+/** Fields of something main handed over, read as unknown. */
+const isRecord = (value: unknown): value is { readonly [field: string]: unknown } =>
+  typeof value === "object" && value !== null;
+
+/** A count main handed over: a whole number from 0, else 0. */
+const countOf = (value: unknown): number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
+
+/** `previous_session_ended`'s properties. */
+export type PreviousSessionProperties = {
+  exit: SessionExit;
+  renderer_crashes: CountBucket;
+  last_crash_reason: RendererGone | null;
+  hangs: CountBucket;
+  main_errors: CountBucket;
+  update_failures: CountBucket;
+  uptime_bucket: UptimeBucket | null;
+};
+
+/** How the previous session ended (`LaunchFacts.previous`), re-checked; null when it says no known end. */
+export function previousSessionProperties(previous: unknown): PreviousSessionProperties | null {
+  if (!isRecord(previous)) return null;
+  const exit = oneOf(SessionExit, previous.exit);
+  if (!exit) return null;
+  return {
+    exit,
+    renderer_crashes: countBucket(countOf(previous.rendererCrashes)),
+    last_crash_reason: oneOf(RendererGone, previous.lastCrash),
+    hangs: countBucket(countOf(previous.hangs)),
+    main_errors: countBucket(countOf(previous.mainErrors)),
+    update_failures: countBucket(countOf(previous.updateFailures)),
+    uptime_bucket: uptimeBucket(previous.uptimeMs),
+  };
+}
+
+/** A held start's code, re-checked: the boot's own, or the sandbox's. */
+export const bootFailureCode = (value: unknown): BootFailureCode | null =>
+  oneOf(BootFailure, value) ?? oneOf(SandboxProblemCode, value);
+
+/** `app_ready_measured`'s start facts. */
+export type StartProperties = {
+  start_passed: StartPassage[];
+  start_failure: BootFailureCode | null;
+  start_retries: CountBucket;
+};
+
+/** How this launch started (`LaunchFacts.start`), re-checked; null when there is nothing to read. */
+export function startProperties(start: unknown): StartProperties | null {
+  if (!isRecord(start)) return null;
+  const steps: readonly unknown[] = Array.isArray(start.passed) ? start.passed : [];
+  const passed = steps.map((step) => oneOf(StartPassage, step)).filter((step) => step !== null);
+  return {
+    start_passed: [...new Set(passed)],
+    start_failure: bootFailureCode(start.failure),
+    start_retries: countBucket(countOf(start.retries)),
+  };
+}
+
+/** `update_background_failed`: the stage an update the app looked for on its own failed at. */
+export const updateFailedProperties = (payload: unknown): { stage: UpdateFailure | null } => ({
+  stage: isRecord(payload) ? oneOf(UpdateFailure, payload.stage) : null,
+});
+
+/** `agents_start_failed`: why an open studio's agents would not start, as its code. */
+export const agentsStartFailedProperties = (payload: unknown): { code: BootFailureCode | null } => ({
+  code: isRecord(payload) ? bootFailureCode(payload.failureCode) : null,
+});
+
+/** Main's own error kinds, as the window's error kinds name them. */
+const MAIN_ERROR_KIND = {
+  [MainDiagnostic.Uncaught]: ErrorKind.Uncaught,
+  [MainDiagnostic.Rejection]: ErrorKind.Rejection,
+} as const;
+
+/** One of main's own errors as `app_error_caught`: its kind and built-in type; null for anything else. */
+export function mainErrorProperties(payload: unknown): AppErrorProperties | null {
+  if (!isRecord(payload)) return null;
+  const kind = oneOf(MainDiagnostic, payload.kind);
+  if (kind === null || kind === MainDiagnostic.Unresponsive) return null;
+  return {
+    process: ErrorProcess.Main,
+    kind: MAIN_ERROR_KIND[kind],
+    error_type: errorType({ name: payload.errorType }),
+    fatal: false,
+    fingerprint: null,
+  };
+}
+
+/** A window that answered again as `window_unresponsive`; null for any other diagnostic. */
+export function unresponsiveProperties(payload: unknown): { duration_ms: number | null } | null {
+  if (!isRecord(payload) || payload.kind !== MainDiagnostic.Unresponsive) return null;
+  const ms = payload.durationMs;
+  const measured = typeof ms === "number" && Number.isFinite(ms) && ms >= 0 && ms <= HANG_MAX_MS;
+  return { duration_ms: measured ? Math.round(ms) : null };
+}
 
 /** `error_toast_shown`'s properties: the failure's code (null when it had none) and the screen it showed on. */
 export type ErrorToastProperties = { code: StudioErrorCode | null; screen: string };
@@ -191,14 +323,26 @@ export function appErrorProperties(error: unknown, kind: ErrorKind): AppErrorPro
 /** How many times each error was sent in this window. */
 const errorsSent = new Map<string, number>();
 
-/** Send a caught error, each fingerprint at most a few times a launch. */
-export function reportError(error: unknown, kind: ErrorKind): void {
-  const properties = appErrorProperties(error, kind);
-  const key = `${kind}:${properties.fingerprint ?? properties.error_type}`;
+/** Send an error, each (by process, kind and fingerprint or type) at most a few times a launch. */
+function sendError(properties: AppErrorProperties): void {
+  const key = `${properties.process}:${properties.kind}:${properties.fingerprint ?? properties.error_type}`;
   const sent = errorsSent.get(key) ?? 0;
   if (sent >= ERROR_REPEATS_MAX) return;
   errorsSent.set(key, sent + 1);
   track(LaunchEvent.AppErrorCaught, properties);
+}
+
+/** Send a caught error, each fingerprint at most a few times a launch. */
+export function reportError(error: unknown, kind: ErrorKind): void {
+  sendError(appErrorProperties(error, kind));
+}
+
+/** One of main's diagnostics (`UiEvent.AppDiagnostic`): its own error, or a window that answered again. */
+function reportMainDiagnostic(payload: unknown): void {
+  const error = mainErrorProperties(payload);
+  if (error) sendError(error);
+  const hang = unresponsiveProperties(payload);
+  if (hang) track(LaunchEvent.WindowUnresponsive, hang);
 }
 
 /** `ui_stall_summarized`'s properties. */
@@ -268,15 +412,21 @@ function watchErrors(): () => void {
   };
 }
 
-/** What this launch learned about itself, for the first screen's measure and the update's wait. */
-const launch: { bootstrapMs: number | null; firstScreen: boolean; updateReadyAt: number | null } = {
+/** What this launch learned about itself, for the first screen's measure, the update's wait and the session before. */
+const launch: {
+  bootstrapMs: number | null;
+  firstScreen: boolean;
+  updateReadyAt: number | null;
+  previousSent: boolean;
+} = {
   bootstrapMs: null,
   firstScreen: false,
   updateReadyAt: null,
+  previousSent: false,
 };
 
-/** `app_ready_measured`'s properties. */
-export type AppReadyProperties = {
+/** `app_ready_measured`'s properties; the start's facts only in the window the launch opened first. */
+export type AppReadyProperties = Partial<StartProperties> & {
   /** From the window's start to its first real screen. */
   window_to_first_screen_ms: number;
   /** From the stores' start to the bootstrap's answer; null when it had not answered. */
@@ -287,7 +437,7 @@ export type AppReadyProperties = {
   engines_ready_count: number;
 };
 
-/** The first screen's measure, from what the stores hold then. */
+/** The first screen's measure, from what the stores hold then, with how the launch started when it says. */
 export function appReadyProperties(
   state: {
     status: SessionStatus;
@@ -298,6 +448,7 @@ export function appReadyProperties(
   },
   sinceWindowStart: number,
   bootstrapMs: number | null,
+  start: unknown = null,
 ): AppReadyProperties {
   return {
     window_to_first_screen_ms: Math.max(0, Math.round(sinceWindowStart)),
@@ -306,6 +457,7 @@ export function appReadyProperties(
     first_launch: state.firstLaunch || state.welcoming,
     games_bucket: countBucket(state.games),
     engines_ready_count: state.enginesReady,
+    ...startProperties(start),
   };
 }
 
@@ -328,7 +480,21 @@ export function reportFirstScreen(
     games: app.library.getState().games.length,
     enginesReady: ready.length,
   };
-  track(LaunchEvent.AppReadyMeasured, appReadyProperties(state, sinceWindowStart, launch.bootstrapMs));
+  const start = session.launch?.start ?? null;
+  track(LaunchEvent.AppReadyMeasured, appReadyProperties(state, sinceWindowStart, launch.bootstrapMs, start));
+}
+
+/** Send how the session before this one ended, once, when the first bootstrap brings it. */
+function followPreviousSession(app: Studio): () => void {
+  const send = (state: Pick<SessionState, "launch">): void => {
+    if (launch.previousSent) return;
+    const properties = previousSessionProperties(state.launch?.previous);
+    if (!properties) return;
+    launch.previousSent = true;
+    track(LaunchEvent.PreviousSessionEnded, properties);
+  };
+  send(app.session.getState());
+  return app.session.subscribe(guarded(send));
 }
 
 /** The bootstrap as it moves: its first answer, and a Retry from its failure until it answers. */
@@ -416,18 +582,17 @@ function followUpdate(
   );
 }
 
-/** Relaunch to update, pressed: run it, send what it came to, and hand its answer back. */
+/** Relaunch to update, pressed: run it, send what it came to, and hand back whether it relaunches. */
 export async function trackedRestart(
   surface: UpdateSurface,
-  run: () => Promise<boolean>,
+  run: () => Promise<RestartAnswer>,
   clock: () => number = Date.now,
 ): Promise<boolean> {
   const waited = launch.updateReadyAt === null ? null : elapsedMs(launch.updateReadyAt, clock());
   try {
-    const relaunching = await run();
-    const outcome = relaunching ? RestartOutcome.Relaunching : RestartOutcome.NotRelaunched;
+    const outcome = oneOf(RestartAnswer, await run());
     track(LaunchEvent.UpdateRestartPressed, { surface, outcome, waited_ms: waited });
-    return relaunching;
+    return outcome === RestartAnswer.Relaunching;
   } catch (error) {
     track(LaunchEvent.UpdateRestartPressed, { surface, outcome: RestartOutcome.Failed, waited_ms: waited });
     throw error;
@@ -452,7 +617,11 @@ function watchErrorToasts(app: Studio): () => void {
   );
 }
 
-/** What this area hears: main's update announcement, the session, the window's errors, its long tasks and error toasts. */
+/**
+ * What this area hears: main's update announcements and failures, its diagnostics and agents that
+ * would not start, the session (with how the one before it ended), the window's errors, its long
+ * tasks and error toasts.
+ */
 export function createLaunchObservers(
   clock: () => number = Date.now,
   later: (run: () => void) => void = (run) => void setTimeout(run, 0),
@@ -460,14 +629,26 @@ export function createLaunchObservers(
   const announced = new Set<string>();
   return {
     ui: (event) => {
-      if (event.type !== UiEvent.UpdateReady) return;
-      announced.add(updateKey(event.payload));
-      launch.updateReadyAt = clock();
-      track(LaunchEvent.UpdateReady, { action: event.payload.action, at_bootstrap: false });
+      switch (event.type) {
+        case UiEvent.UpdateReady:
+          announced.add(updateKey(event.payload));
+          launch.updateReadyAt = clock();
+          track(LaunchEvent.UpdateReady, { action: event.payload.action, at_bootstrap: false });
+          return;
+        case UiEvent.UpdateFailed:
+          track(LaunchEvent.UpdateBackgroundFailed, updateFailedProperties(event.payload));
+          return;
+        case UiEvent.HarnessStartFailed:
+          track(LaunchEvent.AgentsStartFailed, agentsStartFailedProperties(event.payload));
+          return;
+        case UiEvent.AppDiagnostic:
+          reportMainDiagnostic(event.payload);
+      }
     },
     start: (app) => {
       const stops = [
         followBootstrap(app, clock),
+        followPreviousSession(app),
         followUpdate(app, announced, clock, later),
         watchErrors(),
         watchStalls(),

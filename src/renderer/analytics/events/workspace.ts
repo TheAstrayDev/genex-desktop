@@ -1,4 +1,5 @@
 /** Home, starting and opening games, navigation and Settings (plan §1.4): how people get to a game and around the app. */
+import type { ExportRefusal, WorkspaceRefusal } from "../../../shared/game-library.ts";
 import type { FolderPreflight, ProjectKind } from "../../../shared/game-project.ts";
 import type { ReasoningEffort } from "../../../shared/model-preferences.ts";
 import type { EngineId } from "../../../shared/providers.ts";
@@ -94,6 +95,9 @@ export const WorkspaceEvent = {
 } as const;
 export type WorkspaceEvent = (typeof WorkspaceEvent)[keyof typeof WorkspaceEvent];
 
+/** An export's refusal: its own (`ExportRefusal`) or the library's (an unknown game). */
+export type ExportCode = ExportRefusal | WorkspaceRefusal;
+
 /** A finished action's two ends, without the cancel some actions have. */
 type Settled = typeof ActionOutcome.Ok | typeof ActionOutcome.Failed;
 
@@ -130,6 +134,8 @@ export type WorkspaceEventProperties = {
     reason: LaunchFailReason;
     elapsed_ms: number;
     custom_location: boolean;
+    /** The refusal's code (`WorkspaceRefusal`); null when main named none. */
+    code: WorkspaceRefusal | null;
   };
   [WorkspaceEvent.GameCreated]: {
     from: GameCreatedFrom;
@@ -148,8 +154,13 @@ export type WorkspaceEventProperties = {
     held_ms?: number;
   };
   [WorkspaceEvent.FirstMessageAction]: { action: FirstMessageAction; held_state: HeldState };
-  [WorkspaceEvent.GameLocationPicked]: { outcome: LocationOutcome; pick_ms?: number };
-  [WorkspaceEvent.OpenFolderPicked]: { outcome: FolderPickOutcome; pick_ms: number; inspect_ms?: number };
+  [WorkspaceEvent.GameLocationPicked]: { outcome: LocationOutcome; pick_ms?: number; code?: WorkspaceRefusal | null };
+  [WorkspaceEvent.OpenFolderPicked]: {
+    outcome: FolderPickOutcome;
+    pick_ms: number;
+    inspect_ms?: number;
+    code?: WorkspaceRefusal | null;
+  };
   [WorkspaceEvent.OpenFolderSheetViewed]: {
     candidates: number;
     must_choose: boolean;
@@ -169,6 +180,7 @@ export type WorkspaceEventProperties = {
     trust_toggled: boolean;
     kind: ProjectKind | null;
     adopt_ms?: number;
+    code?: WorkspaceRefusal | null;
   };
   [WorkspaceEvent.NavClicked]: { item: NavItem; mode: PlayMode; compact: boolean };
   [WorkspaceEvent.ShortcutUsed]: { key: ShortcutKey; did_nothing: boolean };
@@ -199,6 +211,7 @@ export type WorkspaceEventProperties = {
     outcome: ActionOutcome;
     ms_since_created_bucket: AgeBucket | null;
     game_ref: string | null;
+    code?: WorkspaceRefusal | null;
   };
   [WorkspaceEvent.GameExportFinished]: {
     outcome: Settled;
@@ -206,6 +219,7 @@ export type WorkspaceEventProperties = {
     excluded_bucket?: CountBucket;
     export_ms: number;
     game_ref: string | null;
+    code?: ExportCode | null;
   };
   [WorkspaceEvent.FreeSpaceAnswered]: {
     surface: StorageSurface;
@@ -215,7 +229,7 @@ export type WorkspaceEventProperties = {
     skipped_games?: number;
     failed?: boolean;
   };
-  [WorkspaceEvent.GamesRootChanged]: { outcome: GamesRootOutcome; choose_ms: number };
+  [WorkspaceEvent.GamesRootChanged]: { outcome: GamesRootOutcome; choose_ms: number; code?: WorkspaceRefusal | null };
   [WorkspaceEvent.StageViewChanged]: {
     from: StageView;
     to: StageView;

@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PostHog } from "posthog-js";
 import { createStore } from "zustand/vanilla";
-import { UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
+import { RestartAnswer, UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
 import { startAnalytics } from "../../src/renderer/analytics/client.ts";
 import { AnalyticsEvent } from "../../src/renderer/analytics/events.ts";
@@ -235,7 +235,7 @@ describe("updates", () => {
     stop?.();
 
     now = 70_000;
-    assert.equal(await trackedRestart(UpdateSurface.About, async () => false, clock), false);
+    assert.equal(await trackedRestart(UpdateSurface.About, async () => RestartAnswer.Declined, clock), false);
     await assert.rejects(trackedRestart(UpdateSurface.Sidebar, async () => Promise.reject(new Error("x")), clock));
     assert.deepEqual(
       sent.map((s) => [s.event, s.properties]),
@@ -244,7 +244,7 @@ describe("updates", () => {
         [AnalyticsEvent.UpdateReady, { action: "download", at_bootstrap: false }],
         [
           AnalyticsEvent.UpdateRestartPressed,
-          { surface: "about", outcome: RestartOutcome.NotRelaunched, waited_ms: 60_000 },
+          { surface: "about", outcome: RestartOutcome.Declined, waited_ms: 60_000 },
         ],
         [
           AnalyticsEvent.UpdateRestartPressed,

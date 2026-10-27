@@ -390,9 +390,14 @@ export function rewindConfirmedProperties(
   };
 }
 
-/** `rewind_undone`: whether the newer version came back, and the code it was refused with when not. */
-export const rewindUndoneProperties = (failure: unknown = null): Props<typeof ChatEvent.RewindUndone> =>
-  failure === null ? { ok: true } : { ok: false, code: undoRewindCode(failure) };
+/** `rewind_undone` when the newer version came back. */
+export const REWIND_UNDONE: Props<typeof ChatEvent.RewindUndone> = { ok: true };
+
+/** `rewind_undone` when it was refused: the refusal's code, never its words. */
+export const rewindUndoFailedProperties = (failure: unknown): Props<typeof ChatEvent.RewindUndone> => ({
+  ok: false,
+  code: undoRewindCode(failure),
+});
 
 /** `rewind_decided` on Cancel. */
 export const REWIND_CANCELLED: Props<typeof ChatEvent.RewindDecided> = {

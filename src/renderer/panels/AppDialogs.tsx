@@ -212,7 +212,7 @@ function openPickedFolder(
       onEnterProject(opened.name);
     })
     .catch((error: unknown) => {
-      const end = { outcome: SheetOutcome.Failed, at: Date.now(), adoptStartedAt: startedAt };
+      const end = { outcome: SheetOutcome.Failed, at: Date.now(), adoptStartedAt: startedAt, failure: error };
       track(AnalyticsEvent.OpenFolderSheetClosed, sheetClosedProperties(answer.facts, end));
       notifyProblem(app.notify)(error);
     })

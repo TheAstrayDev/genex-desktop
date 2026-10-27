@@ -9,7 +9,9 @@
  * name those producers pass is a key of {@link UiEventMap}, and that every key is still produced.
  */
 import type { AgentScreenEvent, AgentScreenFrame } from "./agent-screen.ts";
-import type { ReadyUpdate } from "./app-update.ts";
+import type { ReadyUpdate, UpdateFailure } from "./app-update.ts";
+import type { MainDiagnostic } from "./app-session.ts";
+import type { BootFailureCode } from "./boot.ts";
 import type { AssetDeliveredPayload } from "./game-assets.ts";
 import type { LiveBehindEvent } from "./live-behind.ts";
 import type { McpChange } from "./mcp.ts";
@@ -95,7 +97,7 @@ export interface UiEventMap {
   "harness.log": { line: string; stream: "stdout" | "stderr" };
   "harness.boot": Partial<BootNotice>;
   /** The open studio's harness would not start (main's own, never the harness's): why, for its line. */
-  "harness.start-failed": { failure: string };
+  "harness.start-failed": { failure: string; failureCode?: BootFailureCode };
   "seed.upgraded": { added: string[]; updated: string[]; kept: string[]; retired: string[] };
   "watchdog.triggered": { reason: string; snapshot: string | null };
   "watchdog.recovered": { reason: string; ok: boolean; reseeded?: boolean };
@@ -105,6 +107,10 @@ export interface UiEventMap {
   "notification.open": { id: string };
   /** A new version of the app is downloaded; a restart installs it (`main/auto-update.ts`). */
   "update.ready": ReadyUpdate;
+  /** An update the app looked for on its own failed, at `stage` (`main/auto-update.ts`). */
+  "update.failed": { stage?: UpdateFailure };
+  /** Main's own process caught an error nowhere, or a window answered again after `durationMs`. */
+  "app.diagnostic": { kind?: MainDiagnostic; durationMs?: number; errorType?: string };
 
   // — engines and models —
   "engines.changed": { engine?: string };
@@ -277,6 +283,8 @@ export const UiEvent = {
   StudioReady: "studio.ready",
   NotificationOpen: "notification.open",
   UpdateReady: "update.ready",
+  UpdateFailed: "update.failed",
+  AppDiagnostic: "app.diagnostic",
   EnginesChanged: "engines.changed",
   EngineAuth: "engine.auth",
   EngineFallback: "engine.fallback",

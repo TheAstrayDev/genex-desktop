@@ -11,6 +11,7 @@ import { pathLeaf } from "../../shared/path-label.ts";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import { elapsedMs } from "../analytics/properties.ts";
+import { workspaceCode } from "../analytics/workspace-properties.ts";
 import { LocationOutcome } from "../analytics/workspace-vocabulary.ts";
 import { inspectPickedFolder } from "../open-folder.ts";
 import {
@@ -79,10 +80,12 @@ function useChipAsks({ location, onLocation, onInspect, onProblem }: ChipProps) 
   const chooseAnother = () =>
     ask(async () => {
       const started = Date.now();
-      const picked = (outcome: LocationOutcome): void =>
-        track(AnalyticsEvent.GameLocationPicked, { outcome, pick_ms: elapsedMs(started, Date.now()) });
+      const picked = (outcome: LocationOutcome, failure?: unknown): void => {
+        const code = outcome === LocationOutcome.Refused ? { code: workspaceCode(failure) } : {};
+        track(AnalyticsEvent.GameLocationPicked, { outcome, pick_ms: elapsedMs(started, Date.now()), ...code });
+      };
       const chosen = await window.studio.pickGameLocation().catch((error: unknown) => {
-        picked(LocationOutcome.Refused);
+        picked(LocationOutcome.Refused, error);
         throw error;
       });
       picked(chosen ? LocationOutcome.Chosen : LocationOutcome.Cancelled);
