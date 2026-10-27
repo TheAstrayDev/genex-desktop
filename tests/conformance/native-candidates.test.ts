@@ -52,6 +52,35 @@ function mac(): CandidateDeps & { asked: string[] } {
 }
 
 describe("Runtime candidates on Windows", () => {
+  it("resolve a reviewed drive path without looking in the registry", async () => {
+    const pc = windowsPc({});
+    assert.deepEqual(await candidatePaths("D:/Genex-Local-Models/hunyuan/python.exe", pc), [
+      "D:\\Genex-Local-Models\\hunyuan\\python.exe",
+    ]);
+    assert.deepEqual(pc.asked, []);
+  });
+  it("keeps local drive paths off a Mac, and resolves Windows separators and spaces on Windows", async () => {
+    assert.deepEqual(await candidatePaths("D:/Genex-Local-Models/python.exe", mac()), []);
+    assert.deepEqual(await candidatePaths("D:\\Local Models\\python.exe", windowsPc({})), [
+      "D:\\Local Models\\python.exe",
+    ]);
+  });
+  it("resolves no unsafe drive path and performs no filesystem or registry lookup for it", async () => {
+    for (const candidate of [
+      "D:python.exe",
+      "D:/../python.exe",
+      "D:/models/./python.exe",
+      "D:/models//python.exe",
+      "D:/models/python.exe:stream",
+      "\\\\server\\share\\python.exe",
+      "\\\\?\\D:\\python.exe",
+      "D:/models/py\u0000thon.exe",
+    ]) {
+      const pc = windowsPc({});
+      assert.deepEqual(await candidatePaths(candidate, pc), [], candidate);
+      assert.deepEqual(pc.asked, [], candidate);
+    }
+  });
   it("try every installed Blender in Program Files, newest version first", async () => {
     const pc = windowsPc({
       folders: { [`${PROGRAM_FILES}\\Blender Foundation`]: ["Blender 4.2", "Blender 10.0", "blender 5.2", "Other"] },

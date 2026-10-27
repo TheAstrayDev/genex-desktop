@@ -1,6 +1,7 @@
 /**
  * Where a native runtime's declared candidates point on this computer (`nativeRuntimes[].candidates`,
- * checked by `native-manifest.ts`). A candidate is an absolute POSIX path, a path under a folder
+ * checked by `native-manifest.ts`). A candidate is an absolute POSIX path, a Windows drive path
+ * inside a Windows-specific platform list, or a path under a folder
  * Genex knows (`home:`, `studio:`, `storage:`, and on Windows `programfiles:`, `programfilesx86:`,
  * `localappdata:`), a path beside the program Windows opens a file type with (`opens:.blend/…`),
  * a path inside a Microsoft Store package whose name starts so (`package:<name>/…`), or the file
@@ -17,6 +18,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { StudioPlatform } from "../../shared/boot.ts";
+import { assertRelativePath } from "../paths.ts";
 
 const run = promisify(execFile);
 
@@ -173,9 +175,23 @@ function settingPath(key: string, deps: CandidateDeps): string[] {
   return absolute ? [chosen] : [];
 }
 
+/** A reviewed local drive candidate; never resolved on another operating system. */
+async function drivePaths(candidate: string, deps: CandidateDeps): Promise<string[]> {
+  if (deps.platform !== StudioPlatform.Windows) return [];
+  const relative = candidate.slice(3).replaceAll("\\", "/");
+  try {
+    assertRelativePath(relative);
+    if (relative.includes(":")) return [];
+  } catch {
+    return [];
+  }
+  return expand(candidate.slice(0, 3), relative, deps);
+}
+
 /** Every path `candidate` stands for on this computer, in the order to try them; none when it means nothing here. */
 export async function candidatePaths(candidate: string, deps: CandidateDeps): Promise<string[]> {
   const windows = deps.platform === StudioPlatform.Windows;
+  if (LOCAL_WINDOWS_PATH.test(candidate)) return drivePaths(candidate, deps);
   if (candidate.startsWith("/")) return windows ? [] : expand("/", candidate.slice(1), deps);
   const colon = candidate.indexOf(":");
   const root = candidate.slice(0, colon),

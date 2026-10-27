@@ -6,7 +6,9 @@ import {
   type PluginNativeJob,
   type PluginNativeArg,
   type PluginRuntimePin,
+  type PluginRuntimeCandidates,
 } from "../../shared/plugins.ts";
+import { StudioPlatform } from "../../shared/boot.ts";
 import { assertRelativePath } from "../paths.ts";
 import { PLUGIN_ID } from "../../shared/plugin-id.ts";
 /** Runtime, job and value names follow the plugin id rule. */
@@ -28,6 +30,8 @@ const PACKAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$/;
 const WILDCARD = "*";
 /** What Windows reads as a separator or a drive inside a path a candidate joins. */
 const WINDOWS_SEPARATORS = /[\\:]/;
+/** A local Windows drive; accepted only inside a Windows-specific candidate list. */
+const WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 const ARCHIVE_FORMATS: string[] = Object.values(RuntimeArchive);
 const PLATFORMS: string[] = Object.values(NativePlatform);
 const ARG_SOURCES = ["package", "input", "output", "value"];
@@ -38,6 +42,7 @@ const NATIVE_MANIFEST_LIMITS = {
   jobs: 8,
   labelChars: 120,
   candidates: 16,
+  platforms: 4,
   versionArgs: 16,
   versionPatternChars: 200,
   urlChars: 2048,
@@ -65,6 +70,7 @@ const MESSAGE = {
   DuplicatePlatform: "Each pinned native installation needs a platform of its own",
   InvalidInstall: "Invalid pinned native installation or missing trusted install action",
   InvalidRuntime: "Invalid native runtime",
+  InvalidCandidates: "Invalid platform-specific native runtime candidates",
   InvalidVersionPattern: "Invalid runtime version pattern",
   TimeoutRange: (label: string) => `${label}: timeoutMs must be an integer from 1000 to 300000 milliseconds`,
   OutputLimit: (label: string) =>
@@ -123,10 +129,14 @@ function anchoredPath(kind: string, rest: string): string {
  * A candidate is absolute, an alias path that stays inside its root, or a string setting the
  * plugin declares. At most one segment holds a `*` pattern.
  */
-function validateCandidate(candidate: string, m: PluginManifest): void {
+function validateCandidate(candidate: string, m: PluginManifest, windows = false): void {
   const setting = SETTING_CANDIDATE.exec(candidate);
   if (setting) {
     if (!m.settings.some((s) => s.key === setting[1] && s.type === "string")) throw new Error(MESSAGE.CandidateSetting);
+    return;
+  }
+  if (windows && WINDOWS_DRIVE_PATH.test(candidate)) {
+    validateCandidatePath(candidate.slice(3).replaceAll("\\", "/"));
     return;
   }
   const alias = CANDIDATE_ALIAS.exec(candidate);
@@ -134,12 +144,35 @@ function validateCandidate(candidate: string, m: PluginManifest): void {
   const kind = alias?.[1] ?? "",
     rest = alias?.[2] ?? candidate.slice(1);
   const relative = kind === "opens" || kind === "package" ? anchoredPath(kind, rest) : rest;
+  validateCandidatePath(relative);
+}
+
+/** A candidate's part inside its declared root, including the bounded optional wildcard. */
+function validateCandidatePath(relative: string): void {
   // Windows reads `\` as a separator and `C:` as a drive, so `..\` or a drive would leave the root.
   if (WINDOWS_SEPARATORS.test(relative)) throw new Error(MESSAGE.CandidatePath);
   assertRelativePath(relative);
   const patterned = relative.split("/").filter((segment) => segment.includes(WILDCARD));
   if (patterned.length > 1 || (patterned[0] ?? "").split(WILDCARD).length > 2)
     throw new Error(MESSAGE.CandidatePattern);
+}
+
+/** Optional OS/architecture-specific paths, validated before any runtime discovery can use them. */
+function validatePlatforms(r: PluginNativeRuntime, m: PluginManifest): PluginRuntimeCandidates[] | undefined {
+  if (r.platforms === undefined) return undefined;
+  if (!Array.isArray(r.platforms) || r.platforms.length > L.platforms) throw new Error(MESSAGE.InvalidCandidates);
+  const seen = new Set<string>();
+  return r.platforms.map((entry) => {
+    const namedTarget = typeof entry?.platform === "string" && typeof entry?.arch === "string";
+    const target = namedTarget ? `${entry.platform}-${entry.arch}` : "";
+    if (!PLATFORMS.includes(target)) throw new Error(MESSAGE.InvalidCandidates);
+    if (seen.has(target) || !paths(entry.candidates, L.candidates) || !entry.candidates.length)
+      throw new Error(MESSAGE.InvalidCandidates);
+    seen.add(target);
+    for (const candidate of entry.candidates)
+      validateCandidate(candidate, m, entry.platform === StudioPlatform.Windows);
+    return { platform: entry.platform, arch: entry.arch, candidates: [...entry.candidates] };
+  });
 }
 
 /** A pinned download behind a confirmed setup action: https, a digest, sizes, a known format and computer. */
@@ -182,10 +215,12 @@ function validateRuntime(r: PluginNativeRuntime, m: PluginManifest, ids: Set<str
   for (const c of r.candidates) validateCandidate(c, m);
   if (!isValidPattern(r.version.pattern)) throw new Error(MESSAGE.InvalidVersionPattern);
   ids.add(r.id);
+  const platforms = validatePlatforms(r, m);
   return {
     id: r.id,
     label: r.label,
     candidates: [...r.candidates],
+    ...(platforms ? { platforms } : {}),
     version: { ...r.version, args: [...r.version.args] },
     ...validatePins(r, m),
   };

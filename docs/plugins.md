@@ -3550,6 +3550,16 @@ answers `{started: true}` as the download starts and the installation record say
 since a call's deadline must not cut the download short. An agent cannot choose a binary, download
 URL or installation action: either way the manifest's pinned one is installed.
 
+A runtime may also declare `platforms: [{platform, arch, candidates}]` for macOS arm64, Windows x64
+or Windows arm64. The matching list replaces its fallback `candidates`; other platform lists are
+never probed. With no matching entry, the original list remains the fallback. At most four unique
+OS/architecture entries are accepted, each with 1–16 candidates checked by the same path rules.
+Only a Windows-specific list may name a local drive path such as
+`D:/Genex-Local-Models/hunyuan/python.exe`. Drive-relative paths, network shares, device namespaces,
+stream suffixes and traversal are refused. A missing matching runtime remains missing, rather than
+falling through to another operating system's interpreter. This changes discovery, not GPU access,
+job deadlines, installation consent or available generation models.
+
 A candidate (`native-candidates.ts`) is an absolute POSIX path (skipped on Windows), a path under
 `home:`, `studio:`, `storage:` or, on Windows, `programfiles:`, `programfilesx86:` and
 `localappdata:`; a path beside the program Windows opens a file type with (`opens:.blend/…`, from
