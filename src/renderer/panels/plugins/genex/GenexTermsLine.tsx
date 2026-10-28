@@ -1,6 +1,6 @@
 /**
  * "Genex terms updated" with Review, while the signed-in account has Genex's updated terms to
- * accept: one line at the foot of the sidebar, dressed as the plugin updates line, and under a Genex
+ * accept: one line at the foot of the sidebar, dressed as the update rows, and under a Genex
  * call in the chat that waits on them. Review opens genex.games' terms page in the browser; the
  * line goes once the account reads as accepted (the app reads it again when it comes back to front).
  */

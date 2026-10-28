@@ -1,7 +1,7 @@
 /**
- * The sidebar's plugin updates: one line over the foot of the game list while installed plugins
- * have newer versions waiting. Hovering it lists them, each with its versions and a box to leave it
- * out; the line and the list install what is ticked, one update after another.
+ * The sidebar's plugin updates: one row under the friends while installed plugins have newer
+ * versions waiting. Hovering it lists them, each with its versions and a box to leave it out; a
+ * press on the row, or the list's button, installs what is ticked, one update after another.
  */
 import type { JSX } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -85,7 +85,7 @@ const fromUpdates =
     go(...args);
   };
 
-/** The line, its list and the boxes they share: an untick in the list changes the line's count too. */
+/** The row, its list and the boxes they share: an untick in the list changes the row's count too. */
 export function SidebarPluginUpdates({ updates, updating, onUpdate, onOpenPlugins, onOpenPlugin }: Props): JSX.Element {
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState(false);
@@ -111,56 +111,53 @@ export function SidebarPluginUpdates({ updates, updating, onUpdate, onOpenPlugin
     go();
   };
   // The last update installs before the run ends: nothing is left to count then.
-  const label = total > 0 && !updating ? PLUGIN_UPDATE_WORDS.count(total) : PLUGIN_UPDATE_WORDS.updating;
+  const label = total > 0 && !updating ? PLUGIN_UPDATE_WORDS.count(chosen || total) : PLUGIN_UPDATE_WORDS.updating;
+  // A run going, or nothing ticked: the row has nothing to install, so a press opens the list.
+  const installs = !updating && chosen > 0;
   return (
-    <div className="sidebar-plugin-updates" data-plugin-updates aria-busy={updating}>
-      <Popover open={open && total > 0} onOpenChange={setOpen}>
-        <PopoverTrigger
-          openOnHover
-          delay={OPEN_DELAY_MS}
-          closeDelay={CLOSE_DELAY_MS}
-          className="sidebar-plugin-updates-open"
-          data-plugin-updates-open
-        >
-          <Icon name={updating ? "reload" : "plugins"} size={16} />
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-        </PopoverTrigger>
-        <PopoverContent side="top" align="start" sideOffset={6} className="plugin-updates-panel">
-          <PluginUpdatesList
-            updates={updates}
-            skipped={skipped}
-            disabled={updating}
-            onToggle={toggle}
-            onChooseAll={chooseAll}
-            onOpenPlugin={(id) => closeThen(() => fromUpdates(onOpenPlugin)(id))()}
-          />
-          <div className="plugin-updates-actions">
-            <button type="button" className="plugin-updates-open-all" onClick={closeThen(fromUpdates(onOpenPlugins))}>
-              {PLUGIN_UPDATE_WORDS.openPlugins}
-            </button>
-            <button
-              type="button"
-              className="plugin-updates-run"
-              disabled={updating || chosen === 0}
-              onClick={update(UpdatesRunSurface.SidebarMenu)}
-            >
-              {PLUGIN_UPDATE_WORDS.update(chosen, total)}
-            </button>
-          </div>
-        </PopoverContent>
-      </Popover>
-      {!updating && total > 0 && (
-        <button
-          type="button"
-          className="plugin-updates-run"
-          data-plugins-update
-          disabled={chosen === 0}
-          onClick={update(UpdatesRunSurface.SidebarButton)}
-        >
-          {PLUGIN_UPDATE_WORDS.update(chosen, total)}
-        </button>
-      )}
-    </div>
+    <Popover open={open && total > 0} onOpenChange={setOpen}>
+      <PopoverTrigger
+        openOnHover
+        delay={OPEN_DELAY_MS}
+        closeDelay={CLOSE_DELAY_MS}
+        className="sidebar-update"
+        data-plugin-updates
+        data-plugin-updates-open
+        data-plugins-update
+        aria-busy={updating}
+        onClick={(event) => {
+          if (!installs) return;
+          event.preventBaseUIHandler();
+          update(UpdatesRunSurface.SidebarButton)();
+        }}
+      >
+        <Icon name={updating ? "reload" : "plugins"} size={16} />
+        <span>{label}</span>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" sideOffset={6} className="plugin-updates-panel">
+        <PluginUpdatesList
+          updates={updates}
+          skipped={skipped}
+          disabled={updating}
+          onToggle={toggle}
+          onChooseAll={chooseAll}
+          onOpenPlugin={(id) => closeThen(() => fromUpdates(onOpenPlugin)(id))()}
+        />
+        <div className="plugin-updates-actions">
+          <button type="button" className="plugin-updates-open-all" onClick={closeThen(fromUpdates(onOpenPlugins))}>
+            {PLUGIN_UPDATE_WORDS.openPlugins}
+          </button>
+          <button
+            type="button"
+            className="plugin-updates-run"
+            disabled={updating || chosen === 0}
+            onClick={update(UpdatesRunSurface.SidebarMenu)}
+          >
+            {PLUGIN_UPDATE_WORDS.update(chosen, total)}
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
