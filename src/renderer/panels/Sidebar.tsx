@@ -217,8 +217,8 @@ export function Sidebar(props: Props): JSX.Element {
           </div>
           <span className="sidebar-fade" aria-hidden="true" />
         </div>
-        <SidebarFooter {...props} />
         <SidebarFriends onPlayMode={(play) => props.onPlayMode(play, PlayModeVia.Friends)} />
+        <SidebarFooter {...props} />
       </div>
       {/* Shown once, until the first sign-in: the account plate stays under it. */}
       {playOpen && <PlayPromo />}
@@ -278,8 +278,9 @@ function LaunchRow({ title }: { title: string | null }): JSX.Element {
 }
 
 /**
- * What waits for the person, over the foot of the game list: agents that didn't start, Genex's
- * updated terms to review, the plugin updates line, then the app's own Relaunch to update or Download.
+ * What waits for the person, under the friends and over the account plate: agents that didn't
+ * start, Genex's updated terms to review, the plugin updates row, then the app's own Relaunch to
+ * update or Download, in the plugin line's height, icon and words.
  */
 function SidebarFooter({
   update,
@@ -335,8 +336,8 @@ function SidebarUpdate({ update, onRestart }: { update: ReadyUpdate; onRestart: 
         disabled={restarting}
         onClick={restart}
       >
-        <span>{restarting ? UPDATE_WORDS.restarting : UPDATE_WORDS.restart}</span>
         <Icon name="reload" size={16} />
+        <span>{restarting ? UPDATE_WORDS.restarting : UPDATE_WORDS.restart}</span>
       </button>
     </Hint>
   );
@@ -347,8 +348,8 @@ function SidebarDownload({ update, onDownload }: { update: ReadyUpdate; onDownlo
   return (
     <Hint label={UPDATE_WORDS.downloadHint} side="top">
       <button type="button" className="sidebar-update" data-update-download onClick={onDownload}>
+        <Icon name="download" size={16} />
         <span>{UPDATE_WORDS.download(update.version)}</span>
-        <Icon name="arrow-up-right" size={16} />
       </button>
     </Hint>
   );

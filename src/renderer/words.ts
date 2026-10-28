@@ -2965,6 +2965,9 @@ export const PLUGIN_UPDATE_WORDS = {
     if (chosen < total) return t("Update {count}", { count: chosen });
     return total === 1 ? t("Update") : t("Update all");
   },
+  /** The line's own button: Update, or Update N while some are unticked in the list. */
+  updateLine: (chosen: number, total: number) =>
+    chosen < total ? t("Update {count}", { count: chosen }) : t("Update"),
   updating: t("Updating plugins…"),
   heading: t("Plugin updates"),
   /** Beside the heading while some updates are unticked. */
