@@ -68,6 +68,7 @@ import {
   feedFailed,
   feedOf,
   feedRequested,
+  gameChanged,
   gameOpened,
   initialPlay,
   installAnswered,
@@ -1483,6 +1484,37 @@ describe("Play store: a native game's own page", () => {
     await store.loadGame("dust-runners");
     assert.deepEqual(slugsOf(store.getState().recent), ["dust-runners"]);
     assert.equal(store.getState().recent[0]?.page, true);
+  });
+
+  it("leaves Recent's order alone when a native page read lands after another game was opened", async () => {
+    const page = deferred<PlayGameDetail>();
+    const store = createPlayStore(fakeApi({ playGame: () => page.promise }).api, memory());
+    await store.open({ ...entry("dust-runners"), page: true });
+    await store.open(entry("skate"));
+    page.resolve(detail("dust-runners"));
+    await store.loadGame("dust-runners");
+    assert.deepEqual(slugsOf(store.getState().recent), ["skate", "dust-runners"], "the game being played stays first");
+    assert.equal(store.getState().recent[1]?.page, true);
+  });
+
+  it("does not put a native game in Recent when its page was left before it was read", async () => {
+    const page = deferred<PlayGameDetail>();
+    const store = createPlayStore(fakeApi({ playGame: () => page.promise }).api, memory());
+    store.showFriends();
+    store.showGame("dust-runners");
+    store.back();
+    page.resolve(detail("dust-runners"));
+    await store.loadGame("dust-runners");
+    assert.deepEqual(store.getState().recent, []);
+  });
+
+  it("keeps a native game opening its page from Recent after its card changes", () => {
+    const kept = { ...entry("dust-runners"), page: true as const };
+    const state = gameChanged({ ...initialPlay([kept]) }, nativeOnly("dust-runners"), {
+      ...nativeOnly("dust-runners"),
+      title: "Dust Runners 2",
+    });
+    assert.deepEqual(state.recent, [{ ...kept, title: "Dust Runners 2" }]);
   });
 
   it("leaves Recent alone when a web game's page shows: it joins Recent when it is played", async () => {

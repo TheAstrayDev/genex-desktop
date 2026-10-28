@@ -286,10 +286,18 @@ export function gameLaunched(state: PlayState, slug: string): PlayState {
   return entry ? { ...state, recent: withRecent(state.recent, entry) } : state;
 }
 
-/** A game's page was read for showing: a native-only game leads Recent, as its card would have put it. */
+/** Whether `slug`'s own page is what Play shows now, with no game open over it. */
+const pageShownNow = (state: PlayState, slug: string): boolean =>
+  state.view.page === PlayPage.Game && state.view.slug === slug && state.viewer === null;
+
+/**
+ * A game's page was read for showing: a native-only game leads Recent, as its card would have put
+ * it, while its page is still what Play shows. A read that lands after the person moved on moves nothing.
+ */
 export function nativePageShown(state: PlayState, slug: string): PlayState {
   const entry = recentEntryOf(state, slug);
-  return entry?.page ? { ...state, recent: withRecent(state.recent, entry) } : state;
+  if (!entry?.page || !pageShownNow(state, slug)) return state;
+  return { ...state, recent: withRecent(state.recent, entry) };
 }
 
 /** A game's page is on its way: one already read stays shown while it is read again. */
@@ -382,7 +390,7 @@ export function gameChanged(state: PlayState, game: Pick<PlayGame, "id" | "slug"
   }
   const recent = next
     ? state.recent.map((entry) =>
-        entry.slug === game.slug ? { slug: next.slug, title: next.title, coverUrl: next.coverUrl } : entry,
+        entry.slug === game.slug ? { ...entry, slug: next.slug, title: next.title, coverUrl: next.coverUrl } : entry,
       )
     : state.recent.filter((entry) => entry.slug !== game.slug);
   return { ...state, feeds, recent };
