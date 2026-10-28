@@ -157,7 +157,7 @@ export function SidebarPluginUpdates({ updates, updating, onUpdate, onOpenPlugin
           disabled={chosen === 0}
           onClick={update(UpdatesRunSurface.SidebarButton)}
         >
-          {PLUGIN_UPDATE_WORDS.update(chosen, total)}
+          {PLUGIN_UPDATE_WORDS.updateLine(chosen, total)}
         </button>
       )}
     </div>
