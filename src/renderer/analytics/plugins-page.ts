@@ -8,7 +8,7 @@
  * its failure) back unchanged, so a call site stays one wrapper around what it already does.
  */
 import type { ConnectionSnapshot } from "../../shared/connections.ts";
-import { isUserCancelled } from "../../shared/errors.ts";
+import { errorCodeIn, isUserCancelled } from "../../shared/errors.ts";
 import type { McpConnectorView, McpHealth, McpTestResult, McpTransport } from "../../shared/mcp.ts";
 import {
   type GithubLookup,
@@ -18,8 +18,10 @@ import {
   PluginHealth,
   type PluginIndexEntry,
   type PluginInfo,
+  PluginInstallProblem,
   type PluginScan,
   PluginSourceKind,
+  PluginStateRefusal,
   type PluginTier,
 } from "../../shared/plugins.ts";
 import { SuggestionState } from "../chat/plugin-suggestion.ts";
@@ -227,6 +229,8 @@ export type PluginInstallFinishedProperties = PluginInstallStartedProperties & {
   outcome: InstallOutcome;
   scan_verdict: PluginScan["verdict"] | null;
   duration_ms: number;
+  /** A failed install's code; null when it had none. */
+  code?: PluginInstallProblem | null;
 };
 
 /** An install as the person pressed it: where from, on which button, and the plugin when its id is known. */
@@ -250,12 +254,13 @@ export function installStartedProperties(press: InstallPress): PluginInstallStar
   return { plugin_ref: pluginRef(press.id ?? "", source), origin: press.origin, surface: press.surface };
 }
 
-/** `plugin_install_finished` for a press: the plugin installed (or null), or the failure. */
+/** `plugin_install_finished` for a press: the plugin installed (or null), or the failure and its code. */
 export function installFinishedProperties(
   press: InstallPress,
   installed: Pick<PluginInfo, "manifest" | "source" | "scan"> | null,
   failed: boolean,
   ms: number,
+  failure: unknown = null,
 ): PluginInstallFinishedProperties {
   const started = installStartedProperties(press);
   return {
@@ -264,6 +269,7 @@ export function installFinishedProperties(
     outcome: installOutcome(installed !== null, failed),
     scan_verdict: installed?.scan?.verdict ?? null,
     duration_ms: Math.max(0, Math.round(ms)),
+    ...(failed ? { code: errorCodeIn(PluginInstallProblem, failure) } : {}),
   };
 }
 
@@ -294,7 +300,8 @@ export const addedSince = (before: readonly PluginInfo[]) => async (): Promise<P
 /**
  * Run an install and report it: started now, finished with what the plugin list says afterwards.
  * Resolves once the install itself did: the list is read in the background, so nothing the person
- * waits on waits for analytics, and `found` hears what the read found. A failure is reported and rethrown.
+ * waits on waits for analytics, and `found` hears what the read found. A failure is reported with
+ * its code and rethrown; the person's no is reported as not installed.
  */
 export async function trackedPluginInstall(
   press: InstallPress,
@@ -308,7 +315,11 @@ export async function trackedPluginInstall(
   try {
     await run();
   } catch (error) {
-    track(AnalyticsEvent.PluginInstallFinished, installFinishedProperties(press, null, true, clock() - started));
+    const failed = !isUserCancelled(error);
+    track(
+      AnalyticsEvent.PluginInstallFinished,
+      installFinishedProperties(press, null, failed, clock() - started, error),
+    );
     throw error;
   }
   const ms = clock() - started;
@@ -384,7 +395,7 @@ export const PluginSurface = {
 } as const;
 export type PluginSurface = (typeof PluginSurface)[keyof typeof PluginSurface];
 
-/** How an action ended. Why one failed is English only, so it is not sent. */
+/** How an action ended. A failure says why only by its code (`code`), never its words. */
 export const ActionOutcome = {
   Ok: "ok",
   Failed: "failed",
@@ -401,6 +412,13 @@ export function actionOutcome(error: unknown, threw: boolean): ActionOutcome {
   return isUserCancelled(error) ? ActionOutcome.Cancelled : ActionOutcome.Failed;
 }
 
+/** The code a plugin's install, update, switch or removal failed with: never its words. */
+export type PluginProblemCode = PluginInstallProblem | PluginStateRefusal;
+
+/** The code a failed plugin action crossed with, or null. */
+export const pluginProblemCode = (error: unknown): PluginProblemCode | null =>
+  errorCodeIn(PluginInstallProblem, error) ?? errorCodeIn(PluginStateRefusal, error);
+
 /** `plugin_action_finished`'s properties. */
 export type PluginActionFinishedProperties = {
   action: PluginAction;
@@ -408,6 +426,8 @@ export type PluginActionFinishedProperties = {
   surface: PluginSurface;
   outcome: ActionOutcome;
   duration_ms: number;
+  /** A failed action's code; null when it had none. */
+  code?: PluginProblemCode | null;
 };
 
 /** One plugin action as the caller names it: what, on which plugin, from where. */
@@ -417,17 +437,19 @@ export interface ActionPress {
   surface: PluginSurface;
 }
 
-/** An action's end as `plugin_action_finished`. */
+/** An action's end as `plugin_action_finished`; a failure says its code. */
 export const pluginActionProperties = (
   press: ActionPress,
   outcome: ActionOutcome,
   ms: number,
+  failure: unknown = null,
 ): PluginActionFinishedProperties => ({
   action: press.action,
   plugin_ref: installedRef(press.plugin),
   surface: press.surface,
   outcome,
   duration_ms: Math.max(0, Math.round(ms)),
+  ...(outcome === ActionOutcome.Failed ? { code: pluginProblemCode(failure) } : {}),
 });
 
 /** When each plugin was last turned on in this window, by id (memory only): setup time counts from it. */
@@ -436,11 +458,17 @@ const enabledAt = new Map<string, number>();
 /** When a plugin was turned on in this window, or null. */
 export const pluginEnabledAt = (id: string): number | null => enabledAt.get(id) ?? null;
 
-/** Report an action that already ended: its outcome and how long it took. */
-export function reportPluginAction(press: ActionPress, outcome: ActionOutcome, started: number, now: number): void {
+/** Report an action that already ended: its outcome, how long it took and what it failed with. */
+export function reportPluginAction(
+  press: ActionPress,
+  outcome: ActionOutcome,
+  started: number,
+  now: number,
+  failure: unknown = null,
+): void {
   if (press.action === PluginAction.Enable && outcome === ActionOutcome.Ok)
     enabledAt.set(press.plugin.manifest.id, now);
-  track(AnalyticsEvent.PluginActionFinished, pluginActionProperties(press, outcome, now - started));
+  track(AnalyticsEvent.PluginActionFinished, pluginActionProperties(press, outcome, now - started, failure));
 }
 
 /** Run a plugin action and report how it ended; its result or failure goes back to the caller unchanged. */
@@ -455,7 +483,7 @@ export async function trackedPluginAction<T>(
     reportPluginAction(press, ActionOutcome.Ok, started, clock());
     return result;
   } catch (error) {
-    reportPluginAction(press, actionOutcome(error, true), started, clock());
+    reportPluginAction(press, actionOutcome(error, true), started, clock(), error);
     throw error;
   }
 }
@@ -547,6 +575,10 @@ export type PluginUpdatesRunProperties = {
   skipped: number;
   /** Chosen updates still offered afterwards: failed, or turned down in a trust dialog. */
   not_updated: number;
+  /** Chosen updates that failed (each toasted with its code). */
+  failed: number;
+  /** Chosen updates the person turned down in a trust dialog. */
+  declined: number;
   duration_ms: number;
 };
 
@@ -556,6 +588,8 @@ export const updatesRunProperties = (run: {
   chosen: number;
   skipped: number;
   notUpdated: number;
+  failed: number;
+  declined: number;
   startedAt: number;
   now: number;
 }): PluginUpdatesRunProperties => ({
@@ -563,6 +597,8 @@ export const updatesRunProperties = (run: {
   chosen: run.chosen,
   skipped: run.skipped,
   not_updated: run.notUpdated,
+  failed: run.failed,
+  declined: run.declined,
   duration_ms: elapsedMs(run.startedAt, run.now),
 });
 

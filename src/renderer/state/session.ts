@@ -5,6 +5,7 @@
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { AnalyticsConfig } from "../../shared/analytics.ts";
+import type { LaunchFacts } from "../../shared/app-session.ts";
 import { PLAY_ORIGIN } from "../../shared/play.ts";
 import type { AnalyticsChoice } from "../analytics/consent.ts";
 
@@ -33,6 +34,8 @@ export interface SessionState {
   replayUntil: number | null;
   /** The welcome was up when this launch started: the question's answer is the first launch's. */
   firstLaunch: boolean;
+  /** How this launch started and the session before it ended, from the first bootstrap only (usage analytics). */
+  launch: LaunchFacts | null;
 }
 
 export const initialSession = (): SessionState => ({
@@ -45,6 +48,7 @@ export const initialSession = (): SessionState => ({
   analyticsChoice: null,
   replayUntil: null,
   firstLaunch: false,
+  launch: null,
 });
 
 export function bootstrapStarted(state: SessionState): SessionState {
@@ -60,6 +64,7 @@ export function bootstrapReady(
     analytics?: AnalyticsConfig | null;
     analyticsChoice?: AnalyticsChoice | null;
     replayUntil?: number | null;
+    launch?: LaunchFacts | null;
   },
 ): SessionState {
   return {
@@ -73,6 +78,7 @@ export function bootstrapReady(
     analytics: opening.analytics ?? null,
     analyticsChoice: opening.analyticsChoice ?? null,
     replayUntil: opening.replayUntil ?? null,
+    launch: opening.launch ?? null,
   };
 }
 

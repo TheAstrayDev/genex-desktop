@@ -3,6 +3,7 @@ import { useState, type JSX } from "react";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import { elapsedMs } from "../analytics/properties.ts";
+import { workspaceCode } from "../analytics/workspace-properties.ts";
 import { settingsVisit } from "../analytics/workspace-trackers.ts";
 import { GamesRootOutcome } from "../analytics/workspace-vocabulary.ts";
 import { Button } from "../ui/Button.tsx";
@@ -33,16 +34,17 @@ export function GamesSection({
     setBusy(true);
     setError(null);
     const started = Date.now();
-    const ended = (outcome: GamesRootOutcome): void => {
+    const ended = (outcome: GamesRootOutcome, failure?: unknown): void => {
       if (outcome !== GamesRootOutcome.Cancelled) settingsVisit.changed(outcome === GamesRootOutcome.Refused);
-      track(AnalyticsEvent.GamesRootChanged, { outcome, choose_ms: elapsedMs(started, Date.now()) });
+      const code = outcome === GamesRootOutcome.Refused ? { code: workspaceCode(failure) } : {};
+      track(AnalyticsEvent.GamesRootChanged, { outcome, choose_ms: elapsedMs(started, Date.now()), ...code });
     };
     try {
       const label = await window.studio.chooseGamesRoot();
       ended(label ? GamesRootOutcome.Changed : GamesRootOutcome.Cancelled);
       if (label) onRoot(label);
     } catch (cause) {
-      ended(GamesRootOutcome.Refused);
+      ended(GamesRootOutcome.Refused, cause);
       setError(problemWords(cause));
     } finally {
       setBusy(false);

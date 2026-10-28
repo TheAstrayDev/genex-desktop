@@ -5,6 +5,8 @@
  * wrote or named, and no path, ever leaves through them.
  */
 import { DAY_MS, HOUR_MS } from "../../shared/duration.ts";
+import { errorCodeIn } from "../../shared/errors.ts";
+import { ExportRefusal, WorkspaceRefusal } from "../../shared/game-library.ts";
 import type { FolderInspection, GameProject } from "../../shared/game-project.ts";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
 import { EngineId } from "../../shared/providers.ts";
@@ -15,7 +17,7 @@ import type { StageView } from "../stage.ts";
 import { type Launch, LaunchPhase } from "../state/launch.ts";
 import { Room } from "../state/threads.ts";
 import type { ComposerExtras } from "../ui/PromptBar.tsx";
-import type { WorkspaceEvent, WorkspaceEventProperties } from "./events/workspace.ts";
+import type { ExportCode, WorkspaceEvent, WorkspaceEventProperties } from "./events/workspace.ts";
 import { charsBucket, countBucket, elapsedMs } from "./properties.ts";
 import {
   ActionOutcome,
@@ -27,7 +29,9 @@ import {
   type GameCreatedFrom,
   HomeLeftTo,
   HomeWords,
+  type LaunchFailReason,
   LaunchMode,
+  type LaunchStage,
   type ManageVia,
   type NoticeVia,
   type NoticeWent,
@@ -180,10 +184,35 @@ export interface SheetFacts {
   kind: GameProject["shape"]["kind"] | null;
 }
 
-/** How the sheet ended: adopted, failed (with how long adopting took), or put away. */
+/** The code a game or folder was refused with (`WorkspaceRefusal`), or null: never its words. */
+export const workspaceCode = (error: unknown): WorkspaceRefusal | null => errorCodeIn(WorkspaceRefusal, error);
+
+/** The code an export was refused with: its own, or the library's for an unknown game. */
+export const exportCode = (error: unknown): ExportCode | null =>
+  errorCodeIn(ExportRefusal, error) ?? errorCodeIn(WorkspaceRefusal, error);
+
+/** A launch that stopped: the step, why, how long it had run, and the refusal's code when main named one. */
+export function launchFailedProperties(input: {
+  stage: LaunchStage;
+  reason: LaunchFailReason;
+  startedAt: number;
+  at: number;
+  customLocation: boolean;
+  failure?: unknown;
+}): Props<typeof WorkspaceEvent.GameLaunchFailed> {
+  return {
+    stage: input.stage,
+    reason: input.reason,
+    elapsed_ms: elapsedMs(input.startedAt, input.at),
+    custom_location: input.customLocation,
+    code: workspaceCode(input.failure),
+  };
+}
+
+/** How the sheet ended: adopted, failed (with how long adopting took and its refusal's code), or put away. */
 export function sheetClosedProperties(
   facts: SheetFacts,
-  end: { outcome: SheetOutcome; at: number; via?: DismissVia; adoptStartedAt?: number },
+  end: { outcome: SheetOutcome; at: number; via?: DismissVia; adoptStartedAt?: number; failure?: unknown },
 ): Props<typeof WorkspaceEvent.OpenFolderSheetClosed> {
   const adopted = end.outcome !== SheetOutcome.Dismissed ? end.adoptStartedAt : undefined;
   return {
@@ -195,6 +224,7 @@ export function sheetClosedProperties(
     trust_toggled: facts.trustToggled,
     kind: facts.kind,
     ...(adopted === undefined ? {} : { adopt_ms: elapsedMs(adopted, end.at) }),
+    ...(end.outcome === SheetOutcome.Failed ? { code: workspaceCode(end.failure) } : {}),
   };
 }
 
@@ -219,7 +249,7 @@ export function gameOpenedProperties(input: {
   };
 }
 
-/** Something done to a game, how it ended, and how old the game was. */
+/** Something done to a game, how it ended, how old the game was, and a failure's code. */
 export function gameManagedProperties(input: {
   action: GameAction;
   via: ManageVia;
@@ -227,6 +257,7 @@ export function gameManagedProperties(input: {
   game: Pick<GameProject, "createdAt"> | null;
   at: number;
   ref: string | null;
+  failure?: unknown;
 }): Props<typeof WorkspaceEvent.GameManaged> {
   return {
     action: input.action,
@@ -234,20 +265,22 @@ export function gameManagedProperties(input: {
     outcome: input.outcome,
     ms_since_created_bucket: sinceBucket(input.game?.createdAt, input.at),
     game_ref: input.ref,
+    ...(input.outcome === ActionOutcome.Failed ? { code: workspaceCode(input.failure) } : {}),
   };
 }
 
-/** An export's result as counts, never the files it names or the folder it wrote. */
+/** An export's result as counts, never the files it names or the folder it wrote; a failure says its code. */
 export function exportFinishedProperties(
   result: { files: number; excluded: readonly string[] } | null,
   timing: { startedAt: number; at: number; ref: string | null },
+  failure: unknown = null,
 ): Props<typeof WorkspaceEvent.GameExportFinished> {
-  const counts = result
+  const ended = result
     ? { files_bucket: countBucket(result.files), excluded_bucket: countBucket(result.excluded.length) }
-    : {};
+    : { code: exportCode(failure) };
   return {
     outcome: result ? ActionOutcome.Ok : ActionOutcome.Failed,
-    ...counts,
+    ...ended,
     export_ms: elapsedMs(timing.startedAt, timing.at),
     game_ref: timing.ref,
   };

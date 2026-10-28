@@ -120,15 +120,15 @@ export function RewindDialog({
       .catch((err) => {
         if (!current) return;
         setRefused(problemWords(err));
-        track(AnalyticsEvent.RewindPreviewed, rewindPreviewProperties(null));
+        track(AnalyticsEvent.RewindPreviewed, rewindPreviewProperties(null, err));
       });
     return () => {
       current = false;
     };
   }, [threadId, eventId, messageId]);
-  const decided = (failed: boolean): void => {
+  const decided = (failed: boolean, failure: unknown = null): void => {
     const choice = { restore, restoresByDefault: Boolean(files && restoresByDefault(files)), failed };
-    track(AnalyticsEvent.RewindDecided, rewindConfirmedProperties(files, choice));
+    track(AnalyticsEvent.RewindDecided, rewindConfirmedProperties(files, choice, failure));
   };
   const confirm = (): void => {
     setBusy(true);
@@ -141,7 +141,7 @@ export function RewindDialog({
         onDismiss();
       })
       .catch((err) => {
-        decided(true);
+        decided(true, err);
         setError(problemWords(err));
         setBusy(false);
       });

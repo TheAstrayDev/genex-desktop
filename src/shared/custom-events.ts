@@ -385,6 +385,29 @@ export interface RunAutoResumedPayload extends RunScope {
   attempt?: number;
 }
 
+/**
+ * Why the harness refused to start a run (`refusal` on `run_start_blocked`, beside its English
+ * `reason`). The seed's copy is `RunStartRefusal` in `loop/run-dispatch.ts`
+ * (tests/conformance/seed-contracts.test.ts holds the two together); an older seed writes none.
+ * Persisted: never rename a value.
+ */
+export const RunStartRefusal = {
+  /** A run already owns the chat or the game. */
+  RunOwnsThread: "run_owns_thread",
+  /** The folder is an engine's export: compiled, with nothing a run could edit. */
+  EngineExport: "engine_export",
+  /** Genex's `web.ready` gate: the web page lacks files it needs to load. */
+  WebNotReady: "web_not_ready",
+} as const;
+export type RunStartRefusal = (typeof RunStartRefusal)[keyof typeof RunStartRefusal];
+
+/** A run's start the harness refused: the run that holds the chat (when one does), the one asked for, and why. */
+export interface RunStartBlockedPayload extends RunScope {
+  requestedRunId?: string;
+  reason?: string;
+  refusal?: RunStartRefusal;
+}
+
 /** One part of the plan, as the start and plan-review records list it. */
 export interface PlannedFacet {
   id?: string;
@@ -745,6 +768,7 @@ export interface CustomEventMap {
   run_finished: RunFinishedPayload;
   run_iteration: RunScope & { winner?: string; biggest_gap?: string; verdict?: RoundVerdict | null };
   run_registered: RunScope & { budgets?: RecordedRunBudgets; resumed?: boolean };
+  run_start_blocked: RunStartBlockedPayload;
   run_started: RunScope & {
     budgets?: RecordedRunBudgets;
     goal?: string;

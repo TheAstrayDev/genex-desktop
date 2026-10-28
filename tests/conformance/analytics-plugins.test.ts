@@ -210,8 +210,18 @@ describe("plugin records and UI events", () => {
     assertClean([connector, consentCardShownProperties(pending, list)], "consent card");
   });
 
-  it("maps a plugin failing, and no other change", () => {
-    assert.deepEqual(pluginFailedProperties({ id: "mine", reason: "failed" }, list), { plugin_ref: "local" });
+  it("maps a plugin failing with how it failed, and no other change", () => {
+    assert.deepEqual(pluginFailedProperties({ id: "mine", reason: "failed" }, list), {
+      plugin_ref: "local",
+      failure: null,
+    });
+    assert.deepEqual(
+      pluginFailedProperties({ id: "roblox", reason: "failed", failure: "plugin_reload_refused" }, list),
+      {
+        plugin_ref: "roblox",
+        failure: "plugin_reload_refused",
+      },
+    );
     assert.equal(pluginFailedProperties({ id: "mine", reason: "enabled" }, list), null);
   });
 
@@ -443,10 +453,20 @@ describe("accounts and setups", () => {
       chosen: 3,
       skipped: 1,
       notUpdated: 1,
+      failed: 1,
+      declined: 0,
       startedAt: 100,
       now: 2_100,
     });
-    assert.deepEqual(run, { surface: "sidebar_menu", chosen: 3, skipped: 1, not_updated: 1, duration_ms: 2_000 });
+    assert.deepEqual(run, {
+      surface: "sidebar_menu",
+      chosen: 3,
+      skipped: 1,
+      not_updated: 1,
+      failed: 1,
+      declined: 0,
+      duration_ms: 2_000,
+    });
   });
 });
 

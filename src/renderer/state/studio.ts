@@ -30,8 +30,7 @@ import {
 import { track } from "../analytics/client.ts";
 import { WorkspaceEvent } from "../analytics/events/workspace.ts";
 import { gameRef } from "../analytics/game-ref.ts";
-import { elapsedMs } from "../analytics/properties.ts";
-import { gameCreatedProperties } from "../analytics/workspace-properties.ts";
+import { gameCreatedProperties, launchFailedProperties } from "../analytics/workspace-properties.ts";
 import { noteStageSwitch } from "../analytics/workspace-trackers.ts";
 import { GameCreatedFrom, LaunchFailReason, LaunchStage, StageSwitchVia } from "../analytics/workspace-vocabulary.ts";
 import { shouldWelcome } from "../onboarding/state.ts";
@@ -418,7 +417,8 @@ function bootstrapper(
       const welcome = shouldWelcome(boot.welcome, boot.games.length, safeStorage(storage));
       const { developer, playWebOrigin: playWeb } = boot;
       const analytics = analyticsOpening(boot, welcome, storage, chance);
-      session.setState((state) => bootstrapReady(state, { welcome, developer, playWeb, ...analytics }), true);
+      const opening = { welcome, developer, playWeb, ...analytics, launch: boot.launch ?? null };
+      session.setState((state) => bootstrapReady(state, opening), true);
       void plugins.refresh();
       void plugins.refreshIndex();
       // An update downloaded before this window opened, or before a reload, still waits.
@@ -617,15 +617,20 @@ function keepComposerChoice(storage: KeyValueStorage | null, threadId: string, i
   if (input.effort) rememberChatEffort(kept, threadId, input.effort);
 }
 
-/** A launch that stopped, for usage analytics: the step, why, and how long it had run. */
+/** A launch that stopped, for usage analytics: the step, why, how long it had run, and main's refusal code. */
 function launchStopped(ctx: StudioContext, input: LaunchInput, startedAt: number) {
-  return (stage: LaunchStage, reason: LaunchFailReason): void =>
-    track(WorkspaceEvent.GameLaunchFailed, {
-      stage,
-      reason,
-      elapsed_ms: elapsedMs(startedAt, ctx.now()),
-      custom_location: Boolean(input.parent),
-    });
+  return (stage: LaunchStage, reason: LaunchFailReason, failure?: unknown): void =>
+    track(
+      WorkspaceEvent.GameLaunchFailed,
+      launchFailedProperties({
+        stage,
+        reason,
+        startedAt,
+        at: ctx.now(),
+        customLocation: Boolean(input.parent),
+        failure,
+      }),
+    );
 }
 
 async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void> {
@@ -685,8 +690,8 @@ async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void>
     notify(problemWords(error), ToastTone.Error, errorCode(error));
     launch.setState((state) => launchFailed(state, id), true);
     // A game made and then lost on the way to its chat failed opening; otherwise main refused making it.
-    if (made) stopped(LaunchStage.Opening, LaunchFailReason.OpenRefused);
-    else stopped(LaunchStage.Creating, LaunchFailReason.CreateRefused);
+    if (made) stopped(LaunchStage.Opening, LaunchFailReason.OpenRefused, error);
+    else stopped(LaunchStage.Creating, LaunchFailReason.CreateRefused, error);
   }
 }
 

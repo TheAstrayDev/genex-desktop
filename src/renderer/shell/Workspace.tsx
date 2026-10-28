@@ -80,12 +80,12 @@ function WorkspaceChat({ app, chrome, navigation, views, chat }: WorkspaceProps)
   const saveGameTitle = useCallback(
     (name: string, title: string) => {
       const game = app.library.getState().games.find((known) => known.name === name) ?? null;
-      const renamed = (outcome: ActionOutcome): void =>
-        trackGameManaged(GameAction.Renamed, ManageVia.ChatHeader, outcome, game);
+      const renamed = (outcome: ActionOutcome, failure?: unknown): void =>
+        trackGameManaged(GameAction.Renamed, ManageVia.ChatHeader, outcome, game, failure);
       void app.saveGame(name, { title }).then(
         () => renamed(ActionOutcome.Ok),
         (error: unknown) => {
-          renamed(ActionOutcome.Failed);
+          renamed(ActionOutcome.Failed, error);
           notifyProblem(notify)(error);
         },
       );

@@ -8,6 +8,7 @@ import { CodedError, errorCodeIn, errorMessage } from "../../shared/errors.ts";
 import { SendFailure } from "../../shared/composer.ts";
 import type { EngineBoot } from "../engine-boot.ts";
 import type { AnalyticsConfig } from "../../shared/analytics.ts";
+import type { LaunchFacts } from "../../shared/app-session.ts";
 
 /** Why a thread read (or a tag's retry) from the renderer is refused. */
 const MESSAGE = {
@@ -37,6 +38,8 @@ export interface ThreadsIpcDeps {
   playWeb: string;
   /** Usage analytics the renderer may offer (`shared/analytics.ts`); the person still decides. */
   analytics: AnalyticsConfig | null;
+  /** How this launch started and the session before it ended: answered once, then null (`session-marker.ts`). */
+  launchFacts?(): Promise<LaunchFacts | null>;
 }
 
 /** A sent message's failed @ tag tried again or taken off: the renderer names the tag, main re-checks it as a send does. */
@@ -64,6 +67,7 @@ function registerBootstrap(
     developer,
     playWeb,
     analytics,
+    launchFacts,
   }: ThreadsIpcDeps,
 ): void {
   handle("studio:bootstrap", async () => {
@@ -82,6 +86,8 @@ function registerBootstrap(
       core.games.list(),
       engineList.bootstrap(),
     ]);
+    // Taken last, once the reads it rides with have answered: a bootstrap that fails hands none.
+    const launch = launchFacts ? await launchFacts() : null;
     return {
       threadId: core.mainThread,
       layout: core.layout,
@@ -98,6 +104,7 @@ function registerBootstrap(
       developer,
       playWebOrigin: playWeb,
       analytics,
+      launch,
     };
   });
 }

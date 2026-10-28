@@ -28,10 +28,10 @@ export function useChatExport(onNotice: Notify): ChatExport {
     setExporting(true);
     const startedAt = Date.now();
     // How it ended, as counts and a duration (never the files it names or where it wrote them).
-    const finished = (result: ExportResult | null): void =>
+    const finished = (result: ExportResult | null, failure: unknown = null): void =>
       track(
         AnalyticsEvent.GameExportFinished,
-        exportFinishedProperties(result, { startedAt, at: Date.now(), ref: gameRef(project) }),
+        exportFinishedProperties(result, { startedAt, at: Date.now(), ref: gameRef(project) }, failure),
       );
     void window.studio
       .exportGame(project)
@@ -40,7 +40,7 @@ export function useChatExport(onNotice: Notify): ChatExport {
         onNotice(exportedWords(result), ToastTone.Ok);
       })
       .catch((error: unknown) => {
-        finished(null);
+        finished(null, error);
         notifyProblem(onNotice)(error);
       })
       .finally(() => {
