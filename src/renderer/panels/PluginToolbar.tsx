@@ -68,7 +68,7 @@ import { useCoverAfterTurns } from "./plugins/genex/use-cover-after-turns.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PluginPanelDialog } from "./PluginPanelDialog.tsx";
 import { useEngineSlot } from "./engine-slot.ts";
-import { errorCode } from "../../shared/errors.ts";
+import { errorCode, isUserCancelled } from "../../shared/errors.ts";
 
 /** Status refreshes coalesce: a burst of change events wakes each plugin's process once. */
 const STATUS_DEBOUNCE_MS = SECOND_MS;
@@ -369,9 +369,6 @@ interface PressDeps {
   setBusy: Dispatch<SetStateAction<string | null>>;
 }
 
-/** The user turned the action down, in Studio's review or the native dialog: nothing to report. */
-const declined = (err: unknown): boolean => /Cancelled/.test(String(err));
-
 /** Open a button's panel over the stage (Genex's Publish is Studio's own dialog); a panel that fails to open is toasted. */
 async function openToolbarPanel(entry: PluginToolbarEntry, panelId: string, deps: PressDeps): Promise<void> {
   const { plugin } = entry;
@@ -387,7 +384,7 @@ async function openToolbarPanel(entry: PluginToolbarEntry, panelId: string, deps
     reportPluginAction(press, ActionOutcome.Ok, started, performance.now());
   } catch (err) {
     deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
-    reportPluginAction(press, ActionOutcome.Failed, started, performance.now());
+    reportPluginAction(press, ActionOutcome.Failed, started, performance.now(), err);
   }
 }
 
@@ -423,9 +420,10 @@ async function runToolbarAction(
     deps.refreshRef.current();
     reportPluginAction(press, ActionOutcome.Ok, started, performance.now());
   } catch (err) {
-    if (!declined(err)) deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+    // The person's no, in Studio's review or the native dialog, says nothing.
+    if (!isUserCancelled(err)) deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
     const outcome = reviewDeclined ? ActionOutcome.DeclinedReview : actionOutcome(err, true);
-    reportPluginAction(press, outcome, started, performance.now());
+    reportPluginAction(press, outcome, started, performance.now(), err);
   } finally {
     deps.setBusy((current) => (current === entry.key ? null : current));
   }

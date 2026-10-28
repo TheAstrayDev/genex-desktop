@@ -14,6 +14,7 @@ import {
   updatesRunProperties,
 } from "../analytics/plugins-page.ts";
 import { isOwnPlugin } from "../analytics/plugins-ref.ts";
+import { usePlugins } from "../state/hooks.ts";
 import { chosenUpdates, type PluginUpdate, updateKey } from "../state/plugins.ts";
 import { Checkbox } from "../ui/Checkbox.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -50,10 +51,12 @@ interface UpdatesRun {
 
 /**
  * Report a run of Update plugins once the store says it ended: how many were chosen and skipped,
- * how many are still offered (failed, or turned down in a trust dialog) and how long it took.
+ * how many are still offered, how many of those failed or were turned down in a trust dialog
+ * (the store's `lastRun`), and how long it took.
  */
 function useUpdatesRunReport(updates: readonly PluginUpdate[], updating: boolean) {
   const run = useRef<UpdatesRun | null>(null);
+  const lastRun = usePlugins((s) => s.lastRun);
   useEffect(() => {
     const current = run.current;
     if (!current) return;
@@ -65,9 +68,9 @@ function useUpdatesRunReport(updates: readonly PluginUpdate[], updating: boolean
     run.current = null;
     const notUpdated = updates.filter((update) => current.keys.has(updateKey(update))).length;
     const chosen = current.keys.size;
-    const ended = { chosen, skipped: current.skipped, notUpdated, startedAt: current.at, now: Date.now() };
+    const ended = { chosen, skipped: current.skipped, notUpdated, ...lastRun, startedAt: current.at, now: Date.now() };
     track(AnalyticsEvent.PluginUpdatesRun, updatesRunProperties({ surface: current.surface, ...ended }));
-  }, [updating, updates]);
+  }, [updating, updates, lastRun]);
   return (surface: UpdatesRunSurface, skipped: ReadonlySet<string>): void => {
     const keys = new Set(chosenUpdates(updates, skipped).map(updateKey));
     run.current = { surface, keys, skipped: updates.length - keys.size, at: Date.now(), seen: false };

@@ -3989,6 +3989,7 @@ export const MESSAGES = [
   "Welcome to Genex",
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.",
   "What Harness has learned",
+  "What changed",
   "What changes",
   "What credits pay for",
   "What do you want to make?",

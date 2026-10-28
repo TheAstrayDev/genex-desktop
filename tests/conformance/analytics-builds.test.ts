@@ -594,6 +594,8 @@ describe("the stage", () => {
       game_playing: false,
       draws_seen: true,
       game_ref: REF,
+      load_failure: null,
+      crash_reason: null,
     });
     assert.equal(liveShownProperties({ ...inputWithout(), load: { since: T0 } }).trigger, null);
   });
@@ -605,8 +607,11 @@ describe("the stage", () => {
       ms_after_shown: BLANK_AFTER_MS,
       draws_counted: true,
       game_playing: null,
+      unresponsive: false,
     });
     assert.equal(blankSuspected(T0, T0 + BLANK_AFTER_MS, null)?.draws_counted, false);
+    assert.equal(blankSuspected(T0, T0 + BLANK_AFTER_MS, null, true)?.unresponsive, true, "its loop stopped answering");
+    assert.equal(blankSuspected(T0, T0 + BLANK_AFTER_MS, null, "true")?.unresponsive, false, "only a plain true");
   });
 
   it("marks a Reload rapid when the last one of the game was moments ago", () => {

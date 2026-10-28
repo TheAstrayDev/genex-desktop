@@ -398,7 +398,7 @@ describe("opening a folder", () => {
     assert.deepEqual(reports, [
       { outcome: FolderPickOutcome.Cancelled, pick_ms: 4_000 },
       { outcome: FolderPickOutcome.Picked, pick_ms: 1_000, inspect_ms: 250 },
-      { outcome: FolderPickOutcome.Refused, pick_ms: 0, inspect_ms: 10 },
+      { outcome: FolderPickOutcome.Refused, pick_ms: 0, inspect_ms: 10, code: null },
     ]);
     assertClean(reports, "open_folder_picked");
   });
@@ -504,6 +504,7 @@ describe("finding, opening and managing games", () => {
     });
     assert.deepEqual(exportFinishedProperties(null, { startedAt: 0, at: 1, ref: null }), {
       outcome: ActionOutcome.Failed,
+      code: null,
       export_ms: 1,
       game_ref: null,
     });
@@ -779,7 +780,13 @@ describe("what the workspace hears without a click", () => {
     assert.deepEqual(ours(), [
       [
         WorkspaceEvent.GameLaunchFailed,
-        { stage: LaunchStage.Naming, reason: LaunchFailReason.UsageLimit, elapsed_ms: 2_000, custom_location: true },
+        {
+          stage: LaunchStage.Naming,
+          reason: LaunchFailReason.UsageLimit,
+          elapsed_ms: 2_000,
+          custom_location: true,
+          code: null,
+        },
       ],
     ]);
   });

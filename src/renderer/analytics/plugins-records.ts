@@ -8,6 +8,7 @@ import {
   type PluginChange,
   PluginChangeReason,
   type PluginConsentEvent,
+  PluginFailure,
   type PluginIndexView,
   type PluginInfo,
   PluginTier,
@@ -16,7 +17,7 @@ import {
 import { PluginOffer, type PluginSuggestedPayload } from "../../shared/project-tools.ts";
 import { type SuggestionState, suggestionState } from "../chat/plugin-suggestion.ts";
 import { type CommunityView, communityView } from "../panels/plugins/labels.ts";
-import { type CountBucket, countBucket } from "./properties.ts";
+import { type CountBucket, countBucket, oneOf } from "./properties.ts";
 import { pluginRef, refFromList } from "./plugins-ref.ts";
 
 /** Whose consent card asks: a plugin, a connector, or the studio itself (computer control). */
@@ -94,13 +95,23 @@ export function consentCardShownProperties(
   };
 }
 
-/** A plugin's backend failing (`plugins.changed` with reason failed), as `plugin_failed`; null for any other change. */
+/** `plugin_failed`'s properties. */
+export type PluginFailedProperties = {
+  plugin_ref: string;
+  /** How it failed (its backend exited or failed to start, a reload was refused); null when main said nothing typed. */
+  failure: PluginFailure | null;
+};
+
+/**
+ * A plugin failing while it ran (`plugins.changed` with reason failed), as `plugin_failed`, its
+ * failure re-checked against `PluginFailure`; null for any other change.
+ */
 export function pluginFailedProperties(
   change: Partial<PluginChange>,
   list: readonly ListedPlugin[],
-): { plugin_ref: string } | null {
+): PluginFailedProperties | null {
   if (change.reason !== PluginChangeReason.Failed || typeof change.id !== "string") return null;
-  return { plugin_ref: refFromList(list, change.id) };
+  return { plugin_ref: refFromList(list, change.id), failure: oneOf(PluginFailure, change.failure) };
 }
 
 /** `plugin_index_loaded`'s properties. */

@@ -139,13 +139,15 @@ as one set (`pluginUpdates` in `renderer/state/plugins.ts`; none for a plugin wh
 waits for sessions): each plugin's row and page offer **Update to x**, and the sidebar's **Update
 plugins** runs them one after another. A seed's update asks nothing: it is Genex's own code, shipped
 inside the app the user installed (`asksBeforeInstall` in `main/plugin-local-install.ts`); an index
-release goes through its own trust dialog. A removed preference suppresses the seed across Studio upgrades.
+release goes through its own trust dialog, and a no there rejects `studio:plugins.update` as the
+person's no (`isUserCancelled`; a no to an install still resolves). A removed preference suppresses the seed across Studio upgrades.
 Normal updates preserve settings, protected credentials and job state. The Genex plugin adopts
 `engine-homes/genex`, keeping existing allowances and unresolved jobs; remove/reinstall is not a
 required upgrade step.
 
 The registry reports every mutation through `onChange` (`PluginChange` reasons `installed`,
-`updated`, `enabled`, `disabled`, `removed`, `failed`, `reloaded`); Studio forwards it to the
+`updated`, `enabled`, `disabled`, `removed`, `failed`, `reloaded`; a `failed` one says how in
+`failure`, a `PluginFailure`); Studio forwards it to the
 renderer as the UI event `plugins.changed`, which is what refreshes the plugin list, the toolbar
 and the Plugins page — no polling is needed for a change to show.
 

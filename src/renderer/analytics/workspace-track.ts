@@ -28,15 +28,17 @@ export function trackSettingChanged(key: SettingKey, value: string | number | bo
   track(WorkspaceEvent.SettingChanged, { key, value, outcome: failed ? ActionOutcome.Failed : ActionOutcome.Ok });
 }
 
-/** Something done to a game: renamed, pinned, given a cover, removed or shown in Finder. */
+/** Something done to a game: renamed, pinned, given a cover, removed or shown in Finder; a failure says its code. */
 export function trackGameManaged(
   action: GameAction,
   via: ManageVia,
   outcome: ActionOutcome,
   game: Pick<GameProject, "name" | "createdAt"> | null,
+  failure?: unknown,
 ): void {
   const ref = gameRef(game?.name, browserStorage());
-  track(WorkspaceEvent.GameManaged, gameManagedProperties({ action, via, outcome, game, at: Date.now(), ref }));
+  const properties = gameManagedProperties({ action, via, outcome, game, at: Date.now(), ref, failure });
+  track(WorkspaceEvent.GameManaged, properties);
 }
 
 /** A game was made: from home, an opened folder or a Play remix. */

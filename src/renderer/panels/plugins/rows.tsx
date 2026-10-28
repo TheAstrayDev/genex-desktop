@@ -1,5 +1,6 @@
 /** The plugins page's building blocks: its sections and pictures, a plugin's row, its on/off toggle and its account step. */
 import type { JSX, ReactNode } from "react";
+import { isUserCancelled } from "../../../shared/errors.ts";
 import { GENEX_PLUGIN_ID } from "../../../shared/genex.ts";
 import { intlLocale, t } from "../../../shared/i18n.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
@@ -118,9 +119,16 @@ export const installListed = (
 ): Promise<unknown> =>
   trackedPluginInstall({ origin, surface, id, source: null }, () => window.studio.pluginInstall(id), installedNow(id));
 
-/** Install a plugin's waiting update, reported as the page's Update. */
+/**
+ * Install a plugin's waiting update, reported as the page's Update. The person's no in its trust
+ * dialog is reported as cancelled and says nothing on the page.
+ */
 export const updatePlugin = (plugin: PluginInfo, update: Parameters<typeof installPluginUpdate>[1]): Promise<void> =>
-  trackedPluginAction(pagePress(PluginAction.Update, plugin), () => installPluginUpdate(window.studio, update));
+  trackedPluginAction(pagePress(PluginAction.Update, plugin), () => installPluginUpdate(window.studio, update)).catch(
+    (error: unknown) => {
+      if (!isUserCancelled(error)) throw error;
+    },
+  );
 
 /** Run one of a plugin's account actions (connect, cancel) through the shared review, then re-read the account. */
 async function runAccountAction(plugin: PluginInfo, page: PluginsPage, name: string): Promise<void> {

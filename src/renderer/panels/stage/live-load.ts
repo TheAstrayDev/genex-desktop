@@ -7,14 +7,16 @@ import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
 import { WebBuildLoad } from "../../../shared/live-behind.ts";
+import { isBuildLoadFailure, LiveLoadFailure } from "../../../shared/preview-contract.ts";
 import type { GameKind } from "../../../shared/project-facts.ts";
 import { webFolderOf } from "../../../shared/project-workspace.ts";
 import { gameStartedSince, type StageGameKind, StageView } from "../../stage.ts";
-import { blankSuspected, liveShownProperties } from "../../analytics/builds-stage.ts";
-import { track } from "../../analytics/client.ts";
+import { blankSuspected, liveRefusedProperties, liveShownProperties } from "../../analytics/builds-stage.ts";
+import { guarded, track } from "../../analytics/client.ts";
 import { gameRef } from "../../analytics/game-ref.ts";
 import { AnalyticsEvent } from "../../analytics/events.ts";
 import { LiveOutcome, LiveTrigger } from "../../analytics/events/builds.ts";
+import { oneOf } from "../../analytics/properties.ts";
 
 /** While a page loads behind the loader the stage asks often; otherwise once a second is enough. */
 const LIVE_LOADING_TICK_MS = 150;
@@ -78,7 +80,8 @@ export function useLiveLoad(project: string | null, holds: boolean) {
   liveLoadRef.current = liveLoad;
   /** Hide the game while `load` runs, then wait for the page it produced to settle; `trigger` says what asked for it. */
   const loadLive = useCallback((target: string, load: () => Promise<unknown>, trigger: LiveTrigger) => {
-    setLiveLoad({ project: target, pending: true, since: Date.now(), trigger });
+    const since = Date.now();
+    setLiveLoad({ project: target, pending: true, since, trigger });
     return load().then(
       (value) => {
         setLiveLoad((current) =>
@@ -88,6 +91,7 @@ export function useLiveLoad(project: string | null, holds: boolean) {
       },
       (err: unknown) => {
         setLiveLoad((current) => (current?.project === target ? null : current));
+        noteRefused({ project: target, since, trigger }, err);
         throw err;
       },
     );
@@ -176,13 +180,19 @@ interface Settle {
 }
 const freshSettle = (): Settle => ({ since: -1, currentAt: 0, lastResources: -1, quietAt: 0 });
 
-/** Why waiting for the page any longer is pointless, if it is: no time left, a broken build, a failed or crashed page. */
-function givenUp(
+/**
+ * Why waiting for the page any longer is pointless, if it is: no time left, a broken build, a failed
+ * or crashed page. A page whose load error is the game's own build (`isBuildLoadFailure`: nothing to
+ * serve, or the last build that worked served instead) gave up on a broken build, not a failed load.
+ */
+export function givenUp(
   load: LiveLoad,
   probe: { live: LivePage | null; current: boolean; broken: boolean; now: number },
 ): LiveOutcome | null {
   const { live, current } = probe;
   if (current && live?.crashed) return LiveOutcome.Crashed;
+  const buildFailed = current && isBuildLoadFailure(oneOf(LiveLoadFailure, live?.loadFailure));
+  if (buildFailed) return LiveOutcome.BuildBroken;
   if (current && live?.loadError) return LiveOutcome.LoadFailed;
   if (probe.broken) return LiveOutcome.BuildBroken;
   return probe.now - load.since > LIVE_LOAD_MAX_MS ? LiveOutcome.TimedOut : null;
@@ -247,11 +257,25 @@ const shownThisLaunch = new Set<string>();
 /** A game Live uncovered, watched until it draws or looks blank. */
 type Shown = { project: string; at: number; told: boolean };
 
+/**
+ * A load main refused before any page came: said once, unless another load took its place. Guarded:
+ * the refusal the caller catches is never one of analytics.
+ */
+const noteRefused = guarded((load: { project: string; since: number; trigger: LiveTrigger }, refusal: unknown) => {
+  const properties = liveRefusedProperties(load, refusal, { now: Date.now(), gameRef: gameRef(load.project) });
+  if (properties) track(AnalyticsEvent.LiveGameShown, properties);
+});
+
 /** Live's wait ended: say how, and start watching a shown game for a blank page. */
 function noteSettled(
   load: LiveLoad,
   outcome: LiveOutcome,
-  at: { now: number; about: RefObject<LiveAbout | null>; state: Record<string, unknown> | null },
+  at: {
+    now: number;
+    about: RefObject<LiveAbout | null>;
+    state: Record<string, unknown> | null;
+    failure: { load: unknown; gone: unknown } | null;
+  },
 ): Shown | null {
   const firstInLaunch = !shownThisLaunch.has(load.project);
   const about = at.about.current;
@@ -266,6 +290,7 @@ function noteSettled(
       firstMessageAt: about?.firstMessageAt ?? null,
       state: at.state,
       gameRef: gameRef(load.project),
+      failure: at.failure,
     }),
   );
   if (outcome !== LiveOutcome.Shown) return null;
@@ -273,14 +298,18 @@ function noteSettled(
   return { project: load.project, at: at.now, told: false };
 }
 
+/** Why this game's own page failed or went away, as its probe says (unchecked); null for another page. */
+const pageFailure = (live: LivePage | null, current: boolean): { load: unknown; gone: unknown } | null =>
+  current && live ? { load: live.loadFailure, gone: live.gone } : null;
+
 /** A shown game that has drawn nothing since it showed is told once. */
 function noteBlank(
   shown: Shown | null,
   project: string,
-  at: { now: number; state: Record<string, unknown> | null },
+  at: { now: number; state: Record<string, unknown> | null; unresponsive: unknown },
 ): void {
   if (!shown || shown.told || shown.project !== project) return;
-  const blank = blankSuspected(shown.at, at.now, at.state);
+  const blank = blankSuspected(shown.at, at.now, at.state, at.unresponsive);
   if (!blank) return;
   shown.told = true;
   track(AnalyticsEvent.LiveBlankSuspected, blank);
@@ -317,7 +346,7 @@ export function useLiveProbe({
       if (current && live) noteGame(live, { setState, setStopped });
       const now = Date.now();
       const state = live?.page?.state ?? null;
-      if (current) noteBlank(shown.current, project, { now, state });
+      if (current) noteBlank(shown.current, project, { now, state, unresponsive: live?.unresponsive });
       const done = settledLoad(liveLoadRef.current, project, settle, {
         live,
         current,
@@ -325,7 +354,7 @@ export function useLiveProbe({
         now,
       });
       if (!done) return;
-      shown.current = noteSettled(done.load, done.outcome, { now, about, state });
+      shown.current = noteSettled(done.load, done.outcome, { now, about, state, failure: pageFailure(live, current) });
       setLiveLoad((value) => (value === done.load ? null : value));
     };
     const tick = async (): Promise<void> => {

@@ -60,6 +60,7 @@ import {
   consentCardShownProperties,
   type IndexLoadedProperties,
   indexLoadedProperties,
+  type PluginFailedProperties,
   pluginFailedProperties,
   sameIndexRead,
   type SuggestionShownProperties,
@@ -118,7 +119,7 @@ export type PluginsEventProperties = {
   [PluginsEvent.GithubLinkLookedUp]: GithubLinkLookedUpProperties;
   [PluginsEvent.PluginActionFinished]: PluginActionFinishedProperties;
   [PluginsEvent.PluginAccountStateChanged]: AccountStateChangedProperties;
-  [PluginsEvent.PluginFailed]: { plugin_ref: string };
+  [PluginsEvent.PluginFailed]: PluginFailedProperties;
   [PluginsEvent.PluginSetupCompleted]: SetupCompletedProperties;
   [PluginsEvent.PluginUpdatesRun]: PluginUpdatesRunProperties;
   [PluginsEvent.PluginSuggestionShown]: SuggestionShownProperties;

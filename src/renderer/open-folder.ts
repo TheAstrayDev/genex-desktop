@@ -7,6 +7,7 @@
 import type { OpenChoice } from "../shared/shape-words.ts";
 import type { WorkspaceEvent, WorkspaceEventProperties } from "./analytics/events/workspace.ts";
 import { elapsedMs } from "./analytics/properties.ts";
+import { workspaceCode } from "./analytics/workspace-properties.ts";
 import { FolderPickOutcome } from "./analytics/workspace-vocabulary.ts";
 import type { FolderInspection, GameProject } from "./types.ts";
 
@@ -30,7 +31,7 @@ export async function inspectPickedFolder(
 ): Promise<FolderInspection | null> {
   const started = now();
   const dir = await api.pickProject().catch((error: unknown) => {
-    report({ outcome: FolderPickOutcome.Refused, pick_ms: elapsedMs(started, now()) });
+    report({ outcome: FolderPickOutcome.Refused, pick_ms: elapsedMs(started, now()), code: workspaceCode(error) });
     throw error;
   });
   const picked = now();
@@ -39,10 +40,15 @@ export async function inspectPickedFolder(
     report({ outcome: FolderPickOutcome.Cancelled, pick_ms: pickMs });
     return null;
   }
-  const inspected = (outcome: FolderPickOutcome): void =>
-    report({ outcome, pick_ms: pickMs, inspect_ms: elapsedMs(picked, now()) });
+  const inspected = (outcome: FolderPickOutcome, failure: unknown = null): void =>
+    report({
+      outcome,
+      pick_ms: pickMs,
+      inspect_ms: elapsedMs(picked, now()),
+      ...(outcome === FolderPickOutcome.Refused ? { code: workspaceCode(failure) } : {}),
+    });
   const inspection = await api.inspectFolder(dir).catch((error: unknown) => {
-    inspected(FolderPickOutcome.Refused);
+    inspected(FolderPickOutcome.Refused, error);
     throw error;
   });
   inspected(FolderPickOutcome.Picked);

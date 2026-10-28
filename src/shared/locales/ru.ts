@@ -4564,6 +4564,7 @@ export default {
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.":
     "Что Claude делает, не спрашивая. Если выбрать в чате «Всегда разрешать», действие появится здесь — для этой игры.",
   "What Harness has learned": "Чему научился Harness",
+  "What changed": "Что изменилось",
   "What changes": "Что изменится",
   "What credits pay for": "На что тратятся кредиты",
   "What do you want to make?": "Что хочешь создать?",

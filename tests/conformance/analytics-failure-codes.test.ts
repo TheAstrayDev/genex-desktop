@@ -69,54 +69,11 @@ import {
   SignInOutcome,
 } from "../../src/renderer/analytics/welcome-vocabulary.ts";
 import { createToastsStore, notifyProblem, ToastTone } from "../../src/renderer/state/toasts.ts";
+import { assertClean, HOSTILE, HOSTILE_THREAD, HOSTILE_THROWS } from "../helpers/failure-codes.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const T0 = Date.parse("2026-10-27T10:00:00.000Z");
-const THREAD = "thread-5b7e21";
-
-/** Words, paths, Node codes and ids a failure may carry: none may leave in a property. */
-const HOSTILE = [
-  "/Users/alice/Secret Game",
-  "C:\\Users\\alice\\game",
-  "file:///Users/alice/x.png",
-  "ENOENT",
-  "EACCES: permission denied, open '/Users/alice/.claude.json'",
-  "Your usage limit resets at 5pm",
-  "Invalid API key · Please run /login",
-  "Could not answer this message: fetch failed",
-  "http://10.0.0.7:11434",
-  "sk-or-v1-0123456789abcdef",
-  THREAD,
-];
-
-/** Every string a property holds, arrays included. */
-function strings(properties: EventProperties): string[] {
-  return Object.values(properties).flatMap((value) => {
-    if (typeof value === "string") return [value];
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  });
-}
-
-/** Nothing hostile leaves, whole or in part. */
-function assertClean(label: string, properties: EventProperties): void {
-  for (const value of strings(properties))
-    for (const hostile of HOSTILE) assert.ok(!value.includes(hostile), `${label} leaks ${JSON.stringify(value)}`);
-}
-
-/** Thrown values whose `code` is not one of the app's: each must read as no code at all. */
-const HOSTILE_THROWS: ReadonlyArray<[string, unknown]> = [
-  [
-    "a Node error",
-    Object.assign(new Error("ENOENT: no such file, open '/Users/alice/Secret Game'"), { code: "ENOENT" }),
-  ],
-  ["a path as code", Object.assign(new Error("failed"), { code: "/Users/alice/Secret Game" })],
-  ["words as code", { message: "x", code: "Your usage limit resets at 5pm" }],
-  ["a number as code", { code: 401 }],
-  ["a string", "busy"],
-  ["null", null],
-  ["undefined", undefined],
-  ["a plain error", new Error("Invalid API key · Please run /login")],
-];
+const THREAD = HOSTILE_THREAD;
 
 describe("phase 2 analytics: a failure's code crosses IPC", () => {
   it("errorCode reads a coded failure's code and nothing else", () => {

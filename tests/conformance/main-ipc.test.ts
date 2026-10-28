@@ -34,7 +34,7 @@ import { ModelPullProblem } from "../../src/shared/model-install.ts";
 import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
 import { EngineError } from "../../src/substrate/engines/types.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
-import { UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
+import { RestartAnswer, UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
 
 type Listener = (event: IpcSender, payload: unknown) => Promise<IpcResult>;
@@ -1290,7 +1290,7 @@ describe("the in-window update prompt", () => {
         ready: () => ({ version: "0.2.0", action: UpdateAction.Restart }),
         restart: async () => {
           restarts.push("restart");
-          return true;
+          return RestartAnswer.Relaunching;
         },
         download: () => {
           restarts.push("download");
@@ -1318,7 +1318,7 @@ describe("the in-window update prompt", () => {
       ok: true,
       value: { version: "0.2.0", action: UpdateAction.Restart },
     });
-    assert.deepEqual(await invoke("studio:update.restart"), { ok: true, value: true });
+    assert.deepEqual(await invoke("studio:update.restart"), { ok: true, value: RestartAnswer.Relaunching });
     assert.deepEqual(restarts, ["restart"]);
   });
 

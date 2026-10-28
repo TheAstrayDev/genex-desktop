@@ -4593,6 +4593,7 @@ export default {
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.":
     "Claudeが確認せずに行う操作です。チャットで「常に許可」を選ぶと、そのゲーム用にここへ追加されます。",
   "What Harness has learned": "Harnessが学んだこと",
+  "What changed": "変わったところ",
   "What changes": "変わる内容",
   "What credits pay for": "クレジットの使い道",
   "What do you want to make?": "何をつくりますか？",

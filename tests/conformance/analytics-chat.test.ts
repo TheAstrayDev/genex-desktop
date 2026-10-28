@@ -733,7 +733,11 @@ describe("rewind", () => {
       outside_changes: 2,
       stops_build: true,
     });
-    assert.deepEqual(rewindPreviewProperties(null), { files_state: RewindFilesState.Refused, stops_build: false });
+    assert.deepEqual(rewindPreviewProperties(null), {
+      files_state: RewindFilesState.Refused,
+      stops_build: false,
+      code: null,
+    });
     assert.deepEqual(
       rewindPreviewProperties({
         files: { state: "unavailable", reason: "too-large", tooLargeFiles: [HOSTILE[0] ?? ""] },
@@ -754,6 +758,7 @@ describe("rewind", () => {
         restore_files: false,
         default_overridden: false,
         failed: true,
+        code: null,
       },
     );
     assertClean([{ event: ChatEvent.RewindPreviewed, properties: preview }]);

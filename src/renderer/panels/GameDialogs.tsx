@@ -14,18 +14,18 @@ import { t } from "../../shared/i18n.ts";
  */
 export function useGameManaged(action: GameAction, game: GameProject, onDismiss: () => void) {
   const settled = useRef(false);
-  const settle = (outcome: ActionOutcome): void => {
+  const settle = (outcome: ActionOutcome, failure?: unknown): void => {
     if (settled.current) return;
     // A failed try leaves the dialog up for another; done and put away end it.
     settled.current = outcome !== ActionOutcome.Failed;
-    trackGameManaged(action, ManageVia.Menu, outcome, game);
+    trackGameManaged(action, ManageVia.Menu, outcome, game, failure);
   };
   return {
     done: (): void => {
       settle(ActionOutcome.Ok);
       onDismiss();
     },
-    failed: (): void => settle(ActionOutcome.Failed),
+    failed: (failure: unknown): void => settle(ActionOutcome.Failed, failure),
     dismiss: (): void => {
       settle(ActionOutcome.Cancelled);
       onDismiss();
@@ -65,7 +65,7 @@ export function RenameGameDialog({
           void onSave({ title: name.trim() })
             .then(managed.done)
             .catch((error) => {
-              managed.failed();
+              managed.failed(error);
               setError(problemWords(error));
             })
             .finally(() => setBusy(false));
@@ -142,7 +142,7 @@ export function DeleteGameDialog({
             void onDelete()
               .then(managed.done)
               .catch((error) => {
-                managed.failed();
+                managed.failed(error);
                 setError(problemWords(error));
               })
               .finally(() => setBusy(false));

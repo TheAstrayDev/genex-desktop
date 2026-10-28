@@ -8,7 +8,13 @@
  * a switch, a count or a duration: never a title, a task, a reason, a path or a name.
  */
 import { CallCutOff, PluginSourceKind } from "../../../shared/plugins.ts";
-import { AutoResumeCause, CustomEvent, customRecord, StopCode } from "../../../shared/custom-events.ts";
+import {
+  AutoResumeCause,
+  CustomEvent,
+  customRecord,
+  RunStartRefusal,
+  StopCode,
+} from "../../../shared/custom-events.ts";
 import { MINUTE_MS } from "../../../shared/duration.ts";
 import { EngineFailureKind, StopReason } from "../../../shared/engine-requests.ts";
 import type { BuildProblem } from "../../../shared/build-problem.ts";
@@ -18,7 +24,7 @@ import { GameEngine } from "../../../shared/game-engine.ts";
 import { GenexBlocked } from "../../../shared/genex.ts";
 import { GenexTool, MakingKind, type MakingPhase, type MakingJob } from "../../../shared/asset-making.ts";
 import { JobRole, JobState, JobStopper } from "../../../shared/jobs.ts";
-import { ReadyVia } from "../../../shared/preview-contract.ts";
+import { type LiveLoadFailure, type PreviewGone, ReadyVia } from "../../../shared/preview-contract.ts";
 import { LoopProfile } from "../../../shared/project-facts.ts";
 import { EngineId } from "../../../shared/providers.ts";
 import {
@@ -307,13 +313,17 @@ export type LiveGameShownProperties = {
   game_playing: boolean | null;
   draws_seen: boolean;
   game_ref: string | null;
+  /** Why the page did not load (Chromium's kind, or the game's own build); null when nothing said. */
+  load_failure: LiveLoadFailure | null;
+  /** Why the page's renderer went away, on a crash; null otherwise. */
+  crash_reason: PreviewGone | null;
 };
 
 export type BuildsEventProperties = {
   [BuildsEvent.BuildPlanningEnded]: { ms: number; ended_by: PlanningEnd; from_home: boolean; game_ref: string | null };
   [BuildsEvent.RunStarted]: RunStartedProperties;
-  /** `conflict`: the chat already builds; the refusal's reason is English only. */
-  [BuildsEvent.RunStartRefused]: { conflict: boolean };
+  /** `conflict`: the chat already builds; `refusal`: the harness's code for why (null from an older harness). */
+  [BuildsEvent.RunStartRefused]: { conflict: boolean; refusal: RunStartRefusal | null };
   [BuildsEvent.RunPlanReviewShown]: { wait_minutes: number | null; facets: number };
   [BuildsEvent.WorkerFinished]: {
     state: WorkerEnd;
@@ -385,7 +395,13 @@ export type BuildsEventProperties = {
   };
   [BuildsEvent.GameBuildRetryPressed]: { attempt: number; needs_install: boolean };
   [BuildsEvent.PackagesInstallFinished]: { ok: boolean; scripts: boolean; ms: number };
-  [BuildsEvent.LiveBlankSuspected]: { ms_after_shown: number; draws_counted: boolean; game_playing: boolean | null };
+  [BuildsEvent.LiveBlankSuspected]: {
+    ms_after_shown: number;
+    draws_counted: boolean;
+    game_playing: boolean | null;
+    /** The page's loop had stopped answering when the stage looked. */
+    unresponsive: boolean;
+  };
   [BuildsEvent.LiveShownBuildBroken]: { run_active: boolean };
   [BuildsEvent.LivePlayToggled]: { to: LiveRun; ok: boolean };
   [BuildsEvent.WebBuildWaitGaveUp]: { asks: number };
@@ -711,7 +727,7 @@ const workerFinished: Reader = (payload, at, memory) => {
 
 const runStartRefused: Reader = (payload) => ({
   event: BuildsEvent.RunStartRefused,
-  properties: { conflict: runIdOf(payload) !== null },
+  properties: { conflict: runIdOf(payload) !== null, refusal: oneOf(RunStartRefusal, payload.refusal) },
 });
 
 const planReviewShown: Reader = (payload) => ({
