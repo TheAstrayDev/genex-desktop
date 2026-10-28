@@ -3,11 +3,12 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { usePlay } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
+import { NoCover } from "./NoCover.tsx";
 import type { PlayRecentEntry } from "./play-model.ts";
 
 /**
  * A game's small cover, a rectangle so Play's rows read apart from Create's round game pictures: its
- * cover, or a plain tile while it has none or it fails to load (then `onMissing` hears of it).
+ * cover, or the no-cover drawing while it has none or it fails to load (then `onMissing` hears of it).
  */
 export function PlayThumb({ src, onMissing }: { src: string | null; onMissing?: () => void }): JSX.Element {
   // The address that failed: a new one is tried again.
@@ -16,7 +17,12 @@ export function PlayThumb({ src, onMissing }: { src: string | null; onMissing?: 
   useEffect(() => {
     if (missing) onMissing?.();
   }, [missing, onMissing]);
-  if (!src || missing) return <span className="play-thumb play-thumb-blank" aria-hidden="true" />;
+  if (!src || missing)
+    return (
+      <span className="play-thumb play-thumb-blank" aria-hidden="true">
+        <NoCover small />
+      </span>
+    );
   return (
     <img
       className="play-thumb"

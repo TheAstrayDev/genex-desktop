@@ -54,8 +54,9 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Games, Tools and Assets, each with tabs and search; Recent once something was played (opened in
   the viewer, a native-only game's page shown however it was reached, or a native app launched). A
   Recent row takes the newest cover any card or page shows for its game; one still without a cover,
-  or whose cover no longer loads, reads its game's page once a window. Top creators (the last 30
-  days) above Games' tabs. The promo card shows until the first sign-in or
+  or whose cover no longer loads, reads its game's page once a window. A game with no cover shows a
+  still wire floor (`NoCover.tsx`) on its row and card. Top creators (the last 30 days) above
+  Games' tabs. The promo card shows until the first sign-in or
   its ×.
 - Assets are square tiles under two switchers: kind (All · 3D · Images · Sounds · Videos, a kind
   read from the whole catalog) and Everyone · Mine (the account's library, Saved/Shared tags, signed

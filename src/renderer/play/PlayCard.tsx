@@ -19,6 +19,7 @@ import { claimHoverClip, releaseHoverClip } from "./clip-playback.ts";
 import { CoverClip } from "./CoverClip.tsx";
 import { CardBadge, cardBadge } from "./native-model.ts";
 import { CardNativeBadge } from "./NativeBadge.tsx";
+import { NoCover } from "./NoCover.tsx";
 import { createShownCovers, formatCount } from "./play-model.ts";
 
 const WORDS = PLAY_WORDS;
@@ -40,7 +41,7 @@ const shownBefore = (src: string | null): boolean => src !== null && SHOWN_COVER
  */
 function Cover({ src, onShown }: { src: string | null; onShown: () => void }): JSX.Element | null {
   const [state, setState] = useState<CoverState>(() => (shownBefore(src) ? CoverState.Shown : CoverState.Loading));
-  if (!src || state === CoverState.Failed) return null;
+  if (!src || state === CoverState.Failed) return <NoCover />;
   return (
     <img
       className="play-card-image"
