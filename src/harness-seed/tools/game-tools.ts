@@ -207,7 +207,7 @@ export const tools: HarnessTool[] = [
       });
       if ("blocker" in started) return started.message;
       await ctx.call(HostMethod.PreviewLoad, { project });
-      return "The web starter is in the folder; build on it.";
+      return "Genex wrote the game's page: index.html and src/main.js, both yours to rewrite from scratch, as plain as the game wants. Its import map serves three.js r185 (`three`, `three/addons/`, `three/webgpu`) from Genex's own copy at /vendor/, not from this folder: import it, never search the disk for it. The rest of src/ and docs/ is Genex's own instrumentation for its Loop builds: you need none of it.";
     },
   },
 
