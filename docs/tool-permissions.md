@@ -123,6 +123,12 @@ input closes (a pick made while the session starts is applied once that control 
 `ChatPermissionService#onControl`), and a refusal comes back as `ModeSwitchFailure.AutoUnavailable`, the only case the
 host shows beside the picker.
 
+Every session runs on Claude Code's own system prompt (`claudeCodeSystemPrompt`: the `claude_code`
+preset, which the Agent SDK otherwise replaces with an empty one), with what holds for the session's
+whole life appended once (`DelegateRequest.system`: where it reaches, its plugins, their guidance
+and connectors, and for the session answering the person `personSessionNote`), never repeated in
+each message ([delegation](../src/main/core/delegation.ts) `#brief`).
+
 No session gets Claude Code's own sub-agents (`Agent`, `Task`), in any mode or seat: Genex runs the
 workers, under the person's ceiling and the chat's mode (`disallowedToolsFor`).
 
