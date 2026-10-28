@@ -2958,7 +2958,7 @@ export const AGENTS_START_WORDS = {
 } as const;
 
 export const PLUGIN_UPDATE_WORDS = {
-  /** The row's name for what waits (the ticked ones): a press installs them, hovering opens the list. */
+  /** The line's name for what waits: it opens the list. */
   count: (count: number) => t("{count, plural, one {# plugin update} other {# plugin updates}}", { count }),
   /** Install what is ticked: every update, or only some of them. */
   update: (chosen: number, total: number) => {

@@ -564,7 +564,7 @@ export function setupCompletions(
   return { waiting: next, completed };
 }
 
-/** Where Update plugins was pressed in the sidebar: the row itself, or the list's button. */
+/** Where Update plugins was pressed in the sidebar: its own button, or the list's. */
 export const UpdatesRunSurface = { SidebarButton: "sidebar_button", SidebarMenu: "sidebar_menu" } as const;
 export type UpdatesRunSurface = (typeof UpdatesRunSurface)[keyof typeof UpdatesRunSurface];
 

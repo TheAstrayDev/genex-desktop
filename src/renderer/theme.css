@@ -2703,10 +2703,9 @@ button.chat-header-title:hover {
   left: 0;
   pointer-events: none;
 }
-/* The sidebar's update rows (`Sidebar.tsx` `SidebarFooter`): the plugin updates, which lists them on
- * hover, and Relaunch to update or Download. One dress, the terms line's: the field colour (the light
- * palette's own secondary fill is one step from the sidebar and would vanish here), a light-blue icon,
- * then the words; the whole row is the press. */
+/* Relaunch to update or Download (`Sidebar.tsx`), in the plugin updates line's dress: the field colour
+ * (the light palette's own secondary fill is one step from the sidebar and would vanish here), a
+ * light-blue icon, then the words; the whole row is the press. */
 .sidebar-update {
   display: flex;
   align-items: center;
@@ -2734,8 +2733,7 @@ button.chat-header-title:hover {
 .sidebar-update .gi {
   color: color-mix(in oklab, var(--accent-primary) 55%, var(--ink));
 }
-.sidebar-update:enabled:hover,
-.sidebar-update[data-popup-open] {
+.sidebar-update:enabled:hover {
   background: color-mix(in oklab, var(--ink) 5%, var(--field));
 }
 .sidebar-update:disabled {
@@ -2745,7 +2743,45 @@ button.chat-header-title:hover {
 .sidebar-update[aria-busy="true"] .gi .a-spin {
   animation: gi-spin 1.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
-/* Genex's updated terms (`panels/plugins/genex/GenexTermsLine.tsx`): the update rows' dress,
+/* The plugin updates line (`panels/SidebarPluginUpdates.tsx`): the plug and the count open the
+ * list on hover, the small button at its end installs what is ticked. */
+.sidebar-plugin-updates {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding-inline: 4px;
+  border-radius: var(--radius-control);
+  background: var(--field);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+.sidebar-plugin-updates-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 26px;
+  padding-inline: 5px 4px;
+  border-radius: 8px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--duration-quick);
+}
+/* The plug in a lighter blue than the accent fill, which reads too dark on the dark field. */
+.sidebar-plugin-updates-open .gi {
+  color: color-mix(in oklab, var(--accent-primary) 55%, var(--ink));
+}
+.sidebar-plugin-updates-open:hover,
+.sidebar-plugin-updates-open[data-popup-open] {
+  background: color-mix(in oklab, var(--ink) 5%, var(--field));
+}
+.sidebar-plugin-updates[aria-busy="true"] .gi .a-spin {
+  animation: gi-spin 1.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+/* Genex's updated terms (`panels/plugins/genex/GenexTermsLine.tsx`): the plugin updates line's dress,
  * a page icon and the words, then Review. In the chat it is as wide as its words. */
 .genex-terms-line {
   display: flex;

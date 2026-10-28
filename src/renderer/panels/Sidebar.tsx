@@ -280,7 +280,7 @@ function LaunchRow({ title }: { title: string | null }): JSX.Element {
 /**
  * What waits for the person, under the friends and over the account plate: agents that didn't
  * start, Genex's updated terms to review, the plugin updates row, then the app's own Relaunch to
- * update or Download. The last two wear one dress (`.sidebar-update`), each row one press.
+ * update or Download, in the plugin line's height, icon and words.
  */
 function SidebarFooter({
   update,
