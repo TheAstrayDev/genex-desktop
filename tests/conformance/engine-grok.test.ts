@@ -11,12 +11,21 @@
  * around them the CLI's.
  */
 import assert from "node:assert/strict";
-import { constants } from "node:fs";
+import { constants, existsSync } from "node:fs";
 import { access, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { grokEnv, grokTurnArgv, parseGrokProbe, type GrokProbe } from "../../src/substrate/engines/grok-cli.ts";
+import { setTimeout as sleep } from "node:timers/promises";
+import {
+  grokEnv,
+  grokTurnArgv,
+  parseGrokProbe,
+  renewGrokSignIn,
+  sessionSignIn,
+  signInRenewal,
+  type GrokProbe,
+} from "../../src/substrate/engines/grok-cli.ts";
 import { grokStderrStatus, grokStream, parseGrokLine } from "../../src/substrate/engines/grok-events.ts";
 import { GrokEngine, grokEvents, type GrokExec, type GrokInvocation } from "../../src/substrate/engines/grok.ts";
 import { EngineError, type DelegateEvent } from "../../src/substrate/engines/types.ts";
@@ -218,7 +227,13 @@ async function* replay(list: Array<Record<string, unknown>>): AsyncGenerator<Rec
 /** An engine whose sessions replay `stream`, recording each invocation and the prompt it was handed. */
 async function engineWith(
   stream: (invocation: GrokInvocation) => AsyncIterable<Record<string, unknown>>,
-  options: { probe?: string; home?: string } = {},
+  options: {
+    probe?: string;
+    home?: string;
+    platform?: NodeJS.Platform;
+    renewSignIn?: (renewal: { scope: string; leadSeconds: number }) => Promise<void>;
+    clock?: () => number;
+  } = {},
 ) {
   const root = await tmpDir("grok-engine-");
   const seen: GrokInvocation[] = [];
@@ -240,6 +255,9 @@ async function engineWith(
     execFn,
     resolveCli: ready,
     probe: () => probed(options.probe ?? SIGNED_IN),
+    ...(options.platform ? { platform: options.platform } : {}),
+    ...(options.renewSignIn ? { renewSignIn: options.renewSignIn } : {}),
+    ...(options.clock ? { clock: options.clock } : {}),
   });
   return { engine, seen, prompts, beside, root };
 }
@@ -422,6 +440,212 @@ describe("Grok Build sessions", () => {
       sandbox?.denyWrite?.some((dir) => dir.endsWith(`${path.sep}.grok`)),
       "a game's own Grok settings stay as they are",
     );
+  });
+
+  it("on Windows reads a copy of Grok's sign-in in the run's own folder, without its refresh tokens, gone after (#531)", async () => {
+    // Grok gives `auth.json` to the Windows user who signed in alone, on every read and write; a
+    // session runs as the sandbox's own user, which could not open it.
+    const home = path.join(await tmpDir("grok-sign-in-"), ".grok");
+    await mkdir(home, { recursive: true });
+    const signIn = JSON.stringify({
+      "grok.com": { key: "access-1", auth_mode: "oidc", user_id: "u1", refresh_token: "refresh-1", expires_at: "x" },
+      "api.x.ai": { key: "access-2", auth_mode: "external", user_id: "u1" },
+    });
+    await writeFile(path.join(home, "auth.json"), signIn);
+    const copies: Array<{ copy: string | undefined; text: string; prompt: string | undefined }> = [];
+    const stream = async function* (invocation: GrokInvocation) {
+      const copy = invocation.env.GROK_AUTH_PATH;
+      copies.push({
+        copy,
+        text: copy ? await readFile(copy, "utf8") : "",
+        prompt: flag(invocation.argv, "--prompt-file"),
+      });
+      yield* replay([]);
+    };
+    const { engine } = await engineWith(stream, { home, platform: "win32" });
+    await engine.delegate({ cwd: await game(), prompt: "x" });
+    await engine.delegate({ cwd: await game(), prompt: "", compact: true, resume: "s" });
+    assert.equal(copies.length, 2, "a turn and a compaction");
+    for (const { copy, text } of copies) {
+      assert.ok(copy, "the session is pointed at the copy");
+      assert.deepEqual(JSON.parse(text), {
+        "grok.com": { key: "access-1", auth_mode: "oidc", user_id: "u1", expires_at: "x" },
+        "api.x.ai": { key: "access-2", auth_mode: "external", user_id: "u1" },
+      });
+      assert.equal(existsSync(copy), false, "the copy goes with the run");
+    }
+    assert.equal(path.dirname(copies[0]?.copy ?? ""), path.dirname(copies[0]?.prompt ?? "-"), "beside its prompt");
+    assert.equal(await readFile(path.join(home, "auth.json"), "utf8"), signIn, "the person's own sign-in as it was");
+
+    const mac = await engineWith(stream, { home, platform: "darwin" });
+    await mac.engine.delegate({ cwd: await game(), prompt: "x" });
+    assert.equal(copies.at(-1)?.copy, undefined, "a Mac session runs as the person and reads Grok's own file");
+  });
+
+  it("knows when a sign-in would not outlast a session, and how early Grok must count it due to renew it now", () => {
+    const now = Date.parse("2026-10-29T12:00:00Z");
+    const at = (offsetMs: number) => new Date(now + offsetMs).toISOString();
+    const DAY = 24 * 60 * 60_000;
+    const entry = (fields: Record<string, unknown>) =>
+      JSON.stringify({ "grok.com": { key: "access", create_time: at(-DAY), refresh_token: "r", ...fields } });
+    const renewal = (fields: Record<string, unknown>) => signInRenewal(entry(fields), now);
+    const soon = renewal({ expires_at: at(10 * 60_000) });
+    assert.equal(soon?.scope, "grok.com");
+    assert.ok((soon?.leadSeconds ?? 0) >= 10 * 60, "ten minutes left of a day: due at once");
+    assert.equal(renewal({ expires_at: at(-60 * 60_000) })?.leadSeconds, 300, "expired: Grok's own lead does it");
+    assert.equal(renewal({ expires_at: at(3 * DAY) }), null, "three days left");
+    // An hour-long token is renewed with half of it left, so the lead stays short of a new one's life.
+    const hour = { create_time: at(-40 * 60_000), expires_at: at(20 * 60_000) };
+    const hourly = renewal(hour)?.leadSeconds ?? 0;
+    assert.ok(hourly >= 20 * 60 && hourly < 30 * 60, `twenty minutes left of an hour: ${hourly}`);
+    assert.equal(renewal({ create_time: at(0), expires_at: at(60 * 60_000) }), null, "an hour just minted");
+    assert.equal(renewal({ refresh_token: undefined, expires_at: at(60_000) }), null, "no refresh token to renew with");
+    for (const fields of [{}, { expires_at: "soon" }, { expires_at: at(60_000), create_time: "then" }])
+      assert.equal(renewal(fields), null, JSON.stringify(fields));
+    for (const text of ["", "not json", "[]", '{"grok.com": null}']) assert.equal(signInRenewal(text, now), null);
+    const two = JSON.stringify({
+      "api.x.ai": { key: "k", create_time: at(-DAY), refresh_token: "r", expires_at: at(60 * 60_000) },
+      "grok.com": { key: "a", create_time: at(-DAY), refresh_token: "r", expires_at: at(30 * 60_000) },
+    });
+    assert.equal(signInRenewal(two, now)?.scope, "grok.com", "the account that expires first counts");
+  });
+
+  it("on Windows has the person's own Grok renew a sign-in about to expire before a session copies it, once", async () => {
+    // A session's copy has no refresh token, so it can never renew itself (#531).
+    const home = path.join(await tmpDir("grok-renew-"), ".grok");
+    await mkdir(home, { recursive: true });
+    const file = path.join(home, "auth.json");
+    let now = Date.now();
+    const signIn = (key: string, ageMs: number, leftMs: number) =>
+      JSON.stringify({
+        "grok.com": {
+          key,
+          refresh_token: `refresh-${key}`,
+          create_time: new Date(now - ageMs).toISOString(),
+          expires_at: new Date(now + leftMs).toISOString(),
+        },
+      });
+    const DAY = 24 * 60 * 60_000;
+    await writeFile(file, signIn("access-1", DAY, 10 * 60_000));
+    const asked: Array<{ scope: string; leadSeconds: number }> = [];
+    const renewSignIn = async (renewal: { scope: string; leadSeconds: number }) => {
+      asked.push(renewal);
+      await writeFile(file, signIn("access-2", 0, 7 * DAY));
+    };
+    const keys: Array<string | undefined> = [];
+    const stream = async function* (invocation: GrokInvocation) {
+      const copy = invocation.env.GROK_AUTH_PATH;
+      keys.push(copy ? JSON.parse(await readFile(copy, "utf8"))["grok.com"]?.key : undefined);
+      yield* replay([]);
+    };
+    const { engine } = await engineWith(stream, { home, platform: "win32", renewSignIn });
+    await Promise.all([
+      engine.delegate({ cwd: await game(), prompt: "x" }),
+      engine.delegate({ cwd: await game(), prompt: "y" }),
+    ]);
+    await engine.delegate({ cwd: await game(), prompt: "z" });
+    assert.deepEqual(keys, ["access-2", "access-2", "access-2"], "every session reads the renewed sign-in");
+    assert.equal(asked.length, 1, "one renewal for the runs that waited on it, none once renewed");
+    assert.equal(asked[0]?.scope, "grok.com");
+    assert.ok((asked[0]?.leadSeconds ?? 0) >= 10 * 60, "early enough that Grok renews it at once");
+
+    await writeFile(file, signIn("dead", DAY, -60_000));
+    const stuck = await engineWith(stream, {
+      home,
+      platform: "win32",
+      clock: () => now,
+      renewSignIn: async (renewal) => {
+        asked.push(renewal);
+      },
+    });
+    await stuck.engine.delegate({ cwd: await game(), prompt: "x" });
+    await stuck.engine.delegate({ cwd: await game(), prompt: "x" });
+    assert.equal(asked.length, 2, "a sign-in a renewal left as it was waits before it is tried again");
+    assert.deepEqual(keys.slice(-2), ["dead", "dead"], "the session still gets what there is");
+    now += 10 * 60_000;
+    await stuck.engine.delegate({ cwd: await game(), prompt: "x" });
+    assert.equal(asked.length, 3, "and is tried again later: the failure may have passed");
+
+    const mac = await engineWith(stream, { home, platform: "darwin", renewSignIn });
+    await mac.engine.delegate({ cwd: await game(), prompt: "x" });
+    assert.equal(asked.length, 3, "a Mac session renews its sign-in itself");
+  });
+
+  it("waits only so long on a renewal, which Grok finishes and writes before it is asked to stop", {
+    skip: process.platform === "win32" && "a shell script stands in for grok",
+  }, async () => {
+    // Stopping Grok between xAI's answer and its write would leave the person a spent refresh token.
+    const root = await tmpDir("grok-renewal-");
+    const home = path.join(root, ".grok");
+    await mkdir(home, { recursive: true });
+    const file = path.join(home, "auth.json");
+    const expiring = (offsetMs: number) =>
+      JSON.stringify({ "grok.com": { key: "k", expires_at: new Date(Date.now() + offsetMs).toISOString() } });
+    await writeFile(file, expiring(60_000));
+    const log = path.join(root, "log.txt");
+    const script = path.join(root, "grok.mjs");
+    await writeFile(
+      script,
+      `import { appendFileSync, writeFileSync } from "node:fs";
+const log = (line) => appendFileSync(${JSON.stringify(log)}, line + "\\n");
+log("lead " + process.env.GROK_AUTH_EARLY_INVALIDATION_SECS + " " + process.argv.slice(2).join(" "));
+process.stdin.on("end", () => { log("input closed"); process.exit(0); });
+process.stdin.resume();
+setTimeout(() => { writeFileSync(${JSON.stringify(file)}, ${JSON.stringify(expiring(7 * 24 * 60 * 60_000))}); log("renewed"); }, 800);
+`,
+    );
+    const grok = path.join(root, "grok");
+    await writeFile(grok, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`, { mode: 0o755 });
+    const started = Date.now();
+    await renewGrokSignIn(grok, {
+      env: { PATH: process.env.PATH ?? "" },
+      cwd: root,
+      home,
+      renewal: { scope: "grok.com", leadSeconds: 120 },
+      waitMs: 200,
+    });
+    assert.ok(Date.now() - started < 700, "the run went on without the renewal");
+    const deadline = Date.now() + 5_000;
+    while (!(await readFile(log, "utf8").catch(() => "")).includes("input closed") && Date.now() < deadline)
+      await sleep(50);
+    assert.deepEqual((await readFile(log, "utf8")).trim().split("\n"), [
+      "lead 120 agent stdio",
+      "renewed",
+      "input closed",
+    ]);
+  });
+
+  it("clears the run folders a run that never finished left behind, before its first run", async () => {
+    const { engine, root } = await engineWith(() => replay([]), { platform: "win32" });
+    const temporary = path.join(root, "scratch", "tmp");
+    await mkdir(path.join(temporary, "prompt-crashed"), { recursive: true });
+    await writeFile(path.join(temporary, "prompt-crashed", "auth.json"), "{}");
+    await mkdir(path.join(temporary, ".curl"), { recursive: true });
+    await engine.delegate({ cwd: await game(), prompt: "x" });
+    assert.deepEqual(await readdir(temporary), [".curl"], "only what is not a run's folder stays");
+  });
+
+  it("copies no sign-in for a session when Grok's file is missing or is not one, and writes nothing", async () => {
+    const hostile = ["", "not json", "null", "[]", '"text"', '{"grok.com": "access"}', '{"grok.com": null}'];
+    for (const text of hostile) assert.equal(sessionSignIn(text), null, JSON.stringify(text));
+    const home = path.join(await tmpDir("grok-no-sign-in-"), ".grok");
+    await mkdir(home, { recursive: true });
+    const seen: Array<{ copy: string | undefined; beside: string[] }> = [];
+    const { engine } = await engineWith(
+      async function* (invocation) {
+        const prompt = flag(invocation.argv, "--prompt-file") ?? "";
+        seen.push({ copy: invocation.env.GROK_AUTH_PATH, beside: await readdir(path.dirname(prompt)) });
+        yield* replay([]);
+      },
+      { home, platform: "win32" },
+    );
+    await engine.delegate({ cwd: await game(), prompt: "x" });
+    await writeFile(path.join(home, "auth.json"), "not json");
+    await engine.delegate({ cwd: await game(), prompt: "x" });
+    assert.deepEqual(seen, [
+      { copy: undefined, beside: ["prompt.json"] },
+      { copy: undefined, beside: ["prompt.json"] },
+    ]);
   });
 
   it("puts a picked model, an effort it offers and the pictures into the turn; an effort it does not offer stays out", async () => {
