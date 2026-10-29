@@ -939,13 +939,16 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
       return done();
     };
 
-    // Flipped: a Bypass chat's lead ran in Manual and the host allowed every
-    // question. It runs in Bypass now, as the chat's own session, so a question that still reaches
-    // the host is one of Claude Code's checks no mode skips (a dangerous `rm`): a card, as the
-    // chat's own session's. A lead started in another mode whose chat moved to Bypass is allowed.
+    // Flipped twice: a Bypass chat's lead ran in Manual and the host allowed every question; then it
+    // ran in Bypass and the checks Claude Code still asks about there were carded. Bypass asks
+    // nothing now (#528): those are allowed at once, with no card, as the chat's own session's are.
+    // A lead started in another mode whose chat moved to Bypass is allowed too.
     await core.setPermissionMode(threadId, "bypassPermissions");
-    const bypassed = await settled({ tool: "Bash", input: { command: "rm -rf ~" } }, { decision: "deny" });
-    assert.deepEqual(bypassed.answer, { decision: "deny" }, "Bypass: the person's answer");
+    assert.deepEqual(
+      await (await asking({ tool: "Bash", input: { command: "rm -rf ~" } })).done(),
+      { answer: { decision: "allow" }, rows: [] },
+      "Bypass: allowed, no card",
+    );
     await core.setPermissionMode(threadId, "default");
     const moved = () => core.setPermissionMode(threadId, "bypassPermissions").then(() => {});
     assert.deepEqual(
