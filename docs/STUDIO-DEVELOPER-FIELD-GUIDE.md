@@ -96,7 +96,9 @@ leaves that side on genex.games.
 The controller builds immutable output under `.studio-dev/builds/<id>` and returns actual
 readiness and profile/build/source/runtime identity. Rebuilding does not update a running app.
 Each start removes the builds no profile's `launch.json` or `attempt.json` names, once they are an
-hour old.
+hour old. A running app keeps its build's `build.json` open, so `lsof +D .studio-dev/builds/<id>`
+lists it; never remove a build by age alone, because the app loads screens such as the terminal
+from it hours after it started.
 Use the controller to stop owned sessions; a PID alone is not authority to signal a process.
 `clean --profile <name>` removes only stopped recognized disposable state. Retained live
 profiles, evidence and normal games are not disposable fixture cleanup.
