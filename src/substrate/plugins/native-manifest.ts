@@ -8,7 +8,6 @@ import {
   type PluginRuntimePin,
   type PluginRuntimeCandidates,
 } from "../../shared/plugins.ts";
-import { StudioPlatform } from "../../shared/boot.ts";
 import { assertRelativePath } from "../paths.ts";
 import { PLUGIN_ID } from "../../shared/plugin-id.ts";
 /** Runtime, job and value names follow the plugin id rule. */
@@ -30,8 +29,6 @@ const PACKAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$/;
 const WILDCARD = "*";
 /** What Windows reads as a separator or a drive inside a path a candidate joins. */
 const WINDOWS_SEPARATORS = /[\\:]/;
-/** A local Windows drive; accepted only inside a Windows-specific candidate list. */
-const WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 const ARCHIVE_FORMATS: string[] = Object.values(RuntimeArchive);
 const PLATFORMS: string[] = Object.values(NativePlatform);
 const ARG_SOURCES = ["package", "input", "output", "value"];
@@ -129,14 +126,10 @@ function anchoredPath(kind: string, rest: string): string {
  * A candidate is absolute, an alias path that stays inside its root, or a string setting the
  * plugin declares. At most one segment holds a `*` pattern.
  */
-function validateCandidate(candidate: string, m: PluginManifest, windows = false): void {
+function validateCandidate(candidate: string, m: PluginManifest): void {
   const setting = SETTING_CANDIDATE.exec(candidate);
   if (setting) {
     if (!m.settings.some((s) => s.key === setting[1] && s.type === "string")) throw new Error(MESSAGE.CandidateSetting);
-    return;
-  }
-  if (windows && WINDOWS_DRIVE_PATH.test(candidate)) {
-    validateCandidatePath(candidate.slice(3).replaceAll("\\", "/"));
     return;
   }
   const alias = CANDIDATE_ALIAS.exec(candidate);
@@ -163,15 +156,13 @@ function validatePlatforms(r: PluginNativeRuntime, m: PluginManifest): PluginRun
   if (!Array.isArray(r.platforms) || r.platforms.length > L.platforms) throw new Error(MESSAGE.InvalidCandidates);
   const seen = new Set<string>();
   return r.platforms.map((entry) => {
-    const namedTarget = typeof entry?.platform === "string" && typeof entry?.arch === "string";
-    const target = namedTarget ? `${entry.platform}-${entry.arch}` : "";
+    const target = typeof entry?.platform === "string" ? entry.platform : "";
     if (!PLATFORMS.includes(target)) throw new Error(MESSAGE.InvalidCandidates);
     if (seen.has(target) || !paths(entry.candidates, L.candidates) || !entry.candidates.length)
       throw new Error(MESSAGE.InvalidCandidates);
     seen.add(target);
-    for (const candidate of entry.candidates)
-      validateCandidate(candidate, m, entry.platform === StudioPlatform.Windows);
-    return { platform: entry.platform, arch: entry.arch, candidates: [...entry.candidates] };
+    for (const candidate of entry.candidates) validateCandidate(candidate, m);
+    return { platform: entry.platform, candidates: [...entry.candidates] };
   });
 }
 

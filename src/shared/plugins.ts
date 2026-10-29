@@ -60,8 +60,7 @@ export interface PluginRuntimePin {
 
 /** A runtime's candidate paths for one supported operating system and processor. */
 export interface PluginRuntimeCandidates {
-  platform: string;
-  arch: string;
+  platform: NativePlatform;
   candidates: string[];
 }
 
@@ -84,9 +83,7 @@ export function runtimeCandidatesFor(
   runtime: Pick<PluginNativeRuntime, "candidates" | "platforms">,
   platform: string,
 ): readonly string[] {
-  return (
-    runtime.platforms?.find((entry) => `${entry.platform}-${entry.arch}` === platform)?.candidates ?? runtime.candidates
-  );
+  return runtime.platforms?.find((entry) => entry.platform === platform)?.candidates ?? runtime.candidates;
 }
 
 /** The pinned download of `runtime` for `platform` (this computer's by default), if it has one. */

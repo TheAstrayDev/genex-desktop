@@ -6,7 +6,7 @@ import { PluginNativeServices } from "../../src/substrate/plugins/native.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
-/** A Local Models-style Python runtime, with the secondary drive declared only for Windows. */
+/** A Local Models-style Python runtime, with separate candidates for each operating system. */
 function manifest() {
   return {
     apiVersion: 3,
@@ -31,9 +31,8 @@ function manifest() {
         version: { args: ["--version"], pattern: "Python (\\d+\\.\\d+\\.\\d+)", minimum: "3.11.0" },
         platforms: [
           {
-            platform: "win32",
-            arch: "x64",
-            candidates: ["home:Genex-Local-Models/hunyuan/python.exe", "D:/Genex-Local-Models/hunyuan/python.exe"],
+            platform: "win32-x64",
+            candidates: ["storage:runtimes/hunyuan/python.exe", "setting:program"],
           },
         ],
       },
@@ -42,7 +41,7 @@ function manifest() {
 }
 
 describe("platform-specific native runtime candidates", () => {
-  it("retains the declared Windows secondary-drive candidates after manifest validation", () => {
+  it("retains the declared Windows candidates after manifest validation", () => {
     const raw = manifest();
     const parsed = validateManifest(raw);
     assert.deepEqual(parsed.nativeRuntimes?.[0]?.platforms, raw.nativeRuntimes[0]?.platforms);
@@ -51,8 +50,7 @@ describe("platform-specific native runtime candidates", () => {
   it("chooses only the matching target and keeps the fallback for hosts without a declaration", () => {
     const raw = manifest();
     raw.nativeRuntimes[0].platforms.push({
-      platform: "darwin",
-      arch: "arm64",
+      platform: "darwin-arm64",
       candidates: ["home:Genex-Local-Models/qwen.app/Contents/bin/python3.11"],
     });
     const runtime = validateManifest(raw).nativeRuntimes?.[0];
@@ -74,7 +72,7 @@ describe("platform-specific native runtime candidates", () => {
   it("clones the platform lists instead of retaining mutable manifest input", () => {
     const raw = manifest();
     const parsed = validateManifest(raw);
-    raw.nativeRuntimes[0].platforms[0].candidates.push("D:/changed.exe");
+    raw.nativeRuntimes[0].platforms[0].candidates.push("storage:changed.exe");
     assert.equal(parsed.nativeRuntimes?.[0]?.platforms?.[0]?.candidates.length, 2);
   });
 
@@ -83,16 +81,16 @@ describe("platform-specific native runtime candidates", () => {
     {},
     "win32",
     [null],
-    [{ platform: "linux", arch: "x64", candidates: ["storage:python"] }],
-    [{ platform: "darwin", arch: "x64", candidates: ["storage:python"] }],
-    [{ platform: "win32", arch: "other", candidates: ["storage:python"] }],
-    [{ platform: "win32", arch: "x64", candidates: [] }],
-    [{ platform: "win32", arch: "x64", candidates: [7] }],
-    [{ platform: ["win32"], arch: "x64", candidates: ["storage:python"] }],
-    [{ platform: "win32", arch: ["x64"], candidates: ["storage:python"] }],
-    [{ platform: "win32", arch: "x64", candidates: Array(17).fill("storage:python") }],
-    Array(5).fill({ platform: "win32", arch: "x64", candidates: ["storage:python"] }),
-    Array(2).fill({ platform: "win32", arch: "x64", candidates: ["storage:python"] }),
+    [{ platform: "linux-x64", candidates: ["storage:python"] }],
+    [{ platform: "darwin-x64", candidates: ["storage:python"] }],
+    [{ platform: "win32-other", candidates: ["storage:python"] }],
+    [{ platform: "win32-x64", candidates: [] }],
+    [{ platform: "win32-x64", candidates: [7] }],
+    [{ platform: ["win32-x64"], candidates: ["storage:python"] }],
+    [{ platform: "win32", arch: "x64", candidates: ["storage:python"] }],
+    [{ platform: "win32-x64", candidates: Array(17).fill("storage:python") }],
+    Array(5).fill({ platform: "win32-x64", candidates: ["storage:python"] }),
+    Array(2).fill({ platform: "win32-x64", candidates: ["storage:python"] }),
   ];
   for (const [index, platforms] of malformed.entries())
     it(`refuses malformed or duplicate platform candidates (${index})`, () => {
@@ -118,13 +116,13 @@ describe("platform-specific native runtime candidates", () => {
       assert.throws(() => validateManifest(raw));
     });
 
-  it("keeps Windows drive paths out of top-level and Mac candidate declarations", () => {
+  it("keeps Windows drive paths out of top-level and platform candidate declarations", () => {
     const raw = manifest();
     raw.nativeRuntimes[0].candidates = ["D:/python.exe"];
     assert.throws(() => validateManifest(raw));
     raw.nativeRuntimes[0].candidates = ["storage:python"];
-    raw.nativeRuntimes[0].platforms[0].platform = "darwin";
-    raw.nativeRuntimes[0].platforms[0].arch = "arm64";
+    raw.nativeRuntimes[0].platforms[0].platform = "darwin-arm64";
+    raw.nativeRuntimes[0].platforms[0].candidates = ["D:/python.exe"];
     assert.throws(() => validateManifest(raw));
   });
 
@@ -147,7 +145,7 @@ describe("platform-specific native runtime candidates", () => {
     const raw = manifest();
     raw.nativeRuntimes[0].candidates = ["setting:program"];
     raw.nativeRuntimes[0].platforms[0].candidates = ["storage:missing"];
-    raw.nativeRuntimes[0].platforms.push({ platform: "darwin", arch: "arm64", candidates: ["setting:program"] });
+    raw.nativeRuntimes[0].platforms.push({ platform: "darwin-arm64", candidates: ["setting:program"] });
     const runtime = validateManifest(raw).nativeRuntimes?.[0];
     assert.ok(runtime);
     const service = new PluginNativeServices(root, [], { platform: NativePlatform.WindowsX64 });

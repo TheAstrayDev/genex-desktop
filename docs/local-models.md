@@ -1,28 +1,5 @@
 # Managed local models
 
-## Local asset-generation plugins
-
-Asset models are chosen in a plugin's panel. The community
-[Local Models plugin](https://github.com/TheAstrayDev/genex-local-models) offers separate assignments
-for images, textures, sound effects, music and 3D objects. Its
-[source update](https://github.com/TheAstrayDev/genex-local-models/pull/1) adds Qwen Image 2.1
-Turbo Q4/Q8 and Hunyuan3D Turbo/Mini Turbo choices, alongside Stable Audio's SFX/music packs.
-The AI uses the saved task assignment; Off disables that local route. Model weights are installed
-separately with consent, and a filename found in a cache does not make it a compatible adapter.
-
-The plugin's [catalog submission](https://github.com/genex-games/genex-plugins/pull/11) is still a
-draft. The new Q8/Mini adapters have command and workflow tests; actual GPU inference and memory
-fit remain unverified. Hunyuan requires a separately prepared Windows CUDA runtime. It is not a
-bundled or approved catalog entry yet.
-
-Native plugins can declare [platform-specific runtime candidates](plugins.md#api-3-managed-native-services)
-so a prepared runtime on a second Windows drive can be found without probing a Mac's interpreter
-paths. A matching candidate list replaces the fallback; existing plugins keep their fallback
-behavior. Jobs retain the host's sandbox, cancellation, five-minute recipe limit and project-scoped
-delivery. A completed local file is not proof that the game loaded or visibly used it.
-
-## Chat and coding models
-
 Studio offers Bonsai 2 27B on Apple Silicon Macs with at least 16 GiB RAM. PQ2_0 is the
 Best fit on those Macs up to 96 GB and the first ready choice in chat; PTQ1_0 is the smaller
 alternative. Existing explicit model selections remain selected.

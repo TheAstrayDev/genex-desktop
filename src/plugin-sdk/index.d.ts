@@ -17,8 +17,7 @@
 
 /** A runtime's candidate paths for one supported operating system and processor. */
 export interface PluginRuntimeCandidates {
-  platform: string;
-  arch: string;
+  platform: "darwin-arm64" | "win32-x64" | "win32-arm64";
   candidates: string[];
 }
 
