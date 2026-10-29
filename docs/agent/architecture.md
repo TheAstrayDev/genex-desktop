@@ -401,7 +401,7 @@ dependencies and packaged binaries are excluded. A persisted override that is no
 ready automatic installation, an explicit executable never. Diagnostics share a 15-second
 cache; sessions skip it but reuse the login PATH and unchanged binaries' probe answers (kept
 across launches) until Recheck. Running processes keep theirs. `main/index.ts` configures protected `engine-homes/coding-clis.json`, which no
-renderer or agent channel can write. Descriptors carry `account` (login source, variable, what
+renderer or agent channel can write; a copy it cannot read (damaged, empty) saves no path, and a BOM is read past. Descriptors carry `account` (login source, variable, what
 signing out leaves, CLI state and version). Fixture and smoke sessions search no paths or standard
 locations (`configureCodingClis`), so status checks never run a machine-installed provider or report
 fixtures as account readiness.
@@ -967,9 +967,8 @@ the native steps `studio:plugins.host-cli` / `host-package`; consent cards show
 (`main/core/genex-cli.ts`, allow-list in `genex-cli-policy.ts`) runs the plugin payload's pinned
 CLI (`resources/plugins/genex/node_modules/@genex-ai/cli-demo`) in ProcessSandbox, in a fresh `<userData>/genex-cli/<id>` (its `HOME`,
 removed afterwards), never a game folder, where the CLI's skill sync and contract healing would
-write `.claude`, `AGENTS.md` and ancestor contracts. Only `api.genex.games` is reachable, the
-games root and every game are write-denied, the token goes on stdin, and project commands see
-only `{id, slug}`. `GenexPackageService` (`genex-package.ts`) checks the name against
+write `.claude`, `AGENTS.md` and ancestor contracts. Only `api.genex.games` (or a dev stand's, `GenexStand`) is reachable,
+games are write-denied, the token goes on stdin, and project commands see only `{id, slug}`. `GenexPackageService` (`genex-package.ts`) checks the name against
 `GENEX_GAME_PACKAGES` and the binding folder by realpath (the game, or a registered git worktree of
 it under scratch), then runs the toolchain's `add` through `GameBuilds.addPackages`.
 

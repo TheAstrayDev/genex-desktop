@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type JSX } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
+import { t } from "../../../shared/i18n.ts";
 import { nativeJobDisclosure } from "../../../shared/native-job-disclosure.ts";
 import {
   NativeJobState,
@@ -12,27 +13,27 @@ import { Section } from "./rows.tsx";
 
 const JOB_POLL_MS = 2 * SECOND_MS;
 const MESSAGE = {
-  title: "Background jobs",
-  permission: "Agents can start background jobs. Cancel a running job here.",
-  cancel: "Cancel",
-  cancelling: "Cancelling…",
-  details: "Details",
-  hideDetails: "Hide details",
-  loading: "Loading details…",
-  unavailable: "Job details are unavailable.",
-  empty: "No logs or output files yet.",
-  retry: "Retry",
-  log: "Log",
-  files: "Output files",
-  detailsLabel: (recipe: string) => `Details for ${recipe}`,
-  showDetailsLabel: (recipe: string) => `Show details for ${recipe}`,
-  hideDetailsLabel: (recipe: string) => `Hide details for ${recipe}`,
+  title: t("Background jobs"),
+  permission: t("Agents can start background jobs. Cancel a running job here."),
+  cancel: t("Cancel"),
+  cancelling: t("Cancelling…"),
+  details: t("Details"),
+  hideDetails: t("Hide details"),
+  loading: t("Loading details…"),
+  unavailable: t("Job details are unavailable."),
+  empty: t("No logs or output files yet."),
+  retry: t("Retry"),
+  log: t("Log"),
+  files: t("Output files"),
+  detailsLabel: (recipe: string) => t("Details for {recipe}", { recipe }),
+  showDetailsLabel: (recipe: string) => t("Show details for {recipe}", { recipe }),
+  hideDetailsLabel: (recipe: string) => t("Hide details for {recipe}", { recipe }),
   status: {
-    [NativeJobState.Running]: "Running",
-    [NativeJobState.Completed]: "Completed",
-    [NativeJobState.Cancelled]: "Cancelled",
-    [NativeJobState.Failed]: "Failed",
-    [NativeJobState.Interrupted]: "Interrupted",
+    [NativeJobState.Running]: t("Running"),
+    [NativeJobState.Completed]: t("Completed"),
+    [NativeJobState.Cancelled]: t("Cancelled"),
+    [NativeJobState.Failed]: t("Failed"),
+    [NativeJobState.Interrupted]: t("Interrupted"),
   },
 };
 
@@ -168,7 +169,7 @@ function JobRow({
             {open ? MESSAGE.hideDetails : MESSAGE.details}
           </Button>
           {job.state === NativeJobState.Running && (
-            <Button disabled={pending} aria-label={`Cancel ${job.recipe}`} onClick={cancel}>
+            <Button disabled={pending} aria-label={t("Cancel {recipe}", { recipe: job.recipe })} onClick={cancel}>
               {pending ? MESSAGE.cancelling : MESSAGE.cancel}
             </Button>
           )}

@@ -8,6 +8,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { setLocale } from "../../src/shared/i18n.ts";
+import { Locale } from "../../src/shared/locale.ts";
+import russian from "../../src/shared/locales/ru.ts";
+import { nativeJobDisclosure } from "../../src/shared/native-job-disclosure.ts";
 import { type PluginManifest, type PluginScan, type PluginSource, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import {
@@ -66,8 +70,17 @@ test("native install consent discloses the declared duration and GPU use", () =>
     ],
   };
   const detail = installDetail({ manifest, origin: INDEX });
-  assert.ok(detail.includes("shape: up to 35 min per background job; uses the GPU."));
-  assert.ok(detail.includes("export: up to 1 s per background job."));
+  assert.ok(detail.includes("shape: up to 35 minutes per background job; uses the GPU."));
+  assert.ok(detail.includes("export: up to 1 second per background job."));
+  setLocale(Locale.Russian, russian);
+  try {
+    assert.deepEqual(nativeJobDisclosure(manifest), [
+      "shape: до 35 минут на фоновую задачу; использует GPU.",
+      "export: до 1 секунды на фоновую задачу.",
+    ]);
+  } finally {
+    setLocale(Locale.English, {});
+  }
 });
 
 test("characterization: a first install from the catalog gives one block each, in plain words", () => {
@@ -93,9 +106,9 @@ test("characterization: a first install from the catalog gives one block each, i
       "Genex runs 3 tools for it:",
       "• cli — runs the Genex CLI",
       "• cli-paid — runs the Genex CLI, asks you each time",
-      "• package — installs Genex packages in the game, asks you each time",
+      "• package — installs Genex packages in the game",
     ].join("\n"),
-    "Adds 20 skills for agents: creator-mcp, asset-preference, publishing, publishing-apps, cover, genex, genex-threejs-multiplayer, genex-threejs-embed-auth, genex-llm-in-games, genex-tool-llm, genex-monetization, genex-tool-publish, genex-cover, genex-tool-model, genex-tool-character, genex-tool-texture, genex-tool-audio, genex-tool-image, genex-updates, plugin-author.",
+    "Adds 21 skills for agents: creator-mcp, asset-preference, publishing, publishing-apps, cover, genex, genex-threejs-multiplayer, genex-threejs-embed-auth, genex-llm-in-games, genex-tool-llm, genex-monetization, genex-items, genex-tool-publish, genex-cover, genex-tool-model, genex-tool-character, genex-tool-texture, genex-tool-audio, genex-tool-image, genex-updates, plugin-author.",
     "Scan: caution, 1 finding: child-process in backend.mjs:12.",
   ]);
 });
@@ -223,7 +236,7 @@ test("tools Genex runs itself are named with what they do and whether each asks 
     before: { ...genex, tools: genex.tools.filter((t) => t.name !== "package") },
   });
   assert.match(update, /\n• cli — runs the Genex CLI\n/);
-  assert.match(update, /\n• package \(new\) — installs Genex packages in the game, asks you each time\n/);
+  assert.match(update, /\n• package \(new\) — installs Genex packages in the game\n/);
   const withoutHostTools = { ...genex, tools: genex.tools.filter((t) => t.host === undefined) };
   assert.doesNotMatch(installDetail({ manifest: withoutHostTools }), /Genex runs/);
 });

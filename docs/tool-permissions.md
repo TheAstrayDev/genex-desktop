@@ -68,7 +68,8 @@ a mode), which the asking session takes itself. An "always" moves the chat only 
 the person moved to Auto or Bypass while the card waited keeps that mode, and the answer keeps its
 other grants (`#keptGrants`). A switch to Bypass answers every card still waiting that was asked
 while the chat was in another mode (`ToolPermissions.allowInBypass`, `by: mode`, "Allowed in
-Bypass"); a plan, and a card Claude Code asked in Bypass itself, still wait for the person. A lead switches one switch after another (`#switchLead`), each to
+Bypass"); a plan still waits for the person. Bypass asks nothing: what Claude Code still asks in
+Bypass itself (its own safety checks) is allowed by the host at once, with no card (`#ask`). A lead switches one switch after another (`#switchLead`), each to
 `leadModeFor` the chat's mode when it runs, so a later pick wins; a pick made while a lead starts is
 applied once its control arrives. Each question is routed by the host (`#leadAsk`) for the chat's
 mode at that moment, whether or not the person is talking to it: Bypass allows one running in
@@ -123,6 +124,12 @@ input closes (a pick made while the session starts is applied once that control 
 `ChatPermissionService#onControl`), and a refusal comes back as `ModeSwitchFailure.AutoUnavailable`, the only case the
 host shows beside the picker.
 
+Every session runs on Claude Code's own system prompt (`claudeCodeSystemPrompt`: the `claude_code`
+preset, which the Agent SDK otherwise replaces with an empty one), with what holds for the session's
+whole life appended once (`DelegateRequest.system`: where it reaches, its plugins, their guidance
+and connectors, and for the session answering the person `personSessionNote`), never repeated in
+each message ([delegation](../src/main/core/delegation.ts) `#brief`).
+
 No session gets Claude Code's own sub-agents (`Agent`, `Task`), in any mode or seat: Genex runs the
 workers, under the person's ceiling and the chat's mode (`disallowedToolsFor`).
 
@@ -132,7 +139,7 @@ a headless run) is a job (see Jobs below).
 
 A lead or coordinator with `leadAsks` (`leadAskingOptions`) starts in its chat's Auto, Accept edits
 or Bypass (what Claude Code asks in any mode, such as a dangerous `rm`, is carded as for the chat's
-own session), or in Manual (`default`), where every edit and command reaches `canUseTool` and the
+own session, and allowed at once in Bypass), or in Manual (`default`), where every edit and command reaches `canUseTool` and the
 host. It is launched with `allowDangerouslySkipPermissions`, as the chat's own session, so the
 picker can switch it to Bypass mid-turn; `liveControl` hands the host its `setPermissionMode` as
 for the chat's own session, and nothing else moves its mode. No `sandbox` key, no blanket `Bash`,
@@ -191,7 +198,7 @@ is in Bypass (any connector) or in Auto (a plugin's connector, which works on th
 person's own may reach services beyond it), as `PluginToolService#unaskedIn` reads the chat's mode
 (`chatMode`). A card those modes would not have asked is answered when the person switches the chat
 to one (`PluginConsent.approveForMode`, `by: mode`). A connector's card ("Let the agent use
-<name>?", the tool and its arguments under Request details) offers Allow once, Always allow ("Don't
+<name>?", the tool and its arguments under Details) offers Allow once, Always allow ("Don't
 ask again for this action in <name>") and Don't allow; Always allow saves that exact tool (`McpRegistry.alwaysAllow`): the person's own connector
 in connectors.json, where its card's checkbox shows it, and a plugin's in `always-allowed.json`
 beside it, listed on the plugin's page under Connections with **Ask every time** to take it back.
@@ -211,7 +218,9 @@ Loop runner's saves, shots, play checks, editor end and reopen, module and helpe
 `PluginToolService`, `ChatPermissionService.planning`), so the runner's save points and autosaves
 save nothing and take no snapshot while the chat plans. The lead is not the chat's turn: another
 turn ending leaves its consent cards and connector calls going (`outlivesTurn` in `PluginConsent`
-and `activeConnectorCalls`), and its own session's end, a Stop, the answer or the timeout end them. A director's turn writes no Connecting activity, so the build card reads as
+and `activeConnectorCalls`). Its own session's end ends its connector calls, but not its plugin cards:
+a Loop's lead ends its turn to wait for its workers, so its card for a paid Genex command waits
+for the person; the answer, the timeout or a Stop end it. A director's turn writes no Connecting activity, so the build card reads as
 planning between parts.
 
 ## Workers
@@ -495,7 +504,7 @@ grant, no run controls, no chat turn, no folder of its own, no plugin tools, con
 reads are the lead's folder and the run's captures folder (refused when that is a link). On Claude
 Code and local sessions those are its only read roots beside its home, and the unattended fence
 denies the other games and the rest of Genex's data (the other runs' folders and captures, the jobs,
-the chats' coordinator homes, the exports). A Codex or OpenCode reviewer's box reads the whole disk,
+the chats' coordinator homes, the exports). A Codex, OpenCode or Grok Build reviewer's box reads the whole disk,
 so it is only told those, and Genex's secrets and engine homes, are off limits, and its brief names
 the folder it reads, not its home. Its
 seat (`ProjectToolSeat.Reviewer`) is offered `app_look` alone, whose access line goes to the run's
@@ -514,6 +523,8 @@ thread keeps the mode the person picked, so a chat moved back to Claude Code fin
 | Bonsai, OpenRouter, Local server | Auto, Manual, Accept edits, Plan | the studio runs its tools and asks before each change |
 | Codex | Auto, Plan, Bypass | `codex exec` cannot ask mid-turn; the mode picks its sandbox |
 | OpenCode | Auto, Plan | `opencode run` cannot ask mid-turn and always runs in the studio's sandbox |
+| Grok Build | Auto, Plan | `grok -p` cannot ask mid-turn and always runs in the studio's sandbox; Plan reads from a folder of its own |
+| Cursor | Auto, Plan | `cursor-agent --print` cannot ask mid-turn and always runs in the studio's sandbox |
 | Ollama, a new engine | Auto | its harness tool loop keeps its sandbox |
 
 The chat's own session on any engine is handed `permissions` (`#personSession`, no
@@ -546,7 +557,8 @@ only hands an agent has ([computer use](computer-use.md)).
 
 A judge that plays (`role: "judge"`) is blind as well as read-only (`DelegateRequest.blind`) where
 the engine can enforce it: Claude Code is offered no built-in but tool search and disallows every file, shell, edit and question tool, OpenCode
-denies every file tool, and a local session gets no file tool. Codex reads the whole disk, so a Codex
+denies every file tool, Grok Build keeps only its shell, approved for the studio bridge alone, and a local session
+gets no file tool. Codex reads the whole disk, so a Codex
 judge is only told to judge by playing. Every engine starts in the empty `scratch/blind-judge`
 folder and is not told the build's path. Writing nothing and reading no file, it takes a folder
 lock of its own (`judgeLockKey`), so the chat's `judge_play` judge plays the game folder its own

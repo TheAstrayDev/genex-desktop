@@ -60,6 +60,7 @@ import {
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { CAMERA_SETTLE_MS, DEFAULT_SHOT_QUALITY, DEFAULT_STILL_QUALITY, captureSurface, tookPage } from "./capture.ts";
 import { delegationsIn, PreviewIdentityState, type ServedRoot } from "./internals.ts";
+import { readItemPicture } from "./item-pictures.ts";
 import { iterationDir, safePathSegment } from "./run-shots.ts";
 import { readyNote, servedKey, strayPage } from "./page-report.ts";
 import type { SessionPort } from "./session-port.ts";
@@ -70,7 +71,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { setTimeout as sleep } from "node:timers/promises";
-import { ReadyPhase, CaptureSurface, GameClock, GameFront } from "../../shared/preview-contract.ts";
+import { ReadyPhase, CaptureSurface, GameClock, GameFront, LiveLoadFailure } from "../../shared/preview-contract.ts";
 import { StateShape, keepPathsOf } from "../../shared/studio-state-shape.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { buildFinished, LiveGate, type LiveOffer, readBuild } from "./live-gate.ts";
@@ -78,7 +79,6 @@ import { type LiveBehindEvent, WebBuildLoad } from "../../shared/live-behind.ts"
 import type { GameSoundRequest } from "../../shared/game-sound.ts";
 import { liveAudible, type LiveSound } from "../game-sound.ts";
 import { liveMaxFps } from "../live-pace.ts";
-
 /** The most cameras one capture photographs. */
 const MAX_CAPTURE_CAMERAS = 8;
 /** How many times a capture asks a registered camera to switch before it says the switch is dead. */
@@ -533,6 +533,8 @@ export class PreviewService {
   #stageVisible = true;
   /** The person watches a game in Live, whatever briefly covers it (the renderer's `watchingLive`). */
   #liveWatched = true;
+  /** The game open on the person's stage, which Live may not hold: opening a game starts nothing. */
+  #stageGame: string | null = null;
   /** Sessions looking through Live itself: only where this build opens no hidden windows. */
   #liveObservers = 0;
   /** What the Live game's sound depends on, bar the stage and the agents that `#applySound` reads. */
@@ -555,20 +557,23 @@ export class PreviewService {
     });
   }
 
-  /** Apply stage visibility without suspending an agent's observation. */
-  async setStageVisible(visible: boolean, watching = visible): Promise<void> {
+  /** Apply stage visibility, and the game open on the stage, without suspending an agent's observation. */
+  async setStageVisible(visible: boolean, watching = visible, stageGame: string | null = null): Promise<void> {
     this.#stageVisible = visible;
     this.#liveWatched = watching;
+    this.#stageGame = stageGame;
     this.#updateVisibility();
   }
 
   /**
-   * Whether a show or landing the person asked for may load Live itself: Live, holding this game
-   * (or none yet), is out of their sight. While they watch it, a dialog or a popover over it
+   * Whether a show or landing the person asked for may load Live itself: Live is out of their
+   * sight, and holds this game (or none yet), or another game while this one is open on their
+   * stage, where the ask is their Play. While they watch Live, a dialog or a popover over it
    * included, only Reload changes it (`live-gate.ts`).
    */
   liveOutOfSight(project: string): boolean {
-    return !this.#liveWatched && !this.liveHoldsAnother(project);
+    if (this.#liveWatched) return false;
+    return !this.liveHoldsAnother(project) || this.#stageGame === project;
   }
 
   /** Live holds a game other than this one: nothing of this one is shown or offered there. */
@@ -689,7 +694,7 @@ export class PreviewService {
     const guarded = await this.#core.scriptsGuarded(project);
     const outcome = await this.#core.builds.ensure({ project, dir: base, game, shape, guarded });
     const note = outcome.problem ? buildFailureNote(outcome.problem) : null;
-    if (note) port.note?.("error", note, { loadError: true });
+    if (note) port.note?.("error", note, { loadError: true, failure: LiveLoadFailure.BuildFailed });
     // The live folder is the one the user is looking at, so it is the one whose trouble the
     // stage reports; a worktree's build failure belongs to the run that made it.
     if (root === null) {
@@ -768,7 +773,7 @@ export class PreviewService {
       if (isLive) await this.#identifyLoaded(p.project, checkedRoot, served.stale, revisionBefore);
       // Loading clears the port's error, and the build is still broken: the agent loop and the
       // judges read that flag, so the failure is put back on the page the user can see.
-      if (served.stale) port.note?.("error", served.stale, { loadError: true });
+      if (served.stale) port.note?.("error", served.stale, { loadError: true, failure: LiveLoadFailure.StaleBuild });
       return url;
     } catch (error) {
       if (isLive)
@@ -1418,6 +1423,11 @@ export class PreviewService {
       if (!dir || !isGenexInspectionFile(p.file)) return null;
       return readContainedImage(dir, p.file, { prefixes: [], ...resize });
     }
+    // A store item's picture: Studio's kept copy, else its local draft's own folder in the game.
+    if (p.scope === ProjectAssetScope.ItemPicture) {
+      const where = { root: this.#core.layout.itemPictures, game: this.#core.games.dirFor(p.project) };
+      return readItemPicture(where, p.project, p.file, resize);
+    }
     if (isGenexRef(p.file)) return this.#readGenexOutput(p.project, p.file, resize);
     if (!isAssetPath(p.file, await this.#x.assets.assetFolders(p.project))) return null;
     return readContainedImage(this.#core.games.dirFor(p.project), p.file, { prefixes: [], ...resize });
@@ -1858,7 +1868,7 @@ export class PreviewService {
     if (!served.stale && last.loaded === key) return false;
     await port.load(last.project, served.entry, served.root, { loopback: served.loopback });
     last.loaded = key;
-    if (served.stale) port.note?.("error", served.stale, { loadError: true });
+    if (served.stale) port.note?.("error", served.stale, { loadError: true, failure: LiveLoadFailure.StaleBuild });
     return true;
   }
 }

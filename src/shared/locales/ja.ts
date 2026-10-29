@@ -48,8 +48,8 @@ export default {
   "A comet herding game where you guide ice rocks into orbit": "氷の岩を軌道へ導く彗星の群れ追いゲーム",
   "A command is already running for this game. Wait for it to finish or stop it.":
     "このゲームではすでにコマンドが実行中です。終わるのを待つか、停止してください。",
-  "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.":
-    "このMac上のコマンドか、ブラウザでサインインするURL。すべてのゲームのエージェントがそのツールを使えます。",
+  "A command on this computer, or a URL with browser sign-in. Agents in every game can use its tools.":
+    "このコンピュータ上のコマンドか、ブラウザでサインインするURL。すべてのゲームのエージェントがそのツールを使えます。",
   'A connector already uses the id "{id}"; remove or rename that connector before installing this plugin':
     "ID「{id}」はすでにコネクタが使っています。このプラグインをインストールする前に、そのコネクタを削除するか名前を変えてください",
   "A connector id is lowercase letters, digits and dashes, up to 32 characters":
@@ -134,8 +134,6 @@ export default {
   "A new version of Genex is downloading.": "Genexの新しいバージョンをダウンロードしています。",
   "A new version of Genex is ready and may fix this.":
     "Genexの新しいバージョンの準備ができました。これで直るかもしれません。",
-  "A newer Genex helper is already in Studio's Plugins folder, so Genex left it.":
-    "StudioのPluginsフォルダーにはもっと新しいGenexヘルパーがあるので、Genexはそのままにしました。",
   "A night-vision security camera, its timestamp burned in": "タイムスタンプが焼き付いた、暗視モードの防犯カメラ",
   "A ninja who can only move when the music plays": "音楽が鳴っているときだけ動ける忍者",
   "A note for every part": "すべてのパートへのメモ",
@@ -298,8 +296,6 @@ export default {
   "Agents build in it in your Studio, and its scripts are files in this game's folder.":
     "エージェントはあなたのStudioでこのプレイスを使ってつくり、スクリプトはこのゲームのフォルダーにファイルとして入ります。",
   "Agents can edit and play it from this chat.": "エージェントがこのチャットから編集もプレイもできます。",
-  "Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex.":
-    "オフでもエージェントはアプリのウィンドウを見られますが、パスワードマネージャー、システム設定、パスワード入力画面、Genexは決して見ません。",
   "Agents didn’t start": "エージェントが起動しませんでした",
   "Agents only run in a protected space that Windows has to allow once. If you aren’t an administrator of this PC, ask one to enter their password when Windows asks, then press Set up.":
     "エージェントは、Windowsで一度だけ許可が必要な保護スペースの中でだけ動きます。このPCの管理者でない場合は、Windowsに聞かれたときに管理者にパスワードを入力してもらい、それから「セットアップ」を押してください。",
@@ -314,7 +310,6 @@ export default {
   "All done": "すべて完了",
   "All done.": "すべて完了しました。",
   "All games": "すべてのゲーム",
-  Allow: "許可",
   "Allow all edits in this chat": "このチャットのすべての編集を許可",
   "Allow calls without asking, including changes this tool can make":
     "確認なしでの呼び出しを許可（このツールによる変更も含む）",
@@ -476,6 +471,7 @@ export default {
   "Ben-Day": "ベンデイ",
   "Best fit": "最適",
   Better: "改善",
+  Beta: "ベータ",
   "Between builds": "ビルドの合間",
   "Billed by each provider you use": "使うプロバイダーごとに請求されます",
   "Billed by each provider you use.": "使ったプロバイダーごとに請求されます。",
@@ -536,6 +532,8 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "{title}の{players}アプリをもう一度ビルドしてください。公開したいです。",
   "Build updated": "ビルドを更新しました",
+  "Build with the Cursor plan you already have.": "すでに契約しているCursorのプランでつくります。",
+  "Build with the Grok account you already have.": "すでに持っているGrokアカウントでつくります。",
   "Build with workers": "ワーカーとつくる",
   Building: "制作中",
   "Building the game": "ゲームをビルド中",
@@ -551,8 +549,6 @@ export default {
   "Built in one session. Its work wasn't merged into your build.":
     "1回のセッションでつくられました。作業はビルドに追加されませんでした。",
   Bundled: "同梱",
-  "Buy credits": "クレジットを購入",
-  "Buy credits on genex.games": "genex.gamesでクレジットを購入",
   "By <maker>{name}</maker>": "作者：<maker>{name}</maker>",
   "By {author}": "作者：{author}",
   "Bypass permissions": "権限をバイパス",
@@ -605,7 +601,6 @@ export default {
   "Character approval no longer available": "キャラクターの承認はもう利用できません",
   Characters: "文字",
   Chat: "チャット",
-  "Chat about this": "これについてチャット",
   "Chat actions": "チャットの操作",
   "Chat name": "チャット名",
   "Chat turn from {day}": "{day}のチャット",
@@ -644,6 +639,9 @@ export default {
   "Checking plan usage…": "プランの使用状況を確認しています…",
   "Checking play": "プレイを確認しています",
   "Checking preservation": "何も失われていないか確認中",
+  "Checking that Epic signed the installer…": "インストーラーにEpicの署名があるか確認しています…",
+  "Checking that Microsoft signed Unreal's runtime installer…":
+    "Unreal付属のランタイムのインストーラーにMicrosoftの署名があるか確認しています…",
   "Checking that Roblox signed the installer.": "Robloxがインストーラーに署名しているか確認しています。",
   "Checking the game files…": "ゲームファイルを確認しています…",
   "Checking the key…": "キーを確認中…",
@@ -679,7 +677,6 @@ export default {
   "Choose a provider below and finish signing in. OpenCode keeps the sign-in.":
     "下でプロバイダーを選んでサインインを完了してください。サインイン情報はOpenCodeが保持します。",
   "Choose a theme smaller than 128 KB.": "128 KB未満のテーマを選んでください。",
-  "Choose an answer": "答えを選んでください",
   "Choose an auto-compaction threshold between 5% and 95%.": "自動圧縮のしきい値は5%〜95%の間で選んでください。",
   "Choose an empty folder, or create one. Games you already have stay where they are.":
     "空のフォルダーを選ぶか、新しく作ってください。今あるゲームは今の場所に残ります。",
@@ -785,8 +782,42 @@ export default {
     "Codexのスキル検出が終了しました。更新して、もう一度試してください。",
   "Codex skill discovery timed out. Refresh to retry.":
     "Codexのスキル検出がタイムアウトしました。更新して、もう一度試してください。",
-  "Coin lives in your Genex account. Sign in once, then pay here.":
-    "コインはGenexアカウントに保管されます。一度サインインすれば、ここで支払えます。",
+  "Connect Cursor": "Cursorを接続",
+  "Connect Grok Build": "Grok Buildを接続",
+  "Cursor didn't answer. Check the installation, then try again.":
+    "Cursorが応答しませんでした。インストールを確認して、もう一度試してください。",
+  "Cursor is unavailable": "Cursorを利用できません",
+  "Cursor isn't installed on this computer.": "このコンピューターにCursorがインストールされていません。",
+  "Cursor ready": "Cursor準備完了",
+  "Cursor sign-in": "Cursorへのサインイン",
+  "Cursor {version}, {count, plural, other {# model(s)}}": "Cursor {version}、モデル{count, plural, other {#個}}",
+  "Cursor's CLI forgets this computer's sign-in": "CursorのCLIがこのコンピューターのサインインを忘れます",
+  "Cursor's model list could not be read.": "Cursorのモデル一覧を読み取れませんでした。",
+  "Cursor's sign-in status could not be read.": "Cursorのサインイン状態を読み取れませんでした。",
+  "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
+    "ブラウザーでCursorへのサインインを完了してください。サインインはCursorが保存します。",
+  "Finish signing in to Grok in your browser.": "ブラウザでGrokへのサインインを完了してください。",
+  "Grok Build didn't answer. Check the installation, then try again.":
+    "Grok Buildが応答しませんでした。インストールを確認してから、もう一度お試しください。",
+  "Grok Build isn't installed on this Mac.": "このMacにGrok Buildがインストールされていません。",
+  "Grok Build isn't signed in.": "Grok Buildにサインインしていません。",
+  "Grok Build ready": "Grok Build準備完了",
+  "Grok Build sign-in": "Grok Buildのサインイン",
+  "Grok Build {version}, {count, plural, one {# model} other {# models}}":
+    "Grok Build {version}、モデル{count, plural, other {#個}}",
+  "Grok Build's model list could not be read.": "Grok Buildのモデル一覧を読み込めませんでした。",
+  "Install Cursor": "Cursorをインストール",
+  "Install Cursor from Settings › Model Providers.": "設定 › モデルプロバイダーからCursorをインストールしてください。",
+  "Install Cursor's CLI to build with your Cursor plan.":
+    "CursorのCLIをインストールすると、Cursorのプランでつくれます。",
+  "Install Grok Build": "Grok Buildをインストール",
+  "Install Grok Build from Settings › Model Providers.":
+    "設定 › モデルプロバイダーからGrok Buildをインストールしてください。",
+  "Install it to build games with your Grok account.": "インストールすると、Grokアカウントでゲームをつくれます。",
+  "Installing Cursor. This can take a minute.": "Cursorをインストールしています。1分ほどかかることがあります。",
+  "Installing Grok Build. This can take a minute.": "Grok Buildをインストールしています。1分ほどかかることがあります。",
+  "Nex lives in your Genex account. Sign in once, then pay here.":
+    "NexはGenexアカウントに保管されます。一度サインインすれば、ここで支払えます。",
   Color: "色",
   Colors: "配色",
   Columns: "列数",
@@ -1033,6 +1064,8 @@ export default {
   "Couldn’t install: this game is larger than it says.":
     "インストールできませんでした。このゲームは表示されたサイズより大きいです。",
   "Couldn’t install: this game isn’t signed.": "インストールできませんでした。このゲームは署名されていません。",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "インストールできませんでした。このゲームをこのMacで動かすにはRosettaが必要です。",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "インストールできませんでした。このゲームのファイルは安全に開けません。",
   "Couldn’t load other versions.": "ほかのバージョンを読み込めませんでした。",
@@ -1164,6 +1197,8 @@ export default {
   "Dismiss remaining imports": "残りのインポートを閉じる",
   Dividers: "区切り線",
   "Do it for me": "おまかせ",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
+    "「おまかせ」でランチャーを開き、このチャットがコンピューター操作でUnrealをインストールします。約45 GB。Epicにサインインを求められたら、あなたがサインインしてください。",
   "Does it feel alive? {score} of {max}": "生き生きしている？{score}/{max}",
   "Does what you ask, then stops.": "頼んだことをやったら、止まります。",
   "Don't allow": "許可しない",
@@ -1200,6 +1235,7 @@ export default {
   "Downloading Roblox's installer.": "Robloxのインストーラーをダウンロードしています。",
   "Downloading Unity Hub": "Unity Hubをダウンロード中",
   "Downloading models": "モデルをダウンロード中",
+  "Downloading the Epic Games Launcher from Epic…": "EpicからEpic Games Launcherをダウンロードしています…",
   "Downloading {model}": "{model}をダウンロード中",
   "Downloading {model} · {percent}%": "{model}をダウンロード中 · {percent}%",
   "Downloading {name}": "{name}をダウンロード中",
@@ -1215,8 +1251,6 @@ export default {
   "Drop to add {count, plural, one {# picture} other {# pictures}}":
     "ドロップして{count, plural, other {#枚の画像}}を追加",
   "Drove the route": "ルートを走りました",
-  "Each chat session asks you first, and {keys} stops it.":
-    "チャットのセッションごとに最初に確認があり、{keys}で止められます。",
   Earlier: "それ以前",
   "Earlier builds": "以前のビルド",
   "Earlier conversation · no folder": "以前の会話 · フォルダーなし",
@@ -1248,8 +1282,19 @@ export default {
   "Enter the server's address, like 127.0.0.1:5000.": "サーバーのアドレスを入力してください（例：127.0.0.1:5000）。",
   "Environment variables": "環境変数",
   "Environment variables: name": "環境変数：名前",
+  "Epic's download led somewhere other than Epic, so Genex stopped.":
+    "Epicのダウンロードが、Epic以外の場所につながっていたため、Genexは止めました。",
+  "Epic's download link wasn't secure, so Genex didn't download it.":
+    "Epicのダウンロードリンクが安全ではなかったため、Genexはダウンロードしませんでした。",
+  "Epic's download page is opening in your browser.": "Epicのダウンロードページをブラウザーで開いています。",
+  "Epic's download was far bigger than its installer, so Genex stopped.":
+    "Epicのダウンロードがインストーラーよりはるかに大きかったため、Genexは止めました。",
+  "Epic's free app that installs Unreal. Do it for me downloads it from Epic and installs it: choose Yes when Windows asks.":
+    "Unrealをインストールする、Epicの無料アプリです。「おまかせ」でEpicからダウンロードしてインストールします。Windowsに聞かれたら「はい」を選んでください。",
   "Epic's free app that installs Unreal. Genex opens Epic's download page.":
     "Unrealをインストールする、Epicの無料アプリです。GenexがEpicのダウンロードページを開きます。",
+  "Epic's installer didn't download. Check your internet connection and try again.":
+    "Epicのインストーラーをダウンロードできませんでした。インターネット接続を確認して、もう一度試してください。",
   Error: "エラー",
   "Error copied.": "エラーをコピーしました。",
   "Every game chat and Loop run is recorded under Recent runs.":
@@ -1452,6 +1497,8 @@ export default {
     "Genexはこのコンピューターでは、Roblox Studioをクリックできません。Studioで自分で公開してください：{clicks}。",
   "Genex can't click in Roblox Studio on this computer. Turn it on yourself: {clicks}.":
     "Genexはこのコンピューターでは、Roblox Studioをクリックできません。自分でオンにしてください：{clicks}。",
+  "Genex can't click in the launcher on this computer. Install Unreal {version} yourself: {clicks}.":
+    "Genexはこのコンピューターではランチャーをクリックできません。自分でUnreal {version}をインストールしてください：{clicks}。",
   "Genex can't find this computer's Roblox folders: its home folder isn't a full path of this system.":
     "GenexはこのコンピューターのRobloxフォルダーを見つけられません。ホームフォルダーがこのシステムの完全なパスではありません。",
   "Genex can't read {file} as Roblox Studio's settings, so it changes no settings file. Turn Studio's MCP server on in Studio: {clicks}.":
@@ -1486,10 +1533,14 @@ export default {
   "Genex cover": "Genexカバー",
   "Genex credits": "Genexクレジット",
   "Genex decides from crash reports": "クラッシュレポートからGenexが判断します",
+  "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "Genexは何もクリックしていません。ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
     "Genexは何もクリックしませんでした。自分でオンにしてください：{clicks}。",
   "Genex didn't publish anything. To publish it yourself in Studio: {clicks}.":
     "Genexは何も公開しませんでした。Studioで自分で公開するには：{clicks}。",
+  "Genex didn’t approve the {app}.": "{app}はGenexに承認されませんでした。",
+  "Genex didn’t approve the {app}: {reason}": "{app}はGenexに承認されませんでした：{reason}",
   "Genex didn’t take that. Try again in a moment.":
     "Genexが受け付けませんでした。少し待ってからもう一度試してください。",
   "Genex downloads Godot this way on Windows only; on a Mac, Do it for me installs it in Applications.":
@@ -1513,6 +1564,8 @@ export default {
     "Genexはこのプロジェクトをセットアップしていないので、元に戻すものはありません。",
   "Genex hasn’t confirmed it yet. {game} finishes the purchase once it does. You won’t be charged twice.":
     "Genexがまだ確認していません。確認されると{game}が購入を完了します。二重に請求されることはありません。",
+  "Genex installs Epic's launcher itself on Windows only.":
+    "GenexがEpicのランチャーを自分でインストールするのはWindowsだけです。",
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "GenexがUnity HubをインストールできるのはMacだけです。Unityのページから入手してください。",
   "Genex is already getting Roblox Studio.": "GenexはすでにRoblox Studioを入手中です。",
@@ -1525,8 +1578,6 @@ export default {
     "GenexがGodotをインストールしています。何もしなくて大丈夫です。",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "GenexはMITライセンスのオープンソースです。ほかのプロジェクトのソフトウェアも含まれており、それぞれ独自のライセンスに従います。",
-  "Genex is reviewing the game before it shows in the gallery.":
-    "ギャラリーに表示される前に、Genexがゲームを確認しています。",
   "Genex isn't getting Roblox Studio right now.": "Genexは今、Roblox Studioを入手していません。",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genexは先に各ファイルのコピーを保存します。「セットアップを元に戻す」でこれらの変更を取り消せます。あなたが変更したGenexエディターヘルパーのファイルは、.mineコピーとして横に残ります。",
@@ -1595,7 +1646,31 @@ export default {
     "Unrealでゲームをつくるには、Unreal Engine {version}を入手してください。",
   "Get Xcode": "Xcodeを入手",
   "Get a key": "キーを取得",
-  "Get coin": "コインを入手",
+  "Get Nex": "Nexを入手",
+  Nex: "Nex",
+  "Not signed in to Cursor.": "Cursorにサインインしていません。",
+  "Runs on your Grok account": "Grokアカウントで動作",
+  "Setting up Cursor…": "Cursorをセットアップ中…",
+  "Setting up Grok Build…": "Grok Buildをセットアップ中…",
+  "Sign in again…": "もう一度サインイン…",
+  "Sign in to Cursor from Settings › Model Providers.": "設定 › モデルプロバイダーからCursorにサインインしてください。",
+  "Sign in to Grok from Settings › Model Providers.": "設定 › モデルプロバイダーからGrokにサインインしてください。",
+  "Sign in with your Cursor account to build with your plan.":
+    "Cursorのアカウントでサインインすると、プランでつくれます。",
+  "Sign in with your Grok account. Grok Build keeps the sign-in.":
+    "Grokアカウントでサインインしてください。サインイン情報はGrok Buildが保持します。",
+  "Switch to another Cursor account": "別のCursorアカウントに切り替える",
+  "Switch to another Grok account": "別のGrokアカウントに切り替える",
+  "Update Cursor": "Cursorをアップデート",
+  "Update Grok Build": "Grok Buildをアップデート",
+  "Update Grok Build from Settings › Model Providers.":
+    "設定 › モデルプロバイダーからGrok Buildをアップデートしてください。",
+  "Uses your Cursor plan": "Cursorのプランを使います",
+  "Your Cursor account has no model it can run.": "Cursorのアカウントで実行できるモデルがありません。",
+  "xAI blocked this Grok account: {reason}": "xAIがこのGrokアカウントをブロックしました: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAIはこのGrok Buildを受け付けなくなりました。",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAIはこのバージョンを受け付けなくなりました。アップデートして続けましょう。",
   "Get credits": "クレジットを入手",
   "Get the Epic Games Launcher": "Epic Games Launcherを入手",
   "Getting Roblox Studio": "Roblox Studioを入手中",
@@ -1668,6 +1743,7 @@ export default {
   Help: "ヘルプ",
   Hide: "隠す",
   "Hide Others": "ほかを隠す",
+  "Hide friends": "フレンドを隠す",
   "Hide sidebar": "サイドバーを隠す",
   "Hide terminal": "ターミナルを隠す",
   "Hide terminal · keeps running": "ターミナルを隠す · 実行は続きます",
@@ -1728,6 +1804,7 @@ export default {
   "In Unity Hub, sign in and add a Unity license (Personal is free if Unity's terms allow it for you). Unity's own terms cover its apps and your account. Only you type your password.":
     "Unity Hubでサインインして、Unityのライセンスを追加してください（Unityの規約で認められていれば、Personalは無料です）。Unityのアプリとアカウントには、Unity自身の規約が適用されます。パスワードを入力するのはあなただけです。",
   "In every game": "すべてのゲーム",
+  "In review": "審査中",
   "In round {round}'s brief": "ラウンド{round}の指示に反映",
   "In the background": "バックグラウンド",
   "In the background: {title}": "バックグラウンド：{title}",
@@ -1766,6 +1843,7 @@ export default {
   "Install Codex": "Codexをインストール",
   "Install Codex, then check again.": "Codexをインストールしてから、もう一度確認してください。",
   "Install Genex plugin": "Genexプラグインをインストール",
+  "Install Microsoft's Visual C++ runtime": "MicrosoftのVisual C++ランタイムをインストール",
   "Install Ollama": "Ollamaをインストール",
   "Install OpenCode": "OpenCodeをインストール",
   "Install OpenCode from Settings › Model Providers.":
@@ -1804,10 +1882,14 @@ export default {
   "Installed.": "インストール済み。",
   "Installing Blender {version}": "Blender {version}をインストール中",
   "Installing Godot {version}": "Godot {version}をインストール中",
+  "Installing Microsoft's Visual C++ runtime. Choose Yes when Windows asks.":
+    "MicrosoftのVisual C++ランタイムをインストールしています。Windowsに聞かれたら「はい」を選んでください。",
   "Installing OpenCode. This can take a minute.": "OpenCodeをインストールしています。1分ほどかかることがあります。",
   "Installing Unity Hub": "Unity Hubをインストール中",
   "Installing Unity {version}": "Unity {version}をインストール中",
   "Installing packages": "パッケージをインストール中",
+  "Installing the Epic Games Launcher. Choose Yes when Windows asks.":
+    "Epic Games Launcherをインストールしています。Windowsに聞かれたら「はい」を選んでください。",
   "Installing {name} took too long. Try again.":
     "{name}のインストールに時間がかかりすぎました。もう一度試してください。",
   "Installing {name}. This can take a minute.": "{name}をインストールしています。1分ほどかかることがあります。",
@@ -1860,6 +1942,8 @@ export default {
     "何度もうまくいかなかったので、クレジットを節約するために止めました。",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "「プレイ」とgenex.gamesから消えて、下書きに戻ります。直接リンクはそのまま使えて、もう一度公開すればプレイ数といいねも残ります。",
+  "It leaves the game’s Store. Players who own it keep it.":
+    "ゲームのストアから外れます。持っているプレイヤーはそのまま使えます。",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "パッケージ付属のセットアップスクリプトが必要かもしれません（まだ実行されていません）。",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1923,7 +2007,6 @@ export default {
   "Judge who played it": "プレイした審査員",
   "Jump to latest": "最新へ移動",
   "Jump to now": "現在に移動",
-  "Just this once.": "今回だけ。",
   Keep: "残す",
   "Keep building": "続きをつくる",
   "Keep building where you left off.": "中断したところから続きをつくってください。",
@@ -1976,19 +2059,10 @@ export default {
   "Left {count, plural, one {# game} other {# games}} alone while they work.":
     "作業中の{count, plural, other {ゲーム#本}}はそのままにしました。",
   "Left {game} alone while it works.": "作業中の{game}はそのままにしました。",
-  "Let agents control your computer": "エージェントにコンピューターの操作を許可",
   "Let go of every input": "すべての入力を離しました",
   "Let it see this game's folder": "このゲームのフォルダーへのアクセスを許可",
   "Let the agent use {name}?": "エージェントに{name}を使わせますか？",
   "Let the game settle": "ゲームが落ち着くのを待ちました",
-  "Let this chat's agent do this for you with computer control? {plugin} asks: {task}":
-    "このチャットのエージェントに、コンピューター操作でこれを代わりにやってもらいますか？{plugin}からの依頼：{task}",
-  "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or {shortcut}.":
-    "このセッション中、このチャットのエージェントに画面を見てコンピューターを使ってもらいますか？アプリごとに、まずあなたに確認します。「停止」または{shortcut}でいつでも止められます。",
-  "Let this chat's agent use this app? It can click, type and read what this app shows.":
-    "このチャットのエージェントにこのアプリを使わせますか？このアプリに表示される内容を読み、クリックや入力ができます。",
-  "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
-    "このチャットのエージェントに{app}を使わせますか？{app}に表示される内容を読み、クリックや入力ができます。",
   "Letters a–z, digits and dashes.": "a–zの英字、数字、ハイフンが使えます。",
   "Letting go of every input": "すべての入力を離しています",
   "Letting the game settle": "ゲームが落ち着くのを待っています",
@@ -2169,6 +2243,7 @@ export default {
   "Merging a worker's work": "ワーカーの作業を統合中",
   "Mic didn’t start": "マイクを開始できませんでした",
   Microphone: "マイク",
+  "Microsoft's Visual C++ runtime is installed.": "MicrosoftのVisual C++ランタイムをインストールしました。",
   Mine: "自分",
   Minimize: "最小化",
   "Mobile support": "モバイル対応",
@@ -2285,6 +2360,7 @@ export default {
   "No comments on {title} yet": "{title}にはまだコメントがありません",
   "No compatible newer release is available for this installed plugin":
     "このインストール済みプラグインに、互換性のある新しいリリースはありません",
+  "No cover yet, so it goes out without a picture.": "まだカバーがないので、画像なしで公開されます。",
   "No dash at the ends": "先頭と末尾にハイフンは使えません",
   "No friends yet — send your link and play together.": "フレンドはまだいません。リンクを送って一緒に遊びましょう。",
   "No games for “{query}”.": "「{query}」に一致するゲームはありません。",
@@ -2339,6 +2415,7 @@ export default {
   "None yet": "まだありません",
   "Not a public file: {path}": "公開ファイルではありません：{path}",
   "Not added": "未追加",
+  "Not approved": "未承認",
   "Not asked — the step did not land.": "依頼なし — ステップが実現しませんでした。",
   "Not comparable": "比較できません",
   "Not confirmed": "未確認",
@@ -2396,6 +2473,7 @@ export default {
   "Nothing changes until you apply.": "適用するまで何も変わりません。",
   "Nothing is added to this folder.": "このフォルダーには何も追加されません。",
   "Nothing is failing.": "失敗しているものはありません。",
+  "Nothing is installing.": "インストール中のものはありません。",
   "Nothing is online for this game yet": "このゲームはまだ何もオンラインにありません",
   "Nothing kept yet": "まだ採用なし",
   "Nothing made": "成果なし",
@@ -2404,6 +2482,8 @@ export default {
   "Nothing new to suggest.": "新しい提案はありません。",
   "Nothing spent yet": "まだ利用はありません",
   "Nothing to free up": "空けられる容量はありません",
+  "Nothing was clicked. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "何もクリックしていません。ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Nothing was clicked. Turn it on yourself: {clicks}.":
     "何もクリックされませんでした。自分でオンにしてください：{clicks}。",
   "Nothing was ever sent from this launch.": "今回の起動では何も送信されていません。",
@@ -2507,6 +2587,8 @@ export default {
   "Open a game before starting its terminal.": "ターミナルを開く前に、ゲームを開いてください。",
   "Open a game first, so its chat can click it for you, or turn it on yourself: {clicks}.":
     "先にゲームを開けば、そのチャットが代わりにクリックします。自分でオンにすることもできます：{clicks}。",
+  "Open a game first, so its chat can install Unreal for you, or install Unreal {version} yourself in the launcher: {clicks}.":
+    "先にゲームを開くと、そのチャットがUnrealをインストールします。または、ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Open a game first, then choose the place it builds in.":
     "先にゲームを開いてから、そのゲームをつくるプレイスを選んでください。",
   "Open a game first: Unity works on the open game's project.":
@@ -2622,8 +2704,7 @@ export default {
     "ブラウザでOpenRouterが開きます。そこでGenexを許可すると、ここに戻ってきます。",
   "Opens System Settings → Privacy & Security → {pane}": "システム設定 → プライバシーとセキュリティ → {pane}を開きます",
   "Opens beside the chat": "チャットの横に開きます",
-  "Opens genex.games. Pay comes back once the coin lands.":
-    "genex.gamesが開きます。コインが届くと支払えるようになります。",
+  "Opens genex.games. Pay comes back once the Nex lands.": "genex.gamesが開きます。Nexが届くと支払えるようになります。",
   "Opens in Explorer": "エクスプローラーで開きます",
   "Opens in Finder": "Finderで開きます",
   "Opens in its default app": "既定のアプリで開きます",
@@ -2961,6 +3042,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "先に待機中のメッセージを削除してください。このHarnessはそれを取り消せません。",
   "Remove this row": "この行を削除",
+  "Remove {item} from {game}?": "{item}を{game}から外しますか？",
   "Remove {name}": "{name}を削除",
   Removed: "削除済み",
   "Removed {actor}": "{actor}を削除しました",
@@ -2993,7 +3075,6 @@ export default {
   "Repository tree is truncated; point the spec at a smaller subdirectory":
     "リポジトリのツリーが途中で切れています。もっと小さいサブディレクトリを指定してください",
   "Repository tree is unreadable": "リポジトリのツリーを読み取れません",
-  "Request details": "リクエストの詳細",
   "Request sent": "リクエスト送信済み",
   Requests: "リクエスト",
   Reset: "リセット",
@@ -3148,6 +3229,8 @@ export default {
   "Run status unavailable": "ビルドの状態を取得できません",
   "Run the setup scripts this game’s packages came with": "このゲームのパッケージに付属のセットアップスクリプトを実行",
   "Run this game’s setup scripts?": "このゲームのセットアップスクリプトを実行しますか？",
+  "Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder to install Microsoft's Visual C++ runtime.":
+    "UnrealのEngine › Extras › Redist › en-usフォルダーにあるvc_redist.x64.exeを実行して、MicrosoftのVisual C++ランタイムをインストールしてください。",
   "Run {command}": "{command}を実行",
   "Run {command} for {connector}?": "{connector}用に{command}を実行しますか？",
   Running: "実行中",
@@ -3249,7 +3332,6 @@ export default {
     "自己改善はオフです。改善点を探すには、Studioの上部でオンにしてください。",
   Send: "送信",
   "Send a report": "レポートを送信",
-  "Send answer": "回答を送信",
   "Send feedback": "フィードバックを送信",
   "Send idea": "アイデアを送信",
   "Send report": "レポートを送信",
@@ -3258,6 +3340,8 @@ export default {
   Sending: "送信中",
   "Sending…": "送信中…",
   "Sends when the build finishes…": "ビルドが終わったら送信されます…",
+  "Sent for review. It appears in Play once Genex approves it.":
+    "審査に送りました。Genexが承認すると「プレイ」に表示されます。",
   Sent: "送信済み",
   "Sent — every part gets it with its next round": "送信しました。すべてのパートの次のラウンドに反映されます",
   "Sent — it goes into this part's next round": "送信しました。このパートの次のラウンドに反映されます",
@@ -3331,6 +3415,7 @@ export default {
   "Show earlier runs": "以前のビルドを表示",
   "Show earlier updates": "以前の更新を表示",
   "Show fewer": "表示を減らす",
+  "Show friends": "フレンドを表示",
   "Show friends what I’m playing": "プレイ中のゲームをフレンドに見せる",
   "Show game": "ゲームを表示",
   "Show in Explorer": "エクスプローラーで表示",
@@ -3519,6 +3604,7 @@ export default {
   "Stopped getting Roblox Studio. Anything Roblox's installer already put on this computer stays.":
     "Roblox Studioの入手を止めました。Robloxのインストーラーがすでにこのコンピューターに入れたものは残ります。",
   "Stopped play": "プレイを停止しました",
+  "Stopped.": "停止しました。",
   "Stopped. Everything built so far is kept.": "停止しました。ここまでつくったものはすべて残っています。",
   "Stopped. What it built is in your game now.": "停止しました。つくったものはゲームに反映されています。",
   "Stopped. What it built is kept in your project.": "停止しました。つくったものはプロジェクトに残っています。",
@@ -3694,6 +3780,8 @@ export default {
   "The CLI returned an invalid control response.": "CLIが無効な制御応答を返しました。",
   "The CLI returned an invalid model list.": "CLIが無効なモデル一覧を返しました。",
   "The Epic Games Launcher is installed": "Epic Games Launcherはインストール済み",
+  "The Epic Games Launcher is installed. Sign in to Epic in it.":
+    "Epic Games Launcherをインストールしました。ランチャーでEpicにサインインしてください。",
   "The Genex helper is in Studio": "GenexヘルパーはStudioに入っています",
   "The Genex helper is in Studio's Plugins folder and Studio's MCP server is on.":
     "GenexヘルパーがStudioのPluginsフォルダーに入り、StudioのMCPサーバーがオンになっています。",
@@ -3774,6 +3862,11 @@ export default {
     "インストーラーにRoblox以外の署名があるので、Genexは実行しませんでした。何もインストールされていません。",
   "The installer isn't signed as Roblox's, so Genex didn't run it. Nothing was installed.":
     "インストーラーにRobloxの署名がないので、Genexは実行しませんでした。何もインストールされていません。",
+  "The installer isn't signed by its maker, so Genex didn't run it.":
+    "インストーラーに作成元の署名がないため、Genexは実行しませんでした。",
+  "The installer isn't signed, so Genex didn't run it.": "インストーラーに署名がないため、Genexは実行しませんでした。",
+  "The installer stopped before it finished. Try again.":
+    "インストーラーが途中で止まりました。もう一度試してください。",
   "The instructions this suggestion changes are gone. Discard it.":
     "この提案が変更する指示はもうありません。提案を破棄してください。",
   "The judge didn't play": "審査員はプレイしませんでした",
@@ -4057,6 +4150,8 @@ export default {
     "このゲームのチャットが、コンピューター操作でRoblox Studioの{clicks}をクリックします。ゲームをプレイする全員にアップデートが届き、あなたのRobloxアカウントで公開されます。",
   "This game's chat clicks {clicks} in Roblox Studio with computer control. It keeps the privacy and settings Studio gives a new game and leaves the description empty. It is published on your Roblox account; if Roblox asks for your age, ID, a two-step code, terms or a payment, Genex stops and leaves that to you.":
     "このゲームのチャットが、コンピューター操作でRoblox Studioの{clicks}をクリックします。Studioが新しいゲームに付けるプライバシーと設定はそのままで、説明は空のままにします。あなたのRobloxアカウントで公開されます。Robloxから年齢、身分証明書、2段階認証のコード、規約への同意、支払いを求められたら、Genexは止まってあなたに任せます。",
+  "This game's chat is installing Unreal in the Epic Games Launcher. If Genex asks you something first, answer it in this game's chat, and sign in to Epic if the launcher asks.":
+    "このゲームのチャットがEpic Games LauncherでUnrealをインストールしています。先にGenexから質問があればこのゲームのチャットで答え、ランチャーに求められたらEpicにサインインしてください。",
   "This game's chat is publishing the update in Roblox Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
     "このゲームのチャットがRoblox Studioでアップデートを公開しています。先にGenexから質問があれば、このゲームのチャットで答えてから、Studioを見ていてください。",
   "This game's chat is publishing {name} to Roblox in Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
@@ -4098,7 +4193,8 @@ export default {
   "This plan is no longer waiting for approval.": "このプランはもう承認を待っていません。",
   "This plugin has no releases, so Studio takes the newest code. It stays as installed until you update it.":
     "このプラグインにはリリースがないため、Studioは最新のコードを使います。アップデートするまでインストール時のままです。",
-  "This plugin runs trusted code on your Mac.": "このプラグインは、このMacで信頼済みのコードを実行します。",
+  "This plugin runs trusted code on your computer.":
+    "このプラグインは、このコンピュータで信頼済みのコードを実行します。",
   "This plugin's package is missing; remove the plugin and install it again":
     "このプラグインのパッケージが見つかりません。プラグインを削除して、もう一度インストールしてください",
   "This plugin’s plugin.json can’t be used.": "このプラグインのplugin.jsonは使えません。",
@@ -4196,12 +4292,12 @@ export default {
   Try: "候補",
   "Try again": "もう一度試す",
   "Try again in a few minutes.": "数分後にもう一度試してください。",
-  "Try again in the game once the coin lands.": "コインが届いたら、ゲームでもう一度試してください。",
-  "Try again in the game. No coin was charged.": "ゲームでもう一度試してください。コインは請求されていません。",
-  "Try again in the game. No coin was reserved or charged.":
-    "ゲームでもう一度試してください。コインは確保も請求もされていません。",
-  "Try again in the game. The coin went back to your balance.":
-    "ゲームでもう一度試してください。コインは残高に戻りました。",
+  "Try again in the game once the Nex lands.": "Nexが届いたら、ゲームでもう一度試してください。",
+  "Try again in the game. No Nex was charged.": "ゲームでもう一度試してください。Nexは請求されていません。",
+  "Try again in the game. No Nex was reserved or charged.":
+    "ゲームでもう一度試してください。Nexは確保も請求もされていません。",
+  "Try again in the game. The Nex went back to your balance.":
+    "ゲームでもう一度試してください。Nexは残高に戻りました。",
   "Try again, or choose another model.": "もう一度試すか、別のモデルを選んでください。",
   "Try the build again": "ビルドをもう一度試す",
   "Try your changes before you update.": "アップデート前に変更を試せます。",
@@ -4220,8 +4316,6 @@ export default {
   "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.":
     "WindowsのサービスでSecondary Logonをオンにして（スタートアップの種類：手動）、もう一度試してください。",
   "Turn on Studio's MCP server": "StudioのMCPサーバーをオンにする",
-  "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.":
-    "コンピューター操作をオンにしますか？オンにすると、どのチャットのエージェントも、このコンピューターのアプリを使わせてほしいと頼めるようになります（一度に1つのアプリずつ）。",
   "Turn on mic": "マイクをオン",
   "Turn on microphone": "マイクをオン",
   "Turn on {name}": "{name}をオンにする",
@@ -4235,7 +4329,6 @@ export default {
     "Unrealエディターが2つ開いています。終了したいほうを、そのウィンドウから終了してください。",
   "Two open Studios have a place named {name}, so Genex can't tell them apart. Save one under another name in Studio, then choose it again.":
     "開いている2つのStudioに{name}という名前のプレイスがあり、Genexには区別できません。Studioで片方を別の名前で保存してから、もう一度選んでください。",
-  "Two steps before the agent can build in Unreal.": "あと2ステップで、エージェントがUnrealでつくれるようになります。",
   "Type a name.": "名前を入力してください。",
   "Type your email and password in the Unity Hub window and add a Unity license (Personal is free if Unity's terms allow it for you). Genex goes on by itself once you're in.":
     "Unity Hubのウィンドウでメールアドレスとパスワードを入力し、Unityのライセンスを追加してください（Unityの規約で認められていれば、Personalは無料です）。サインインできたら、Genexが自動で続けます。",
@@ -4327,9 +4420,17 @@ export default {
   "Unreal {engine} builds with Xcode {min} to {max}. Keep Xcode {version} and add Xcode {wanted} from Apple's downloads: put it in Applications beside Xcode {current}; this card then shows the one command to select it.":
     "Unreal {engine}はXcode {min}〜{max}でビルドします。Xcode {version}はそのままにして、AppleのダウンロードページからXcode {wanted}を追加してください。「アプリケーション」のXcode {current}の横に置くと、このカードに選択用のコマンドが1つ表示されます。",
   "Unreal {engine} is set up for {project}": "Unreal {engine}は{project}用にセットアップ済み",
+  "Unreal {version} and everything it needs are on this computer.":
+    "Unreal {version}と必要なものはすべて、このコンピューターにそろっています。",
   "Unreal {version} is installed": "Unreal {version}はインストール済み",
   "Unreal {version}'s editor isn't where Epic's launcher says. Verify the install in the Epic Games Launcher.":
     "Unreal {version}のエディターが、Epicのランチャーが示す場所にありません。Epic Games Launcherでインストールを検証してください。",
+  "Unreal's copy of Microsoft's runtime installer is missing. In the Epic Games Launcher, verify Unreal.":
+    "Unreal付属のMicrosoftランタイムのインストーラーが見つかりません。Epic Games LauncherでUnrealを検証（Verify）してください。",
+  "Unreal's editor needs it to start, and it isn't on this computer. Do it for me runs Unreal's own copy: choose Yes when Windows asks.":
+    "Unrealのエディターの起動に必要ですが、このコンピューターにはありません。「おまかせ」でUnreal付属のものを実行します。Windowsに聞かれたら「はい」を選んでください。",
+  "Unreal's editor needs it to start. Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder.":
+    "Unrealのエディターの起動に必要です。UnrealのEngine › Extras › Redist › en-usフォルダーにあるvc_redist.x64.exeを実行してください。",
   "Unrecognized Genex page link": "認識できないGenexページのリンク",
   "Unsafe runtime archive": "安全でないランタイムアーカイブ",
   "Unsupported TOML value. Use quoted strings, booleans or arrays of strings.":
@@ -4492,6 +4593,7 @@ export default {
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.":
     "Claudeが確認せずに行う操作です。チャットで「常に許可」を選ぶと、そのゲーム用にここへ追加されます。",
   "What Harness has learned": "Harnessが学んだこと",
+  "What changed": "変わったところ",
   "What changes": "変わる内容",
   "What credits pay for": "クレジットの使い道",
   "What do you want to make?": "何をつくりますか？",
@@ -4530,14 +4632,15 @@ export default {
   "Why the lead stopped it": "メインエージェントが止めた理由",
   Window: "ウィンドウ",
   "Windows app": "Windowsアプリ",
+  "Windows didn't get permission to install. Press Do it for me again and choose Yes when Windows asks.":
+    "Windowsでインストールが許可されませんでした。もう一度「おまかせ」を押して、Windowsに聞かれたら「はい」を選んでください。",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windowsでは、保護されたワークスペースの初回セットアップに管理者の承認が必要です。",
+  "Windows will ask you to allow it once.": "Windowsから一度だけ許可を求められます。",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "Windowsから一度だけ許可を求められます。パスワードを求められたら、このPCの管理者が自分のパスワードを入力できます。エージェントは、あなたのファイルから離れた専用の保護スペースで作業します。",
   "Windows wouldn’t start Genex’s protected space.": "WindowsでGenexの保護スペースを起動できませんでした。",
   "Wireframe terrain flying by at dusk": "夕暮れに流れていくワイヤーフレームの地形",
-  "With this on, an agent can click and type in the apps you allow.":
-    "オンにすると、許可したアプリでエージェントがクリックや入力をできます。",
   "Withdrawn by a restart": "再起動で取り下げ",
   "Withdrawn when the studio restarted": "アプリの再起動で取り下げ",
   "Withdrawn when the turn ended": "応答の終了で取り下げ",
@@ -4632,7 +4735,7 @@ export default {
   "Your browser should show": "ブラウザに表示されるコード",
   "Your build": "あなたのビルド",
   "Your coding provider": "お使いのモデルプロバイダー",
-  "Your coin arrived. Review the purchase, then pay.": "コインが届きました。購入内容を確認して支払ってください。",
+  "Your Nex arrived. Review the purchase, then pay.": "Nexが届きました。購入内容を確認して支払ってください。",
   "Your files": "あなたのファイル",
   "Your game appears here": "ここにゲームが表示されます",
   "Your game as it was when the run started.": "ビルドを始めたときのゲームの状態です。",
@@ -4665,7 +4768,6 @@ export default {
     "開いているRoblox Studioです。エージェントはここでRobloxのゲームをつくります。",
   "Your open Unreal Editor, where agents build Unreal games.":
     "開いているUnreal Editorです。エージェントはここでUnrealのゲームをつくります。",
-  "Your own answer": "自分の答え",
   "Your profile link": "あなたのプロフィールリンク",
   "Your profile link.": "プロフィールのリンクです。",
   "Your profile, friends and Publish stay.": "プロフィール、フレンド、公開はそのまま使えます。",
@@ -5264,8 +5366,7 @@ export default {
   "{added} of {total} added": "{total}件中{added}件を追加",
   "{added} of {total} parts added": "{total}個中{added}個のパートを追加",
   "{added} of {total} parts added · {working} working": "{total}個中{added}個のパートを追加 · {working}個作業中",
-  "{amount} coin": "{amount}コイン",
-  "{amount} credits, open Credits": "{amount}クレジット、クレジットを開く",
+  "{amount} Nex": "{amount} Nex",
   "{amount} more needed": "あと{amount}必要",
   "{app} settings": "{app}の設定",
   "{brand} doesn’t share limits for this plan": "{brand} はこのプランの上限を公開していません",
@@ -5289,6 +5390,7 @@ export default {
   "{chart}: {readings}": "{chart}：{readings}",
   "{check}: {name} · {status}": "{check}：{name} · {status}",
   "{chosen} of {total}": "{chosen}/{total}",
+  "{coins} of your Nex is on hold until {date}.": "Nexのうち{coins}は{date}まで保留中です。",
   "{command} (exit {code})": "{command}（終了コード{code}）",
   "{command} failed": "{command}が失敗しました",
   "{commit} (cataloged, not audited)": "{commit}（カタログ掲載、未監査）",
@@ -5387,6 +5489,8 @@ export default {
     "{count, plural, other {元の履歴は.git.studio-backupという名前に変えて、すぐ横に保存してあります。}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, other {ゲームのファイルを#個復元しました。}}",
+  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
+    "{count, plural, other {この変更は一度に{size}を超えたため、大きいファイル#件が保存されず、巻き戻しで元に戻せません：{files}。}}",
   "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
     "{count, plural, other {保存するには大きすぎるファイル#件は、巻き戻しで元に戻せません：{files}。}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":
@@ -5598,6 +5702,7 @@ export default {
   "{name}, playing {game}": "{name}、{game}をプレイ中",
   '{name}: Codex reads the bearer token from the environment variable {variable}. Studio stores it itself — paste the token into the Authorization field as "Bearer <token>".':
     "{name}：Codexはbearerトークンを環境変数{variable}から読みます。Studioはトークンを自分で保存するので、Authorizationフィールドに「Bearer <token>」の形で貼り付けてください。",
+  "{name}: Genex is reviewing it": "{name}：Genexが審査中",
   "{name}: on Genex for desktop players": "{name}：デスクトップのプレイヤー向けにGenexで公開中",
   "{name}: publishing it is coming soon": "{name}：公開は近日対応予定です",
   "{name}: sign in to Genex again": "{name}：Genexにもう一度サインイン",
@@ -5732,6 +5837,8 @@ export default {
   "{source} needs your permission": "{source}が許可を求めています",
   "{state} · from {plugin}": "{state} · {plugin}から",
   "{status} · newer than Genex has tested": "{status} · Genexでの検証より新しいバージョン",
+  "{steps, plural, =2 {Two steps before the agent can build in Unreal.} =3 {Three steps before the agent can build in Unreal.} other {# steps before the agent can build in Unreal.}}":
+    "{steps, plural, =2 {あと2ステップで、エージェントがUnrealでつくれるようになります。} =3 {あと3ステップで、エージェントがUnrealでつくれるようになります。} other {あと#ステップで、エージェントがUnrealでつくれるようになります。}}",
   "{task} in {engine}…": "{engine}で{task}…",
   "{task} · working": "{task} · 作業中",
   "{task}: didn't finish.": "{task}：完了しませんでした。",
@@ -5843,8 +5950,8 @@ export default {
   "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
     "このコンピューターではGenexがRoblox Studioをクリックできません。Studioで自分で公開してください：",
   "Handing it to the agent…": "エージェントに渡しています…",
-  "If the chat asks to use computer control, answer it there.":
-    "チャットでコンピューター操作の使用を聞かれたら、そこで答えてください。",
+  "If the chat or macOS asks for permission, allow it: publishing goes on by itself.":
+    "チャットや macOS で許可を求められたら、許可してください。公開はそのまま自動で進みます。",
   "In Roblox Studio": "Roblox Studioで",
   "Name on Roblox": "Robloxでの名前",
   "On Roblox": "Robloxに",
@@ -5864,4 +5971,217 @@ export default {
   "Your game is on Roblox": "ゲームがRobloxに公開されました",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "作業を続けている間に、ゲームのエージェントがRoblox Studioで公開します。",
+  "Anything else we should know? (optional)": "ほかに伝えたいことはありますか？（任意）",
+  "Balance {amount}": "残高 {amount}",
+  "Balance {now} → {after}": "残高 {now} → {after}",
+  "Doesn't work": "動かない",
+  "Drag to turn": "ドラッグで回転",
+  "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
+    "Genexでまだ確認できていません。確認されるとマイアイテムに表示されます。二重に請求されることはありません。",
+  "Genex’s protected space needs an update": "Genexの保護スペースを更新する必要があります",
+  Get: "入手",
+  "Get in {game}": "{game}で入手",
+  Inappropriate: "不適切",
+  "It may be back later. No Nex was charged.": "また販売されるかもしれません。Nexは請求されていません。",
+  "It's yours. Find it under Store › My items in every game it works in.":
+    "あなたのものになりました。使えるすべてのゲームの「ストア › マイアイテム」にあります。",
+  Item: "アイテム",
+  Items: "アイテム",
+  "Items you own show up here.": "持っているアイテムがここに表示されます。",
+  "My items": "マイアイテム",
+  "No Nex was charged.": "Nexは請求されていません。",
+  "No Nex was reserved or charged.": "Nexは確保も請求もされていません。",
+  "Not in this game": "このゲームでは使えません",
+  Owned: "所持済み",
+  "Report item": "アイテムを報告",
+  "Report item…": "アイテムを報告…",
+  Scam: "詐欺",
+  "Sign in to see the items you own.": "サインインすると、持っているアイテムを見られます。",
+  Store: "ストア",
+  "Store and my items": "ストアとマイアイテム",
+  "The Nex went back to your balance.": "Nexは残高に戻りました。",
+  "This item isn’t sold here anymore": "このアイテムはここでは販売されていません",
+  "Too many reports for now. Try again later.": "報告が多すぎます。しばらくしてからもう一度お試しください。",
+  "Try again once the Nex lands.": "Nexが届いたら、もう一度お試しください。",
+  "Why are you reporting it?": "報告する理由は？",
+  "Works here": "このゲームで使えます",
+  "You have {have} · {more} more needed": "所持 {have} · あと{more}必要",
+  "Your items couldn’t load.": "アイテムを読み込めませんでした。",
+  "item report\u0004Copy": "コピー品",
+  "{count, number} left": "残り{count, number}",
+  "{count, plural, one {Works in # game} other {Works in # games}}": "{count, plural, other {#本のゲームで使えます}}",
+  "+{amount}": "+{amount}",
+  Actions: "操作",
+  "Actions for {name}": "{name}の操作",
+  "Ask for an item or a change…": "アイテムや変更を頼む…",
+  "Ask the agent to change it": "エージェントに変更を頼む",
+  Browse: "さがす",
+  "Browse and selling": "さがす・販売",
+  "By {name}": "作者: {name}",
+  "Choose a game": "ゲームを選ぶ",
+  "Draft, put on sale": "下書き、販売する",
+  Earned: "収益",
+  "Genex can’t sell it under that name. Ask the agent for another.":
+    "この名前ではGenexで販売できません。エージェントに別の名前を頼んでください。",
+  "Genex can’t sell it with that description. Ask the agent to change it.":
+    "この説明ではGenexで販売できません。エージェントに変更を頼んでください。",
+  "Genex couldn’t do that. Try again in a moment.": "Genexで処理できませんでした。少ししてからもう一度試してください。",
+  "Genex couldn’t use its 3D model. Ask the agent to fix it.":
+    "Genexで3Dモデルを使えませんでした。エージェントに修正を頼んでください。",
+  "Genex couldn’t use its files. Ask the agent to fix them.":
+    "Genexでファイルを使えませんでした。エージェントに修正を頼んでください。",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genexで画像を使えませんでした。エージェントに画像をアップロードしてもらいましょう。",
+  "Genex took this item off sale.": "Genexがこのアイテムの販売を停止しました。",
+  "It isn’t on sale anymore.": "もう販売されていません。",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "まず画像が必要です。エージェントに画像をアップロードしてもらいましょう。",
+  "Items couldn’t load.": "アイテムを読み込めませんでした。",
+  "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
+    "ほかのクリエイターが作ったアイテム。無料でゲームに追加でき、そのゲームでの売上ごとに15%を受け取れます。",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "ほかのクリエイターが作ったアイテム。無料でゲームに追加でき、そのゲームでの売上ごとに{share}を受け取れます。",
+  "Items you make show up here. Ask your game’s agent for one.":
+    "作ったアイテムはここに表示されます。ゲームのエージェントに頼んでみましょう。",
+  "Its files are too large. Ask the agent to make them smaller.":
+    "ファイルが大きすぎます。エージェントに小さくしてもらいましょう。",
+  "Its maker doesn’t let other games use it anymore.": "作者がほかのゲームでの使用をやめました。",
+  "It’s already this game’s own item.": "すでにこのゲームのアイテムです。",
+  "Listing draft: {name}": "出品の下書き: {name}",
+  "Draft · goes on sale when you publish": "下書き · 公開すると販売開始",
+  Draft: "下書き",
+  "Drafts go on sale when you publish.": "下書きは公開すると販売開始されます。",
+  For: "対象",
+  "Add to game": "ゲームに追加",
+  "Players see it after your next publish.": "次回の公開後にプレイヤーに表示されます。",
+  "On sale in your game": "ゲームで販売中",
+  "Players can buy it there now.": "プレイヤーは今そこで購入できます。",
+  "Remove from game": "ゲームから削除",
+  "What is Nex?": "Nexとは？",
+  "{amount} Nex, about Nex": "{amount} Nex、Nexについて",
+  "Nex is the money of games on Genex. Players buy it, then spend it on items inside any game.":
+    "NexはGenexのゲームで使うお金です。プレイヤーはNexを購入し、どのゲームでもアイテムに使えます。",
+  "Your Nex": "あなたのNex",
+  "Buy Nex in packs. One balance works in every game.": "Nexはパックで購入できます。残高はすべてのゲームで共通です。",
+  Spend: "使う",
+  "Buy items in a game’s store: characters, skins, upgrades. What you buy stays yours.":
+    "ゲームのストアでアイテムを購入できます：キャラクター、スキン、アップグレード。購入したものはずっとあなたのものです。",
+  Earn: "稼ぐ",
+  "Players pay Nex for your items. After a short hold, you spend it like any Nex.":
+    "プレイヤーはあなたのアイテムにNexを支払います。短い保留期間の後、ほかのNexと同じように使えます。",
+  "Credits are separate: they pay for making games. Nex pays for what games sell.":
+    "クレジットは別物です：ゲーム作りの支払いに使います。Nexはゲームが販売するものの支払いに使います。",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "このアイテムはこのカードの後に変更されました。販売する前に アイテム › 販売 で確認してください。",
+  "It changed since you approved it, so it stayed a draft.": "承認した後に変更されたため、下書きのままです。",
+  "Removed from this game": "このゲームから削除しました",
+  "Genex couldn’t change this draft. Try again.": "Genexでこの下書きを変更できませんでした。もう一度試してください。",
+  "No items match.": "一致するアイテムはありません。",
+  "No one has shared an item yet.": "まだ誰もアイテムを共有していません。",
+  "Off sale": "販売停止中",
+  "On sale": "販売中",
+  "Only an item players keep can be used in other games.":
+    "ほかのゲームで使えるのは、プレイヤーがずっと持てるアイテムだけです。",
+  "Only the item’s maker can change it.": "アイテムを変更できるのは作者だけです。",
+  "Other games can use it": "ほかのゲームでも使える",
+  "Players pay": "プレイヤーの支払い",
+  "Publish a game to Genex first, then add items to it.":
+    "まずゲームをGenexで公開してから、アイテムを追加してください。",
+  "Put on sale": "販売する",
+  "Ready to use": "使えるコイン",
+  "Report under review": "通報を確認中",
+  "Search items": "アイテムを検索",
+  Selling: "販売",
+  "Sign in to Genex first.": "まずGenexにサインインしてください。",
+  "Sign in to Genex to see items.": "アイテムを見るにはGenexにサインインしてください。",
+  Sold: "販売数",
+  Status: "状態",
+  "Take off sale": "販売をやめる",
+  "That price isn’t one the store takes. Ask the agent to pick another.":
+    "この価格はストアで使えません。エージェントに別の価格を選んでもらいましょう。",
+  "The item store is off right now.": "アイテムストアは現在停止中です。",
+  "This game is still the empty starter: build something first, then publish.":
+    "このゲームはまだ空のスタータープロジェクトです。何か作ってから公開してね。",
+  "This game sells as many items as it can.": "このゲームはすでに上限までアイテムを販売しています。",
+  "You get per sale": "1回の売上での受け取り",
+  "You get per sale ({share})": "1回の売上での受け取り（{share}）",
+  "Your agent puts it in the game.": "エージェントがゲームに組み込みます。",
+  "You’ve put a lot on sale today. Try again tomorrow.": "今日はたくさん出品しました。明日また試してください。",
+  "{count, plural, one {in # game} other {in # games}}": "{count, plural, other {#ゲームで使用}}",
+  "{days, plural, one {On hold for # day} other {On hold for # days}}": "{days, plural, other {#日間保留中}}",
+  "{game} · {games}": "{game} · {games}",
+  "Ask for changes": "変更を依頼",
+  "Ask for changes below": "下で変更を依頼してください",
+  Shop: "ショップ",
+  "Character preview": "キャラクターのプレビュー",
+  "Finished character": "完成したキャラクター",
+  "Get Genex credits on genex.games": "genex.gamesでGenexクレジットを入手",
+  "Make the {kind} with Genex now.": "Genexで今すぐつくって：{kind}",
+  "Make the {kind} with Genex now: {prompt}": "Genexで今すぐつくって：{kind} — {prompt}",
+  "Not enough credits": "クレジットが足りません",
+  "{count, plural, other {# need credits}}": "{count, plural, other {#件クレジット不足}}",
+  "Agents in any chat can then ask to use your apps.":
+    "オンにすると、どのチャットのエージェントもアプリを使わせてほしいと頼めます。",
+  "It asks before each app.": "アプリごとに先に確認します。",
+  "It can click and type there.": "そのアプリでクリックや入力ができます。",
+  "It never uses password managers, System Settings, password prompts or Genex.":
+    "パスワードマネージャー、システム設定、パスワード入力画面、Genexは決して操作しません。",
+  "Let agents use your computer": "エージェントにコンピューターの使用を許可",
+  "Let the agent do this with computer control?": "コンピューター操作でエージェントにこれをやってもらいますか？",
+  "Let the agent see your screen in this chat?": "このチャットでエージェントに画面を見せますか？",
+  "Let the agent use this app?": "エージェントにこのアプリを使わせますか？",
+  "Let the agent use {app}?": "エージェントに{app}を使わせますか？",
+  "They ask before each app.": "エージェントはアプリごとに先に確認します。",
+  "Turn on computer control?": "コンピューター操作をオンにしますか？",
+  "{plugin} asks: {task}": "{plugin}からの依頼：{task}",
+  "Add an icon and a thumbnail, or Roblox shows a grey square.":
+    "アイコンとサムネイルを追加しよう。ないとRobloxは灰色の四角を表示するよ。",
+  "Answer Roblox's questions about what's in the game, so it gets an age rating.":
+    "ゲームの内容についてのRobloxの質問に答えると、年齢区分がつくよ。",
+  "Make the game public, so anyone can play it.": "ゲームを公開すると、だれでも遊べるようになるよ。",
+  "Only you can open it for now. Roblox keeps a new game private until you finish these in Creator Hub:":
+    "今はあなただけが開けるよ。Creator Hubでこれを終えるまで、Robloxは新しいゲームを非公開にしておくよ：",
+  "Open Creator Hub": "Creator Hubを開く",
+  "Studio hasn't loaded the Genex helper": "StudioがGenexヘルパーを読み込んでいません",
+  "Studio was open before the helper was added, so your scripts don't reach it yet. Restart Studio loads the helper.":
+    "ヘルパーを追加する前からStudioが開いていたので、スクリプトがまだ届いていないよ。「Studioを再起動」でヘルパーを読み込むよ。",
+  "The Genex helper was already in Studio's Plugins folder, so Genex left it as it is.":
+    "GenexヘルパーはすでにStudioのPluginsフォルダーにあったので、Genexはそのままにしたよ。",
+  "Allow in this chat": "このチャットで許可",
+  "Allowed in this chat": "このチャットで許可済み",
+  "Don't ask again for this action in this chat.": "このチャットでは今後この操作を確認しません。",
+  "A replay of your first week": "最初の1週間の記録",
+  "Change it anytime in Settings.": "設定でいつでも変更できます。",
+  "Don't share": "共有しない",
+  "Help improve Genex?": "Genexの改善に協力しますか？",
+  "How you move through the app, with your work blanked out": "アプリ内での動き方。作品の中身は隠されます",
+  "Never your work or name": "作品や名前は送りません",
+  "Prompts, code, files, game names and accounts are left out":
+    "プロンプト、コード、ファイル、ゲーム名、アカウントは含みません",
+  "Screens, clicks and errors": "画面、クリック、エラー",
+  "Screens, clicks, errors and wait times, and until {date} a replay of how you move through the app with your work blanked out. Sent to PostHog in the EU under a random id.":
+    "画面、クリック、エラー、待ち時間。{date}までは、作品の中身を隠したうえでアプリ内での動き方も記録します。ランダムなIDでEUのPostHogに送られます。",
+  "Screens, clicks, errors and wait times. Sent to PostHog in the EU under a random id.":
+    "画面、クリック、エラー、待ち時間。ランダムなIDでEUのPostHogに送られます。",
+  "Share usage data": "使用データを共有",
+  "Show us where Genex gets in your way.": "Genexで困っているところを教えてください。",
+  "Where you go, what fails and how long it takes": "どこへ行き、何が失敗し、どれだけ時間がかかったか",
+  "usage data\u0004Share": "共有する",
+  "Background jobs": "バックグラウンドタスク",
+  "Agents can start background jobs. Cancel a running job here.":
+    "エージェントはバックグラウンドタスクを開始できます。実行中のタスクはここでキャンセルできます。",
+  "Cancelling…": "キャンセル中…",
+  "Hide details": "詳細を隠す",
+  "Loading details…": "詳細を読み込み中…",
+  "Job details are unavailable.": "タスクの詳細を取得できません。",
+  "No logs or output files yet.": "ログや出力ファイルはまだありません。",
+  Log: "ログ",
+  "Output files": "出力ファイル",
+  Cancelled: "キャンセル済み",
+  "Details for {recipe}": "{recipe}の詳細",
+  "Show details for {recipe}": "{recipe}の詳細を表示",
+  "Hide details for {recipe}": "{recipe}の詳細を隠す",
+  "Cancel {recipe}": "{recipe}をキャンセル",
+  "{id}: up to {unit, select, minutes {{count, plural, one {# minute} other {# minutes}}} other {{count, plural, one {# second} other {# seconds}}}} per background job{gpu, select, yes {; uses the GPU} other {}}.":
+    "{id}：バックグラウンドタスク1件につき最大{unit, select, minutes {{count, plural, other {#分}}} other {{count, plural, other {#秒}}}}{gpu, select, yes {。GPUを使用します} other {}}。",
 } satisfies LocaleCatalog;

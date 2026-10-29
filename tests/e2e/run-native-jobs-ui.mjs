@@ -48,7 +48,7 @@ await test("host native job cards disclose limits, follow receipts and cancel by
     const page = await app.firstWindow();
     page.on("pageerror", (error) => errors.push(String(error)));
     await expect(page.locator("[data-native-job]")).toHaveCount(4);
-    await expect(page.locator("[data-native-job-limits]")).toContainText("up to 35 min");
+    await expect(page.locator("[data-native-job-limits]")).toContainText("up to 35 minutes");
     await expect(page.locator("[data-native-job-limits]")).toContainText("uses the GPU");
     checks.push("manifest duration and GPU disclosure rendered");
     const cancel = page.getByRole("button", { name: "Cancel hunyuan-shape" });

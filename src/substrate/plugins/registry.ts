@@ -39,9 +39,12 @@ import {
   PluginChangeReason,
   NATIVE_JOB_TIMEOUT_MS,
   NATIVE_JOB_CLEANUP_TIMEOUT_MS,
+  PluginFailure,
   PluginHealth,
+  PluginInstallProblem,
   PluginService,
   PluginSourceKind,
+  PluginStateRefusal,
   type CallCutOff,
   type PluginBinding,
   type PluginCatalogEntry,
@@ -70,6 +73,7 @@ import {
 import { atomicWriteJson } from "../fsx.ts";
 import {
   canonicalManifest,
+  inspectForInstall,
   inspectPackage,
   readPluginIcon,
   readSkillFile,
@@ -85,8 +89,10 @@ import type { PluginWorkspace } from "../../shared/project-workspace.ts";
 import { canonicalSourceRepo } from "./marketplace.ts";
 import { containedReal } from "../paths.ts";
 import { SessionCredentials } from "../session-credentials.ts";
-import { PluginCallCutOff, type PluginInvocation, PluginProcess } from "./process.ts";
+import { PluginCallCutOff, type PluginHostEnv, type PluginInvocation, PluginProcess } from "./process.ts";
 import { MAX_ARTIFACT_BYTES, packageCopyFilter, unpackEnvelope } from "./pack.ts";
+import { asInstallProblem, refusedAs } from "./install-problem.ts";
+import { CodedError } from "../../shared/errors.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { currentLocale, t } from "../../shared/i18n.ts";
 import type { Locale } from "../../shared/locale.ts";
@@ -107,6 +113,18 @@ interface Installed {
   allowed?: string[];
   /** The person turned it off themselves: only they turn it on again (a sign-in leaves it off). */
   turnedOff?: boolean;
+}
+/** A plugin whose backend talks to another API, as another account (`PluginRegistry.hostAccount`). */
+export interface PluginHostAccount {
+  id: string;
+  /** The API's origin, named to the backend. */
+  api: string;
+  /** That API's own CA file (an absolute PEM path) the backend and its runs trust, when it has one. */
+  ca?: string;
+  /** That API's game host (a bare origin), where its games and drafts play, when it is not genex.games'. */
+  games?: string;
+  /** That account's token, or undefined while it is signed out. */
+  token(): Promise<string | undefined>;
 }
 /**
  * Who a package is, as far as its saved account and data are concerned. The id is only a name: two
@@ -187,6 +205,13 @@ const DEFAULT_ACCOUNT_ACTIONS: NonNullable<PluginManifest["account"]> = {
 type AccountActions = NonNullable<PluginManifest["account"]>;
 const accountActionsOf = (manifest: PluginManifest): AccountActions => manifest.account ?? DEFAULT_ACCOUNT_ACTIONS;
 
+/** What a plugin on another account's backend is told: that API, and its CA and game host when it has them. */
+const hostEnvOf = (account: PluginHostAccount): PluginHostEnv => ({
+  api: account.api,
+  ...(account.ca ? { ca: account.ca } : {}),
+  ...(account.games ? { games: account.games } : {}),
+});
+
 /**
  * What a plugin's lifecycle and calls say. The words that are functions are the person's, in their
  * language: refusals of what they did in Plugins (install, update, reload, watch, remove) and the
@@ -194,6 +219,8 @@ const accountActionsOf = (manifest: PluginManifest): AccountActions => manifest.
  * is the model's to read, a service's is the plugin backend's, and an unknown id is a caller's bug.
  */
 const MESSAGE = {
+  /** A backend on another account (a development stand) tried to save a sign-in of its own. */
+  HostAccount: "This plugin uses the development stand's account: sign in to the stand from Play's account instead",
   IdentityMismatch: "Plugin identity mismatch",
   OutsideStorage: "Plugin directory is outside Studio storage",
   PackageMissing: () => t("This plugin's package is missing; remove the plugin and install it again"),
@@ -298,7 +325,7 @@ function capabilityFor(method: string): PluginCapability | undefined {
 /**
  * The services that link a game to an engine project, snapshot the game before the plugin changes
  * it, make a game for a project, name the games whose run is going, and hand a setup task to the
- * game's chat (Do it for me) or say whether that can run here.
+ * game's chat (Do it for me), say whether that can run here, or whether the chat still runs it.
  */
 const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineLink,
@@ -309,6 +336,7 @@ const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineRuns,
   PluginService.GameEngineAssist,
   PluginService.GameEngineCanAssist,
+  PluginService.GameEngineAssisting,
 ]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([
@@ -503,18 +531,21 @@ function recordedOrigin(source: PluginSourceKind, directory: string): PluginSour
 }
 /** A catalog artifact's bytes, refused past {@link MAX_ARTIFACT_BYTES}. */
 async function downloadArtifact(url: string): Promise<Buffer> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(CATALOG_DOWNLOAD_TIMEOUT_MS), redirect: "error" });
-  if (!response.ok || !response.body) throw new Error(MESSAGE.DownloadFailed(response.status));
+  const response = await refusedAs(PluginInstallProblem.DownloadFailed, () =>
+    fetch(url, { signal: AbortSignal.timeout(CATALOG_DOWNLOAD_TIMEOUT_MS), redirect: "error" }),
+  );
+  if (!response.ok || !response.body)
+    throw new CodedError(PluginInstallProblem.DownloadFailed, MESSAGE.DownloadFailed(response.status));
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await refusedAs(PluginInstallProblem.DownloadFailed, () => reader.read());
     if (done) break;
     size += value.length;
     if (size > MAX_ARTIFACT_BYTES) {
       await reader.cancel();
-      throw new Error(MESSAGE.ArtifactTooLarge());
+      throw new CodedError(PluginInstallProblem.TooLarge, MESSAGE.ArtifactTooLarge());
     }
     chunks.push(value);
   }
@@ -533,7 +564,7 @@ function assertReplacementConfirmed(
   answer: { key: string; expires: number } | undefined,
 ) {
   const confirmed = answer?.key === identityKey(identity) && answer.expires >= Date.now();
-  if (!confirmed) throw new Error(MESSAGE.ConfirmReplacement(next, previous));
+  if (!confirmed) throw new CodedError(PluginInstallProblem.NeedsReview, MESSAGE.ConfirmReplacement(next, previous));
 }
 /** An update may not gain capabilities, servers or hosts the user was never shown. */
 function assertUpdateReviewed(
@@ -542,18 +573,19 @@ function assertUpdateReviewed(
   approved: string[] | undefined,
   reason: PluginChange["reason"] | undefined,
 ) {
-  if (expandsCapabilities(next, current, approved)) throw new Error(MESSAGE.PermissionExpansion());
+  const needsReview = (words: string) => new CodedError(PluginInstallProblem.NeedsReview, words);
+  if (expandsCapabilities(next, current, approved)) throw needsReview(MESSAGE.PermissionExpansion());
   // An MCP server is native code with an environment of its own: changing what one runs, where
   // it runs or what it is handed is an expansion of the same kind a new capability is, and an
   // update that was never shown to anybody must not quietly acquire it.
-  if (approved === undefined && !sameServers(next, current)) throw new Error(MESSAGE.PermissionExpansion());
+  if (approved === undefined && !sameServers(next, current)) throw needsReview(MESSAGE.PermissionExpansion());
   // A hot reload carries the capabilities the user approved, not a review of new servers or hosts.
   if (reason === PluginChangeReason.Reloaded && reviewedLaunch(next) !== reviewedLaunch(current))
-    throw new Error(MESSAGE.ServersChanged());
+    throw needsReview(MESSAGE.ServersChanged());
   // Nor of the steps Genex runs on its own, with no card: a hook, an observer, a lock's person-first
   // probe, a folder workers may write in, a harness tool or a readiness check.
   if (reason === PluginChangeReason.Reloaded && harnessSteps(next) !== harnessSteps(current))
-    throw new Error(MESSAGE.StepsChanged());
+    throw needsReview(MESSAGE.StepsChanged());
 }
 
 /** What of a plugin Genex runs or widens on its own, without asking, in one comparable form. */
@@ -636,6 +668,7 @@ const DECLINED_MESSAGE: Record<PluginConsentBy, (name: string) => string> = {
   restart: (name) => `${name} was declined because the turn ended`,
   // A mode answers only with a yes; listed so every ending has its words.
   mode: (name) => `${name} was answered by the chat's mode`,
+  chat: (name) => `${name} was answered by the user's Allow in this chat`,
 };
 /** Rejects with the reason `signal` is aborted with, once it is: a host tool call's cut-off. */
 function cutOffOf(signal: AbortSignal): Promise<never> {
@@ -847,6 +880,13 @@ export class PluginRegistry {
    * it can't be removed. The host sets it.
    */
   appAccount: { id: string; actions: readonly string[] } | undefined;
+  /**
+   * A plugin whose backend talks to another API than its own default, as another account: a
+   * development profile's stand (`main/play/origins.ts`). Its backend is told the API
+   * (`PLUGIN_API_ENV`) and holds that account's token as its session lease; its own saved account
+   * is neither read nor written while it is set. The host sets it once, before any backend starts.
+   */
+  hostAccount: PluginHostAccount | undefined;
   readonly bootstrap: string;
   /** The host services, told which call each request is made on behalf of (absent for the host's own). */
   readonly service: (
@@ -1110,7 +1150,10 @@ export class PluginRegistry {
   assertInstallable(manifest: Pick<PluginManifest, "id">, origin: PluginSource) {
     const fromStudio = origin.kind === PluginSourceKind.Bundled || origin.kind === PluginSourceKind.Catalog;
     if (fromStudio || !this.#seedManifests.has(manifest.id)) return;
-    throw new Error(MESSAGE.BundledId(manifest.id, origin.kind === PluginSourceKind.Local));
+    throw new CodedError(
+      PluginInstallProblem.IdTaken,
+      MESSAGE.BundledId(manifest.id, origin.kind === PluginSourceKind.Local),
+    );
   }
   /**
    * The installed (or removed) plugin this package would replace, when it is not the same identity:
@@ -1598,7 +1641,7 @@ export class PluginRegistry {
   async setEnabled(id: string, enabled: boolean) {
     return this.#serial(async () => {
       const p = this.#installed.get(id);
-      if (!p || p.removed) throw new Error(MESSAGE.InstallFirst());
+      if (!p || p.removed) throw new CodedError(PluginStateRefusal.InstallFirst, MESSAGE.InstallFirst());
       const wasEnabled = p.enabled;
       // A local plugin loaded off ran none of its code: its backend is proven as the person turns it on.
       if (enabled && !wasEnabled && p.source === PluginSourceKind.Local) await this.#probe(p.directory, p.manifest);
@@ -1646,8 +1689,9 @@ export class PluginRegistry {
   async remove(id: string) {
     return this.#serial(async () => {
       const p = this.#installed.get(id);
-      if (!p) throw new Error(MESSAGE.UnknownPlugin);
-      if (this.#keepsAccount(p)) throw new Error(MESSAGE.AccountPlugin(p.manifest.name));
+      if (!p) throw new CodedError(PluginInstallProblem.NotFound, MESSAGE.UnknownPlugin);
+      if (this.#keepsAccount(p))
+        throw new CodedError(PluginStateRefusal.KeepsAccount, MESSAGE.AccountPlugin(p.manifest.name));
       p.enabled = false;
       p.removed = true;
       this.#lockAccount(id);
@@ -1676,13 +1720,14 @@ export class PluginRegistry {
         p?.scan,
       );
     if (origin?.kind === PluginSourceKind.Local) {
-      if (!origin.directory || !(await isDirectory(origin.directory))) throw new Error(MESSAGE.FolderGone());
+      if (!origin.directory || !(await isDirectory(origin.directory)))
+        throw new CodedError(PluginInstallProblem.SourceGone, MESSAGE.FolderGone());
       // No `scan` argument: the folder is read again, so the verdict is recomputed rather than inherited.
       return this.installLocal(origin.directory, PluginSourceKind.Local, p?.manifest.capabilities, origin);
     }
-    if (!origin) throw new Error(MESSAGE.OriginUnknown());
+    if (!origin) throw new CodedError(PluginInstallProblem.SourceGone, MESSAGE.OriginUnknown());
     const info = this.list().find((x) => x.manifest.id === id);
-    if (!this.reacquire || !info) throw new Error(MESSAGE.NeedsMarketplace());
+    if (!this.reacquire || !info) throw new CodedError(PluginInstallProblem.NotReady, MESSAGE.NeedsMarketplace());
     await this.reacquire(info);
     const after = this.#installed.get(id);
     if (!after || after.removed) throw new Error(MESSAGE.NotReinstalled());
@@ -1705,7 +1750,7 @@ export class PluginRegistry {
     scan?: PluginScan,
     reason?: PluginChange["reason"],
   ) {
-    const manifest = await inspectPackage(directory),
+    const manifest = await inspectForInstall(directory),
       previous = this.#installed.get(manifest.id);
     const recorded = origin ?? recordedOrigin(source, directory);
     // An answer is spent by the next install of that id, whatever becomes of it.
@@ -1762,7 +1807,7 @@ export class PluginRegistry {
         filter: (source) => packaged(source) && fromSeed(source),
         mode: constants.COPYFILE_FICLONE,
       });
-      await inspectPackage(destination);
+      await inspectForInstall(destination);
     } catch (e) {
       await rm(destination, { recursive: true, force: true });
       throw e;
@@ -1776,7 +1821,10 @@ export class PluginRegistry {
     }
     return destination;
   }
-  /** Prove a staged package's backend starts: it loads and answers a ping, with no host services. */
+  /**
+   * Prove a staged package's backend starts: it loads and answers a ping, with no host services.
+   * Whatever stops it (it exits, throws, never answers) is refused as `BackendFailed`.
+   */
   async #probe(directory: string, manifest: PluginManifest, seed?: string): Promise<void> {
     const probe = new PluginProcess(
       this.bootstrap,
@@ -1789,6 +1837,8 @@ export class PluginRegistry {
     );
     try {
       await probe.call("ping", "", {});
+    } catch (error) {
+      throw asInstallProblem(PluginInstallProblem.BackendFailed, error);
     } finally {
       probe.stop();
     }
@@ -1811,7 +1861,7 @@ export class PluginRegistry {
   async allowUnlisted(id: string, approvedCapabilities?: string[], scan?: PluginScan) {
     return this.#serial(async () => {
       const u = this.#unlisted.get(id);
-      if (!u) throw new Error(MESSAGE.UnknownPlugin);
+      if (!u) throw new CodedError(PluginInstallProblem.NotFound, MESSAGE.UnknownPlugin);
       const manifest = await this.#installLocal(
         u.directory,
         PluginSourceKind.Local,
@@ -1829,11 +1879,12 @@ export class PluginRegistry {
   }
   async installCatalog(id: string, approvedCapabilities: string[]) {
     const entry = (await this.catalog()).find((p) => p.manifest.id === id);
-    if (!entry) throw new Error(MESSAGE.NotInCatalog());
+    if (!entry) throw new CodedError(PluginInstallProblem.NotFound, MESSAGE.NotInCatalog());
     if (!entry.url.startsWith("https://") || !SHA256_HEX.test(entry.sha256))
-      throw new Error(MESSAGE.InvalidCatalogArtifact());
+      throw new CodedError(PluginInstallProblem.CatalogMismatch, MESSAGE.InvalidCatalogArtifact());
     const bytes = await downloadArtifact(entry.url);
-    if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) throw new Error(MESSAGE.DigestMismatch());
+    if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256)
+      throw new CodedError(PluginInstallProblem.IntegrityMismatch, MESSAGE.DigestMismatch());
     return this.installEnvelope(
       bytes,
       PluginSourceKind.Catalog,
@@ -1841,7 +1892,7 @@ export class PluginRegistry {
       { kind: PluginSourceKind.Catalog, url: entry.url, sha256: entry.sha256 },
       async (manifest) => {
         if (canonicalManifest(manifest) !== canonicalManifest(entry.manifest))
-          throw new Error(MESSAGE.CatalogMismatch());
+          throw new CodedError(PluginInstallProblem.CatalogMismatch, MESSAGE.CatalogMismatch());
         return undefined;
       },
     );
@@ -1862,7 +1913,7 @@ export class PluginRegistry {
     await mkdir(stage, { recursive: true, mode: 0o700 });
     try {
       await unpackEnvelope(bytes, stage);
-      const manifest = await inspectPackage(stage);
+      const manifest = await inspectForInstall(stage);
       const scan = verify ? await verify(manifest, stage) : undefined;
       return await this.installLocal(stage, source, approvedCapabilities, origin, scan);
     } finally {
@@ -1931,7 +1982,7 @@ export class PluginRegistry {
     } catch (e) {
       this.#errors.set(id, String(e));
       this.debug?.(id, `reload failed: ${String(e)}`);
-      this.#fire({ id, reason: PluginChangeReason.Failed });
+      this.#fire({ id, reason: PluginChangeReason.Failed, failure: PluginFailure.ReloadRefused });
     }
   }
   /**
@@ -1947,8 +1998,18 @@ export class PluginRegistry {
     if (method === PluginService.CredentialsClear && !isActionAmong(invocation, [actions.disconnect]))
       throw new Error(MESSAGE.DisconnectRequired);
   }
+  /**
+   * The account services of a plugin on another account (`hostAccount`): its token is the lease and
+   * what an unlock reads; nothing is saved, and signing out is that account's own (Play's).
+   */
+  async #hostAccountService(account: PluginHostAccount, method: string): Promise<unknown> {
+    if (method === PluginService.CredentialsWrite) throw new Error(MESSAGE.HostAccount);
+    if (method === PluginService.CredentialsClear) return undefined;
+    return (await account.token().catch(() => undefined)) ?? null;
+  }
   /** The account services, answered from the session lease rather than the plugin services. */
   async #credentialService(id: string, p: Installed, method: string, args: any): Promise<unknown> {
+    if (this.hostAccount?.id === id) return this.#hostAccountService(this.hostAccount, method);
     if (method === PluginService.CredentialsSession) return this.#account(id).get();
     if (method === PluginService.CredentialsRead) {
       await this.#account(id).unlock();
@@ -2008,13 +2069,13 @@ export class PluginRegistry {
         this.bootstrap,
         path.join(p.directory, p.manifest.backend),
         this.#hostService(id, p),
-        (error) => {
+        (error, failure) => {
           if (this.#processes.get(id) === process) {
             this.#errors.set(id, error);
             this.#processes.delete(id);
             // A backend that ended takes its jobs with it: nobody is left to read or stop them.
             void this.sandboxJobs?.stopAll(id).catch(() => {});
-            this.#fire({ id, reason: PluginChangeReason.Failed });
+            this.#fire({ id, reason: PluginChangeReason.Failed, failure });
           }
         },
         {
@@ -2025,6 +2086,7 @@ export class PluginRegistry {
           },
           ...(this.toolPath ? { toolPath: this.toolPath } : {}),
           ...this.#seedOption(p),
+          ...(this.hostAccount?.id === id ? { host: hostEnvOf(this.hostAccount) } : {}),
         },
       );
       this.#processes.set(id, process);
