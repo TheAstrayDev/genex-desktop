@@ -524,17 +524,27 @@ describe("game chat permissions", () => {
     assert.equal(core.answerPermission(card.requestId, { decision: "deny" }), false, "nothing left to answer");
   });
 
-  it("a card Claude Code asks in Bypass itself is still the person's to answer after a switch away and back", async () => {
+  // Flipped: Claude Code's own safety checks still asked in Bypass, and the person who chose to be
+  // asked nothing got a card anyway. Bypass now answers them: the person confirmed it when picking it.
+  it("Bypass asks nothing: Claude Code's own question in Bypass is allowed at once, with no card", async () => {
     await core.setPermissionMode(threadId, "bypassPermissions");
-    const { card, done } = await asking({ tool: "Bash", input: { command: "rm -rf build" }, always: [] });
+    const known = new Set((await rows()).map((row) => row.requestId));
+    let answer: ToolPermissionAnswer | undefined;
+    during = async (request) => {
+      const ask = { toolUseId: "tu", tool: "Bash", input: { command: "rm -rf build" }, always: [] };
+      answer = await request.permissions!.ask(ask, new AbortController().signal);
+    };
+    await brief().finally(() => {
+      during = async () => {};
+    });
+    // The cards below are asked in Manual, as the person who left Bypass would be.
     await core.setPermissionMode(threadId, "default");
-    await core.setPermissionMode(threadId, "bypassPermissions");
+    assert.deepEqual(answer, { decision: "allow" });
     assert.deepEqual(
-      (await rows(card.requestId)).map((row) => row.state),
-      ["pending"],
+      (await rows()).filter((row) => !known.has(row.requestId)),
+      [],
+      "no card",
     );
-    assert.equal(core.answerPermission(card.requestId, { decision: "deny" }), true);
-    assert.deepEqual(await done(), { decision: "deny" });
   });
 
   it("'always' with a mode in it moves a Manual chat, and never takes a chat out of Bypass or Auto", async () => {
@@ -554,6 +564,8 @@ describe("game chat permissions", () => {
       await done();
       assert.equal((await core.store.getRecord(threadId)).metadata?.permissionMode, looser, `${looser} stays`);
     }
+    // The cards below are asked in Manual: Bypass asks nothing.
+    await core.setPermissionMode(threadId, "default");
   });
 
   it("a deny carries the person's words; a plan approval sets the chat's mode", async () => {
